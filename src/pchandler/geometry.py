@@ -1,12 +1,21 @@
-import warnings
+import sys
+
+
 from collections import defaultdict
 from dataclasses import dataclass, field, KW_ONLY, InitVar
 from itertools import compress
 from functools import cached_property
 import gc
 from typing import Iterable, Callable, Any, Tuple, Optional
+if sys.version[0] == 3 and sys.version_info[1] >= 11:
+    from typing import Self
+else:
+    from typing_extensions import Self
+import warnings
 
 import numpy as np
+
+from pchandler.fov import FoV
 
 # from pchandler.util import convert_angle, AngleUnit
 
@@ -39,9 +48,12 @@ class PointCloudData:
     spherical_coordinates_origin: Optional[np.ndarray] = None
     global_coordinate_shift: Optional[np.ndarray] = None
     _spherical_coordinates_calculated: bool = False
-    nbPoints: int = field(init=False)
+    # nbPoints: int = field(init=False)
     apply_global_shift: InitVar[bool] = True
 
+    @property
+    def nbPoints(self):
+        return self.xyz.shape[0]
 
     def __post_init__(self, apply_global_shift) -> None:
         """
@@ -57,8 +69,6 @@ class PointCloudData:
             assert isinstance(value, np.ndarray)
 
         # Check dimensions
-        object.__setattr__(self, "nbPoints", self.xyz.shape[0])
-        # self.nbPoints = self.xyz.shape[0]
         assert self.xyz.shape[1] == 3
         assert self.color is None or self.color.shape == (self.nbPoints, 3,)
         assert self.normals is None or self.normals.shape == (self.nbPoints, 3,)
@@ -85,11 +95,10 @@ class PointCloudData:
        #         pass
        #     scalar_fields["scalar_Intensity"] = scalar_fields["scalar_Intensity"].astype(np.float32)
 
-
     @classmethod
     def from_range_image(cls, range_data: np.ndarray, horizontal_min: float, horizontal_max: float,
                          elevation_min: float, elevation_max: float, scalar_fields: dict[str, np.ndarray] = None,
-                         spherical_coordinates_origin: np.ndarray = None) -> 'PointCloudData':
+                         spherical_coordinates_origin: np.ndarray = None) -> Self:
 
         # nbPts = np.count_nonzero(~np.isnan(range_data))
         resolution = range_data.shape
@@ -111,12 +120,11 @@ class PointCloudData:
         for key, sf in scalar_fields.items():
             scalar_fields[key] = sf.flatten()[~np.isnan(ranges)]
 
-
         return cls.from_spherical_coordinates(spherical_coordinates, scalar_fields, spherical_coordinates_origin)
 
     @classmethod
     def from_spherical_coordinates(cls, spherical_coordinates: np.ndarray, scalar_fields: dict[str, np.ndarray] = None,
-                                   spherical_coordinates_origin: np.ndarray = None) -> 'PointCloudData':
+                                   spherical_coordinates_origin: np.ndarray = None) -> Self:
         # object.__setattr__(self, "_spherical_coordinates_calculated", True)
         assert spherical_coordinates_origin is None or spherical_coordinates_origin.shape == (3, 1)
 
@@ -162,7 +170,7 @@ class PointCloudData:
         for sf_key in self.scalar_fields.keys():
             self.scalar_fields[sf_key] = self.scalar_fields[sf_key][mask]
 
-    def _copy_selection(self, mask:np.ndarray) -> "PointCloudData":
+    def _copy_selection(self, mask: np.ndarray) -> Self:
         # TODO: check if mask is slice or truth array
         xyz = self.xyz[mask].copy()
         color = self.color[mask].copy() if self.color is not None else None
@@ -179,9 +187,8 @@ class PointCloudData:
     #            sample_func: Callable[[np.ndarray], np.ndarray[Any, np.dtype[bool]]],
     #             in_place: bool = False) -> "PointCloudData" | None:
 
-    def apply_math_to_xyz(self, math_func: Callable):
+    def apply_math_to_xyz(self, math_func: Callable) -> None:
         object.__setattr__(self, "xyz", math_func(self.xyz))
-
 
     def filter(self, sf_filter: str, truth_func: Callable[[np.ndarray], np.ndarray[Any, np.dtype[bool]]]) -> None:
         """
@@ -220,16 +227,15 @@ class PointCloudData:
                               np.all(self.xyz <= maximum_corner, axis=1))
         self._reduce_points_to(mask)
 
-    def extract_angles(self, horizontal_min, elevation_min, horizontal_max, elevation_max):
+    def extract_angles(self, fov: FoV) -> Self:
         angle_filter = ("spherical_coordinates",
-                        lambda spc: np.logical_and(np.logical_and(spc[:, 1] >= elevation_min,
-                                                                  spc[:, 1] <= elevation_max),
-                                                   np.logical_and(spc[:, 2] >= horizontal_min,
-                                                                  spc[:, 2] <= horizontal_max, )))
+                        lambda spc: np.logical_and(np.logical_and(spc[:, 1] >= fov.elevation_min,
+                                                                  spc[:, 1] <= fov.elevation_max),
+                                                   np.logical_and(spc[:, 2] >= fov.horizontal_min,
+                                                                  spc[:, 2] <= fov.horizontal_max, )))
         return self.extract(*angle_filter)
 
-
-    def random_subsample(self, size: float | int, in_place: bool = True) -> Optional["PointCloudData"]:
+    def random_subsample(self, size: float | int, in_place: bool = True) -> Optional[Self]:
         if isinstance(size, float) and 0 < size < 1:
             size = np.ceil(size * self.nbPoints).astype(int)
         if size >= self.nbPoints:
@@ -242,7 +248,7 @@ class PointCloudData:
             return self._copy_selection(selection)
 
     def sample(self, sf_sample: str,
-               sample_func: Callable[[np.ndarray], np.ndarray[Any, np.dtype[bool]]]) -> "PointCloudData":
+               sample_func: Callable[[np.ndarray], np.ndarray[Any, np.dtype[bool]]]) -> Self:
         if sf_sample == "spherical_coordinates":
             self.spherical_coordinates
         if sf_sample in self.scalar_fields.keys():
@@ -254,7 +260,7 @@ class PointCloudData:
         return self._copy_selection(filter_mask)
 
     def extract(self, sf_sample: str,
-                sample_func: Callable[[np.ndarray], np.ndarray[Any, np.dtype[bool]]]) -> "PointCloudData":
+                sample_func: Callable[[np.ndarray], np.ndarray[Any, np.dtype[bool]]]) -> Self:
         if sf_sample == "spherical_coordinates":
             self.spherical_coordinates
         if sf_sample in self.scalar_fields.keys():
@@ -277,17 +283,16 @@ class PointCloudData:
     @property
     def fov(self):
         # TODO: Accomodate smaller pcd that cross the hz: 200 -> -200 gon border (same for elevation, less common)
-        return {"horizontal_min": self.spherical_coordinates[:, 2].min(),
-                "elevation_min": self.spherical_coordinates[:, 1].min(),
-                "horizontal_max": self.spherical_coordinates[:, 2].max(),
-                "elevation_max": self.spherical_coordinates[:, 1].max()}
-
-    # @property
-    # def nbPoints(self):
-    #     return self.xyz.shape[0]
+        return FoV(horizontal_min=self.spherical_coordinates[:, 2].min(),
+                   horizontal_max=self.spherical_coordinates[:, 2].max(),
+                   elevation_min=self.spherical_coordinates[:, 1].min(),
+                   elevation_max=self.spherical_coordinates[:, 1].max(),
+                   unit="rad")
 
 
-def merge_pcd(pcds: Iterable[PointCloudData]) -> PointCloudData:
+
+
+def merge_pcd(pcds: Iterable[PointCloudData]) -> Self:
     """
     Merge multiple point clouds.
 
