@@ -2,6 +2,7 @@ import sys
 
 from dataclasses import dataclass, field
 from fractions import Fraction
+from itertools import chain
 import math
 from typing import cast
 if sys.version[0] == 3 and sys.version_info[1] >= 11:
@@ -131,17 +132,39 @@ class FoV:
         return self.split(shape=(np.ceil(self.extent(target_extent[1])[0] / target_extent[0][0]).astype(int),
                                  np.ceil(self.extent(target_extent[1])[1] / target_extent[0][1]).astype(int)))
 
-    def tile(self, target_extent: tuple[tuple[float, float], str], ) -> list[list[Self], ...]:
-        #TODO: Update to take a FoV
-        assert target_extent[0][0] > 0 and target_extent[0][1] > 0
-        # assert all(target < own for target, own in zip(target_extent[0], self.extent(target_extent[1])))
+    # def tile(self, target_extent: tuple[tuple[float, float], str], ) -> list[list[Self], ...]:
+    #     #TODO: Update to take a FoV
+    #     assert target_extent[0][0] > 0 and target_extent[0][1] > 0
+    #     # assert all(target < own for target, own in zip(target_extent[0], self.extent(target_extent[1])))
+    #
+    #     assert target_extent[1] == "rad"
+    #
+    #     horizontal_steps = np.append(np.arange(self.horizontal_min, self.horizontal_max, target_extent[0][0]),
+    #                                  self.horizontal_max)
+    #
+    #     elevation_steps = np.append(np.arange(self.elevation_min, self.elevation_max, target_extent[0][1]),
+    #                                 self.elevation_max)
+    #
+    #     horizontal_bins = list(zip(horizontal_steps[:-1], horizontal_steps[1:]))
+    #     elevation_bins = list(zip(elevation_steps[:-1], elevation_steps[1:]))
+    #
+    #     tiles = []
+    #     for hor_bin in horizontal_bins:
+    #         horizontal_tiles = []
+    #         for elev_bin in elevation_bins:
+    #             horizontal_tiles.append(FoV(horizontal_min=hor_bin[0],
+    #                                         elevation_min=elev_bin[0],
+    #                                         horizontal_max=hor_bin[1],
+    #                                         elevation_max=elev_bin[1]))
+    #         tiles.append(horizontal_tiles)
+    #     return tiles
+    #
+    def tile(self, target_extent: Self) -> list[list[Self]]:
 
-        assert target_extent[1] == "rad"
-
-        horizontal_steps = np.append(np.arange(self.horizontal_min, self.horizontal_max, target_extent[0][0]),
+        horizontal_steps = np.append(np.arange(self.horizontal_min, self.horizontal_max, target_extent.width()),
                                      self.horizontal_max)
 
-        elevation_steps = np.append(np.arange(self.elevation_min, self.elevation_max, target_extent[0][1]),
+        elevation_steps = np.append(np.arange(self.elevation_min, self.elevation_max, target_extent.height()),
                                     self.elevation_max)
 
         horizontal_bins = list(zip(horizontal_steps[:-1], horizontal_steps[1:]))
@@ -180,44 +203,55 @@ class FoVTree:
             return 1
         return max([c.depth() for c in self.children.values()]) + 1
 
-    @classmethod
-    def build_by_splitting(cls, fov: FoV, target_ratio: float, target_fov_extent: tuple[tuple[float, float], str],
-                           max_denominator: int, identifier: str = "") -> Self:
-        # TODO: Rework stopping criteria
-        assert target_fov_extent[1] in ("rad", "gon", "deg")
+    def to_list(self) -> list[tuple[str, FoV]]:
+        if self.is_leaf():
+            return [(self.identifier, self.node)]
 
-        target_extent = target_fov_extent[0]
-        angle_unit = target_fov_extent[1]
+        children_lists = [c.to_list() for c in self.children.values()]
 
-        shape = cls.calculate_optimal_shape(fov, target_ratio, target_fov_extent, max_denominator)
+        return list(chain.from_iterable(children_lists))
 
-        if (fov.extent(unit=angle_unit)[0] < target_extent[0] * shape[0] or
-                fov.extent(unit=angle_unit)[1] < target_extent[1] * shape[1]):
-            fov_tiles = fov.equal_tiles(target_fov_extent)
-            shape = (len(fov_tiles), 1)
-            fov_children = {child_identifier: cls(identifier + child_identifier, child, {})
-                            for child_identifier, child in cls.add_identifier(fov_tiles, shape)}
-        else:
-            fov_splits = fov.split(shape)
-            fov_children = {child_identifier: cls.build_by_splitting(child, target_ratio, target_fov_extent,
-                                                                     max_denominator * 2, identifier + child_identifier)
-                            for child_identifier, child in cls.add_identifier(fov_splits, shape)}
 
-        return cls(identifier, fov, fov_children)
 
-    @classmethod
-    def build_by_tiling(cls, fov: FoV, target_fov_extent: tuple[tuple[float, float], str],
-                        identifier: str = "") -> Self:
-        fov_tiles = fov.equal_tiles(target_fov_extent)
 
-        identifier_length = np.ceil(math.log(len(fov_tiles), 16)).astype(int)
-        fov_with_identifier = tuple([(((identifier_length - len(hex_str := f"{i:x}")) * "0" + hex_str), fov)
-                                     for i, fov in enumerate(fov_tiles)])
+    # @classmethod
+    # def build_by_splitting(cls, fov: FoV, target_ratio: float, target_fov_extent: tuple[tuple[float, float], str],
+    #                        max_denominator: int, identifier: str = "") -> Self:
+    #     # TODO: Rework stopping criteria
+    #     assert target_fov_extent[1] in ("rad", "gon", "deg")
+    #
+    #     target_extent = target_fov_extent[0]
+    #     angle_unit = target_fov_extent[1]
+    #
+    #     shape = cls.calculate_optimal_shape(fov, target_ratio, target_fov_extent, max_denominator)
+    #
+    #     if (fov.extent(unit=angle_unit)[0] < target_extent[0] * shape[0] or
+    #             fov.extent(unit=angle_unit)[1] < target_extent[1] * shape[1]):
+    #         fov_tiles = fov.equal_tiles(target_fov_extent)
+    #         shape = (len(fov_tiles), 1)
+    #         fov_children = {child_identifier: cls(identifier + child_identifier, child, {})
+    #                         for child_identifier, child in cls.add_identifier(fov_tiles, shape)}
+    #     else:
+    #         fov_splits = fov.split(shape)
+    #         fov_children = {child_identifier: cls.build_by_splitting(child, target_ratio, target_fov_extent,
+    #                                                                  max_denominator * 2, identifier + child_identifier)
+    #                         for child_identifier, child in cls.add_identifier(fov_splits, shape)}
+    #
+    #     return cls(identifier, fov, fov_children)
 
-        fov_children = {child_identifier: cls(identifier + child_identifier, child, {})
-                        for child_identifier, child in fov_with_identifier}
-
-        return cls(identifier, fov, fov_children)
+    # @classmethod
+    # def build_by_tiling(cls, fov: FoV, target_fov_extent: tuple[tuple[float, float], str],
+    #                     identifier: str = "") -> Self:
+    #     fov_tiles = fov.equal_tiles(target_fov_extent)
+    #
+    #     identifier_length = np.ceil(math.log(len(fov_tiles), 16)).astype(int)
+    #     fov_with_identifier = tuple([(((identifier_length - len(hex_str := f"{i:x}")) * "0" + hex_str), fov)
+    #                                  for i, fov in enumerate(fov_tiles)])
+    #
+    #     fov_children = {child_identifier: cls(identifier + child_identifier, child, {})
+    #                     for child_identifier, child in fov_with_identifier}
+    #
+    #     return cls(identifier, fov, fov_children)
 
     # @classmethod
     # def build(cls, fov: FoV, target_fov_extent: FoV):
@@ -258,27 +292,27 @@ class FoVTree:
 
         return cls(identifier, fov, fov_children)
 
-    @staticmethod
-    def quadrant_split(tiles: list[list[FoV]]):
-        # q1 = tiles[:len(tiles) // 2]
-        # q2 = tiles[len(tiles) // 2:]
-        # q11 = [row[:len(row)//2] for row in q1]
-        # q12 = [row[len(row)//2:] for row in q1]
-        # q21 = [row[:len(row) // 2] for row in q2]
-        # q22 = [row[len(row) // 2:] for row in q2]
-        # quadrant_FoV = FoV(horizontal_min=q11[0][0].horizontal_min,
-        #                    elevation_min=q11[0][0].elevation_min,
-        #                    horizontal_max=q22[-1][-1].horizontal_max,
-        #                    elevation_max=q22[-1][-1].elevation_max)
+    # @staticmethod
+    # def quadrant_split(tiles: list[list[FoV]]):
+    #     # q1 = tiles[:len(tiles) // 2]
+    #     # q2 = tiles[len(tiles) // 2:]
+    #     # q11 = [row[:len(row)//2] for row in q1]
+    #     # q12 = [row[len(row)//2:] for row in q1]
+    #     # q21 = [row[:len(row) // 2] for row in q2]
+    #     # q22 = [row[len(row) // 2:] for row in q2]
+    #     # quadrant_FoV = FoV(horizontal_min=q11[0][0].horizontal_min,
+    #     #                    elevation_min=q11[0][0].elevation_min,
+    #     #                    horizontal_max=q22[-1][-1].horizontal_max,
+    #     #                    elevation_max=q22[-1][-1].elevation_max)
+    #
+    #     FoVTree.quadrant_split(q11)
+    #     FoVTree.quadrant_split(q12)
+    #     FoVTree.quadrant_split(q21)
+    #     FoVTree.quadrant_split(q22)
+    #
+    #     pass
 
-        FoVTree.quadrant_split(q11)
-        FoVTree.quadrant_split(q12)
-        FoVTree.quadrant_split(q21)
-        FoVTree.quadrant_split(q22)
-
-        pass
-
-    def __getitem__(self, identifier: str):
+    def __getitem__(self, identifier: str) -> Self:
         # TODO: extend to complete for full string
         child_identifier_length = np.ceil(math.log(len(self.children), 16)).astype(int)
         if len(identifier) > child_identifier_length:

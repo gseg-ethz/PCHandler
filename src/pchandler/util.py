@@ -3,7 +3,6 @@ from typing import Optional
 
 import numpy as np
 
-
 class AngleUnit(Enum):
     RAD = "rad"
     DEGREE = "deg"

@@ -2,6 +2,7 @@
 
 import csv
 from datetime import datetime
+from enum import Enum
 from itertools import compress
 from pathlib import Path
 from typing import Any, Callable
@@ -12,14 +13,22 @@ from plyfile import PlyElement, PlyData
 
 from pchandler.geometry import PointCloudData, merge_pcd
 
+# TODO: Implement `Enum` for FileTypes
+# class PCDFileTypes(Enum):
+#     E57 = ".e57"  # Not yet implemented
+#     PLY = ".ply"
+#     LAS = ".las"
+#     LAZ = ".laz"
+#     ASCII = ".txt"
 
-def find_pcd_in_directory(directory_path, pcd_file_types: list[str], greedy: bool = True) -> list[Path]:
+
+def find_pcd_in_directory(directory_path, pcd_file_types: list[str], include_subdirectories: bool = True) -> list[Path]:
     file_list = [file_path for file_path in directory_path.iterdir() if file_path.suffix.lower() in pcd_file_types]
 
-    if greedy:
+    if include_subdirectories:
         for file_path in directory_path.iterdir():
             if file_path.is_dir():
-                file_list.extend(find_pcd_in_directory(file_path, pcd_file_types, greedy))
+                file_list.extend(find_pcd_in_directory(file_path, pcd_file_types, include_subdirectories))
     return file_list
 
 

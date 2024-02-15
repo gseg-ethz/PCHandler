@@ -3,7 +3,7 @@ import sys
 
 from collections import defaultdict
 from dataclasses import dataclass, field, KW_ONLY, InitVar
-from itertools import compress
+from itertools import compress, chain
 from functools import cached_property
 import gc
 from typing import Iterable, Callable, Any, Tuple, Optional
@@ -13,9 +13,10 @@ else:
     from typing_extensions import Self
 import warnings
 
+from joblib import Parallel, delayed
 import numpy as np
 
-from pchandler.fov import FoV
+from pchandler.fov import FoV, FoVTree
 
 # from pchandler.util import convert_angle, AngleUnit
 
@@ -49,13 +50,13 @@ class PointCloudData:
     global_coordinate_shift: Optional[np.ndarray] = None
     _spherical_coordinates_calculated: bool = False
     # nbPoints: int = field(init=False)
-    apply_global_shift: InitVar[bool] = True
+    _global_shift_already_applied: InitVar[bool] = False
 
     @property
     def nbPoints(self):
         return self.xyz.shape[0]
 
-    def __post_init__(self, apply_global_shift) -> None:
+    def __post_init__(self, _global_shift_already_applied) -> None:
         """
 
         """
@@ -80,7 +81,7 @@ class PointCloudData:
         if self.global_coordinate_shift is None and any((np.abs(self.xyz) >= 1e4).flatten()):
             object.__setattr__(self, 'global_coordinate_shift', np.median(np.round(self.xyz, decimals=-3), axis=0))
 
-        if self.global_coordinate_shift is not None and apply_global_shift:
+        if self.global_coordinate_shift is not None and not _global_shift_already_applied:
             object.__setattr__(self, 'xyz', (self.xyz - self.global_coordinate_shift).astype(np.float32, casting="same_kind"))
         else:
             object.__setattr__(self, "xyz", self.xyz.astype(np.float32, casting="same_kind"))
@@ -96,16 +97,15 @@ class PointCloudData:
        #     scalar_fields["scalar_Intensity"] = scalar_fields["scalar_Intensity"].astype(np.float32)
 
     @classmethod
-    def from_range_image(cls, range_data: np.ndarray, horizontal_min: float, horizontal_max: float,
-                         elevation_min: float, elevation_max: float, scalar_fields: dict[str, np.ndarray] = None,
+    def from_range_image(cls, range_data: np.ndarray, fov: FoV, scalar_fields: dict[str, np.ndarray] = None,
                          spherical_coordinates_origin: np.ndarray = None) -> Self:
 
         # nbPts = np.count_nonzero(~np.isnan(range_data))
         resolution = range_data.shape
 
         ## TODO: Check endpoint consistency throughout
-        elevation_range = np.linspace(elevation_min, elevation_max, num=resolution[0], endpoint=True)
-        horizontal_range = np.linspace(horizontal_min, horizontal_max, num=resolution[1], endpoint=True)
+        elevation_range = np.linspace(fov.elevation_min, fov.elevation_max, num=resolution[0], endpoint=True)
+        horizontal_range = np.linspace(fov.horizontal_min, fov.horizontal_max, num=resolution[1], endpoint=True)
 
         elevation_mesh, horizontal_mesh = np.meshgrid(elevation_range, horizontal_range, indexing="ij")
 
@@ -159,7 +159,7 @@ class PointCloudData:
     def __repr__(self) -> str:
         return f"Point cloud with {self.xyz.shape[0]:,d} point(s)"
 
-    def _reduce_points_to(self, mask: np.ndarray) -> None:
+    def _reduce_points_to(self, mask: np.ndarray) -> Self:
         object.__setattr__(self, "xyz", self.xyz[mask])
         if self.color is not None:
             object.__setattr__(self, "color", self.color[mask])
@@ -169,6 +169,7 @@ class PointCloudData:
             object.__setattr__(self, "spherical_coordinates", self.spherical_coordinates[mask])
         for sf_key in self.scalar_fields.keys():
             self.scalar_fields[sf_key] = self.scalar_fields[sf_key][mask]
+        return self
 
     def _copy_selection(self, mask: np.ndarray) -> Self:
         # TODO: check if mask is slice or truth array
@@ -181,7 +182,7 @@ class PointCloudData:
         global_coordinate_shift = self.global_coordinate_shift.copy() if self.global_coordinate_shift is not None else None
         spherical_coordinates_origin = self.spherical_coordinates_origin.copy() if self.spherical_coordinates_origin is not None else None
         return PointCloudData(xyz, color=color, normals=normals, scalar_fields=scalar_fields, global_coordinate_shift=global_coordinate_shift,
-                              spherical_coordinates_origin=spherical_coordinates_origin, apply_global_shift=False)
+                              spherical_coordinates_origin=spherical_coordinates_origin, _global_shift_already_applied=True)
 
     # def _sample(self,sf_sample: str,
     #            sample_func: Callable[[np.ndarray], np.ndarray[Any, np.dtype[bool]]],
@@ -235,7 +236,16 @@ class PointCloudData:
                                                                   spc[:, 2] <= fov.horizontal_max, )))
         return self.extract(*angle_filter)
 
-    def random_subsample(self, size: float | int, in_place: bool = True) -> Optional[Self]:
+    def extract_range(self, *, low: float = None, high: float = None) -> Self:
+        if low is None:
+            low = 0
+        if high is None:
+            high = np.inf
+        range_filter = ("spherical_coordinates",
+                        lambda spc: np.logical_and(spc[:, 0] >= low, spc[:, 0] <= high))
+        return self.extract(*range_filter)
+
+    def random_subsample(self, size: float | int, in_place: bool = True) -> Self:
         if isinstance(size, float) and 0 < size < 1:
             size = np.ceil(size * self.nbPoints).astype(int)
         if size >= self.nbPoints:
@@ -243,7 +253,7 @@ class PointCloudData:
             return self._copy_selection(np.arange(0, self.nbPoints)) if not in_place else None
         selection = np.sort(np.random.choice(np.arange(0, self.nbPoints), size=size, replace=False))
         if in_place:
-            self._reduce_points_to(selection)
+            return self._reduce_points_to(selection)
         else:
             return self._copy_selection(selection)
 
@@ -290,9 +300,7 @@ class PointCloudData:
                    unit="rad")
 
 
-
-
-def merge_pcd(pcds: Iterable[PointCloudData]) -> Self:
+def merge_pcd(pcds: Iterable[PointCloudData]) -> PointCloudData:
     """
     Merge multiple point clouds.
 
@@ -302,18 +310,21 @@ def merge_pcd(pcds: Iterable[PointCloudData]) -> Self:
 
     Parameters
     ----------
-    pcds : iterable[DeSpAn.geometry.PointCloudData]
+    pcds : iterable[pchandler.geometry.PointCloudData]
 
     Returns
     -------
-    pcd : DeSpAn.geometry.PointCloudData
+    pcd : pchandler.geometry.PointCloudData
     """
     warnings.warn("This function is currently only works if the global shift of all pcds is [0, 0, 0]!")
     xyz = []
     color = []
     normals = []
     scalar_fields = defaultdict(list)
+    global_coordinate_shift = []
+    # spherical_coordinates_origin = []
 
+    # Build lists of all elements
     for i, pcd in enumerate(pcds):
         xyz.append(pcd.xyz)
         color.append(pcd.color)
@@ -321,6 +332,9 @@ def merge_pcd(pcds: Iterable[PointCloudData]) -> Self:
         for sf, pcd_sf in pcd.scalar_fields.items():
             scalar_fields[sf].append(pcd_sf)
         scalar_fields["point_cloud_merge"].append(np.ones((pcd.xyz.shape[0],), dtype=np.uint8) * (i + 1))
+        global_coordinate_shift.append(pcd.global_coordinate_shift)
+        # spherical_coordinates_origin.append(pcd.spherical_coordinates_origin)
+
 
     # Find empty pcd
     # empty_mask = [False if val is None else True for val in xyz]
@@ -345,9 +359,21 @@ def merge_pcd(pcds: Iterable[PointCloudData]) -> Self:
     for rk in remove_keys:
         del (scalar_fields[rk])
 
-    xyz_np = np.vstack(tuple(xyz))
-    del xyz
-    gc.collect()
+
+    # Check if all have same global coordinate shift, if not add gcs back
+    gcs_pairs = zip(global_coordinate_shift[:-1], global_coordinate_shift[1:])
+    if all(map(lambda gcs_pair: np.array_equal(*gcs_pair), gcs_pairs)):
+        gcs = global_coordinate_shift[0]
+        xyz_np = np.vstack(tuple(xyz))
+        del xyz
+        gc.collect()
+    else:
+        gcs = None
+        xyz_64 = [x.astype(np.float64) for x in xyz]
+        gcs_None_removed = [np.zeros(3,) if g is None else g for g in global_coordinate_shift]
+        xyz_np = np.vstack(tuple(map(lambda x: np.add(*x), zip(xyz_64, gcs_None_removed))))
+        del xyz, xyz_64
+        gc.collect()
 
     color_np = np.vstack(tuple(color)) if color is not None else None  #
     del color
@@ -366,7 +392,35 @@ def merge_pcd(pcds: Iterable[PointCloudData]) -> Self:
 
     scalar_fields = {sf_key: np.hstack(tuple(sf)) for sf_key, sf in scalar_fields.items()}
 
-    return PointCloudData(xyz_np, color=color_np, normals=normals_np, scalar_fields=scalar_fields)
+    return PointCloudData(xyz_np, color=color_np, normals=normals_np, scalar_fields=scalar_fields,
+                          global_coordinate_shift=gcs, _global_shift_already_applied=(gcs is not None))
 
 
+def split_pc_with_fov_tree(pcd: PointCloudData, fov_tree: FoVTree, remove_empty: bool = True, n_jobs: int = -1) \
+        -> dict[str, PointCloudData]:
+        # -> list[tuple[str, FoV, PointCloudData]]:
 
+    """
+
+    """
+    # if fov_tree.is_leaf() or pcd.nbPoints <= self.minimum_nb_points:
+    #     return [(fov_tree.identifier, fov_tree.node, pcd,)]
+    if fov_tree.is_leaf():
+        return {fov_tree.identifier: pcd}
+        # return [(fov_tree.identifier, fov_tree.node, pcd,)]
+
+    # Setup argumenets for call
+    split_packages = [(pcd.extract_angles(child.node), child, remove_empty, n_jobs)
+                      for child in fov_tree.children.values()]
+    if remove_empty:
+        split_packages = [sp for sp in split_packages if sp[0].nbPoints]
+    # print(*[FoV(**sp[0].fov, unit="rad") for sp in split_packages], sep='\n')
+
+    split = Parallel(n_jobs=n_jobs, prefer="processes", verbose=50, timeout=10 * 60)(delayed(
+        split_pc_with_fov_tree)(*split_package) for split_package in split_packages)
+
+
+    split_dict = {k: v for d in split for k, v in d.items()}
+    return split_dict
+    # split = list(chain.from_iterable(split))
+    # return list(split)
