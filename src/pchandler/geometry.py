@@ -28,37 +28,40 @@ from pchandler.fov import FoV, FoVTree
 @dataclass(frozen=True)
 class PointCloudData:
     """
-    Array with associated photographic information.
+    PointCloudData stores 3D points in a cartesian coordinate system.
 
 
     Attributes
     ----------
     xyz : np.ndarray
-        nx3 float array with the *x*, *y* and *z* coordinates of the cloud.
+        nx3 float32 array with the *x*, *y* and *z* coordinates of the cloud.
+    scalar_fields: dict[str, np.ndarray]
+        dict of n 1D-arrays
     color : np.ndarray
         nx3 uint8 array of *r*, *g* and *b* colors.
     normals : np.ndarray
+        nx3 float array
+
 
     """
 
     xyz: np.ndarray
     _: KW_ONLY
+    scalar_fields: dict[str, np.ndarray] = field(default_factory=dict)
     color: Optional[np.ndarray] = None
     normals: Optional[np.ndarray] = None
-    scalar_fields: dict[str, np.ndarray] = field(default_factory=dict)
-    spherical_coordinates_origin: Optional[np.ndarray] = None
     global_coordinate_shift: Optional[np.ndarray] = None
+    spherical_coordinates_origin: Optional[np.ndarray] = None
     _spherical_coordinates_calculated: bool = False
-    # nbPoints: int = field(init=False)
     _global_shift_already_applied: InitVar[bool] = False
 
     @property
     def nbPoints(self):
         return self.xyz.shape[0]
 
-    def __post_init__(self, _global_shift_already_applied) -> None:
+    def __post_init__(self, _global_shift_already_applied: bool) -> None:
         """
-
+        _global_shift_already_applied
         """
         # Check types
         assert isinstance(self.xyz, np.ndarray)
@@ -126,7 +129,7 @@ class PointCloudData:
     def from_spherical_coordinates(cls, spherical_coordinates: np.ndarray, scalar_fields: dict[str, np.ndarray] = None,
                                    spherical_coordinates_origin: np.ndarray = None) -> Self:
         # object.__setattr__(self, "_spherical_coordinates_calculated", True)
-        assert spherical_coordinates_origin is None or spherical_coordinates_origin.shape == (3, 1)
+        assert spherical_coordinates_origin is None or spherical_coordinates_origin.shape == (3,)
 
         xyz = np.zeros((len(spherical_coordinates), 3))
         xyz[:, 0] = spherical_coordinates[:, 0] * np.sin(spherical_coordinates[:, 1]) * np.cos(spherical_coordinates[:, 2])
@@ -292,7 +295,7 @@ class PointCloudData:
 
     @property
     def fov(self):
-        # TODO: Accomodate smaller pcd that cross the hz: 200 -> -200 gon border (same for elevation, less common)
+        # TODO: Accommodate smaller pcd that cross the hz: 200 -> -200 gon border (same for elevation, less common)
         return FoV(horizontal_min=self.spherical_coordinates[:, 2].min(),
                    horizontal_max=self.spherical_coordinates[:, 2].max(),
                    elevation_min=self.spherical_coordinates[:, 1].min(),
@@ -419,8 +422,5 @@ def split_pc_with_fov_tree(pcd: PointCloudData, fov_tree: FoVTree, remove_empty:
     split = Parallel(n_jobs=n_jobs, prefer="processes", verbose=50, timeout=10 * 60)(delayed(
         split_pc_with_fov_tree)(*split_package) for split_package in split_packages)
 
-
     split_dict = {k: v for d in split for k, v in d.items()}
     return split_dict
-    # split = list(chain.from_iterable(split))
-    # return list(split)

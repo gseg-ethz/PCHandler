@@ -264,6 +264,10 @@ class FoVTree:
         if not tiles or not tiles[0]:
             return None
 
+        # Todo: Check this logic!
+        if len(tiles) == 1 and len(tiles[0]) == 1:
+            return cls(identifier, tiles[0][0], None)
+
         fov = FoV(horizontal_min=tiles[0][0].horizontal_min,
                   elevation_min=tiles[0][0].elevation_min,
                   horizontal_max=tiles[-1][-1].horizontal_max,
@@ -314,6 +318,8 @@ class FoVTree:
 
     def __getitem__(self, identifier: str) -> Self:
         # TODO: extend to complete for full string
+        if not identifier:
+            return self
         child_identifier_length = np.ceil(math.log(len(self.children), 16)).astype(int)
         if len(identifier) > child_identifier_length:
             return self.children[identifier[:child_identifier_length]][identifier[child_identifier_length:]]
