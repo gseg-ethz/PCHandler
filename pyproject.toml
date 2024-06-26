@@ -14,7 +14,7 @@ authors = [
 	{email = "meyernic@ethz.ch"},
 ]
 dynamic = [
-	"version",
+#	"version",
 	"readme",
 ]
 classifiers = [
@@ -32,7 +32,7 @@ dependencies = [
 ]
 
 [tool.setuptools.dynamic]
-version = {attr = "pchandler.__version__"}
+#version = {attr = "pchandler.__version__"}
 readme = {file = ["README.md"]}
 
 [project.urls]

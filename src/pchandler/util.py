@@ -24,7 +24,7 @@ def convert_angles(values: np.ndarray, source_unit: AngleUnit, target_unit: Angl
                 case AngleUnit.GON: return np.multiply(values, 200/np.pi, out=out)
         case AngleUnit.DEGREE:
             match target_unit:
-                case AngleUnit.RAD: return np.deg2rad(values)
+                case AngleUnit.RAD: return np.deg2rad(values, out=out)
                 case AngleUnit.GON: return np.multiply(values, 200/180, out=out)
         case AngleUnit.GON:
             match target_unit:
