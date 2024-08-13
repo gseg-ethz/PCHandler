@@ -141,6 +141,10 @@ class PointCloudData:
 
         return cls(xyz, scalar_fields=scalar_fields, spherical_coordinates_origin=spherical_coordinates_origin)
 
+    def copy(self) -> Self:
+        mask = np.ones(self.xyz.shape[0], dtype=bool)
+        return self._copy_selection(mask)
+
     @cached_property
     def spherical_coordinates(self) -> np.ndarray:
 

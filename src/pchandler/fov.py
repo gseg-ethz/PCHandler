@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from fractions import Fraction
 from itertools import chain
 import math
-from typing import cast
+from typing import cast, Optional
 if sys.version[0] == 3 and sys.version_info[1] >= 11:
     from typing import Self
 else:
@@ -172,8 +172,12 @@ class FoV:
 
         tiles = []
         for hor_bin in horizontal_bins:
+            if hor_bin[-1] - hor_bin[0] <= 0:
+                continue
             horizontal_tiles = []
             for elev_bin in elevation_bins:
+                if elev_bin[-1] - elev_bin[0] <= 0:
+                    continue
                 horizontal_tiles.append(FoV(horizontal_min=hor_bin[0],
                                             elevation_min=elev_bin[0],
                                             horizontal_max=hor_bin[1],
@@ -190,7 +194,7 @@ class FoV:
 class FoVTree:
     identifier: str
     node: FoV
-    children: dict[str, Self] = field(default_factory=dict)
+    children: Optional[dict[str, Self]] = field(default_factory=dict)
 
     @staticmethod
     def add_identifier(fovs: list[FoV], shape: tuple[int, int]):
@@ -266,6 +270,8 @@ class FoVTree:
 
         # Todo: Check this logic!
         if len(tiles) == 1 and len(tiles[0]) == 1:
+            if identifier is "":
+                return cls("root", tiles[0][0], None)
             return cls(identifier, tiles[0][0], None)
 
         fov = FoV(horizontal_min=tiles[0][0].horizontal_min,
@@ -318,7 +324,7 @@ class FoVTree:
 
     def __getitem__(self, identifier: str) -> Self:
         # TODO: extend to complete for full string
-        if not identifier:
+        if not identifier or identifier is "root":
             return self
         child_identifier_length = np.ceil(math.log(len(self.children), 16)).astype(int)
         if len(identifier) > child_identifier_length:
