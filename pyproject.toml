@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pchandler"
-version = "0.2.0"
+#version = "0.2.0"
 description = "Short description of PointCloudHandler (pchandler)"
 requires-python = ">=3.10"
 keywords = ["LiDAR", "Pointclouds"]
@@ -14,7 +14,7 @@ authors = [
 	{email = "meyernic@ethz.ch"},
 ]
 dynamic = [
-#	"version",
+	"version",
 	"readme",
 ]
 classifiers = [
@@ -32,7 +32,7 @@ dependencies = [
 ]
 
 [tool.setuptools.dynamic]
-#version = {attr = "pchandler.__version__"}
+version = {attr = "pchandler.__version__"}
 readme = {file = ["README.md"]}
 
 [project.urls]

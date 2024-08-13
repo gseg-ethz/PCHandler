@@ -324,7 +324,7 @@ class FoVTree:
 
     def __getitem__(self, identifier: str) -> Self:
         # TODO: extend to complete for full string
-        if not identifier or identifier is "root":
+        if not identifier or identifier == "root":
             return self
         child_identifier_length = np.ceil(math.log(len(self.children), 16)).astype(int)
         if len(identifier) > child_identifier_length:
