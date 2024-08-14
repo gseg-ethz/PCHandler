@@ -270,7 +270,7 @@ class FoVTree:
 
         # Todo: Check this logic!
         if len(tiles) == 1 and len(tiles[0]) == 1:
-            if identifier is "":
+            if identifier == "":
                 return cls("root", tiles[0][0], None)
             return cls(identifier, tiles[0][0], None)
 
