@@ -307,100 +307,119 @@ class PointCloudData:
                    unit="rad")
 
 
-def merge_pcd(pcds: Iterable[PointCloudData]) -> PointCloudData:
-    """
-    Merge multiple point clouds.
+    @classmethod
+    def merge_pcd(cls, pcds: Iterable[Self]) -> Self:
+        """
+        Merge multiple point clouds.
 
-    Merges two or more point clouds. The new point cloud will only retain scalar fields (and colors and normals) if
-    TODO: Check for dtype (uint8 vs uint16 -> needs to be scaled)
-    TODO:
+        Merges two or more point clouds. The new point cloud will only retain scalar fields (and colors and normals) if
+        TODO: Check for dtype (uint8 vs uint16 -> needs to be scaled)
+        TODO:
 
-    Parameters
-    ----------
-    pcds : iterable[pchandler.geometry.PointCloudData]
+        Parameters
+        ----------
+        pcds : iterable[pchandler.geometry.PointCloudData]
 
-    Returns
-    -------
-    pcd : pchandler.geometry.PointCloudData
-    """
-    warnings.warn("This function is currently only works if the global shift of all pcds is [0, 0, 0]!")
-    xyz = []
-    color = []
-    normals = []
-    scalar_fields = defaultdict(list)
-    global_coordinate_shift = []
-    # spherical_coordinates_origin = []
+        Returns
+        -------
+        pcd : pchandler.geometry.PointCloudData
+        """
 
-    # Build lists of all elements
-    for i, pcd in enumerate(pcds):
-        xyz.append(pcd.xyz)
-        color.append(pcd.color)
-        normals.append(pcd.normals)
-        for sf, pcd_sf in pcd.scalar_fields.items():
-            scalar_fields[sf].append(pcd_sf)
-        scalar_fields["point_cloud_merge"].append(np.ones((pcd.xyz.shape[0],), dtype=np.uint8) * (i + 1))
-        global_coordinate_shift.append(pcd.global_coordinate_shift)
-        # spherical_coordinates_origin.append(pcd.spherical_coordinates_origin)
+        xyz = []
+        color = []
+        normals = []
+        scalar_fields = defaultdict(list)
+        global_coordinate_shift = []
+        spherical_coordinates_origin = []
 
-
-    # Find empty pcd
-    # empty_mask = [False if val is None else True for val in xyz]
-    # xyz = list(compress(xyz, empty_mask))
-    # color = list(compress(color, empty_mask))
-    # normals = list(compress(normals, empty_mask))
-    # scalar_fields = {sf_key: list(compress(sf_filter, empty_mask)) for sf_key, sf_filter in scalar_fields.items()}
-
-    nb_pcds = len(xyz)
-
-    if any(val is None for val in color):
-        color = None
-
-    if any(val is None for val in normals):
-        normals = None
-
-    remove_keys = []
-    for sf_key, sf in scalar_fields.items():
-        if any(val is None for val in sf) or len(sf) < nb_pcds:
-            remove_keys.append(sf_key)
-
-    for rk in remove_keys:
-        del (scalar_fields[rk])
+        # Build lists of all elements
+        for i, pcd in enumerate(pcds):
+            xyz.append(pcd.xyz)
+            color.append(pcd.color)
+            normals.append(pcd.normals)
+            for sf, pcd_sf in pcd.scalar_fields.items():
+                scalar_fields[sf].append(pcd_sf)
+            scalar_fields["point_cloud_merge"].append(np.ones((pcd.xyz.shape[0],), dtype=np.uint8) * (i + 1))
+            global_coordinate_shift.append(pcd.global_coordinate_shift)
+            spherical_coordinates_origin.append(pcd.spherical_coordinates_origin)
 
 
-    # Check if all have same global coordinate shift, if not add gcs back
-    gcs_pairs = zip(global_coordinate_shift[:-1], global_coordinate_shift[1:])
-    if all(map(lambda gcs_pair: np.array_equal(*gcs_pair), gcs_pairs)):
-        gcs = global_coordinate_shift[0]
-        xyz_np = np.vstack(tuple(xyz))
-        del xyz
+        # Find empty pcd
+        # empty_mask = [False if val is None else True for val in xyz]
+        # xyz = list(compress(xyz, empty_mask))
+        # color = list(compress(color, empty_mask))
+        # normals = list(compress(normals, empty_mask))
+        # scalar_fields = {sf_key: list(compress(sf_filter, empty_mask)) for sf_key, sf_filter in scalar_fields.items()}
+
+        nb_pcds = len(xyz)
+
+        if any(val is None for val in color):
+            color = None
+
+        if any(val is None for val in normals):
+            normals = None
+
+        remove_keys = []
+        for sf_key, sf in scalar_fields.items():
+            if any(val is None for val in sf) or len(sf) < nb_pcds:
+                remove_keys.append(sf_key)
+
+        for rk in remove_keys:
+            del (scalar_fields[rk])
+
+
+        # Check if all have same global coordinate shift, if not add gcs back
+        gcs_pairs = zip(global_coordinate_shift[:-1], global_coordinate_shift[1:])
+        if all(map(lambda gcs_pair: np.array_equal(*gcs_pair), gcs_pairs)):
+            gcs = global_coordinate_shift[0]
+            xyz_np = np.vstack(tuple(xyz))
+            del xyz
+            gc.collect()
+        else:
+            gcs = None
+            xyz_64 = [x.astype(np.float64) for x in xyz]
+            gcs_None_removed = [np.zeros(3,) if g is None else g for g in global_coordinate_shift]
+            xyz_np = np.vstack(tuple(map(lambda x: np.add(*x), zip(xyz_64, gcs_None_removed))))
+            del xyz, xyz_64
+            gc.collect()
+
+        color_np = np.vstack(tuple(color)) if color is not None else None  #
+        del color
         gc.collect()
-    else:
-        gcs = None
-        xyz_64 = [x.astype(np.float64) for x in xyz]
-        gcs_None_removed = [np.zeros(3,) if g is None else g for g in global_coordinate_shift]
-        xyz_np = np.vstack(tuple(map(lambda x: np.add(*x), zip(xyz_64, gcs_None_removed))))
-        del xyz, xyz_64
+
+        normals_np = np.vstack(tuple(normals)) if normals is not None else None
+        del normals
         gc.collect()
 
-    color_np = np.vstack(tuple(color)) if color is not None else None  #
-    del color
-    gc.collect()
+        # sf_keys = scalar_fields.keys()
+        # scalar_fields_np = {}
+        # for sf_key in sf_keys:
+        #     scalar_fields_np[sf_key] = np.hstack(tuple(scalar_fields[sf_key]))
+        #     del scalar_fields[sf_key]
+        #     gc.collect()
 
-    normals_np = np.vstack(tuple(normals)) if normals is not None else None
-    del normals
-    gc.collect()
+        scalar_fields = {sf_key: np.hstack(tuple(sf)) for sf_key, sf in scalar_fields.items()}
 
-    # sf_keys = scalar_fields.keys()
-    # scalar_fields_np = {}
-    # for sf_key in sf_keys:
-    #     scalar_fields_np[sf_key] = np.hstack(tuple(scalar_fields[sf_key]))
-    #     del scalar_fields[sf_key]
-    #     gc.collect()
+        sco_pairs = zip(spherical_coordinates_origin[:-1], spherical_coordinates_origin[1:])
 
-    scalar_fields = {sf_key: np.hstack(tuple(sf)) for sf_key, sf in scalar_fields.items()}
+        # Check if all spherical_coordinates_origin are equal
+        scs = None
+        if all(map(lambda sco_pair: np.array_equal(*sco_pair), sco_pairs)):
+            sco = spherical_coordinates_origin[0]
+            if all([pcd._spherical_coordinates_calculated for pcd in pcds]):
+                scs = np.vstack([pcd.spherical_coordinates_origin for pcd in pcds])
+        else:
+            sco = None
 
-    return PointCloudData(xyz_np, color=color_np, normals=normals_np, scalar_fields=scalar_fields,
-                          global_coordinate_shift=gcs, _global_shift_already_applied=(gcs is not None))
+        new_pcd = cls(xyz=xyz_np, color=color_np, normals=normals_np, scalar_fields=scalar_fields,
+                      global_coordinate_shift=gcs, _global_shift_already_applied=(gcs is not None),
+                      spherical_coordinates_origin=sco)
+
+        if scs is not None:
+            object.__setattr__(new_pcd, "spherical_coordinates", scs)
+            object.__setattr__(new_pcd, "_spherical_coordinates_calculated", True)
+
+        return new_pcd
 
 
 def split_pc_with_fov_tree(pcd: PointCloudData, fov_tree: FoVTree, remove_empty: bool = True, n_jobs: int = -1) \

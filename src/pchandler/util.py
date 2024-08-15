@@ -3,6 +3,8 @@ from typing import Optional
 
 import numpy as np
 
+EPS = np.finfo(np.float32).eps
+
 class AngleUnit(Enum):
     RAD = "rad"
     DEGREE = "deg"

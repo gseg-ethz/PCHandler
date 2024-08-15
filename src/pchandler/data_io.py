@@ -11,7 +11,7 @@ import numpy as np
 import laspy
 from plyfile import PlyElement, PlyData
 
-from pchandler.geometry import PointCloudData, merge_pcd
+from pchandler.geometry import PointCloudData
 
 # TODO: Implement `Enum` for FileTypes
 # class PCDFileTypes(Enum):

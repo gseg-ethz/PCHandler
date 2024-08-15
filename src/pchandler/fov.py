@@ -12,7 +12,7 @@ else:
 
 import numpy as np
 
-from pchandler.util import AngleUnit, convert_angles
+from pchandler.util import AngleUnit, convert_angles, EPS
 
 
 
@@ -83,13 +83,13 @@ class FoV:
                f"{values['horizontal_max']:0.4f}, {values['elevation_max']:0.4f})"
 
     def extend_to_ratio(self, ratio: float) -> Self:
-        if self.ratio() > ratio:
+        if self.ratio() - ratio > EPS:
             target_vertical_extent = self.extent()[0] / ratio
             new_fov = FoV(horizontal_min=self.horizontal_min,
                           elevation_min=self.elevation_min,
                           horizontal_max=self.horizontal_max,
                           elevation_max=self.elevation_min + target_vertical_extent)
-        elif self.ratio() < ratio:
+        elif ratio - self.ratio() > EPS:
             target_horizontal_extent = self.extent()[1] * ratio
             new_fov = FoV(horizontal_min=self.horizontal_min,
                           elevation_min=self.elevation_min,
@@ -178,11 +178,12 @@ class FoV:
             for elev_bin in elevation_bins:
                 if elev_bin[-1] - elev_bin[0] <= 0:
                     continue
-                horizontal_tiles.append(FoV(horizontal_min=hor_bin[0],
-                                            elevation_min=elev_bin[0],
-                                            horizontal_max=hor_bin[1],
-                                            elevation_max=elev_bin[1]))
-            tiles.append(horizontal_tiles)
+                new_fov = FoV(horizontal_min=hor_bin[0], elevation_min=elev_bin[0], horizontal_max=hor_bin[1],
+                              elevation_max=elev_bin[1])
+                if all(e > EPS for e in new_fov.extent()):
+                    horizontal_tiles.append(new_fov)
+            if horizontal_tiles:
+                tiles.append(horizontal_tiles)
         return tiles
 
     def quadrants(self):
