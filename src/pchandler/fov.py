@@ -4,7 +4,8 @@ from dataclasses import dataclass, field
 from fractions import Fraction
 from itertools import chain
 import math
-from typing import cast, Optional
+from typing import cast, Optional, Iterable
+
 if sys.version[0] == 3 and sys.version_info[1] >= 11:
     from typing import Self
 else:
@@ -189,6 +190,18 @@ class FoV:
     def quadrants(self):
         # Keep for legacy
         return tuple(self.split(shape=(2, 2)))
+
+
+    @classmethod
+    def merge(cls, fovs: Iterable[Self]) -> Self:
+        min_horizontal_min = min(fovs, key=lambda fov: fov.horizontal_min).horizontal_min
+        min_elevation_min = min(fovs, key=lambda fov: fov.elevation_min).elevation_min
+        max_horizontal_max = max(fovs, key=lambda fov: fov.horizontal_max).horizontal_max
+        max_elevation_max = max(fovs, key=lambda fov: fov.elevation_max).elevation_max
+
+        return cls(horizontal_min=min_horizontal_min, elevation_min=min_elevation_min,
+                   horizontal_max=max_horizontal_max, elevation_max=max_elevation_max)
+
 
 
 @dataclass(init=True, frozen=True)
