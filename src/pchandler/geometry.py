@@ -160,6 +160,15 @@ class PointCloudData:
         spherical_coordinates[:, 0] = np.sqrt(xy + xyz[:, 2] ** 2)
         spherical_coordinates[:, 1] = np.arctan2(np.sqrt(xy), xyz[:, 2])  # for elevation angle defined from Z-axis down
         spherical_coordinates[:, 2] = - np.arctan2(xyz[:, 1], xyz[:, 0])
+
+        # Check for continuous representation
+        hz_shifted = spherical_coordinates[:,2].copy()
+        hz_shifted[hz_shifted < 0] = 2*np.pi + hz_shifted[hz_shifted < 0]
+        extent_shifted = hz_shifted.max() - hz_shifted.min()
+        extent = spherical_coordinates[:, 2].max() - spherical_coordinates[:, 2].min()
+        if extent_shifted < extent:
+            spherical_coordinates[:, 2] = hz_shifted
+
         object.__setattr__(self, "_spherical_coordinates_calculated", True)
         return spherical_coordinates
 
