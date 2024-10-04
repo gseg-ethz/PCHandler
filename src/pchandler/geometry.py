@@ -156,6 +156,11 @@ class PointCloudData:
         else:
             xyz = self.xyz
 
+        if len(xyz) == 0:
+            object.__setattr__(self, "_spherical_coordinates_calculated", True)
+            object.__setattr__(self, "_spherical_coordinates_represented_0_to_2pi", False)
+            return np.empty_like(xyz)
+
         spherical_coordinates = np.zeros(self.xyz.shape)
         xy = xyz[:, 0] ** 2 + xyz[:, 1] ** 2
         spherical_coordinates[:, 0] = np.sqrt(xy + xyz[:, 2] ** 2)
@@ -206,9 +211,17 @@ class PointCloudData:
             scalar_fields[sf_key] = sf_value[mask].copy()
         global_coordinate_shift = self.global_coordinate_shift.copy() if self.global_coordinate_shift is not None else None
         spherical_coordinates_origin = self.spherical_coordinates_origin.copy() if self.spherical_coordinates_origin is not None else None
-        return PointCloudData(xyz, color=color, normals=normals, scalar_fields=scalar_fields, global_coordinate_shift=global_coordinate_shift,
-                              spherical_coordinates_origin=spherical_coordinates_origin, _global_shift_already_applied=True,
-                              _spherical_coordinates_represented_0_to_2pi=self._spherical_coordinates_represented_0_to_2pi)
+        new_pcd = PointCloudData(
+            xyz, color=color, normals=normals, scalar_fields=scalar_fields,
+            global_coordinate_shift=global_coordinate_shift, spherical_coordinates_origin=spherical_coordinates_origin,
+            _global_shift_already_applied=True,
+            _spherical_coordinates_represented_0_to_2pi=self._spherical_coordinates_represented_0_to_2pi
+        )
+        if self._spherical_coordinates_calculated:
+            object.__setattr__(new_pcd, "spherical_coordinates", self.spherical_coordinates[mask].copy())
+            object.__setattr__(new_pcd, "_spherical_coordinates_calculated", True)
+
+        return new_pcd
 
     # def _sample(self,sf_sample: str,
     #            sample_func: Callable[[np.ndarray], np.ndarray[Any, np.dtype[bool]]],
@@ -439,18 +452,21 @@ class PointCloudData:
 
         sco_pairs = zip(spherical_coordinates_origin[:-1], spherical_coordinates_origin[1:])
 
-        # Check if all spherical_coordinates_origin are equal
+        # Check if all spherical_coordinates_origin are equal and represented in the same system
         scs = None
-        if all(map(lambda sco_pair: np.array_equal(*sco_pair), sco_pairs)):
+        if all(map(lambda sco_pair: np.array_equal(*sco_pair), sco_pairs)) and \
+                len(set([pcd._spherical_coordinates_represented_0_to_2pi for pcd in pcds])) == 1:
             sco = spherical_coordinates_origin[0]
             if all([pcd._spherical_coordinates_calculated for pcd in pcds]):
                 scs = np.vstack([pcd.spherical_coordinates_origin for pcd in pcds])
+            scr = pcds[0]._spherical_coordinates_represented_0_to_2pi
         else:
             sco = None
+            scr = None
 
         new_pcd = cls(xyz=xyz_np, color=color_np, normals=normals_np, scalar_fields=scalar_fields,
                       global_coordinate_shift=gcs, _global_shift_already_applied=(gcs is not None),
-                      spherical_coordinates_origin=sco)
+                      spherical_coordinates_origin=sco, _spherical_coordinates_represented_0_to_2pi=scr)
 
         if scs is not None:
             object.__setattr__(new_pcd, "spherical_coordinates", scs)

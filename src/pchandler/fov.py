@@ -306,11 +306,12 @@ class FoVTree:
         q10 = [row[:len(row) // 2] for row in q1]
         q11 = [row[len(row) // 2:] for row in q1]
 
-        fov_children = {"0": cls.build_from_tiles(q00, min_children, identifier=(identifier + "0")),
-                        "1": cls.build_from_tiles(q01, min_children, identifier=(identifier + "1")),
-                        "2": cls.build_from_tiles(q10, min_children, identifier=(identifier + "2")),
-                        "3": cls.build_from_tiles(q11, min_children, identifier=(identifier + "3")),
-                        }
+        fov_children = {
+            "0": cls.build_from_tiles(q00, min_children, identifier=(identifier + "0")),
+            "1": cls.build_from_tiles(q01, min_children, identifier=(identifier + "1")),
+            "2": cls.build_from_tiles(q10, min_children, identifier=(identifier + "2")),
+            "3": cls.build_from_tiles(q11, min_children, identifier=(identifier + "3")),
+        }
 
         fov_children = {k: v for k, v in fov_children.items() if v is not None}
 
