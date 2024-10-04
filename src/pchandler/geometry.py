@@ -262,6 +262,15 @@ class PointCloudData:
                                                                   spc[:, 2] <= fov.horizontal_max, )))
         return self.extract(*angle_filter)
 
+    def sample_angles(self, fov: FoV) -> Self:
+        angle_filter = ("spherical_coordinates",
+                        lambda spc: np.logical_and(np.logical_and(spc[:, 1] >= fov.elevation_min,
+                                                                  spc[:, 1] <= fov.elevation_max),
+                                                   np.logical_and(spc[:, 2] >= fov.horizontal_min,
+                                                                  spc[:, 2] <= fov.horizontal_max, )))
+        return self.sample(*angle_filter)
+
+
     def extract_range(self, *, low: float = None, high: float = None) -> Self:
         if low is None:
             low = 0
@@ -270,6 +279,15 @@ class PointCloudData:
         range_filter = ("spherical_coordinates",
                         lambda spc: np.logical_and(spc[:, 0] >= low, spc[:, 0] <= high))
         return self.extract(*range_filter)
+
+    def sample_range(self, *, low: float = None, high: float = None) -> Self:
+        if low is None:
+            low = 0
+        if high is None:
+            high = np.inf
+        range_filter = ("spherical_coordinates",
+                        lambda spc: np.logical_and(spc[:, 0] >= low, spc[:, 0] <= high))
+        return self.sample(*range_filter)
 
     def random_subsample(self, size: float | int, in_place: bool = True) -> Self:
         if isinstance(size, float) and 0 < size < 1:
