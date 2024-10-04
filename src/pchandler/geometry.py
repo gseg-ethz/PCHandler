@@ -53,6 +53,7 @@ class PointCloudData:
     global_coordinate_shift: Optional[np.ndarray] = None
     spherical_coordinates_origin: Optional[np.ndarray] = None
     _spherical_coordinates_calculated: bool = False
+    _spherical_coordinates_represented_0_to_2pi: Optional[bool] = None
     _global_shift_already_applied: InitVar[bool] = False
 
     @property
@@ -161,12 +162,20 @@ class PointCloudData:
         spherical_coordinates[:, 1] = np.arctan2(np.sqrt(xy), xyz[:, 2])  # for elevation angle defined from Z-axis down
         spherical_coordinates[:, 2] = - np.arctan2(xyz[:, 1], xyz[:, 0])
 
-        # Check for continuous representation
-        hz_shifted = spherical_coordinates[:,2].copy()
-        hz_shifted[hz_shifted < 0] = 2*np.pi + hz_shifted[hz_shifted < 0]
-        extent_shifted = hz_shifted.max() - hz_shifted.min()
-        extent = spherical_coordinates[:, 2].max() - spherical_coordinates[:, 2].min()
-        if extent_shifted < extent:
+        if self._spherical_coordinates_represented_0_to_2pi is None:
+            # Check for continuous representation
+            hz_shifted = spherical_coordinates[:,2].copy()
+            hz_shifted[hz_shifted < 0] = 2*np.pi + hz_shifted[hz_shifted < 0]
+            extent_shifted = hz_shifted.max() - hz_shifted.min()
+            extent = spherical_coordinates[:, 2].max() - spherical_coordinates[:, 2].min()
+            if extent_shifted < extent:
+                object.__setattr__(self, "_spherical_coordinates_represented_0_to_2pi", True)
+            else:
+                object.__setattr__(self, "_spherical_coordinates_represented_0_to_2pi", False)
+
+        if self._spherical_coordinates_represented_0_to_2pi:
+            hz_shifted = spherical_coordinates[:, 2].copy()
+            hz_shifted[hz_shifted < 0] = 2 * np.pi + hz_shifted[hz_shifted < 0]
             spherical_coordinates[:, 2] = hz_shifted
 
         object.__setattr__(self, "_spherical_coordinates_calculated", True)
@@ -198,7 +207,8 @@ class PointCloudData:
         global_coordinate_shift = self.global_coordinate_shift.copy() if self.global_coordinate_shift is not None else None
         spherical_coordinates_origin = self.spherical_coordinates_origin.copy() if self.spherical_coordinates_origin is not None else None
         return PointCloudData(xyz, color=color, normals=normals, scalar_fields=scalar_fields, global_coordinate_shift=global_coordinate_shift,
-                              spherical_coordinates_origin=spherical_coordinates_origin, _global_shift_already_applied=True)
+                              spherical_coordinates_origin=spherical_coordinates_origin, _global_shift_already_applied=True,
+                              _spherical_coordinates_represented_0_to_2pi=self._spherical_coordinates_represented_0_to_2pi)
 
     # def _sample(self,sf_sample: str,
     #            sample_func: Callable[[np.ndarray], np.ndarray[Any, np.dtype[bool]]],
