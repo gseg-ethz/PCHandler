@@ -456,9 +456,11 @@ class PointCloudData:
         scs = None
         if all(map(lambda sco_pair: np.array_equal(*sco_pair), sco_pairs)) and \
                 len(set([pcd._spherical_coordinates_represented_0_to_2pi for pcd in pcds])) == 1:
+
             sco = spherical_coordinates_origin[0]
             if all([pcd._spherical_coordinates_calculated for pcd in pcds]):
-                scs = np.vstack([pcd.spherical_coordinates_origin for pcd in pcds])
+                scs = np.vstack([pcd.spherical_coordinates for pcd in pcds])
+                # Todo: Add a check if the merged PCD has introduced a discontinuity
             scr = pcds[0]._spherical_coordinates_represented_0_to_2pi
         else:
             sco = None
