@@ -348,7 +348,7 @@ class PointCloudData:
             object.__setattr__(self, "_spherical_coordinates_calculated", False)
 
     @property
-    def fov(self):
+    def fov(self) -> FoV:
         # TODO: Accommodate smaller pcd that cross the hz: 200 -> -200 gon border (same for elevation, less common)
         return FoV(horizontal_min=self.spherical_coordinates[:, 2].min(),
                    horizontal_max=self.spherical_coordinates[:, 2].max(),

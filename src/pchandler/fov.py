@@ -42,6 +42,14 @@ class FoV:
         object.__setattr__(self, "horizontal_max", values[2])
         object.__setattr__(self, "elevation_max", values[3])
 
+    @classmethod
+    def from_center_with_extent(cls, centerpoint: tuple[float, float], extent: tuple[float, float],
+                                unit: [str | AngleUnit] = "rad") -> Self:
+        fov_min = np.array(centerpoint) - np.array(extent) / 2
+        fov_max = np.array(centerpoint) + np.array(extent) / 2
+        return cls(horizontal_min=fov_min[0], horizontal_max=fov_max[0], elevation_min=fov_min[1],
+                   elevation_max=fov_max[1], unit=unit)
+
     def as_numpy(self, unit: [str | AngleUnit] = "rad") -> np.ndarray:
         unit = AngleUnit(unit)
         values = np.array([self.horizontal_min, self.elevation_min, self.horizontal_max, self.elevation_max])
@@ -68,6 +76,12 @@ class FoV:
 
     def extent(self, unit: [str | AngleUnit] = "rad") -> tuple[float, float]:
         return self.width(unit=unit), self.height(unit=unit)
+
+    def center(self, unit: [str | AngleUnit] = "rad") -> tuple[float, float]:
+        values = self.as_dict(unit=unit)
+        elevation_center = (values["elevation_min"] + values["elevation_max"])/2
+        horizontal_center = (values["horizontal_min"] + values["horizontal_max"])/2
+        return horizontal_center, elevation_center
 
     def union(self, fov2: Self) -> Self:
         return FoV(horizontal_min=min(self.horizontal_min, fov2.horizontal_min),
