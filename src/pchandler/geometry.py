@@ -6,6 +6,7 @@ from functools import cached_property
 import gc
 from itertools import compress, chain
 
+from dask.dataframe.io.parquet.core import NONE_LABEL
 from joblib import Parallel, delayed
 from typing import Iterable, Callable, Any, Tuple, Optional
 
@@ -64,7 +65,7 @@ class PointCloudData:
     color: Optional[np.ndarray] = None
     normals: Optional[np.ndarray] = None
     global_coordinate_shift: Optional[np.ndarray] = None
-    spherical_coordinates_origin: Optional[np.ndarray] = None
+    spherical_coordinates_origin: np.ndarray = field(default_factory=lambda: np.zeros((3,)))
     _spherical_coordinates_calculated: bool = False
     _spherical_coordinates_represented_0_to_2pi: Optional[bool] = None
     _global_shift_already_applied: InitVar[bool] = False
@@ -92,19 +93,19 @@ class PointCloudData:
         assert self.normals is None or self.normals.shape == (self.nbPoints, 3,)
         for sf in self.scalar_fields.values():
             assert sf.shape == (self.nbPoints,)
-        assert self.spherical_coordinates_origin is None or self.spherical_coordinates_origin.shape == (3,)
+        assert self.spherical_coordinates_origin.shape == (3,)
         assert self.global_coordinate_shift is None or self.global_coordinate_shift.shape == (3,)
 
-        if self.global_coordinate_shift is None and any((np.abs(self.xyz) >= 1e4).flatten()):
-            object.__setattr__(self, 'global_coordinate_shift', np.median(np.round(self.xyz, decimals=-3), axis=0))
+        if self.global_coordinate_shift is None and self.__check_for_need_of_global_shift(self.xyz):
+            object.__setattr__(self, 'global_coordinate_shift', self.__calculate_optimal_global_shift(self.xyz))
 
         if self.global_coordinate_shift is not None and not _global_shift_already_applied:
             object.__setattr__(self, 'xyz', (self.xyz - self.global_coordinate_shift).astype(np.float32, casting="same_kind"))
         else:
             object.__setattr__(self, "xyz", self.xyz.astype(np.float32, casting="same_kind"))
 
-        if self.global_coordinate_shift is not None and self.spherical_coordinates_origin is None:
-            self.change_spherical_coordinates_origin(self.global_coordinate_shift)
+        if self.global_coordinate_shift is not None:
+            self.change_spherical_coordinates_origin(self.spherical_coordinates_origin - self.global_coordinate_shift)
                 # object.__setattr__(self, 'spherical_coordinates_origin', self.global_coordinate_shift)
 
 
@@ -112,6 +113,15 @@ class PointCloudData:
        #     if np.nanmax(scalar_fields["scalar_Intensity"]) > 1.0 or np.nanmin(scalar_fields["scalar_Intensity"]) < 0.0:
        #         pass
        #     scalar_fields["scalar_Intensity"] = scalar_fields["scalar_Intensity"].astype(np.float32)
+
+    @staticmethod
+    def __check_for_need_of_global_shift(xyz: np.ndarray, _decimal_magnitude: int = 4) -> bool:
+        return any((np.abs(xyz) >= 10 ** _decimal_magnitude).flatten())
+
+    @staticmethod
+    def __calculate_optimal_global_shift(xyz: np.ndarray, _decimal_magnitude: int = 4) -> np.ndarray:
+        return np.median(np.round(xyz, decimals=-(_decimal_magnitude - 1)), axis=0)
+
 
     @classmethod
     def from_range_image(cls, range_data: np.ndarray, fov: FoV, scalar_fields: dict[str, np.ndarray] = None,
@@ -161,24 +171,26 @@ class PointCloudData:
 
     @cached_property
     def spherical_coordinates(self) -> np.ndarray:
+        #
+        # if self.global_coordinate_shift is not None:
+        #     xyz = self.xyz - (self.spherical_coordinates_origin - self.global_coordinate_shift)
+        # elif self.spherical_coordinates_origin is not None:
+        #     xyz = self.xyz - self.spherical_coordinates_origin
+        # else:
+        #     xyz = self.xyz
 
-        if self.global_coordinate_shift is not None:
-            xyz = self.xyz - (self.spherical_coordinates_origin - self.global_coordinate_shift)
-        elif self.spherical_coordinates_origin is not None:
-            xyz = self.xyz - self.spherical_coordinates_origin
-        else:
-            xyz = self.xyz
+        xyz_shifted = self.xyz - self.spherical_coordinates_origin
 
-        if len(xyz) == 0:
+        if len(xyz_shifted) == 0:
             object.__setattr__(self, "_spherical_coordinates_calculated", True)
             object.__setattr__(self, "_spherical_coordinates_represented_0_to_2pi", False)
             return np.empty_like(xyz)
 
         spherical_coordinates = np.zeros(self.xyz.shape, dtype=np.float32)
-        xy = xyz[:, 0] ** 2 + xyz[:, 1] ** 2
-        spherical_coordinates[:, 0] = np.sqrt(xy + xyz[:, 2] ** 2)
-        spherical_coordinates[:, 1] = np.arctan2(np.sqrt(xy), xyz[:, 2])  # for elevation angle defined from Z-axis down
-        spherical_coordinates[:, 2] = - np.arctan2(xyz[:, 1], xyz[:, 0])
+        xy = xyz_shifted[:, 0] ** 2 + xyz_shifted[:, 1] ** 2
+        spherical_coordinates[:, 0] = np.sqrt(xy + xyz_shifted[:, 2] ** 2)
+        spherical_coordinates[:, 1] = np.arctan2(np.sqrt(xy), xyz_shifted[:, 2])  # for elevation angle defined from Z-axis down
+        spherical_coordinates[:, 2] = - np.arctan2(xyz_shifted[:, 1], xyz_shifted[:, 0])
 
         if self._spherical_coordinates_represented_0_to_2pi is None:
             # Check for continuous representation
@@ -244,11 +256,40 @@ class PointCloudData:
         object.__setattr__(self, "xyz", math_func(self.xyz))
 
     def transform(self, transformation_matrix: np.ndarray):
-        xyz_homogeneous = np.hstack((self.xyz, np.ones((self.nbPoints, 1)))).transpose()
+        xyz_sco = np.vstack((self.xyz, self.spherical_coordinates_origin[np.newaxis,:]))
+        if self.global_coordinate_shift is None:
+            xyz_homogeneous = np.hstack((xyz_sco, np.ones((self.nbPoints + 1, 1), dtype=self.xyz.dtype))).transpose()
+        else:
+            xyz_homogeneous = np.hstack((xyz_sco + self.global_coordinate_shift,
+                                         np.ones((self.nbPoints + 1, 1), dtype=self.global_coordinate_shift.dtype))).transpose()
         transformed_xyz_homogeneous = transformation_matrix @ xyz_homogeneous
         w = transformed_xyz_homogeneous[-1]
-        transformed_xyz = np.where(w != 0, transformed_xyz_homogeneous[:-1] / w, transformed_xyz_homogeneous[:-1])
-        object.__setattr__(self, "xyz", transformed_xyz.transpose())
+        transformed_xyz = np.where(w != 0, transformed_xyz_homogeneous[:-1] / w, transformed_xyz_homogeneous[:-1]).transpose()
+
+        # Check if global coordinate shift has become unnecessary
+        if self.global_coordinate_shift is not None and not self.__check_for_need_of_global_shift(transformed_xyz[:-1,:]):
+            object.__setattr__(self, "global_coordinate_shift", None)
+        # Check if old global shift still works, if so apply
+        elif self.global_coordinate_shift is not None and not self.__check_for_need_of_global_shift(transformed_xyz[:-1,:] - self.global_coordinate_shift):
+            transformed_xyz = transformed_xyz - self.global_coordinate_shift
+            # object.__setattr__(self, "xyz", transformed_xyz.astype(self.xyz.dtype, casting="same_kind"))
+        # Old global shift doesn't work
+        elif self.global_coordinate_shift is not None:
+            object.__setattr__(self, "global_coordinate_shift", self.__calculate_optimal_global_shift(transformed_xyz[:-1,:]))
+            transformed_xyz = transformed_xyz - self.global_coordinate_shift
+            # object.__setattr__(self, "xyz", transformed_xyz.astype(self.xyz.dtype, casting="same_kind"))
+
+        elif self.__check_for_need_of_global_shift(transformed_xyz[:-1,:]):
+            object.__setattr__(self, "global_coordinate_shift", self.__calculate_optimal_global_shift(transformed_xyz[:-1,:]))
+            transformed_xyz = transformed_xyz - self.global_coordinate_shift
+
+        object.__setattr__(self, "xyz", transformed_xyz[:-1,:].astype(self.xyz.dtype, casting="same_kind"))
+        object.__setattr__(self, "spherical_coordinates_origin", transformed_xyz[-1,:])
+        if self._spherical_coordinates_calculated:
+            object.__delattr__(self, "spherical_coordinates")
+            object.__setattr__(self, "_spherical_coordinates_calculated", False)
+        return
+
 
     def filter(self, sf_filter: str, truth_func: Callable[[np.ndarray], np.ndarray[Any, np.dtype[bool]]]) -> None:
         """
@@ -508,7 +549,10 @@ class PointCloudData:
 
     def to_o3d(self) -> o3d.geometry.PointCloud:
         pcd_o3d = o3d.geometry.PointCloud()
-        pcd_o3d.points = o3d.utility.Vector3dVector(self.xyz)
+        if self.global_coordinate_shift is None:
+            pcd_o3d.points = o3d.utility.Vector3dVector(self.xyz)
+        else:
+            pcd_o3d.points = o3d.utility.Vector3dVector(self.xyz + self.global_coordinate_shift)
         return pcd_o3d
 
     @classmethod
@@ -629,17 +673,16 @@ class PointCloudData:
         #     raise NotImplementedError
 
     def filter_xyz_outliers(self, std_ratio: float = 0.95, nb_neighbors: int = 13):
-        pcd_o3d = o3d.geometry.PointCloud()
-        pcd_o3d.points = o3d.utility.Vector3dVector(self.xyz)
+        pcd_o3d = self.to_o3d()
 
         _, inliers = pcd_o3d.remove_statistical_outlier(nb_neighbors,std_ratio,True)
         self._reduce_points_to(inliers)
 
-    def _filter_spherical_outliers_gpu(self, percentile: int = 95, nb_neighbors: int = 13):
-        raise NotImplementedError
-        knn = NearestNeighbors(n_neighbors = nb_neighbors)
-        knn.fit(self.spherical_coordinates[:,1:])
-        distances, indices = knn.kneighbors(self.spherical_coordinates[:,1:])
+    # def _filter_spherical_outliers_gpu(self, percentile: int = 95, nb_neighbors: int = 13):
+    #     raise NotImplementedError
+    #     knn = NearestNeighbors(n_neighbors = nb_neighbors)
+    #     knn.fit(self.spherical_coordinates[:,1:])
+    #     distances, indices = knn.kneighbors(self.spherical_coordinates[:,1:])
 
 
 
