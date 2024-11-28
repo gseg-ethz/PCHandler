@@ -30,8 +30,8 @@ class FoV:
 
     def __init__(self, *, horizontal_min: float, elevation_min: float, horizontal_max: float, elevation_max: float,
                  unit: [str | AngleUnit] = "rad"):
-        assert horizontal_max > horizontal_min  # TODO: Rethink in the context describing shortest path
-        assert elevation_max > elevation_min
+        assert horizontal_max >= horizontal_min  # TODO: Rethink in the context describing shortest path
+        assert elevation_max >= elevation_min
 
         input_unit = AngleUnit(unit)
         values = np.array([horizontal_min, elevation_min, horizontal_max, elevation_max], dtype=float)
@@ -88,6 +88,12 @@ class FoV:
                    elevation_min=min(self.elevation_min, fov2.elevation_min),
                    horizontal_max=max(self.horizontal_max, fov2.horizontal_max),
                    elevation_max=max(self.elevation_max, fov2.elevation_max))
+
+    def interset(self, fov2: Self) -> Self:
+        return FoV(horizontal_min=max(self.horizontal_min, fov2.horizontal_min),
+                   elevation_min=max(self.elevation_min, fov2.elevation_min),
+                   horizontal_max=min(self.horizontal_max, fov2.horizontal_max),
+                   elevation_max=min(self.elevation_max, fov2.elevation_max))
 
     def ratio(self) -> float:
         return self.extent()[0] / self.extent()[1]

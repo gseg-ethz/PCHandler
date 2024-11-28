@@ -2,7 +2,7 @@
 
 __author__ = "Nicholas Meyer"
 __email__ = "meyernic@ethz.ch"
-__version__ = "0.5.10"
+__version__ = "0.5.13"
 
 from . import data_io, fov, geometry
 

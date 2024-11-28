@@ -1,20 +1,33 @@
 import sys
 
-
 from collections import defaultdict
 from dataclasses import dataclass, field, KW_ONLY, InitVar
-from itertools import compress, chain
 from functools import cached_property
 import gc
+from itertools import compress, chain
+
+from joblib import Parallel, delayed
 from typing import Iterable, Callable, Any, Tuple, Optional
+
 if sys.version[0] == 3 and sys.version_info[1] >= 11:
     from typing import Self
 else:
     from typing_extensions import Self
 import warnings
 
-from joblib import Parallel, delayed
+import alphashape
+try:
+    import cudf
+    import cuspatial
+    from cuml.neighbors import NearestNeighbors
+    HAS_GPU_SUPPORT = True
+except ImportError:
+    HAS_GPU_SUPPORT = False
+import geopandas as gpd
 import numpy as np
+import open3d as o3d
+from shapely.geometry import Polygon, MultiPolygon
+from shapely.affinity import scale, translate
 
 from pchandler.fov import FoV, FoVTree
 
@@ -161,7 +174,7 @@ class PointCloudData:
             object.__setattr__(self, "_spherical_coordinates_represented_0_to_2pi", False)
             return np.empty_like(xyz)
 
-        spherical_coordinates = np.zeros(self.xyz.shape)
+        spherical_coordinates = np.zeros(self.xyz.shape, dtype=np.float32)
         xy = xyz[:, 0] ** 2 + xyz[:, 1] ** 2
         spherical_coordinates[:, 0] = np.sqrt(xy + xyz[:, 2] ** 2)
         spherical_coordinates[:, 1] = np.arctan2(np.sqrt(xy), xyz[:, 2])  # for elevation angle defined from Z-axis down
@@ -230,6 +243,13 @@ class PointCloudData:
     def apply_math_to_xyz(self, math_func: Callable) -> None:
         object.__setattr__(self, "xyz", math_func(self.xyz))
 
+    def transform(self, transformation_matrix: np.ndarray):
+        xyz_homogeneous = np.hstack((self.xyz, np.ones((self.nbPoints, 1)))).transpose()
+        transformed_xyz_homogeneous = transformation_matrix @ xyz_homogeneous
+        w = transformed_xyz_homogeneous[-1]
+        transformed_xyz = np.where(w != 0, transformed_xyz_homogeneous[:-1] / w, transformed_xyz_homogeneous[:-1])
+        object.__setattr__(self, "xyz", transformed_xyz.transpose())
+
     def filter(self, sf_filter: str, truth_func: Callable[[np.ndarray], np.ndarray[Any, np.dtype[bool]]]) -> None:
         """
         Filters the point cloud based on the function.
@@ -282,6 +302,16 @@ class PointCloudData:
                                                    np.logical_and(spc[:, 2] >= fov.horizontal_min,
                                                                   spc[:, 2] <= fov.horizontal_max, )))
         return self.sample(*angle_filter)
+
+    def filter_range(self, *, low: float = None, high: float = None) -> None:
+        if low is None:
+            low = 0
+        if high is None:
+            high = np.inf
+        range_filter = ("spherical_coordinates",
+                        lambda spc: np.logical_and(spc[:, 0] >= low, spc[:, 0] <= high))
+        self.filter(*range_filter)
+        return
 
 
     def extract_range(self, *, low: float = None, high: float = None) -> Self:
@@ -475,6 +505,143 @@ class PointCloudData:
             object.__setattr__(new_pcd, "_spherical_coordinates_calculated", True)
 
         return new_pcd
+
+    def to_o3d(self) -> o3d.geometry.PointCloud:
+        pcd_o3d = o3d.geometry.PointCloud()
+        pcd_o3d.points = o3d.utility.Vector3dVector(self.xyz)
+        return pcd_o3d
+
+    @classmethod
+    def from_o3d(cls, pcd_o3d: o3d.geometry.PointCloud, scan_center: Optional[np.ndarray] = None):
+        return cls(xyz=np.asarray(pcd_o3d.points), spherical_coordinates_origin=scan_center)
+
+    def filter_to_polygon(self, poly: Polygon, plane: str) -> None:
+        if HAS_GPU_SUPPORT:
+            self._filter_to_polygon_gpu(poly, plane)
+        else:
+            raise NotImplementedError()
+
+    def _filter_to_polygon_gpu(self, poly: Polygon, plane: str) -> None:
+        match plane:
+            case 'xy':
+                proj_pts = cudf.DataFrame({"x": self.xyz[:, 0].astype(float),
+                                           "y": self.xyz[:, 1].astype(float)}).interleave_columns()
+            case 'xz':
+                proj_pts = cudf.DataFrame({"x": self.xyz[:, 0].astype(float),
+                                           "y": self.xyz[:, 2].astype(float)}).interleave_columns()
+            case 'yz':
+                proj_pts = cudf.DataFrame({"x": self.xyz[:, 1].astype(float),
+                                           "y": self.xyz[:, 2].astype(float)}).interleave_columns()
+            case _:
+                raise ValueError
+
+        polygon_gpu = cuspatial.GeoSeries(gpd.GeoSeries(poly))
+        # polygon_gpu = cuspatial.GeoSeries.from_polygons_xy(poly)
+        proj_pts_gs = cuspatial.GeoSeries.from_points_xy(proj_pts)
+        proj_pts_in = cuspatial.point_in_polygon(proj_pts_gs, polygon_gpu)
+
+        pts_in_mask = proj_pts_in[0].to_numpy()
+        self._reduce_points_to(pts_in_mask)
+
+    def get_outline_polygon(self, plane: str, alpha_value: float = 10.0, nb_points: int = -1) -> Polygon:
+        match plane:
+            case 'xy':
+                proj_pts = self.xyz[:, :2]
+            case 'xz':
+                proj_pts = self.xyz[:, [0, 2]]
+            case 'yz':
+                proj_pts = self.xyz[:, 1:]
+            case _:
+                raise ValueError
+
+        # Normalize the points
+        proj_pts_mean = proj_pts.mean(axis=0)
+        proj_pts_scale = proj_pts.max(axis=0) - proj_pts.min(axis=0)
+        proj_pts_norm = (proj_pts - proj_pts_mean) / proj_pts_scale
+        if nb_points > 0:
+            proj_pts_norm = proj_pts_norm[np.random.permutation(proj_pts_norm.shape[0])[:nb_points], :]
+
+        # Add noise to reduce risk of underdefined dimensionality
+        noise = np.random.normal(scale=1e-6, size=proj_pts_norm.shape)
+        proj_pts_norm = proj_pts_norm + noise
+
+        als_norm = alphashape.alphashape(proj_pts_norm, alpha=alpha_value)
+        als = translate(scale(als_norm, *proj_pts_scale), *proj_pts_mean)
+
+        if isinstance(als, MultiPolygon):
+            als = max(als.geoms, key=lambda polygon: polygon.area)
+
+        if not isinstance(als, Polygon):
+            NotImplementedError
+
+        return als
+
+    def voxel_downsample(self, voxel_size: float) -> None:
+        unique, unique_inverse = np.unique(np.round(self.xyz / voxel_size).astype(np.int32), axis=0, return_inverse=True)
+
+        # Calculate centroids for each voxel
+        centroids = np.zeros((unique.shape[0], 3), dtype=np.float32)
+        for i in range(3):  # x, y, z dimensions
+            centroids[:, i] = np.bincount(unique_inverse, weights=self.xyz[:, i], minlength=unique.shape[0])
+
+        counts = np.bincount(unique_inverse, minlength=unique.shape[0])
+        centroids /= counts[:, None]  # Normalize to get centroids
+
+
+        # # Average scalar fields
+        # averaged_scalar_fields = {}
+        # for field_name, field_values in self.scalar_fields.items():
+        #     # Compute the sum of scalar values within each voxel
+        #     scalar_sum = np.bincount(unique_inverse, weights=field_values, minlength=unique.shape[0])
+        #     # Compute the average
+        #     averaged_scalar_fields[field_name] = (scalar_sum / counts).astype(field_values.dtype)
+
+        object.__setattr__(self, "xyz", centroids)
+        if self._spherical_coordinates_calculated:
+            object.__delattr__(self, "spherical_coordinates")
+            object.__setattr__(self, "_spherical_coordinates_calculated", False)
+
+        # Todo: Add functionality
+        warnings.warn("Scalar fields, normals, and colors are not retained during `voxel_downsample`!")
+        object.__setattr__(self, 'color', None)
+        object.__setattr__(self, 'normals', None)
+        for field_name in self.scalar_fields.keys():
+            del self.scalar_fields[field_name]
+
+        return
+
+    def filter_spherical_outliers(self, std_ratio: float = 0.95, nb_neighbors: int = 13):
+        sp_pcd = o3d.geometry.PointCloud()
+        sp_pcd.points = o3d.utility.Vector3dVector(np.hstack((self.spherical_coordinates[:,1:],
+                                                              np.zeros((self.nbPoints,1), dtype=np.float32))))
+        _, inliers = sp_pcd.remove_statistical_outlier(nb_neighbors,std_ratio,True)
+        self._reduce_points_to(inliers)
+        # sp_dist = sp_pcd.compute_nearest_neighbor_distance()
+        # sp_dist_np = np.asarray(sp_dist)
+        # threshold = np.percentile(sp_dist_np, percentile)
+        # sp_mask = sp_dist_np <= threshold
+        #
+        # self._reduce_points_to(sp_mask)
+
+        # if HAS_GPU_SUPPORT:
+        #     self._filter_spherical_outliers_gpu(percentile)
+        # else:
+        #     raise NotImplementedError
+
+    def filter_xyz_outliers(self, std_ratio: float = 0.95, nb_neighbors: int = 13):
+        pcd_o3d = o3d.geometry.PointCloud()
+        pcd_o3d.points = o3d.utility.Vector3dVector(self.xyz)
+
+        _, inliers = pcd_o3d.remove_statistical_outlier(nb_neighbors,std_ratio,True)
+        self._reduce_points_to(inliers)
+
+    def _filter_spherical_outliers_gpu(self, percentile: int = 95, nb_neighbors: int = 13):
+        raise NotImplementedError
+        knn = NearestNeighbors(n_neighbors = nb_neighbors)
+        knn.fit(self.spherical_coordinates[:,1:])
+        distances, indices = knn.kneighbors(self.spherical_coordinates[:,1:])
+
+
 
 
 def split_pc_with_fov_tree(pcd: PointCloudData, fov_tree: FoVTree, remove_empty: bool = True, n_jobs: int = -1) \
