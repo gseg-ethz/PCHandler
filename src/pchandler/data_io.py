@@ -1,3 +1,67 @@
+"""
+``pchandler.data_io``
+
+This module provides functionality for reading, writing, and processing point cloud data (PCD) files in various formats.
+It includes methods for loading and saving PCDs in common formats such as ``.ply``, ``.csv``, ``.las``, and ``.laz``.
+Additionally, it provides utility functions for locating PCD files within directories.
+
+Features:
+---------
+- **PCD Formats Supported**:
+  - PLY (``.ply``)
+  - LAS/LAZ (``.las``, ``.laz``)
+  - ASCII/CSV (``.txt``, ``.csv``)
+
+- **Key Functionalities**:
+  - Find PCD files in a directory with optional subdirectory inclusion.
+  - Save PCD data to `.ply` format with configurable retention of colors, normals, and scalar fields.
+  - Load PCD data from `.ply`, `.csv`, or `.laz` files into `PointCloudData` objects.
+  - Normalize intensity values for scalar fields when loading.
+
+- **Future Improvements**:
+  - Implement an `Enum` for defining supported file types.
+  - Refactor functions to use generators (``yield``) for improved memory efficiency.
+
+Dependencies:
+-------------
+- **Python Standard Library**:
+  - ``csv``, ``datetime``, ``enum``, ``itertools``, ``pathlib``
+
+- **Third-Party Libraries**:
+  - ``numpy``: For efficient numerical operations.
+  - ``laspy``: For handling ``.las`` and ``.laz`` files.
+  - ``plyfile``: For handling ``.ply`` files.
+  - ``pchandler.geometry.PointCloudData``: The internal representation for 3D point cloud data.
+
+Usage:
+------
+Typical usage patterns include:
+
+1. Finding PCD files in a directory:
+
+.. code-block:: python
+
+    from pchandler.data_io import find_pcd_in_directory
+    pcd_files = find_pcd_in_directory(directory_path, pcd_file_types=[".ply", ".las"], include_subdirectories=True)
+
+2. Saving a ``PointCloudData`` object to a ``.ply`` file:
+
+.. code-block:: python
+
+    from pchandler.data_io import save_ply
+    save_ply(pcd_path=Path("output.ply"), pcd=point_cloud, retain_colors=True, retain_normals=True)
+
+3. Loading a `.ply` or `.csv` file into a `PointCloudData` object:
+
+.. code-block:: python
+
+    from pchandler.data_io import load_ply, load_csv
+    point_cloud = load_ply(pcd_path=Path("input.ply"))
+    point_cloud_csv = load_csv(pcd_path=Path("input.csv"), delimeter=",")
+"""
+
+
+
 ## TODO: Rework to use yield instead of generating a list and iterating over it
 
 import csv
@@ -23,6 +87,23 @@ from pchandler.geometry import PointCloudData
 
 
 def find_pcd_in_directory(directory_path, pcd_file_types: list[str], include_subdirectories: bool = True) -> list[Path]:
+    """
+    (Recursively) searches a directory for point cloud files with specific extensions.
+
+    Parameters
+    ----------
+    directory_path : Path
+        The directory to search for PCD files.
+    pcd_file_types : list[str]
+        A list of file extensions to search for (e.g., [".ply", ".las", ".txt"]).
+    include_subdirectories : bool, default=True
+        Whether to include subdirectories in the search.
+
+    Returns
+    -------
+    list[Path]
+        A list of `Path` objects representing the found PCD files.
+    """
     file_list = [file_path for file_path in directory_path.iterdir() if file_path.suffix.lower() in pcd_file_types]
 
     if include_subdirectories:
@@ -35,14 +116,20 @@ def find_pcd_in_directory(directory_path, pcd_file_types: list[str], include_sub
 def save_ply(pcd_path: Path, pcd: PointCloudData, retain_colors: bool = True, retain_normals: bool = True,
              scalar_fields: list[str] = None) -> None:
     """
+    Saves a `PointCloudData` object to a `.ply` file.
 
     Parameters
     ----------
-    pcd_path
-    pcd
-    retain_colors
-    retain_normals
-    scalar_fields
+    pcd_path : Path
+        The output path for the `.ply` file.
+    pcd : PointCloudData
+        The point cloud data to save.
+    retain_colors : bool, default=True
+        Whether to include color information in the saved file.
+    retain_normals : bool, default=True
+        Whether to include normal vectors in the saved file.
+    scalar_fields : list[str], optional
+        A list of scalar fields to include in the saved file. If `None`, all scalar fields are saved.
     """
     nb_points = pcd.xyz.shape[0]
     if pcd.global_coordinate_shift is None:
@@ -91,7 +178,7 @@ def save_ply(pcd_path: Path, pcd: PointCloudData, retain_colors: bool = True, re
         pcd_np_st[sf] = pcd.scalar_fields[sf]
 
     # TODO: Rename program in comment
-    el = PlyElement.describe(pcd_np_st, "vertex", comments=["Created with dranjan/python-plyfile in REASSESS program",
+    el = PlyElement.describe(pcd_np_st, "vertex", comments=["Created with dranjan/python-plyfile with PCHANDLER",
                                                             f"Created {datetime.now():%Y-%m-%dT%H:%M:%S}"])
 
     if not pcd_path.parent.exists():
@@ -102,6 +189,27 @@ def save_ply(pcd_path: Path, pcd: PointCloudData, retain_colors: bool = True, re
 
 def load_csv(pcd_path: Path, delimeter: str = " ", scalar_fields: list[str] = None, normalize_intensities: bool = True,
              **kwargs) -> PointCloudData:
+    """
+    Loads a point cloud from a CSV or ASCII file.
+
+    Parameters
+    ----------
+    pcd_path : Path
+        The path to the input file.
+    delimeter : str, default=" "
+        The delimiter used in the CSV file.
+    scalar_fields : list[str], optional
+        A list of scalar fields to parse from the file.
+    normalize_intensities : bool, default=True
+        Whether to normalize intensity values if they are present in the scalar fields.
+    **kwargs : dict
+        Additional parameters to pass to the `PointCloudData` constructor.
+
+    Returns
+    -------
+    PointCloudData
+        A `PointCloudData` object created from the loaded data.
+    """
     with open(pcd_path, "r") as f:
         reader = csv.reader(f, delimiter=delimeter)
         data = list(reader)
@@ -147,21 +255,27 @@ def load_csv(pcd_path: Path, delimeter: str = " ", scalar_fields: list[str] = No
 def load_ply(pcd_path: Path, retain_colors: bool = True, retain_normals: bool = True, scalar_fields: list[str] = None,
              normalize_intensities: bool = False, **kwargs) -> PointCloudData:
     """
-    Loads a ply file using *dranjan/python-plyfile*.
+    Loads a point cloud from a `.ply` file.
 
     Parameters
     ----------
-    pcd_path : pathlib.Path
-    scalar_fields : list[str], optional
-                    List of scalar fields to keep (will be intersected against the available scalar fields from the
-                    *ply-file*). `None` retains all available scalar fields.
+    pcd_path : Path
+        The path to the input `.ply` file.
     retain_colors : bool, default=True
+        Whether to load color information from the file.
     retain_normals : bool, default=True
-    normalize_intensities: bool, default=False
+        Whether to load normal vectors from the file.
+    scalar_fields : list[str], optional
+        A list of scalar fields to retain from the file. If `None`, all available scalar fields are loaded.
+    normalize_intensities : bool, default=False
+        Whether to normalize intensity values if they are present in the scalar fields.
+    **kwargs : dict
+        Additional parameters to pass to the `PointCloudData` constructor.
 
     Returns
     -------
-    pcd : DeSpAn.geometry.PointCloudData
+    PointCloudData
+        A `PointCloudData` object created from the loaded `.ply` file.
     """
     with open(pcd_path, "rb") as f:
         plydata = PlyData.read(f)
@@ -204,25 +318,27 @@ def load_ply(pcd_path: Path, retain_colors: bool = True, retain_normals: bool = 
     return PointCloudData(xyz, color=colors, normals=normals, scalar_fields=scalar_fields_dict, **kwargs)
 
 
-def load_laz(pcd_path, retain_colors: bool = True, scalar_fields: list[str] = None):
+def load_laz(pcd_path, retain_colors: bool = True, scalar_fields: list[str] = None) -> PointCloudData:
     """
-    Loads a ply file using *laspy*.
-
-    TODO: Extend usage from `dimension_names` to `extra_dimension_names`
+    Loads a point cloud from a `.las` or `.laz` file using `laspy`.
 
     Parameters
     ----------
-    pcd_path : pathlib.Path
-    scalar_fields : list[str], optional
-                    List of scalar fields to keep (will be intersected against the available scalar fields from the
-                    *ply-file*). `None` retains all available scalar fields.
+    pcd_path : Path
+        The path to the input `.las` or `.laz` file.
     retain_colors : bool, default=True
-    retain_normals : bool, default=True
+        Whether to load color information from the file.
+    scalar_fields : list[str], optional
+        A list of scalar fields to retain from the file. If `None`, all available scalar fields are loaded.
 
     Returns
     -------
-    pcd : DeSpAn.geometry.PointCloudData
+    PointCloudData
+        A `PointCloudData` object created from the loaded `.las` or `.laz` file.
     """
+
+    # TODO: Extend usage from `dimension_names` to `extra_dimension_names`
+
     pcd = laspy.read(pcd_path)
     laz_scalar_fields = list(pcd.point_format.dimension_names)
 

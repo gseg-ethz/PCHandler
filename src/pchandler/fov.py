@@ -1,3 +1,71 @@
+"""
+``pchandler.fov``
+
+This module provides classes and methods for defining and manipulating Fields of View (FoVs) and hierarchical FoV trees.
+It is designed to facilitate the spatial partitioning, tiling, and merging of 3D regions based on angular constraints.
+The module supports flexible representation of angular units and integrates with external tools to enable hierarchical
+partitioning of FoVs.
+
+Key Features:
+-------------
+- **FoV Class**:
+  - Represents rectangular angular regions in 3D space.
+  - Supports unit conversion between radians, degrees, and gradians (gon).
+  - Provides methods for splitting, merging, and calculating geometric properties such as aspect ratios and centers.
+
+- **FoVTree Class**:
+  - Implements a hierarchical tree structure for managing FoVs.
+  - Enables efficient spatial partitioning, depth-based querying, and merging operations.
+  - Compatible with tile-based FoV organization for large-scale datasets.
+
+- **Utility Methods**:
+  - Split a single FoV into multiple tiles or quadrants.
+  - Convert between tuple, dictionary, or NumPy array representations of FoV boundaries.
+  - Calculate optimal partitioning schemes for FoVs based on aspect ratios and angular extents.
+
+Dependencies:
+-------------
+- ``numpy``: For numerical computations.
+- ``pchandler.util``: Provides utilities for angle unit conversion and numerical constants.
+
+Usage:
+------
+Example: Create an FoV and convert it between different representations:
+
+.. code-block:: python
+
+    from pchandler.fov import FoV
+
+    # Define a field of view in degrees
+    fov = FoV(horizontal_min=0, horizontal_max=90, elevation_min=-30, elevation_max=30, unit="deg")
+
+    # Convert to radians
+    fov_rad = fov.as_tuple(unit="rad")
+    print("FoV in radians:", fov_rad)
+
+    # Split the FoV into a 2x2 grid
+    sub_fovs = fov.split(shape=(2, 2))
+    print("Sub-FoVs:", sub_fovs)
+
+
+Example: Use a hierarchical FoV tree for spatial partitioning:
+
+.. code-block:: python
+
+    from pchandler.fov import FoV, FoVTree
+
+    # Create a base FoV
+    base_fov = FoV(horizontal_min=0, horizontal_max=90, elevation_min=-30, elevation_max=30, unit="deg")
+
+    # Split into tiles and build a tree
+    tiles = base_fov.tile(FoV(horizontal_min=0, horizontal_max=30, elevation_min=-10, elevation_max=10))
+    fov_tree = FoVTree.build_from_tiles(tiles)
+
+    # Query the depth of the tree
+    print("Tree depth:", fov_tree.depth())
+"""
+
+
 import sys
 
 from dataclasses import dataclass, field
@@ -20,6 +88,21 @@ from pchandler.util import AngleUnit, convert_angles, EPS
 
 @dataclass(init=False, frozen=True)
 class FoV:
+    """
+    Represents a rectangular angular region in 3D space with defined horizontal and elevation bounds.
+
+    Attributes
+    ----------
+    horizontal_min : float
+        The minimum horizontal angle (in radians by default).
+    elevation_min : float
+        The minimum elevation angle (in radians by default).
+    horizontal_max : float
+        The maximum horizontal angle (in radians by default).
+    elevation_max : float
+        The maximum elevation angle (in radians by default).
+    """
+
     # TODO: Rework quadrants as special case of generalized split on shape tuple.
     horizontal_min: float
     elevation_min: float
@@ -30,6 +113,28 @@ class FoV:
 
     def __init__(self, *, horizontal_min: float, elevation_min: float, horizontal_max: float, elevation_max: float,
                  unit: [str | AngleUnit] = "rad"):
+
+        """
+        Initializes an FoV instance.
+
+        Parameters
+        ----------
+        horizontal_min : float
+            The minimum horizontal angle in the specified unit.
+        elevation_min : float
+            The minimum elevation angle in the specified unit.
+        horizontal_max : float
+            The maximum horizontal angle in the specified unit.
+        elevation_max : float
+            The maximum elevation angle in the specified unit.
+        unit : str or AngleUnit, default="rad"
+            The angular unit of the input values ("rad", "gon", or "deg").
+
+        Raises
+        ------
+        AssertionError
+            If the maximum angles are less than the minimum angles.
+        """
         assert horizontal_max >= horizontal_min  # TODO: Rethink in the context describing shortest path
         assert elevation_max >= elevation_min
 
@@ -45,21 +150,77 @@ class FoV:
     @classmethod
     def from_center_with_extent(cls, centerpoint: tuple[float, float], extent: tuple[float, float],
                                 unit: [str | AngleUnit] = "rad") -> Self:
+        """
+        Creates an FoV instance from a center point and angular extent.
+
+        Parameters
+        ----------
+        centerpoint : tuple[float, float]
+            The (horizontal, elevation) center of the FoV in the specified unit.
+        extent : tuple[float, float]
+            The angular extent (width, height) of the FoV in the specified unit.
+        unit : str or AngleUnit, default="rad"
+            The angular unit of the input values ("rad", "gon", or "deg").
+
+        Returns
+        -------
+        FoV
+            A new FoV instance.
+        """
         fov_min = np.array(centerpoint) - np.array(extent) / 2
         fov_max = np.array(centerpoint) + np.array(extent) / 2
         return cls(horizontal_min=fov_min[0], horizontal_max=fov_max[0], elevation_min=fov_min[1],
                    elevation_max=fov_max[1], unit=unit)
 
     def as_numpy(self, unit: [str | AngleUnit] = "rad") -> np.ndarray:
+        """
+        Converts the FoV to a NumPy array.
+
+        Parameters
+        ----------
+        unit : str or AngleUnit, default="rad"
+            The angular unit of the output values ("rad", "gon", or "deg").
+
+        Returns
+        -------
+        np.ndarray
+            A NumPy array of the FoV boundaries.
+        """
         unit = AngleUnit(unit)
         values = np.array([self.horizontal_min, self.elevation_min, self.horizontal_max, self.elevation_max])
         convert_angles(values, source_unit=self.__internal_angular_unit, target_unit=unit, out=values)
         return values
 
     def as_tuple(self, unit: [str | AngleUnit] = "rad") -> tuple[float, float, float, float]:
+        """
+        Converts the FoV to a tuple.
+
+        Parameters
+        ----------
+        unit : str or AngleUnit, default="rad"
+            The angular unit of the output values ("rad", "gon", or "deg").
+
+        Returns
+        -------
+        tuple[float, float, float, float]
+            A tuple of the FoV boundaries.
+        """
         return tuple(self.as_numpy(unit=unit))
 
     def as_dict(self, unit: [str | AngleUnit] = "rad") -> dict[str, float]:
+        """
+        Converts the FoV to a dictionary.
+
+        Parameters
+        ----------
+        unit : str or AngleUnit, default="rad"
+            The angular unit of the output values ("rad", "gon", or "deg").
+
+        Returns
+        -------
+        dict[str, float]
+            A dictionary of the FoV boundaries.
+        """
         values = self.as_numpy(unit=unit)
         return {"horizontal_min": cast(float, values[0]),
                 "elevation_min": cast(float, values[1]),
@@ -67,10 +228,36 @@ class FoV:
                 "elevation_max": cast(float, values[3])}
 
     def width(self, unit: [str | AngleUnit] = "rad") -> float:
+        """
+        Computes the width of the FoV.
+
+        Parameters
+        ----------
+        unit : str or AngleUnit, default="rad"
+            The angular unit of the output.
+
+        Returns
+        -------
+        float
+            The width of the FoV.
+        """
         values = self.as_dict(unit=unit)
         return values["horizontal_max"] - values["horizontal_min"]
 
     def height(self, unit: [str | AngleUnit] = "rad") -> float:
+        """
+        Computes the height of the FoV.
+
+        Parameters
+        ----------
+        unit : str or AngleUnit, default="rad"
+            The angular unit of the output.
+
+        Returns
+        -------
+        float
+            The height of the FoV.
+        """
         values = self.as_dict(unit=unit)
         return values["elevation_max"] - values["elevation_min"]
 
@@ -84,18 +271,52 @@ class FoV:
         return horizontal_center, elevation_center
 
     def union(self, fov2: Self) -> Self:
+        """
+        Computes the union of this FoV with another.
+
+        Parameters
+        ----------
+        fov2 : FoV
+            Another FoV to compute the union with.
+
+        Returns
+        -------
+        FoV
+            The smallest FoV enclosing both.
+        """
         return FoV(horizontal_min=min(self.horizontal_min, fov2.horizontal_min),
                    elevation_min=min(self.elevation_min, fov2.elevation_min),
                    horizontal_max=max(self.horizontal_max, fov2.horizontal_max),
                    elevation_max=max(self.elevation_max, fov2.elevation_max))
 
-    def interset(self, fov2: Self) -> Self:
+    def intersect(self, fov2: Self) -> Self:
+        """
+        Computes the intersection of this FoV with another.
+
+        Parameters
+        ----------
+        fov2 : FoV
+            Another FoV to compute the intersection with.
+
+        Returns
+        -------
+        FoV
+            The largest FoV contained within both.
+        """
         return FoV(horizontal_min=max(self.horizontal_min, fov2.horizontal_min),
                    elevation_min=max(self.elevation_min, fov2.elevation_min),
                    horizontal_max=min(self.horizontal_max, fov2.horizontal_max),
                    elevation_max=min(self.elevation_max, fov2.elevation_max))
 
     def ratio(self) -> float:
+        """
+        Computes the width-to-height ratio of the FoV.
+
+        Returns
+        -------
+        float
+            The aspect ratio (width/height) of the FoV.
+        """
         return self.extent()[0] / self.extent()[1]
 
     def __repr__(self):
@@ -122,6 +343,19 @@ class FoV:
         return new_fov
 
     def split(self, shape: tuple[int, int]) -> list[Self]:
+        """
+        Splits the FoV into smaller FoVs based on a grid shape.
+
+        Parameters
+        ----------
+        shape : tuple[int, int]
+            The number of horizontal and vertical splits.
+
+        Returns
+        -------
+        list[FoV]
+            A list of smaller FoVs.
+        """
         assert shape[0] > 0 and shape[1] > 0
         if shape[0] == shape[1] == 1:
             return [self]
@@ -226,6 +460,18 @@ class FoV:
 
 @dataclass(init=True, frozen=True)
 class FoVTree:
+    """
+    Represents a hierarchical tree structure for spatial partitioning of FoVs.
+
+    Attributes
+    ----------
+    identifier : str
+        A unique identifier for this tree node.
+    node : FoV
+        The FoV associated with this tree node.
+    children : Optional[dict[str, FoVTree]]
+        A dictionary of child nodes, if any.
+    """
     identifier: str
     node: FoV
     children: Optional[dict[str, Self]] = field(default_factory=dict)
@@ -298,6 +544,23 @@ class FoVTree:
 
     @classmethod
     def build_from_tiles(cls, tiles: list[list[FoV]], min_children: int = 4, identifier: str = "") -> Self:
+        """
+        Constructs a tree from a grid of FoVs.
+
+        Parameters
+        ----------
+        tiles : list[list[FoV]]
+            A grid of FoVs to organize into a tree.
+        min_children : int, default=4
+            The minimum number of children to avoid further splitting.
+        identifier : str, default=""
+            The identifier for the root node.
+
+        Returns
+        -------
+        FoVTree
+            The root of the constructed tree.
+        """
         assert min_children > 1
         if not tiles or not tiles[0]:
             return None

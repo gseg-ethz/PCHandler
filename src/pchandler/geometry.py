@@ -1,3 +1,74 @@
+"""
+``pchandler.geometry``
+
+This module provides a comprehensive set of tools for handling, manipulating, and processing 3D point cloud data.
+It includes the `PointCloudData` class, which serves as a robust representation of point clouds, and a variety
+of utility functions for tasks such as filtering, splitting, sampling, and merging point clouds.
+
+The module integrates with popular libraries like Open3D, NumPy, Shapely, and cuSpatial for advanced
+geometry processing, enabling GPU-accelerated workflows where supported.
+
+Key Features:
+-------------
+- **PointCloudData Class**:
+  - Represents 3D point clouds with attributes for coordinates, colors, normals, scalar fields, and more.
+  - Provides methods for transformations, filtering, downsampling, and subsampling.
+  - Supports conversion between Cartesian and spherical coordinate systems.
+
+- **FoV and FoVTree Integration**:
+  - Enables field-of-view-based splitting and extraction of point cloud data.
+  - Compatible with hierarchical splitting for large datasets.
+
+- **Advanced Filtering and Sampling**:
+  - Filters points by range, angles, or polygonal boundaries.
+  - Supports voxel grid downsampling and statistical outlier removal.
+
+- **GPU Acceleration**:
+  - Integrates cuSpatial and cuML for high-performance point cloud operations on supported GPUs.
+
+Dependencies:
+-------------
+- ``numpy``: For numerical computations.
+- ``open3d``: For 3D visualization and geometry operations.
+- ``geopandas`` and ``shapely``: For working with polygons and geospatial data.
+- ``alphashape``: For computing alpha shapes (convex hull approximations).
+- ``joblib``: For parallel processing.
+- ``cudf`` and ``cuspatial`` (optional): For GPU-accelerated operations.
+
+Usage:
+------
+Example: Create a point cloud from spherical coordinates and apply a transformation:
+
+.. code-block:: python
+
+    import numpy as np
+    from pchandler.geometry import PointCloudData
+
+    # Generate spherical coordinates (range, elevation, azimuth)
+    spherical_coords = np.array([[1.0, np.pi / 4, np.pi / 4],
+                                  [2.0, np.pi / 6, np.pi / 3]])
+
+    # Create a PointCloudData instance
+    pcd = PointCloudData.from_spherical_coordinates(spherical_coords)
+
+    # Apply a transformation matrix
+    transformation = np.eye(4)  # Identity matrix for example
+    pcd.transform(transformation)
+
+    print(f"Transformed Point Cloud: {pcd.xyz}")
+
+Example: Split a point cloud using a field-of-view tree:
+
+.. code-block:: python
+
+    from pchandler.fov import FoVTree
+    from pchandler.geometry import split_pc_with_fov_tree
+
+    # Create a FoVTree and split the point cloud
+    split_pcds = split_pc_with_fov_tree(pcd, fov_tree=some_fov_tree)
+"""
+
+
 import sys
 
 from collections import defaultdict
@@ -6,7 +77,6 @@ from functools import cached_property
 import gc
 from itertools import compress, chain
 
-from dask.dataframe.io.parquet.core import NONE_LABEL
 from joblib import Parallel, delayed
 from typing import Iterable, Callable, Any, Tuple, Optional
 
@@ -26,6 +96,7 @@ except ImportError:
     HAS_GPU_SUPPORT = False
 import geopandas as gpd
 import numpy as np
+from numpy.typing import NDArray
 import open3d as o3d
 from shapely.geometry import Polygon, MultiPolygon
 from shapely.affinity import scale, translate
@@ -42,43 +113,63 @@ from pchandler.fov import FoV, FoVTree
 @dataclass(frozen=True)
 class PointCloudData:
     """
-    PointCloudData stores 3D points in a cartesian coordinate system.
-
+    Represents a 3D point cloud in a Cartesian coordinate system.
 
     Attributes
     ----------
-    xyz : np.ndarray
-        nx3 float32 array with the *x*, *y* and *z* coordinates of the cloud.
-    scalar_fields: dict[str, np.ndarray]
-        dict of n 1D-arrays
-    color : np.ndarray
-        nx3 uint8 array of *r*, *g* and *b* colors.
-    normals : np.ndarray
-        nx3 float array
-
-
+    xyz : NDArray[np.float32]
+        An (N x 3) float32 array containing the *x*, *y*, and *z* coordinates of the points.
+    scalar_fields : dict[str, NDArray[np.generic]]
+        A dictionary of named scalar fields, where each field is a 1D array of length N.
+    color : Optional[NDArray[np.uint8]]
+        An (N x 3) uint8 array containing the *r*, *g*, and *b* color values for each point.
+    normals : Optional[NDArray[np.float32]]
+        An (N x 3) array representing the normal vectors for each point.
+    global_coordinate_shift : Optional[NDArray[np.float_]]
+        A (3,) array specifying the global coordinate shift applied to the point cloud.
+    spherical_coordinates_origin : NDArray[np.float_]
+        A (3,) array specifying the origin for spherical coordinate calculations.
+    _spherical_coordinates_calculated : bool
+        A flag indicating if spherical coordinates have been calculated.
+    _spherical_coordinates_represented_0_to_2pi : Optional[bool]
+        A flag indicating whether spherical coordinates are represented in the range [0, 2π].
     """
 
-    xyz: np.ndarray
+    xyz: NDArray[np.float32]
     _: KW_ONLY
-    scalar_fields: dict[str, np.ndarray] = field(default_factory=dict)
-    color: Optional[np.ndarray] = None
-    normals: Optional[np.ndarray] = None
-    global_coordinate_shift: Optional[np.ndarray] = None
-    spherical_coordinates_origin: np.ndarray = field(default_factory=lambda: np.zeros((3,)))
+    scalar_fields: dict[str, NDArray[np.generic]] = field(default_factory=dict)
+    color: Optional[NDArray[np.uint8]] = None
+    normals: Optional[NDArray[np.float32]] = None
+    global_coordinate_shift: Optional[NDArray[np.float_]] = None
+    spherical_coordinates_origin: NDArray[np.float_] = None
     _spherical_coordinates_calculated: bool = False
     _spherical_coordinates_represented_0_to_2pi: Optional[bool] = None
     _global_shift_already_applied: InitVar[bool] = False
 
     @property
-    def nbPoints(self):
+    def nbPoints(self) -> int:
+        """
+        Returns the number of points in the point cloud.
+
+        Returns
+        -------
+        int
+            The number of points (rows) in the `xyz` attribute.
+        """
         return self.xyz.shape[0]
 
     def __post_init__(self, _global_shift_already_applied: bool) -> None:
         """
-        _global_shift_already_applied
+        Validates and processes input data after object initialization.
+
+        Parameters
+        ----------
+        _global_shift_already_applied : bool
+            Indicates whether the global coordinate shift has already been applied to the `xyz` coordinates prior.
         """
-        # Check types
+        if self.spherical_coordinates_origin is None:
+            object.__setattr__(self, "spherical_coordinates_origin", np.zeros((3,), dtype=np.float_))
+
         assert isinstance(self.xyz, np.ndarray)
         assert self.color is None or isinstance(self.color, np.ndarray)
         assert self.normals is None or isinstance(self.normals, np.ndarray)
@@ -115,19 +206,66 @@ class PointCloudData:
        #     scalar_fields["scalar_Intensity"] = scalar_fields["scalar_Intensity"].astype(np.float32)
 
     @staticmethod
-    def __check_for_need_of_global_shift(xyz: np.ndarray, _decimal_magnitude: int = 4) -> bool:
+    def __check_for_need_of_global_shift(xyz: NDArray[np.float_], _decimal_magnitude: int = 4) -> bool:
+        """
+        Determines if a global coordinate shift is necessary.
+
+        Parameters
+        ----------
+        xyz : NDArray[np.float_]
+            The array of (N x 3) coordinates to check.
+        _decimal_magnitude : int, default=4
+            The threshold magnitude for deciding if a shift is needed.
+
+        Returns
+        -------
+        bool
+            True if a global shift is necessary; otherwise, False.
+        """
         return any((np.abs(xyz) >= 10 ** _decimal_magnitude).flatten())
 
     @staticmethod
-    def __calculate_optimal_global_shift(xyz: np.ndarray, _decimal_magnitude: int = 4) -> np.ndarray:
+    def __calculate_optimal_global_shift(xyz: NDArray[np.float_], _decimal_magnitude: int = 4) -> NDArray[np.float_]:
+        """
+        Calculates an optimal global shift based on the median of the coordinates.
+
+        Parameters
+        ----------
+        xyz : NDArray[np.float_]
+            The array of (N x 3) coordinates.
+        _decimal_magnitude : int, default=4
+            The precision used to calculate the shift.
+
+        Returns
+        -------
+        NDArray[np.float_]
+            The calculated global shift as a (3,) array.
+        """
         return np.median(np.round(xyz, decimals=-(_decimal_magnitude - 1)), axis=0)
 
 
     @classmethod
-    def from_range_image(cls, range_data: np.ndarray, fov: FoV, scalar_fields: dict[str, np.ndarray] = None,
-                         spherical_coordinates_origin: np.ndarray = None) -> Self:
+    def from_range_image(cls, range_data: NDArray[np.floating], fov: FoV, scalar_fields: dict[str, NDArray[np.generic]] = None,
+                         spherical_coordinates_origin: NDArray[np.float_] = None) -> Self:
+        """
+        Creates a `PointCloudData` instance from a range image.
 
-        # nbPts = np.count_nonzero(~np.isnan(range_data))
+        Parameters
+        ----------
+        range_data : NDArray[np.floating]
+            A 2D array representing the range values.
+        fov : FoV
+            The field of view defining the angular limits of the range image.
+        scalar_fields : dict[str, NDArray[np.generic]], optional
+            Scalar fields corresponding to the range data.
+        spherical_coordinates_origin : NDArray[np.float_], optional
+            The origin for spherical coordinate calculations.
+
+        Returns
+        -------
+        PointCloudData
+            A new instance of the `PointCloudData` class.
+        """
         resolution = range_data.shape
 
         ## TODO: Check endpoint consistency throughout
@@ -150,9 +288,26 @@ class PointCloudData:
         return cls.from_spherical_coordinates(spherical_coordinates, scalar_fields, spherical_coordinates_origin)
 
     @classmethod
-    def from_spherical_coordinates(cls, spherical_coordinates: np.ndarray, scalar_fields: dict[str, np.ndarray] = None,
-                                   spherical_coordinates_origin: np.ndarray = None) -> Self:
-        # object.__setattr__(self, "_spherical_coordinates_calculated", True)
+    def from_spherical_coordinates(cls, spherical_coordinates: NDArray[np.floating],
+                                   scalar_fields: dict[str, NDArray[np.generic]] = None,
+                                   spherical_coordinates_origin:  NDArray[np.float_] = None) -> Self:
+        """
+        Creates a `PointCloudData` instance from spherical coordinates.
+
+        Parameters
+        ----------
+        spherical_coordinates : NDArray[np.floating]
+            An (N x 3) array of spherical coordinates (range, elevation, azimuth).
+        scalar_fields : dict[str, NDArray[np.generic]], optional
+            Scalar fields associated with the spherical coordinates.
+        spherical_coordinates_origin : NDArray[np.float_], optional
+            The origin for spherical coordinate calculations.
+
+        Returns
+        -------
+        PointCloudData
+            A new instance of the `PointCloudData` class.
+        """
         assert spherical_coordinates_origin is None or spherical_coordinates_origin.shape == (3,)
 
         xyz = np.zeros((len(spherical_coordinates), 3))
@@ -166,11 +321,27 @@ class PointCloudData:
         return cls(xyz, scalar_fields=scalar_fields, spherical_coordinates_origin=spherical_coordinates_origin)
 
     def copy(self) -> Self:
+        """
+        Creates a copy of the current point cloud.
+
+        Returns
+        -------
+        PointCloudData
+            A new instance with the same attributes as the original.
+        """
         mask = np.ones(self.xyz.shape[0], dtype=bool)
         return self._copy_selection(mask)
 
     @cached_property
-    def spherical_coordinates(self) -> np.ndarray:
+    def spherical_coordinates(self) -> NDArray[np.float32]:
+        """
+        Calculates and caches the spherical coordinates of the points.
+
+        Returns
+        -------
+        NDArray[np.float32]
+            An (N x 3) array of spherical coordinates (range, elevation, azimuth).
+        """
         #
         # if self.global_coordinate_shift is not None:
         #     xyz = self.xyz - (self.spherical_coordinates_origin - self.global_coordinate_shift)
@@ -214,7 +385,24 @@ class PointCloudData:
     def __repr__(self) -> str:
         return f"Point cloud with {self.xyz.shape[0]:,d} point(s)"
 
-    def _reduce_points_to(self, mask: np.ndarray) -> Self:
+    def _reduce_points_to(self, mask: NDArray[np.bool_|np.integer]) -> Self:
+        """
+        Reduces the point cloud to only the points specified by the mask.
+
+        Parameters
+        ----------
+        mask : NDArray[np.bool_] or NDArray[np.integer]
+            A boolean or integer array specifying the points to retain.
+
+        Returns
+        -------
+        PointCloudData
+            The modified point cloud instance with only the selected points.
+        """
+        assert mask.dtype != np.bool_ or mask.shape == (self.nbPoints,), (
+            f"If mask.dtype is np.bool_, its shape must be {(self.nbPoints,)}, but got {mask.shape}"
+        )
+
         object.__setattr__(self, "xyz", self.xyz[mask])
         if self.color is not None:
             object.__setattr__(self, "color", self.color[mask])
@@ -226,8 +414,24 @@ class PointCloudData:
             self.scalar_fields[sf_key] = self.scalar_fields[sf_key][mask]
         return self
 
-    def _copy_selection(self, mask: np.ndarray) -> Self:
-        # TODO: check if mask is slice or truth array
+    def _copy_selection(self, mask: NDArray[np.bool_|np.integer]) -> Self:
+        """
+        Creates a copy of the point cloud containing only the points specified by the mask.
+
+        Parameters
+        ----------
+        mask : NDArray[np.bool_] or NDArray[np.integer]
+            A boolean or integer array specifying the points to copy.
+
+        Returns
+        -------
+        PointCloudData
+            A new point cloud instance containing the selected points.
+        """
+        assert mask.dtype != np.bool_ or mask.shape == (self.nbPoints,), (
+            f"If mask.dtype is np.bool_, its shape must be {(self.nbPoints,)}, but got {mask.shape}"
+        )
+
         xyz = self.xyz[mask].copy()
         color = self.color[mask].copy() if self.color is not None else None
         normals = self.normals[mask].copy() if self.normals is not None else None
@@ -235,7 +439,7 @@ class PointCloudData:
         for sf_key, sf_value in self.scalar_fields.items():
             scalar_fields[sf_key] = sf_value[mask].copy()
         global_coordinate_shift = self.global_coordinate_shift.copy() if self.global_coordinate_shift is not None else None
-        spherical_coordinates_origin = self.spherical_coordinates_origin.copy() if self.spherical_coordinates_origin is not None else None
+        spherical_coordinates_origin = self.spherical_coordinates_origin.copy()
         new_pcd = PointCloudData(
             xyz, color=color, normals=normals, scalar_fields=scalar_fields,
             global_coordinate_shift=global_coordinate_shift, spherical_coordinates_origin=spherical_coordinates_origin,
@@ -252,10 +456,26 @@ class PointCloudData:
     #            sample_func: Callable[[np.ndarray], np.ndarray[Any, np.dtype[bool]]],
     #             in_place: bool = False) -> "PointCloudData" | None:
 
-    def apply_math_to_xyz(self, math_func: Callable) -> None:
-        object.__setattr__(self, "xyz", math_func(self.xyz))
+    # def apply_math_to_xyz(self, math_func: Callable) -> None:
+    #     """
+    #     Applies a mathematical transformation to the `xyz` coordinates.
+    #
+    #     Parameters
+    #     ----------
+    #     math_func : Callable
+    #         A function that takes an (N x 3) array and returns a transformed array.
+    #     """
+    #     object.__setattr__(self, "xyz", math_func(self.xyz))
 
-    def transform(self, transformation_matrix: np.ndarray):
+    def transform(self, transformation_matrix: NDArray[np.floating]) -> None:
+        """
+        Applies a transformation matrix to the point cloud.
+
+        Parameters
+        ----------
+        transformation_matrix : NDArray[np.floating]
+            A (4 x 4) transformation matrix.
+        """
         xyz_sco = np.vstack((self.xyz, self.spherical_coordinates_origin[np.newaxis,:]))
         if self.global_coordinate_shift is None:
             xyz_homogeneous = np.hstack((xyz_sco, np.ones((self.nbPoints + 1, 1), dtype=self.xyz.dtype))).transpose()
@@ -291,16 +511,17 @@ class PointCloudData:
         return
 
 
-    def filter(self, sf_filter: str, truth_func: Callable[[np.ndarray], np.ndarray[Any, np.dtype[bool]]]) -> None:
+    # def filter(self, sf_filter: str, truth_func: Callable[[np.ndarray], np.ndarray[Any, np.dtype[bool]]]) -> None:
+    def filter(self, sf_filter: str, truth_func: Callable[[NDArray[np.generic]], NDArray[np.bool_]]) -> None:
         """
-        Filters the point cloud based on the function.
+        Filters the point cloud based on a scalar field or property.
 
         Parameters
         ----------
         sf_filter : str
-            Scalar field identifier.
-        truth_func
-            Callable that takes a number and returns a `bool`
+            The name of the scalar field or property to filter.
+        truth_func : Callable[[NDArray[np.generic]], NDArray[np.bool_]]
+            A function that returns a boolean mask for filtering points.
         """
         if sf_filter == "spherical_coordinates": # Needed to init caching
             self.spherical_coordinates
@@ -312,6 +533,16 @@ class PointCloudData:
             self._reduce_points_to(filter_mask)
 
     def box_cut(self, minimum_corner: Tuple[float, float, float], maximum_corner: Tuple[float, float, float]) -> None:
+        """
+        Removes points outside a specified bounding box.
+
+        Parameters
+        ----------
+        minimum_corner : tuple[float, float, float]
+            The minimum (x, y, z) corner of the bounding box.
+        maximum_corner : tuple[float, float, float]
+            The maximum (x, y, z) corner of the bounding box.
+        """
         # If the dimension difference in an axis is 0, then it should be ignored
         minimum_corner = np.array(minimum_corner, dtype=float)
         maximum_corner = np.array(maximum_corner, dtype=float)
@@ -329,6 +560,19 @@ class PointCloudData:
         self._reduce_points_to(mask)
 
     def extract_angles(self, fov: FoV) -> Self:
+        """
+        Extracts points within a specified field of view (FoV) based on angles.
+
+        Parameters
+        ----------
+        fov : FoV
+            The field of view object defining angular limits.
+
+        Returns
+        -------
+        PointCloudData
+            A new point cloud instance containing only the points within the FoV.
+        """
         angle_filter = ("spherical_coordinates",
                         lambda spc: np.logical_and(np.logical_and(spc[:, 1] >= fov.elevation_min,
                                                                   spc[:, 1] <= fov.elevation_max),
@@ -337,6 +581,19 @@ class PointCloudData:
         return self.extract(*angle_filter)
 
     def sample_angles(self, fov: FoV) -> Self:
+        """
+        Samples points within a specified field of view (FoV) based on angles.
+
+        Parameters
+        ----------
+        fov : FoV
+            The field of view object defining angular limits.
+
+        Returns
+        -------
+        PointCloudData
+            A new point cloud instance containing only the sampled points within the FoV.
+        """
         angle_filter = ("spherical_coordinates",
                         lambda spc: np.logical_and(np.logical_and(spc[:, 1] >= fov.elevation_min,
                                                                   spc[:, 1] <= fov.elevation_max),
@@ -345,6 +602,16 @@ class PointCloudData:
         return self.sample(*angle_filter)
 
     def filter_range(self, *, low: float = None, high: float = None) -> None:
+        """
+        Filters the point cloud based on a range of distances from the spherical coordinates.
+
+        Parameters
+        ----------
+        low : float, optional
+            The lower bound of the range. Defaults to 0.
+        high : float, optional
+            The upper bound of the range. Defaults to infinity.
+        """
         if low is None:
             low = 0
         if high is None:
@@ -356,6 +623,21 @@ class PointCloudData:
 
 
     def extract_range(self, *, low: float = None, high: float = None) -> Self:
+        """
+        Extracts points within a specified range from the spherical coordinates.
+
+        Parameters
+        ----------
+        low : float, optional
+            The lower bound of the range. Defaults to 0.
+        high : float, optional
+            The upper bound of the range. Defaults to infinity.
+
+        Returns
+        -------
+        PointCloudData
+            A new point cloud instance containing only the extracted points.
+        """
         if low is None:
             low = 0
         if high is None:
@@ -365,6 +647,21 @@ class PointCloudData:
         return self.extract(*range_filter)
 
     def sample_range(self, *, low: float = None, high: float = None) -> Self:
+        """
+        Samples points within a specified range from the spherical coordinates.
+
+        Parameters
+        ----------
+        low : float, optional
+            The lower bound of the range. Defaults to 0.
+        high : float, optional
+            The upper bound of the range. Defaults to infinity.
+
+        Returns
+        -------
+        PointCloudData
+            A new point cloud instance containing only the sampled points.
+        """
         if low is None:
             low = 0
         if high is None:
@@ -374,6 +671,22 @@ class PointCloudData:
         return self.sample(*range_filter)
 
     def random_subsample(self, size: float | int, in_place: bool = True) -> Self:
+        """
+        Randomly subsamples the point cloud to reduce the number of points.
+
+        Parameters
+        ----------
+        size : float or int
+            If a float between 0 and 1, it specifies the proportion of points to retain.
+            If an integer, it specifies the exact number of points to retain.
+        in_place : bool, default=True
+            If True, modifies the current point cloud in place. Otherwise, returns a new instance.
+
+        Returns
+        -------
+        PointCloudData or None
+            A new point cloud instance if `in_place` is False; otherwise, None.
+        """
         if isinstance(size, float) and 0 < size < 1:
             size = np.ceil(size * self.nbPoints).astype(int)
         if size >= self.nbPoints:
@@ -385,8 +698,22 @@ class PointCloudData:
         else:
             return self._copy_selection(selection)
 
-    def sample(self, sf_sample: str,
-               sample_func: Callable[[np.ndarray], np.ndarray[Any, np.dtype[bool]]]) -> Self:
+    def sample(self, sf_sample: str, sample_func: Callable[[NDArray[np.generic]], NDArray[np.bool_]]) -> Self:
+        """
+        Samples a subset of points based on a scalar field or property.
+
+        Parameters
+        ----------
+        sf_sample : str
+            The name of the scalar field or property to use for sampling.
+        sample_func : Callable[[NDArray[np.generic]], NDArray[np.bool_]]
+            A function that returns a boolean mask for sampling points.
+
+        Returns
+        -------
+        PointCloudData
+            A new instance containing the sampled points.
+        """
         if sf_sample == "spherical_coordinates":
             self.spherical_coordinates
         if sf_sample in self.scalar_fields.keys():
@@ -397,8 +724,22 @@ class PointCloudData:
             raise ValueError("(Scalar) field does not exist")
         return self._copy_selection(filter_mask)
 
-    def extract(self, sf_sample: str,
-                sample_func: Callable[[np.ndarray], np.ndarray[Any, np.dtype[bool]]]) -> Self:
+    def extract(self, sf_sample: str, sample_func: Callable[[NDArray[np.generic]], NDArray[np.bool_]]) -> Self:
+        """
+        Extracts a subset of points based on a scalar field or property.
+
+        Parameters
+        ----------
+        sf_sample : str
+            The name of the scalar field or property to use for sampling.
+        sample_func : Callable[[NDArray[np.generic]], NDArray[np.bool_]]
+            A function that returns a boolean mask for selecting points.
+
+        Returns
+        -------
+        PointCloudData
+            A new instance containing the extracted points.
+        """
         if sf_sample == "spherical_coordinates":
             self.spherical_coordinates
         if sf_sample in self.scalar_fields.keys():
@@ -411,7 +752,15 @@ class PointCloudData:
         self._reduce_points_to(np.logical_not(filter_mask))
         return new_pcd
 
-    def change_spherical_coordinates_origin(self, spherical_coordinates_origin: np.ndarray) -> None:
+    def change_spherical_coordinates_origin(self, spherical_coordinates_origin: NDArray[np.float_]) -> None:
+        """
+        Changes the origin used for spherical coordinate calculations.
+
+        Parameters
+        ----------
+        spherical_coordinates_origin : NDArray[np.float_]
+            A (3,) array specifying the new origin for spherical coordinate calculations.
+        """
         assert spherical_coordinates_origin.shape == (3,)
         object.__setattr__(self, "spherical_coordinates_origin", spherical_coordinates_origin)
         if self._spherical_coordinates_calculated:
@@ -420,6 +769,11 @@ class PointCloudData:
 
     @property
     def fov(self) -> FoV:
+        """
+        Returns
+        -------
+            FoV: Field of View object based on spherical coordinates.
+        """
         # TODO: Accommodate smaller pcd that cross the hz: 200 -> -200 gon border (same for elevation, less common)
         return FoV(horizontal_min=self.spherical_coordinates[:, 2].min(),
                    horizontal_max=self.spherical_coordinates[:, 2].max(),
@@ -431,21 +785,18 @@ class PointCloudData:
     @classmethod
     def merge_pcd(cls, pcds: Iterable[Self]) -> Self:
         """
-        Merge multiple point clouds.
-
-        Merges two or more point clouds. The new point cloud will only retain scalar fields (and colors and normals) if
-        TODO: Check for dtype (uint8 vs uint16 -> needs to be scaled)
-        TODO:
+        Merges multiple `PointCloudData` instances into a single point cloud.
 
         Parameters
         ----------
-        pcds : iterable[pchandler.geometry.PointCloudData]
+        pcds : Iterable[PointCloudData]
+            A list or iterable of `PointCloudData` instances to merge.
 
         Returns
         -------
-        pcd : pchandler.geometry.PointCloudData
+        PointCloudData
+            A new instance containing the merged point cloud data.
         """
-
         xyz = []
         color = []
         normals = []
@@ -548,6 +899,14 @@ class PointCloudData:
         return new_pcd
 
     def to_o3d(self) -> o3d.geometry.PointCloud:
+        """
+        Converts the point cloud to an Open3D `PointCloud` object.
+
+        Returns
+        -------
+        o3d.geometry.PointCloud
+            An Open3D representation of the point cloud.
+        """
         pcd_o3d = o3d.geometry.PointCloud()
         if self.global_coordinate_shift is None:
             pcd_o3d.points = o3d.utility.Vector3dVector(self.xyz)
@@ -556,16 +915,61 @@ class PointCloudData:
         return pcd_o3d
 
     @classmethod
-    def from_o3d(cls, pcd_o3d: o3d.geometry.PointCloud, scan_center: Optional[np.ndarray] = None):
+    def from_o3d(cls, pcd_o3d: o3d.geometry.PointCloud, scan_center: Optional[NDArray[np.float_]] = None):
+        """
+        Creates a `PointCloudData` instance from an Open3D `PointCloud`.
+
+        Parameters
+        ----------
+        pcd_o3d : o3d.geometry.PointCloud
+            An Open3D `PointCloud` object.
+        scan_center : np.ndarray, optional
+            The scan center for spherical coordinate calculations.
+
+        Returns
+        -------
+        PointCloudData
+            A new instance of the `PointCloudData` class.
+        """
         return cls(xyz=np.asarray(pcd_o3d.points), spherical_coordinates_origin=scan_center)
 
     def filter_to_polygon(self, poly: Polygon, plane: str) -> None:
+        """
+        Filters the point cloud to include only points within a given polygon in a specific 2D projection.
+
+        Parameters
+        ----------
+        poly : Polygon
+            A Shapely Polygon defining the region of interest.
+        plane : str
+            The plane of projection ('xy', 'xz', or 'yz').
+
+        Raises
+        ------
+        NotImplementedError
+            If GPU support is not available.
+        """
         if HAS_GPU_SUPPORT:
             self._filter_to_polygon_gpu(poly, plane)
         else:
             raise NotImplementedError()
 
     def _filter_to_polygon_gpu(self, poly: Polygon, plane: str) -> None:
+        """
+        Filters the point cloud using GPU acceleration to include points within a given polygon in a specific 2D projection.
+
+        Parameters
+        ----------
+        poly : Polygon
+            A Shapely Polygon defining the region of interest.
+        plane : str
+            The plane of projection ('xy', 'xz', or 'yz').
+
+        Raises
+        ------
+        ValueError
+            If the specified plane is invalid.
+        """
         match plane:
             case 'xy':
                 proj_pts = cudf.DataFrame({"x": self.xyz[:, 0].astype(float),
@@ -588,6 +992,30 @@ class PointCloudData:
         self._reduce_points_to(pts_in_mask)
 
     def get_outline_polygon(self, plane: str, alpha_value: float = 10.0, nb_points: int = -1) -> Polygon:
+        """
+        Computes the outline of the point cloud as a polygon in a specific 2D projection.
+
+        Parameters
+        ----------
+        plane : str
+            The plane of projection ('xy', 'xz', or 'yz').
+        alpha_value : float, default=10.0
+            The alpha value for the alpha shape algorithm, controlling the detail of the outline.
+        nb_points : int, default=-1
+            The number of points to use for the computation. If -1, all points are used.
+
+        Returns
+        -------
+        Polygon
+            A Shapely Polygon representing the outline of the point cloud.
+
+        Raises
+        ------
+        ValueError
+            If the specified plane is invalid.
+        NotImplementedError
+            If the outline computation results in an unsupported geometry type.
+        """
         match plane:
             case 'xy':
                 proj_pts = self.xyz[:, :2]
@@ -621,6 +1049,14 @@ class PointCloudData:
         return als
 
     def voxel_downsample(self, voxel_size: float) -> None:
+        """
+        Reduces the number of points in the point cloud using voxel grid downsampling.
+
+        Parameters
+        ----------
+        voxel_size : float
+            The size of the voxel grid.
+        """
         unique, unique_inverse = np.unique(np.round(self.xyz / voxel_size).astype(np.int32), axis=0, return_inverse=True)
 
         # Calculate centroids for each voxel
@@ -655,6 +1091,16 @@ class PointCloudData:
         return
 
     def filter_spherical_outliers(self, std_ratio: float = 0.95, nb_neighbors: int = 13):
+        """
+        Removes outliers in the spherical coordinate space using statistical filtering.
+
+        Parameters
+        ----------
+        std_ratio : float, default=0.95
+            The standard deviation ratio for identifying outliers.
+        nb_neighbors : int, default=13
+            The number of neighbors to consider for statistical outlier removal.
+        """
         sp_pcd = o3d.geometry.PointCloud()
         sp_pcd.points = o3d.utility.Vector3dVector(np.hstack((self.spherical_coordinates[:,1:],
                                                               np.zeros((self.nbPoints,1), dtype=np.float32))))
@@ -673,6 +1119,16 @@ class PointCloudData:
         #     raise NotImplementedError
 
     def filter_xyz_outliers(self, std_ratio: float = 0.95, nb_neighbors: int = 13):
+        """
+        Removes outliers in the `xyz` space using statistical filtering.
+
+        Parameters
+        ----------
+        std_ratio : float, default=0.95
+            The standard deviation ratio for identifying outliers.
+        nb_neighbors : int, default=13
+            The number of neighbors to consider for statistical outlier removal.
+        """
         pcd_o3d = self.to_o3d()
 
         _, inliers = pcd_o3d.remove_statistical_outlier(nb_neighbors,std_ratio,True)
@@ -692,7 +1148,23 @@ def split_pc_with_fov_tree(pcd: PointCloudData, fov_tree: FoVTree, remove_empty:
         # -> list[tuple[str, FoV, PointCloudData]]:
 
     """
+    Splits a PointCloudData instance using a FoVTree.
 
+    Parameters
+    ----------
+    pcd : PointCloudData
+        The point cloud data to be split.
+    fov_tree : FoVTree
+        A tree structure defining the field of view regions for splitting the point cloud.
+    remove_empty : bool, default=True
+        Whether to remove empty splits (i.e., regions with no points).
+    n_jobs : int, default=-1
+        The number of parallel jobs to use. If -1, all available cores are used.
+
+    Returns
+    -------
+    dict[str, PointCloudData]
+        A dictionary where keys are FoV identifiers and values are the split PointCloudData objects.
     """
     # if fov_tree.is_leaf() or pcd.nbPoints <= self.minimum_nb_points:
     #     return [(fov_tree.identifier, fov_tree.node, pcd,)]
