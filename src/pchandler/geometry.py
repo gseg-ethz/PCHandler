@@ -911,7 +911,7 @@ class PointCloudData:
         if self.global_coordinate_shift is None:
             pcd_o3d.points = o3d.utility.Vector3dVector(self.xyz)
         else:
-            pcd_o3d.points = o3d.utility.Vector3dVector(self.xyz + self.global_coordinate_shift)
+            pcd_o3d.points = o3d.utility.Vector3dVector((self.xyz + self.global_coordinate_shift).astype(np.float32))
         return pcd_o3d
 
     @classmethod
