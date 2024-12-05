@@ -79,7 +79,6 @@ from itertools import compress, chain
 
 from joblib import Parallel, delayed
 from typing import Iterable, Callable, Any, Tuple, Optional
-
 if sys.version[0] == 3 and sys.version_info[1] >= 11:
     from typing import Self
 else:
@@ -1002,6 +1001,10 @@ class PointCloudData:
 
         pts_in_mask = proj_pts_in[0].to_numpy()
         self._reduce_points_to(pts_in_mask)
+
+        del polygon_gpu, proj_pts, proj_pts_gs, proj_pts_in
+        gc.collect()
+
 
     def get_outline_polygon(self, plane: str, alpha_value: float = 10.0, nb_points: int = -1) -> Polygon:
         """
