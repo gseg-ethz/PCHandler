@@ -1156,7 +1156,7 @@ class PointCloudData:
         pcd_o3d = self.to_o3d()
 
         _, inliers = pcd_o3d.remove_statistical_outlier(nb_neighbors,std_ratio,True)
-        self._reduce_points_to(inliers)
+        self._reduce_points_to(np.array(inliers))
 
     # def _filter_spherical_outliers_gpu(self, percentile: int = 95, nb_neighbors: int = 13):
     #     raise NotImplementedError
