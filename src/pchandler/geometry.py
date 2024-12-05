@@ -983,6 +983,18 @@ class PointCloudData:
             case _:
                 raise ValueError
 
+        if self.global_coordinate_shift is not None:
+            match plane:
+                case 'xy':
+                    gs = -self.global_coordinate_shift[:2]
+                case 'xz':
+                    gs = -self.global_coordinate_shift[[0, 2]]
+                case 'yz':
+                    gs = -self.global_coordinate_shift[1:]
+                case _:
+                    raise ValueError
+            poly = translate(poly, *gs)
+
         polygon_gpu = cuspatial.GeoSeries(gpd.GeoSeries(poly))
         # polygon_gpu = cuspatial.GeoSeries.from_polygons_xy(poly)
         proj_pts_gs = cuspatial.GeoSeries.from_points_xy(proj_pts)
@@ -1045,6 +1057,18 @@ class PointCloudData:
 
         if not isinstance(als, Polygon):
             NotImplementedError
+
+        if self.global_coordinate_shift is not None:
+            match plane:
+                case 'xy':
+                    gs = self.global_coordinate_shift[:2]
+                case 'xz':
+                    gs = self.global_coordinate_shift[[0, 2]]
+                case 'yz':
+                    gs = self.global_coordinate_shift[1:]
+                case _:
+                    raise ValueError
+            als = translate(als, *gs)
 
         return als
 

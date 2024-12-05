@@ -125,7 +125,7 @@ applications in 3D data analysis, GIS, and computer vision.
 
 __author__ = "Nicholas Meyer"
 __email__ = "meyernic@ethz.ch"
-__version__ = "0.6.6"
+__version__ = "0.6.7"
 
 from . import data_io, fov, geometry, util
 
