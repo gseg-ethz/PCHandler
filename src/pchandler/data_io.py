@@ -30,6 +30,7 @@ Dependencies:
 - **Third-Party Libraries**:
   - ``numpy``: For efficient numerical operations.
   - ``laspy``: For handling ``.las`` and ``.laz`` files.
+  - ``pye57``: For handling ``.e57`` files.
   - ``plyfile``: For handling ``.ply`` files.
   - ``pchandler.geometry.PointCloudData``: The internal representation for 3D point cloud data.
 
@@ -69,11 +70,13 @@ from datetime import datetime
 from enum import Enum
 from itertools import compress
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Optional, Generator
 
 import numpy as np
 import laspy
 from plyfile import PlyElement, PlyData
+import pye57
+from yaml import warnings
 
 from pchandler.geometry import PointCloudData
 
@@ -187,6 +190,100 @@ def save_ply(pcd_path: Path, pcd: PointCloudData, retain_colors: bool = True, re
     PlyData([el]).write(f"{pcd_path}")
 
 
+def save_csv(pcd_path: Path, pcd: PointCloudData, delimiter: str = " ", add_header: bool = False, retain_colors: bool = True,
+             retain_normals: bool = True, scalar_fields: list[str] = None) -> None:
+    """
+    Saves a `PointCloudData` object to a CSV file, accounting for different data types.
+
+    Parameters
+    ----------
+    pcd_path : Path
+        The output path for the CSV file.
+    pcd : PointCloudData
+        The point cloud data to save.
+    delimiter : str, default=" "
+        The delimiter to use in the CSV file.
+    retain_colors : bool, default=True
+        Whether to include color information in the saved file.
+    retain_normals : bool, default=True
+        Whether to include normal vectors in the saved file.
+    scalar_fields : list[str], optional
+        A list of scalar fields to include in the saved file. If `None`, all scalar fields are saved.
+    """
+    nb_points = pcd.nbPoints
+
+    # Define structured dtype for the output data
+    dtype_list = [("x", "f4"), ("y", "f4"), ("z", "f4"), ] if pcd.global_coordinate_shift is None else [("x", "f8"), ("y", "f8"), ("z", "f8"), ]
+
+    if retain_colors and pcd.color is not None:
+        assert pcd.color.shape == (nb_points, 3)
+        dtype_list.extend([("r", "u1"), ("g", "u1"), ("b", "u1")])
+
+    if retain_normals and pcd.normals is not None:
+        assert pcd.normals.shape == (nb_points, 3)
+        dtype_list.extend([("nx", pcd.normals.dtype.str), ("ny", pcd.normals.dtype.str), ("nz", pcd.normals.dtype.str)])
+
+    pcd_scalar_fields = pcd.scalar_fields.keys()
+    common_scalar_fields = pcd_scalar_fields if scalar_fields is None else list(set(scalar_fields) & set(pcd_scalar_fields))
+
+    for sf in common_scalar_fields:
+        assert pcd.scalar_fields[sf].shape == (nb_points,)
+        dtype_list.append((sf, pcd.scalar_fields[sf].dtype.str))
+
+    # Create a structured array with the defined dtype
+    data = np.empty(nb_points, dtype=dtype_list)
+
+    # Fill structured array with data
+    data["x"] = pcd.xyz[:, 0]
+    data["y"] = pcd.xyz[:, 1]
+    data["z"] = pcd.xyz[:, 2]
+
+    if pcd.global_coordinate_shift is not None:
+        data["x"] += pcd.global_coordinate_shift[0]
+        data["y"] += pcd.global_coordinate_shift[1]
+        data["z"] += pcd.global_coordinate_shift[2]
+
+    if retain_colors and pcd.color is not None:
+        data["r"] = pcd.color[:, 0]
+        data["g"] = pcd.color[:, 1]
+        data["b"] = pcd.color[:, 2]
+
+    if retain_normals and pcd.normals is not None:
+        data["nx"] = pcd.normals[:, 0]
+        data["ny"] = pcd.normals[:, 1]
+        data["nz"] = pcd.normals[:, 2]
+
+    for sf in common_scalar_fields:
+        data[sf] = pcd.scalar_fields[sf]
+
+    # Convert structured array to a plain 2D array
+    plain_data = np.stack([data[field] for field in data.dtype.names], axis=-1)
+
+    # Write header and data using numpy.savetxt
+    header = delimiter.join(data.dtype.names) if add_header else ""
+    if not pcd_path.parent.exists():
+        pcd_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Build dynamic format string for `numpy.savetxt`
+    fmt_map = {
+        "f": "%.6f",  # Default float format
+        "u": "%u",  # Unsigned integer
+        "i": "%d",  # Signed integer
+    }
+    fmt = [fmt_map.get(field[1][0], "%s") for field in dtype_list]  # Use `"%s"` for fallback
+
+    np.savetxt(
+        pcd_path,
+        plain_data,
+        delimiter=delimiter,
+        header=header,
+        comments="",  # Avoid prepending '#' to the header
+        fmt=fmt
+    )
+
+
+
+
 def load_csv(pcd_path: Path, delimeter: str = " ", scalar_fields: list[str] = None, normalize_intensities: bool = True,
              **kwargs) -> PointCloudData:
     """
@@ -250,6 +347,94 @@ def load_csv(pcd_path: Path, delimeter: str = " ", scalar_fields: list[str] = No
                     scalar_fields_dict["scalar_Intensity"] / scalar_fields_dict["scalar_Intensity"].max())
 
     return PointCloudData(xyz, color=colors, normals=normals, scalar_fields=scalar_fields_dict, **kwargs)
+
+# def load_e57(pcd_path: Path, point_cloud_index: Optional[int] = None, retain_intensity: bool = True, retain_colors: bool = True,
+#              normalize_intensities: bool = False, **kwargs) -> [PointCloudData | Generator[PointCloudData, None, None]]:
+#     e57 = pye57.E57(str(pcd_path))
+#     number_of_scans = e57.scan_count
+#
+#     assert point_cloud_index is None or (0 <= point_cloud_index < number_of_scans)
+#
+#     point_cloud_index = 0 if number_of_scans == 1 else point_cloud_index
+#
+#     if point_cloud_index is None:
+#         e57.close()
+#         for i in range(number_of_scans):
+#             yield load_e57(pcd_path, i, retain_intensity, retain_colors, normalize_intensities, **kwargs)
+#
+#
+#     data = e57.read_scan(point_cloud_index, ignore_missing_fields=True, intensity=retain_intensity, colors=retain_colors)
+#     header = e57.get_header(point_cloud_index)
+#
+#     # xyz = np.hstack((data["cartesianX"][:,np.newaxis],data["cartesianY"][:,np.newaxis],data["cartesianZ"][:,np.newaxis]))
+#     xyz = np.column_stack((data["cartesianX"], data["cartesianY"], data["cartesianZ"]))
+#     colors = np.column_stack((data["colorRed"], data["colorGreen"], data["colorBlue"])) if "colorRed" in data else None
+#     if "intensity" in data:
+#         intensity = data["intensity"]
+#         if normalize_intensities:
+#             try:
+#                 intensity = (intensity - header.intensityMinimum) / (header.intensityMaximum - header.intensityMinimum)
+#             except:
+#                 intensity = intensity / intensity.max()
+#     else:
+#         intensity = None
+#
+#     scalar_field_dict = dict() if intensity is None else {"scalar_Intensity": intensity}
+#
+#     return PointCloudData(xyz, color=colors, scalar_fields=scalar_field_dict)
+
+def load_e57(pcd_path: Path, point_cloud_index: Optional[int] = None, retain_intensity: bool = True,
+             retain_colors: bool = True, normalize_intensities: bool = False, **kwargs) -> PointCloudData | Generator[PointCloudData, None, None]:
+
+    e57 = pye57.E57(str(pcd_path), mode="r")
+    number_of_scans = e57.scan_count
+    e57.close()
+
+    assert point_cloud_index is None or (0 <= point_cloud_index < number_of_scans)
+
+    point_cloud_index = 0 if number_of_scans == 1 else point_cloud_index
+
+    if point_cloud_index is None:
+        return _load_all_e57_scans(pcd_path, retain_intensity, retain_colors, normalize_intensities, **kwargs)
+    else:
+        return _load_single_e57(pcd_path, point_cloud_index, retain_intensity, retain_colors, normalize_intensities, **kwargs)
+
+
+
+def _load_all_e57_scans(pcd_path: Path, retain_intensity: bool = True, retain_colors: bool = True,
+                       normalize_intensities: bool = False, **kwargs) -> Generator[PointCloudData, None, None]:
+    e57 = pye57.E57(str(pcd_path), mode="r")
+    number_of_scans = e57.scan_count
+
+    for i in range(number_of_scans):
+        yield _load_single_e57(pcd_path, i, retain_intensity, retain_colors, normalize_intensities, **kwargs)
+
+
+def _load_single_e57(pcd_path: Path, point_cloud_index: int, retain_intensity: bool = True, retain_colors: bool = True,
+                    normalize_intensities: bool = False, **kwargs) -> PointCloudData:
+    e57 = pye57.E57(str(pcd_path), mode="r")
+    data = e57.read_scan(point_cloud_index, ignore_missing_fields=True, intensity=retain_intensity, colors=retain_colors)
+    header = e57.get_header(point_cloud_index)
+
+    xyz = np.column_stack((data["cartesianX"], data["cartesianY"], data["cartesianZ"]))
+    colors = np.column_stack((data["colorRed"], data["colorGreen"], data["colorBlue"])) if "colorRed" in data else None
+    if "intensity" in data:
+        intensity = data["intensity"]
+        if normalize_intensities:
+            try:
+                intensity = (intensity - header.intensityMinimum) / (header.intensityMaximum - header.intensityMinimum)
+            except:
+                intensity = intensity / intensity.max()
+    else:
+        intensity = None
+
+    scalar_field_dict = dict() if intensity is None else {"scalar_Intensity": intensity}
+
+    e57.close()
+    return PointCloudData(xyz, color=colors, scalar_fields=scalar_field_dict)
+
+
+
 
 
 def load_ply(pcd_path: Path, retain_colors: bool = True, retain_normals: bool = True, scalar_fields: list[str] = None,

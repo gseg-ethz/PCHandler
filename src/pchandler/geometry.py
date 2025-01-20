@@ -558,6 +558,15 @@ class PointCloudData:
                               np.all(self.xyz <= maximum_corner, axis=1))
         self._reduce_points_to(mask)
 
+    def extract_sphere_around(self, point: NDArray[np.floating], radius: float):
+        distances_to_point = np.linalg.norm(self.xyz - point, axis=1)
+        mask = distances_to_point <= radius
+
+        new_pcd = self._copy_selection(mask)
+        self._reduce_points_to(np.logical_not(mask))
+
+        return new_pcd
+
     def extract_angles(self, fov: FoV) -> Self:
         """
         Extracts points within a specified field of view (FoV) based on angles.
@@ -1005,6 +1014,54 @@ class PointCloudData:
         del polygon_gpu, proj_pts, proj_pts_gs, proj_pts_in
         gc.collect()
 
+    def filter_spherical_polygon(self, poly: Polygon) -> None:
+        """
+        Filters the point cloud to include only points within a given polygon in the spherical projection.
+
+        Parameters
+        ----------
+        poly : Polygon
+            A Shapely Polygon defining the region of interest.
+
+        Raises
+        ------
+        NotImplementedError
+            If GPU support is not available.
+        """
+        if HAS_GPU_SUPPORT:
+            self._filter_spherical_polygon_gpu(poly)
+        else:
+            raise NotImplementedError()
+
+    def _filter_spherical_polygon_gpu(self, poly: Polygon) -> None:
+        """
+        Filters the point cloud using GPU acceleration to include points within a given polygon in the spherical projection.
+
+        Parameters
+        ----------
+        poly : Polygon
+            A Shapely Polygon defining the region of interest.
+
+        Raises
+        ------
+        ValueError
+            If the specified plane is invalid.
+        """
+        proj_pts = cudf.DataFrame({"x": self.spherical_coordinates[:, 1].astype(float),
+                                   "y": self.spherical_coordinates[:, 2].astype(float)}).interleave_columns()
+
+
+
+        polygon_gpu = cuspatial.GeoSeries(gpd.GeoSeries(poly))
+        proj_pts_gs = cuspatial.GeoSeries.from_points_xy(proj_pts)
+        proj_pts_in = cuspatial.point_in_polygon(proj_pts_gs, polygon_gpu)
+
+        pts_in_mask = proj_pts_in[0].to_numpy()
+        self._reduce_points_to(pts_in_mask)
+
+        del polygon_gpu, proj_pts, proj_pts_gs, proj_pts_in
+        gc.collect()
+
 
     def get_outline_polygon(self, plane: str, alpha_value: float = 10.0, nb_points: int = -1) -> Polygon:
         """
@@ -1112,8 +1169,9 @@ class PointCloudData:
         warnings.warn("Scalar fields, normals, and colors are not retained during `voxel_downsample`!")
         object.__setattr__(self, 'color', None)
         object.__setattr__(self, 'normals', None)
-        for field_name in self.scalar_fields.keys():
-            del self.scalar_fields[field_name]
+        # for field_name in self.scalar_fields.keys():
+        #     del self.scalar_fields[field_name]
+        self.scalar_fields.clear()
 
         return
 
