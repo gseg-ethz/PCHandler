@@ -12,39 +12,70 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0
+          fetch-depth: 0  # Fetch only latest commit for speed
 
       - name: Get latest tag
         id: get_version
         run: |
+          echo "Fetching latest tag..."
           LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
           echo "LATEST_TAG=$LATEST_TAG" >> $GITHUB_ENV
 
+      - name: Determine if version bump should be skipped
+        id: check_skip_version
+        run: |
+          echo "Checking commit messages for #skip-version..."
+          LATEST_COMMIT=$(git log -1 --pretty=format:%s)
+
+          if echo "$LATEST_COMMIT" | grep -Eiq "#skip-version"; then
+            echo "Skipping version bump and squashing commits..."
+            echo "SKIP_VERSION=true" >> $GITHUB_ENV
+            exit 0
+          fi
+          echo "SKIP_VERSION=false" >> $GITHUB_ENV
+
+      - name: Squash commits if #skip-version is present
+        if: env.SKIP_VERSION == 'true'
+        run: |
+          echo "Finding last tagged commit..."
+          LAST_TAG_COMMIT=$(git rev-list -n 1 $LATEST_TAG)
+
+          echo "Resetting commits since last tag..."
+          git reset --soft $LAST_TAG_COMMIT
+          git commit -m "Squashed commits (skipped version bump)"
+
+          echo "Force pushing squashed commit..."
+          git push --force-with-lease origin main
+
+          exit 0  # Exit early to prevent version bump
+
       - name: Determine highest-priority version bump
+        if: env.SKIP_VERSION == 'false'
         id: determine_bump
         run: |
           echo "Checking commit messages for version bumps..."
-          MERGE_COMMITS=$(git log -1 --pretty=format:%s)
+          LATEST_COMMIT=$(git log -1 --pretty=format:%s)
 
-          echo "Commit Messages Found:"
-          echo "$MERGE_COMMITS"
+          echo "Commit Message: $LATEST_COMMIT"
 
           BUMP_TYPE="patch"
 
-          if echo "$MERGE_COMMITS" | grep -Eiq "#major"; then
+          if echo "$LATEST_COMMIT" | grep -Eiq "#major"; then
             BUMP_TYPE="major"
-          elif echo "$MERGE_COMMITS" | grep -Eiq "#minor"; then
+          elif echo "$LATEST_COMMIT" | grep -Eiq "#minor"; then
             BUMP_TYPE="minor"
           fi
 
           echo "BUMP_TYPE=$BUMP_TYPE" >> $GITHUB_ENV
           echo "Version bump type selected: $BUMP_TYPE"
 
-
       - name: Bump version
+        if: env.SKIP_VERSION == 'false'
         id: bump_version
         run: |
           OLD_VERSION=${LATEST_TAG//v/}
+          echo "Old Version: $OLD_VERSION"
+
           MAJOR=$(echo $OLD_VERSION | cut -d. -f1)
           MINOR=$(echo $OLD_VERSION | cut -d. -f2)
           PATCH=$(echo $OLD_VERSION | cut -d. -f3)
@@ -61,6 +92,7 @@ jobs:
           echo "NEW_TAG=v$NEW_VERSION" >> $GITHUB_ENV
 
       - name: Create new tag
+        if: env.SKIP_VERSION == 'false'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -68,12 +100,3 @@ jobs:
           git config --global user.email "github-actions@github.com"
           git tag $NEW_TAG
           git push https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git $NEW_TAG
-
-
-      - name: Handle pre-release versioning for feature branches
-        if: github.ref != 'refs/heads/main'
-        run: |
-          DEV_VERSION="${LATEST_TAG//v/}-dev.$(date +%Y%m%d%H%M%S)"
-          echo "DEV_VERSION=$DEV_VERSION" >> $GITHUB_ENV
-          echo "Development version: $DEV_VERSION"
-
