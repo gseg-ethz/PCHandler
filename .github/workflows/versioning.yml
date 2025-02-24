@@ -24,7 +24,7 @@ jobs:
         id: determine_bump
         run: |
           echo "Checking commit messages for version bumps..."
-          MERGE_COMMITS=$(git log -n 10 --pretty=format:%s)
+          MERGE_COMMITS=$(git log -1 --pretty=format:%s)
 
           echo "Commit Messages Found:"
           echo "$MERGE_COMMITS"
