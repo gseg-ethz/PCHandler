@@ -56,11 +56,14 @@ jobs:
           echo "NEW_TAG=v$NEW_VERSION" >> $GITHUB_ENV
 
       - name: Create new tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
           git tag $NEW_TAG
-          git push origin $NEW_TAG
+          git push https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git $NEW_TAG
+
 
       - name: Handle pre-release versioning for feature branches
         if: github.ref != 'refs/heads/main'
