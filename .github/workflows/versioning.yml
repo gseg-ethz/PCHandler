@@ -24,17 +24,22 @@ jobs:
         id: determine_bump
         run: |
           echo "Checking commit messages for version bumps..."
-          MERGE_COMMITS=$(git log $(git merge-base HEAD origin/main)..HEAD --pretty=format:%s)
+          MERGE_COMMITS=$(git log -n 10 --pretty=format:%s)
+
+          echo "Commit Messages Found:"
+          echo "$MERGE_COMMITS"
+
           BUMP_TYPE="patch"
 
-          if echo "$MERGE_COMMITS" | grep -q "#major"; then
+          if echo "$MERGE_COMMITS" | grep -Eiq "#major"; then
             BUMP_TYPE="major"
-          elif echo "$MERGE_COMMITS" | grep -q "#minor"; then
+          elif echo "$MERGE_COMMITS" | grep -Eiq "#minor"; then
             BUMP_TYPE="minor"
           fi
 
           echo "BUMP_TYPE=$BUMP_TYPE" >> $GITHUB_ENV
           echo "Version bump type selected: $BUMP_TYPE"
+
 
       - name: Bump version
         id: bump_version
