@@ -1,3 +1,6 @@
+# Actions
+src/pchandler/_version.py
+
 # BAK files
 **/*.bak
 
