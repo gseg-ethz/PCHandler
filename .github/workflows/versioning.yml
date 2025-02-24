@@ -42,12 +42,18 @@ jobs:
 
           echo "Resetting commits since last tag..."
           git reset --soft $LAST_TAG_COMMIT
+
+          echo "Configuring Git identity for GitHub Actions..."
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+
           git commit -m "Squashed commits (skipped version bump)"
 
           echo "Force pushing squashed commit..."
           git push --force-with-lease origin main
 
           exit 0  # Exit early to prevent version bump
+      
 
       - name: Determine highest-priority version bump
         if: env.SKIP_VERSION == 'false'
