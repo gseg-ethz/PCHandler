@@ -1132,7 +1132,7 @@ class PointCloudData:
 
         return als
 
-    def voxel_downsample(self, voxel_size: float) -> None:
+    def voxel_downsample(self, voxel_size: float, weighted: bool = False) -> None:
         """
         Reduces the number of points in the point cloud using voxel grid downsampling.
 
@@ -1151,6 +1151,22 @@ class PointCloudData:
         counts = np.bincount(unique_inverse, minlength=unique.shape[0])
         centroids /= counts[:, None]  # Normalize to get centroids
 
+        # Compute distances of points to their respective voxel centroids
+        if weighted:
+            distances = np.linalg.norm(self.xyz - centroids[unique_inverse], axis=1)
+            weights = np.reciprocal(np.where(distances > 1e-6, distances, 1.0))  # Avoid division by zero
+            weight_sums = np.bincount(unique_inverse, weights=weights, minlength=unique.shape[0])
+
+            # Normalize weights per voxel
+            weights /= np.where(weight_sums[unique_inverse] > 0, weight_sums[unique_inverse], 1)  # Avoid NaNs
+        else:
+            weights = np.ones_like(counts, dtype=np.float32)[unique_inverse]
+
+        for field_name, field_values in self.scalar_fields.items():
+            # Compute weighted sum of scalar values within each voxel
+            scalar_sum = np.bincount(unique_inverse, weights=field_values * weights, minlength=unique.shape[0])
+            weight_sum = np.bincount(unique_inverse, weights=weights, minlength=unique.shape[0])
+            self.scalar_fields[field_name] = (scalar_sum / weight_sum).astype(field_values.dtype)
 
         # # Average scalar fields
         # averaged_scalar_fields = {}
@@ -1166,12 +1182,12 @@ class PointCloudData:
             object.__setattr__(self, "_spherical_coordinates_calculated", False)
 
         # Todo: Add functionality
-        warnings.warn("Scalar fields, normals, and colors are not retained during `voxel_downsample`!")
+        warnings.warn("Normals, and colors are not retained during `voxel_downsample`!")
         object.__setattr__(self, 'color', None)
         object.__setattr__(self, 'normals', None)
         # for field_name in self.scalar_fields.keys():
         #     del self.scalar_fields[field_name]
-        self.scalar_fields.clear()
+        # self.scalar_fields.clear()
 
         return
 

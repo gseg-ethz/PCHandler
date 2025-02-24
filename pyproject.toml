@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools", "setuptools_scm"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -35,8 +35,11 @@ dependencies = [
 ]
 
 [tool.setuptools.dynamic]
-version = {attr = "pchandler.__version__"}
+#version = {attr = "pchandler.__version__"}
 readme = {file = ["README.md"]}
+
+[tool.setuptools_scm]
+write_to = "src/pchandler/_version.py"
 
 [project.urls]
 homepage = "https://gseg.igp.ethz.ch/"
