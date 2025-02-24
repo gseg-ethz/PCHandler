@@ -19,7 +19,11 @@ jobs:
         id: get_version
         run: |
           echo "Fetching latest tag..."
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          LATEST_TAG=$(git tag --sort=-creatordate | head -n 1)
+          if [[ -z "$LATEST_TAG" ]]; then
+            LATEST_TAG="v0.0.0"
+          fi
+          echo "Detected latest tag: $LATEST_TAG"
           echo "LATEST_TAG=$LATEST_TAG" >> $GITHUB_ENV
 
       - name: Handle pre-release versioning for feature branches
@@ -34,55 +38,67 @@ jobs:
         id: check_skip_version
         run: |
           echo "Checking commit messages for #skip-version..."
-          LATEST_COMMIT=$(git log -1 --pretty=format:%s)
+          MERGE_COMMITS=$(git log $(git merge-base HEAD origin/main)..HEAD --pretty=format:%s | tac)
 
-          if echo "$LATEST_COMMIT" | grep -Eiq "#skip-version"; then
+          if echo "$MERGE_COMMITS" | grep -Eiq "#skip-version"; then
             echo "Skipping version bump!"
             echo "SKIP_VERSION=true" >> $GITHUB_ENV
             exit 0
           fi
           echo "SKIP_VERSION=false" >> $GITHUB_ENV
 
-      - name: Determine highest-priority version bump
+      - name: Determine sequential version bumps
         if: github.ref == 'refs/heads/main' && env.SKIP_VERSION == 'false'
         id: determine_bump
         run: |
-          echo "Checking commit messages for version bumps..."
-          LATEST_COMMIT=$(git log -1 --pretty=format:%s)
+          echo "Fetching commit history for versioning..."
 
-          echo "Commit Message: $LATEST_COMMIT"
+          # Fetch commit messages since the last tag, ensuring correct commit range
+          LAST_TAG_COMMIT=$(git rev-list -n 1 $LATEST_TAG 2>/dev/null || echo "")
 
-          BUMP_TYPE="patch"
-
-          if echo "$LATEST_COMMIT" | grep -Eiq "#major"; then
-            BUMP_TYPE="major"
-          elif echo "$LATEST_COMMIT" | grep -Eiq "#minor"; then
-            BUMP_TYPE="minor"
+          if [[ -z "$LAST_TAG_COMMIT" ]]; then
+            echo "No previous tag found, using all commits."
+            MERGE_COMMITS=$(git log --pretty=format:"%h - %s" --reverse)
+          else
+            echo "Using commit range: $LAST_TAG_COMMIT..HEAD"
+            MERGE_COMMITS=$(git log $LAST_TAG_COMMIT..HEAD --pretty=format:"%h - %s" --reverse)
           fi
 
-          echo "BUMP_TYPE=$BUMP_TYPE" >> $GITHUB_ENV
-          echo "Version bump type selected: $BUMP_TYPE"
+          echo "Processing commits in order:"
+          echo "$MERGE_COMMITS"
 
-      - name: Bump version
-        if: github.ref == 'refs/heads/main' && env.SKIP_VERSION == 'false'
-        id: bump_version
-        run: |
+          # Extract current version
           OLD_VERSION=${LATEST_TAG//v/}
-          echo "Old Version: $OLD_VERSION"
-
           MAJOR=$(echo $OLD_VERSION | cut -d. -f1)
           MINOR=$(echo $OLD_VERSION | cut -d. -f2)
           PATCH=$(echo $OLD_VERSION | cut -d. -f3)
 
-          if [ "$BUMP_TYPE" = "major" ]; then
-            NEW_VERSION="$((MAJOR + 1)).0.0"
-          elif [ "$BUMP_TYPE" = "minor" ]; then
-            NEW_VERSION="$MAJOR.$((MINOR + 1)).0"
-          else
-            NEW_VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
+          # Replay each commit in order
+          while read -r commit; do
+            echo "Evaluating commit: $commit"
+            if echo "$commit" | grep -Eiq "#major"; then
+              echo "Found major version bump"
+              MAJOR=$((MAJOR + 1))
+              MINOR=0  # Reset minor and patch since it's a major bump
+              PATCH=0
+            elif echo "$commit" | grep -Eiq "#minor"; then
+              echo "Found minor version bump"
+              MINOR=$((MINOR + 1))
+              PATCH=0  # Reset patch since it's a minor bump
+            elif echo "$commit" | grep -Eiq "#patch"; then
+              echo "Found patch version bump"
+              PATCH=$((PATCH + 1))
+            fi
+          done <<< "$MERGE_COMMITS"
+
+          # Ensure version actually changed before tagging
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          if [[ "$OLD_VERSION" == "$NEW_VERSION" ]]; then
+            echo "No version change detected. Exiting..."
+            exit 0
           fi
 
-          echo "New Version: $NEW_VERSION"
+          echo "Final Version: v$NEW_VERSION"
           echo "NEW_TAG=v$NEW_VERSION" >> $GITHUB_ENV
 
       - name: Create new tag
