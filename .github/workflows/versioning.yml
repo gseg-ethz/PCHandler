@@ -19,12 +19,19 @@ jobs:
         id: get_version
         run: |
           echo "Fetching latest tag..."
+
+          # Get latest tag sorted by creation date (supports both annotated and lightweight tags)
           LATEST_TAG=$(git tag --sort=-creatordate | head -n 1)
+
+          # If no tags exist, default to v0.0.0
           if [[ -z "$LATEST_TAG" ]]; then
             LATEST_TAG="v0.0.0"
           fi
+
           echo "Detected latest tag: $LATEST_TAG"
           echo "LATEST_TAG=$LATEST_TAG" >> $GITHUB_ENV
+          echo "SKIP_VERSION=false" >> $GITHUB_ENV
+
 
       - name: Handle pre-release versioning for feature branches
         if: github.ref != 'refs/heads/main'
@@ -32,20 +39,6 @@ jobs:
           DEV_VERSION="${LATEST_TAG//v/}-dev.$(date +%Y%m%d%H%M%S)"
           echo "DEV_VERSION=$DEV_VERSION" >> $GITHUB_ENV
           echo "Development version: $DEV_VERSION"
-
-      - name: Determine if version bump should be skipped
-        if: github.ref == 'refs/heads/main'
-        id: check_skip_version
-        run: |
-          echo "Checking commit messages for #skip-version..."
-          MERGE_COMMITS=$(git log $(git merge-base HEAD origin/main)..HEAD --pretty=format:%s | tac)
-
-          if echo "$MERGE_COMMITS" | grep -Eiq "#skip-version"; then
-            echo "Skipping version bump!"
-            echo "SKIP_VERSION=true" >> $GITHUB_ENV
-            exit 0
-          fi
-          echo "SKIP_VERSION=false" >> $GITHUB_ENV
 
       - name: Determine sequential version bumps
         if: github.ref == 'refs/heads/main' && env.SKIP_VERSION == 'false'
@@ -63,9 +56,6 @@ jobs:
             echo "Using commit range: $LAST_TAG_COMMIT..HEAD"
             MERGE_COMMITS=$(git log $LAST_TAG_COMMIT..HEAD --pretty=format:"%h - %s" --reverse)
           fi
-
-          echo "Processing commits in order:"
-          echo "$MERGE_COMMITS"
 
           # Extract current version
           OLD_VERSION=${LATEST_TAG//v/}
@@ -95,6 +85,7 @@ jobs:
           NEW_VERSION="$MAJOR.$MINOR.$PATCH"
           if [[ "$OLD_VERSION" == "$NEW_VERSION" ]]; then
             echo "No version change detected. Exiting..."
+            echo "SKIP_VERSION=true" >> $GITHUB_ENV
             exit 0
           fi
 
