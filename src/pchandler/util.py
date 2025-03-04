@@ -34,9 +34,12 @@ Typical usage patterns include:
 """
 
 from enum import Enum
+import logging
 from typing import Optional
 
 import numpy as np
+
+logger = logging.getLogger(__name__.split(".")[0])
 
 EPS = np.finfo(np.float32).eps
 """
