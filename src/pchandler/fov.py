@@ -71,6 +71,7 @@ import sys
 from dataclasses import dataclass, field
 from fractions import Fraction
 from itertools import chain
+import logging
 import math
 from typing import cast, Optional, Iterable
 
@@ -83,6 +84,7 @@ import numpy as np
 
 from pchandler.util import AngleUnit, convert_angles, EPS
 
+logger = logging.getLogger(__name__.split(".")[0])
 
 
 
