@@ -13,6 +13,7 @@ from shapely.geometry import Polygon, Point
 from numpy.typing import NDArray
 
 from .core import PointCloudData
+from .scalar_fields import ScalarFieldManager
 from ..fov import FoV
 
 logger = logging.getLogger(__name__.split(".")[0])
@@ -88,10 +89,19 @@ class FoVFilter(PointCloudFilter):
 
     def mask(self, pcd: PointCloudData) -> NDArray[np.bool_]:
         spc = pcd.spherical_coordinates
-        mask = np.logical_and(np.logical_and(spc[:, 1] >= self.fov.elevation_min,
-                                             spc[:, 1] <= self.fov.elevation_max),
-                              np.logical_and(spc[:, 2] >= self.fov.horizontal_min,
-                                             spc[:, 2] <= self.fov.horizontal_max, ))
+        el_min = self.fov.el_min
+        el_max = self.fov.el_max
+        hor_min = self.fov.hor_min
+        hor_max = self.fov.hor_max
+
+        if pcd._spherical_coordinates_represented_0_to_2pi:
+            hor_min = hor_min + np.pi if hor_min < 0 else hor_min
+            hor_max = hor_max - np.pi if hor_max > 0 else hor_max
+            if hor_min > hor_max:
+                hor_min, hor_max = hor_max, hor_min
+
+        mask = np.logical_and(np.logical_and(spc[:, 1] >= el_min, spc[:, 1] <= el_max),
+                              np.logical_and(spc[:, 2] >= hor_min, spc[:, 2] <= hor_max))
 
         return mask
 
@@ -131,7 +141,9 @@ class SphereFilter(PointCloudFilter):
         self.radius = radius
 
     def mask(self, pcd: PointCloudData) -> NDArray[np.bool_]:
-        distances_to_point = np.linalg.norm(self.xyz - self.point, axis=1)
+        point = self.point if pcd.global_coordinate_shift is None else self.point - pcd.global_coordinate_shift
+
+        distances_to_point = np.linalg.norm(self.xyz - point, axis=1)
         return distances_to_point <= self.radius
 
 class PolygonFilter(PointCloudFilter):
@@ -211,7 +223,7 @@ class GenericFieldFilter(PointCloudFilter):
         return np.array([self.polygon.contains(Point(pt)) for pt in proj_pts])
 
 
-class RandomFilter(PointCloudFilter):
+class RandomDownsamplingFilter(PointCloudFilter):
     def __init__(self, size: float | int):
         self.size = size
 
@@ -227,6 +239,88 @@ class RandomFilter(PointCloudFilter):
         mask = np.zeros(nb_points, dtype=np.bool_)
         mask[indices] = True
         return mask
+
+#
+class VoxelDownsamplingFilter:
+    _possible_weighting_method: list[str] = ["nearest", "constant", "linear"]
+
+
+    def __init__(self, voxel_size: float, weigthing_method: str = "linear"):
+        if weigthing_method not in self._possible_weighting_method:
+            raise ValueError(f"Weighing method '{weigthing_method}' is not supported.")
+        if voxel_size <= 0:
+            raise ValueError(f"Voxel_size '{voxel_size}' must be positive.")
+        self.voxel_size = voxel_size
+        self.weigthing_method = weigthing_method
+
+    def sample(self, pcd: PointCloudData) -> PointCloudData:
+        unique, unique_inverse = np.unique(np.round(pcd.xyz / self.voxel_size).astype(np.int32), axis=0,
+                                           return_inverse=True)
+
+        # Calculate centroids for each voxel
+        centroids = np.zeros((unique.shape[0], 3), dtype=np.float32)
+        for i in range(3):  # x, y, z dimensions
+            centroids[:, i] = np.bincount(unique_inverse, weights=self.xyz[:, i], minlength=unique.shape[0])
+
+        counts = np.bincount(unique_inverse, minlength=unique.shape[0])
+        centroids /= counts[:, None]  # Normalize to get centroids
+
+        # Compute distances of points to their respective voxel centroids
+        match self.weigthing_method:
+            case "nearest":
+                raise NotImplementedError
+            case "constant":
+                weights = np.ones_like(counts, dtype=np.float32)[unique_inverse]
+            case "linear":
+                distances = np.linalg.norm(pcd.xyz - centroids[unique_inverse], axis=1)
+                weights = np.reciprocal(np.where(distances > 1e-6, distances, 1.0))  # Avoid division by zero
+                weight_sums = np.bincount(unique_inverse, weights=weights, minlength=unique.shape[0])
+
+                # Normalize weights per voxel
+                weights /= np.where(weight_sums[unique_inverse] > 0, weight_sums[unique_inverse], 1)  # Avoid NaNs
+
+        sfm = ScalarFieldManager()
+        for field_name, field_values in self.scalar_fields.items():
+            # Compute weighted sum of scalar values within each voxel
+            scalar_sum = np.bincount(unique_inverse, weights=field_values * weights, minlength=unique.shape[0])
+            weight_sum = np.bincount(unique_inverse, weights=weights, minlength=unique.shape[0])
+            sfm.create_field(field_name, scalar_sum / weight_sum)
+            # self.scalar_fields[field_name] = (scalar_sum / weight_sum).astype(field_values.dtype)
+
+        # # Average scalar fields
+        # averaged_scalar_fields = {}
+        # for field_name, field_values in self.scalar_fields.items():
+        #     # Compute the sum of scalar values within each voxel
+        #     scalar_sum = np.bincount(unique_inverse, weights=field_values, minlength=unique.shape[0])
+        #     # Compute the average
+        #     averaged_scalar_fields[field_name] = (scalar_sum / counts).astype(field_values.dtype)
+
+        # object.__setattr__(self, "xyz", centroids)
+        # if self._spherical_coordinates_calculated:
+        #     object.__delattr__(self, "spherical_coordinates")
+        #     object.__setattr__(self, "_spherical_coordinates_calculated", False)
+        #
+        # # Todo: Add functionality
+        # warnings.warn("Normals, and colors are not retained during `voxel_downsample`!")
+        # object.__setattr__(self, 'color', None)
+        # object.__setattr__(self, 'normals', None)
+        # # for field_name in self.scalar_fields.keys():
+        # #     del self.scalar_fields[field_name]
+        # # self.scalar_fields.clear()
+        #
+        # return
+        warnings.warn("Normals, and colors are not retained during `voxel_downsample`!")
+        return PointCloudData(centroids, scalar_fields=sfm.scalar_fields,
+                              spherical_coordinates_origin=pcd.spherical_coordinates_origin,
+                              global_coordinate_shift=pcd.global_coordinate_shift,
+                              _global_shift_already_applied=True)
+
+
+
+
+
+
+
 
 #
 #
