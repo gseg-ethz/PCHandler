@@ -9,13 +9,12 @@ from typing import Callable, Tuple, Optional
 import warnings
 
 import alphashape
+import open3d as o3d
 import numpy as np
+from numpy.typing import NDArray
 from shapely.geometry import Polygon, Point, MultiPolygon
 from shapely.affinity import scale, translate
-from shapely.prepared import prep
 from shapely import contains_xy
-# from shapely.vectorized import contains
-from numpy.typing import NDArray
 
 from .core import PointCloudData
 from .scalar_fields import ScalarFieldManager
@@ -120,6 +119,15 @@ class RangeFilter(PointCloudFilter):
         spc = pcd.spherical_coordinates
         return np.logical_and(spc >= self.low, spc <= self.high)
 
+class SphericalPolygonFilter(PointCloudFilter):
+    def __init__(self, polygon: Polygon):
+        self.polygon = polygon
+
+    def mask(self, pcd: PointCloudData) -> NDArray[np.bool_]:
+        # Todo: Solve for -pi to pi and 0 to 2pi inconsistency
+        mask = contains_xy(self.polygon, pcd.spherical_coordinates[:, 1], pcd.spherical_coordinates[:, 2])
+        return mask
+
 
 class BoxFilter(PointCloudFilter):
     def __init__(self, minimum_corner: Tuple[float, float, float], maximum_corner: Tuple[float, float, float]):
@@ -139,14 +147,14 @@ class BoxFilter(PointCloudFilter):
 
 
 class SphereFilter(PointCloudFilter):
-    def __init__(self, point: NDArray[np.floating], radius: float):
-        assert point.shape == (3,)
+    def __init__(self, sphere_center_point: NDArray[np.floating], radius: float):
+        assert sphere_center_point.shape == (3,)
         assert radius > 0
-        self.point = point
+        self.sphere_center_point = sphere_center_point
         self.radius = radius
 
     def mask(self, pcd: PointCloudData) -> NDArray[np.bool_]:
-        point = self.point if pcd.global_coordinate_shift is None else self.point - pcd.global_coordinate_shift
+        point = self.sphere_center_point if pcd.global_coordinate_shift is None else self.sphere_center_point - pcd.global_coordinate_shift
 
         distances_to_point = np.linalg.norm(self.xyz - point, axis=1)
         return distances_to_point <= self.radius
@@ -234,7 +242,7 @@ class GenericFieldFilter(PointCloudFilter):
         return np.array([self.polygon.contains(Point(pt)) for pt in proj_pts])
 
 
-class RandomDownsamplingFilter(PointCloudFilter):
+class RandomDownsampleFilter(PointCloudFilter):
     def __init__(self, size: float | int):
         self.size = size
 
@@ -251,8 +259,8 @@ class RandomDownsamplingFilter(PointCloudFilter):
         mask[indices] = True
         return mask
 
-#
-class VoxelDownsamplingFilter:
+
+class VoxelDownsample:
     _possible_weighting_method: list[str] = ["nearest", "constant", "linear"]
 
 
@@ -326,6 +334,44 @@ class VoxelDownsamplingFilter:
                               global_coordinate_shift=pcd.global_coordinate_shift,
                               _global_shift_already_applied=True)
 
+class SphericalOutlierFilter(PointCloudFilter):
+    """
+    Removes outliers in the spherical coordinate space using statistical filtering.
+
+    Parameters
+    ----------
+    std_ratio : float, default=0.95
+        The standard deviation ratio for identifying outliers.
+    nb_neighbors : int, default=13
+        The number of neighbors to consider for statistical outlier removal.
+    """
+    def __init__(self, std_ratio: float = 0.95, nb_neighbors: int = 13):
+        self.std_ratio = std_ratio
+        self.nb_neighbors = nb_neighbors
+
+    def mask(self, pcd: PointCloudData) -> PointCloudData:
+        sp_pcd = o3d.geometry.PointCloud()
+        sp_pcd.points = o3d.utility.Vector3dVector(np.hstack((pcd.spherical_coordinates[:,1:],
+                                                              np.zeros((pcd.nbPoints,1), dtype=np.float32))))
+
+        mask = np.zeros(pcd.nbPoints, dtype=np.bool_)
+        _, inliers = sp_pcd.remove_statistical_outlier(self.nb_neighbors, self.std_ratio, True)
+        mask[inliers] = True
+        return mask
+
+
+class CartesianOutlierFilter(PointCloudFilter):
+    def __init__(self, std_ratio: float = 0.95, nb_neighbors: int = 13):
+        self.std_ratio = std_ratio
+        self.nb_neighbors = nb_neighbors
+
+    def mask(self, pcd: PointCloudData) -> PointCloudData:
+        pcd_o3d = pcd.to_o3d()
+
+        mask = np.zeros(pcd.nbPoints, dtype=np.bool_)
+        _, inliers = pcd_o3d.remove_statistical_outlier(self.nb_neighbors, self.std_ratio, True)
+        mask[inliers] = True
+        return mask
 
 
 def get_outline_polygon(pcd: PointCloudData, plane: str, alpha_value: float = 10.0, nb_points: int = -1) -> Polygon:
@@ -397,40 +443,3 @@ def get_outline_polygon(pcd: PointCloudData, plane: str, alpha_value: float = 10
 
     return als
 
-
-
-
-
-#
-#
-#
-# def random_subsample(pcd: PointCloudData, size: float | int, in_place: bool = True) -> PointCloudData:
-#     """
-#     Randomly subsamples the point cloud.
-#
-#     Parameters
-#     ----------
-#     pcd : PointCloudData
-#         The point cloud to subsample.
-#     size : float or int
-#         If a float (0 < size < 1), specifies the proportion of points to retain.
-#         If an int, specifies the exact number of points to retain.
-#     in_place : bool, optional
-#         If True, modifies the original point cloud; otherwise, returns a new one.
-#
-#     Returns
-#     -------
-#     PointCloudData
-#         The subsampled point cloud.
-#     """
-#     nb_points = pcd.nbPoints
-#     if isinstance(size, float) and 0 < size < 1:
-#         size = int(np.ceil(size * nb_points))
-#     if size >= nb_points:
-#         return pcd if in_place else pcd.copy()
-#
-#     selection = np.sort(np.random.choice(np.arange(nb_points), size=size, replace=False))
-#     if in_place:
-#         return pcd._reduce_points_to(selection)
-#     else:
-#         return pcd._copy_selection(selection)

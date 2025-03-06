@@ -12,7 +12,7 @@ import geopandas as gpd
 import numpy as np
 import gc
 
-from numpy._typing import NDArray
+from numpy.typing import NDArray
 from shapely.geometry import Polygon
 
 from .core import PointCloudData
@@ -57,7 +57,6 @@ class PolygonFilterGPU(PointCloudFilter):
         proj_pts_gs = cuspatial.GeoSeries.from_points_xy(proj_pts)
         proj_pts_in = cuspatial.point_in_polygon(proj_pts_gs, polygon_gpu)
         mask = proj_pts_in[0].to_numpy()
-        # pcd._reduce_points_to(pts_in_mask)
 
         del polygon_gpu, proj_pts, proj_pts_gs, proj_pts_in
         gc.collect()
@@ -74,90 +73,12 @@ class SphericalPolygonFilterGPU(PointCloudFilter):
             "y": pcd.spherical_coordinates[:, 2].astype(float)
         }).interleave_columns()
 
-        polygon_gpu = cuspatial.GeoSeries(gpd.GeoSeries([polygon]))
+        polygon_gpu = cuspatial.GeoSeries(gpd.GeoSeries([self.polygon]))
         proj_pts_gs = cuspatial.GeoSeries.from_points_xy(proj_pts)
         proj_pts_in = cuspatial.point_in_polygon(proj_pts_gs, polygon_gpu)
         mask = proj_pts_in[0].to_numpy()
-        # pcd._reduce_points_to(pts_in_mask)
 
         del polygon_gpu, proj_pts, proj_pts_gs, proj_pts_in
         gc.collect()
 
         return mask
-
-
-
-# def filter_to_polygon_gpu(pcd: PointCloudData, polygon: Polygon, plane: str = 'xy') -> None:
-#     """
-#     Filters the point cloud using GPU acceleration to include only points within a given polygon.
-#
-#     Parameters
-#     ----------
-#     pcd : PointCloudData
-#         The point cloud to filter.
-#     polygon : Polygon
-#         A Shapely Polygon defining the region of interest.
-#     plane : str, optional
-#         The projection plane ('xy', 'xz', or 'yz'). Defaults to 'xy'.
-#     """
-#     if plane == 'xy':
-#         proj_pts = cudf.DataFrame({
-#             "x": pcd.xyz[:, 0].astype(float),
-#             "y": pcd.xyz[:, 1].astype(float)
-#         }).interleave_columns()
-#     elif plane == 'xz':
-#         proj_pts = cudf.DataFrame({
-#             "x": pcd.xyz[:, 0].astype(float),
-#             "y": pcd.xyz[:, 2].astype(float)
-#         }).interleave_columns()
-#     elif plane == 'yz':
-#         proj_pts = cudf.DataFrame({
-#             "x": pcd.xyz[:, 1].astype(float),
-#             "y": pcd.xyz[:, 2].astype(float)
-#         }).interleave_columns()
-#     else:
-#         raise ValueError("Invalid plane. Choose 'xy', 'xz', or 'yz'.")
-#
-#     if pcd.global_coordinate_shift is not None:
-#         if plane == 'xy':
-#             gs = -pcd.global_coordinate_shift[:2]
-#         elif plane == 'xz':
-#             gs = -pcd.global_coordinate_shift[[0, 2]]
-#         elif plane == 'yz':
-#             gs = -pcd.global_coordinate_shift[1:]
-#         polygon = gpd.GeoSeries([polygon]).translate(*gs).iloc[0]
-#
-#     polygon_gpu = cuspatial.GeoSeries(gpd.GeoSeries([polygon]))
-#     proj_pts_gs = cuspatial.GeoSeries.from_points_xy(proj_pts)
-#     proj_pts_in = cuspatial.point_in_polygon(proj_pts_gs, polygon_gpu)
-#     pts_in_mask = proj_pts_in[0].to_numpy()
-#     pcd._reduce_points_to(pts_in_mask)
-#
-#     del polygon_gpu, proj_pts, proj_pts_gs, proj_pts_in
-#     gc.collect()
-
-
-# def filter_spherical_polygon_gpu(pcd: PointCloudData, polygon: Polygon) -> None:
-#     """
-#     Filters the point cloud using GPU acceleration in the spherical coordinate space.
-#
-#     Parameters
-#     ----------
-#     pcd : PointCloudData
-#         The point cloud.
-#     polygon : Polygon
-#         A Shapely Polygon in the spherical projection (using elevation and azimuth).
-#     """
-#     proj_pts = cudf.DataFrame({
-#         "x": pcd.spherical_coordinates[:, 1].astype(float),
-#         "y": pcd.spherical_coordinates[:, 2].astype(float)
-#     }).interleave_columns()
-#
-#     polygon_gpu = cuspatial.GeoSeries(gpd.GeoSeries([polygon]))
-#     proj_pts_gs = cuspatial.GeoSeries.from_points_xy(proj_pts)
-#     proj_pts_in = cuspatial.point_in_polygon(proj_pts_gs, polygon_gpu)
-#     pts_in_mask = proj_pts_in[0].to_numpy()
-#     pcd._reduce_points_to(pts_in_mask)
-#
-#     del polygon_gpu, proj_pts, proj_pts_gs, proj_pts_in
-#     gc.collect()

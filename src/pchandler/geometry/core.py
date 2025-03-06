@@ -17,7 +17,6 @@ else:
 import numpy as np
 from numpy.typing import NDArray
 import open3d as o3d
-from shapely.geometry import Polygon, MultiPolygon
 
 from .scalar_fields import ScalarFieldManager
 from ..fov import FoV
