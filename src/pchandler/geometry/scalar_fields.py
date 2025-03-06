@@ -3,7 +3,7 @@ import sys
 from dataclasses import dataclass, field, InitVar, KW_ONLY
 from collections.abc import MutableMapping
 import logging
-from typing import Iterator, Optional, Any
+from typing import Iterator, Optional, Iterable
 if sys.version[0] == 3 and sys.version_info[1] >= 11:
     from typing import Self
 else:
@@ -147,6 +147,13 @@ class ScalarFieldManager(MutableMapping):
             )
         self._fields[key] = value
 
+    @property
+    def shape(self) -> tuple[int, ...]:
+        if len(self) == 0:
+            return (0,)
+        return (len(self), self._expected_length,)
+
+
     def __delitem__(self, key: str):
         del self._fields[key]
         if not self._fields:
@@ -191,3 +198,43 @@ class ScalarFieldManager(MutableMapping):
 
     def __contains__(self, key: str) -> bool:
         return key.lower() in self._fields
+
+    @classmethod
+    def merge(cls, sfms: Iterable[Self]) -> Self:
+        common_keys = set.intersection(*(sfm.keys() for sfm in sfms))
+        if len(common_keys) == 0:
+            return ScalarFieldManager()
+
+        expected_length = sum([sfm.shape[1] for sfm in sfms])
+        new_sfm = ScalarFieldManager(expected_length=expected_length)
+        for common_key in common_keys:
+            sfs: list[ScalarField] = [sfm[common_key] for sfm in sfms]
+            if len(set([sf.name for sf in sfs])) != 1:
+                logger.warning(f"While merging scalar field {common_key} different names were encountered.")
+            name = sfs[0].name
+
+            if len(set(map(tuple, [sf.operations_performed for sf in sfs]))) != 1:
+                logger.warning(f"While merging scalar field {common_key} different list of previously performed "
+                               f"operations were encountered. Merged scalar field will have an empty record!")
+                operations_performed = []
+            else:
+                operations_performed = sfs[0].operations_performed
+            if len(set(sf.original_dtype for sf in sfs)) != 1:
+                logger.warning(f"While merging scalar field {common_key} different original dtypes were encountered. "
+                               f"Merged scalar field will have an empty record!")
+                original_dtype = None
+            else:
+                original_dtype = sfs[0].original_dtype
+
+            data = np.concatenate([sf.data for sf in sfs])
+            sf = ScalarField(name=name, data=data, original_dtype=original_dtype, operations_performed=operations_performed)
+            new_sfm.add_field(sf)
+
+        return new_sfm
+
+
+
+
+
+
+
