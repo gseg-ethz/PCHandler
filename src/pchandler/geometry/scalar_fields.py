@@ -130,6 +130,7 @@ class ScalarFieldManager(MutableMapping):
         return new_manager
 
     def __setitem__(self, key: str, value: ScalarField | NDArray):
+        key = key.lower()
         if not isinstance(key, str):
             raise TypeError("ScalarField key must be a string")
         if not isinstance(value, ScalarField) and not isinstance(value, np.ndarray):
@@ -204,7 +205,7 @@ class ScalarFieldManager(MutableMapping):
 
     @classmethod
     def merge(cls, sfms: Iterable[Self]) -> Self:
-        common_keys = set.intersection(*(sfm.keys() for sfm in sfms))
+        common_keys = set.intersection(*(set(sfm.keys()) for sfm in sfms))
         if len(common_keys) == 0:
             return ScalarFieldManager()
 

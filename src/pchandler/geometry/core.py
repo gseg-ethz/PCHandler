@@ -256,7 +256,24 @@ class PointCloudData:
 
         return mask
 
-    def reduce(self, selection: NDArray[np.bool_] | NDArray[np.int_] | slice | list[int]) -> None:
+    def set_color(self, color: NDArray[np.uint8] | NDArray[np.floating]) -> None:
+        if color.shape != (self.nbPoints,3):
+            raise ValueError(f"Color shape must be ({self.nbPoints},3), but got {color.shape}")
+
+        if np.issubdtype(color.dtype, np.floating):
+            if not (np.iinfo(np.uint8).min <= np.min(color) <= np.max(color) <= np.iinfo(np.uint8).max):
+                raise ValueError(f"Color Values must be between {np.iinfo(np.uint8).min} and {np.iinfo(np.uint8).max}.")
+            if np.max(color) <= 1.0:
+                color = (color * np.iinfo(np.uint8).max).astype(np.uint8)
+                logger.debug(f"Scaling color values from 0 to 1 to {np.iinfo(np.uint8).min} and "
+                             f"{np.iinfo(np.uint8).max}.")
+        object.__setattr__(self, "_color", color)
+
+    def delete_color(self):
+        object.__setattr__(self, "_color", None)
+
+
+    def reduce(self, selection: NDArray[np.bool_] | NDArray[np.integer] | slice | list[int]) -> None:
         """
         Reduces the point cloud to only the points specified by the selection.
 
