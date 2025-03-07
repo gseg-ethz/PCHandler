@@ -520,7 +520,7 @@ def _load_single_e57(pcd_path: Path, point_cloud_index: int, retain_intensity: b
     colors = np.column_stack((data["colorRed"], data["colorGreen"], data["colorBlue"])) if "colorRed" in data else None
     sfm = ScalarFieldManager(expected_length=xyz.shape[0])
     if "intensity" in data:
-        sfm.add_scalar_field(ScalarField("Intensity", data["intensity"]))
+        sfm.create_field("intensity", data["intensity"])
         if normalize_intensities:
             sfm["Intensity"].normalize()
 
