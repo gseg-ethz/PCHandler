@@ -129,13 +129,16 @@ class ScalarFieldManager(MutableMapping):
             new_manager.add_field(sf_field[key])
         return new_manager
 
-    def __setitem__(self, key: str, value: ScalarField):
+    def __setitem__(self, key: str, value: ScalarField | NDArray):
         if not isinstance(key, str):
             raise TypeError("ScalarField key must be a string")
-        if not isinstance(value, ScalarField):
-            raise TypeError("Value must be an instance of ScalarField")
-        if value.name.lower() != key:
+        if not isinstance(value, ScalarField) and not isinstance(value, np.ndarray):
+            raise TypeError("Value must be an instance of ScalarField or NDArray")
+        if isinstance(value, ScalarField) and value.name.lower() != key:
             raise ValueError("ScalarField name and key do not match")
+
+        if isinstance(value, np.ndarray):
+            value = ScalarField(name=key, data=value)
 
         field_length = value.data.shape[0]
         if self._expected_length is None:
@@ -149,8 +152,8 @@ class ScalarFieldManager(MutableMapping):
 
     @property
     def shape(self) -> tuple[int, ...]:
-        if len(self) == 0:
-            return (0,)
+        # if len(self) == 0:
+        #     return (0,self._expected_length)
         return (len(self), self._expected_length,)
 
 

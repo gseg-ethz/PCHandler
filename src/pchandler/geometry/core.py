@@ -63,7 +63,16 @@ class PointCloudData:
         _global_shift_already_applied : bool
             Indicates whether the global coordinate shift has already been applied to the `xyz` coordinates prior.
         """
-        # Set a default origin if none provided.
+        if isinstance(self.scalar_fields, dict):
+            sfm = ScalarFieldManager()
+            for sf_id, sf in self.scalar_fields.items():
+                sfm.create_field(sf_id, sf)
+            object.__setattr__(self, "scalar_fields", sfm)
+
+        if self.scalar_fields is None or self.scalar_fields.shape[1] == 0:
+            object.__setattr__(self, "scalar_fields", ScalarFieldManager(expected_length=self.nbPoints))
+
+
         if self.spherical_coordinates_origin is None:
             object.__setattr__(self, "spherical_coordinates_origin", np.zeros((3,), dtype=np.float_))
 
@@ -104,11 +113,11 @@ class PointCloudData:
             logger.error(msg)
             raise ValueError(msg)
 
-        for key, sf in self.scalar_fields.items():
-            if len(sf) != self.xyz.shape[0]:
-                msg = f"Scalar field '{key}' must have length equal to the number of points (N)"
-                logger.error(msg)
-                raise ValueError(msg)
+
+        if self.scalar_fields.shape[1] != self.xyz.shape[0]:
+            msg = f"Scalar fields must have length equal to the number of points (N)"
+            logger.error(msg)
+            raise ValueError(msg)
 
         if self.spherical_coordinates_origin.shape != (3,):
             msg = "spherical_coordinates_origin must be (3,)"
@@ -453,7 +462,7 @@ class PointCloudData:
         ----------
         spherical_coords : NDArray[np.floating]
             An (N x 3) array of spherical coordinates (range, elevation, azimuth).
-        scalar_fields : dict[str, NDArray[np.generic]], optional
+        scalar_fields : ScalarFieldManager, optional
             Scalar fields associated with the spherical coordinates.
         spherical_coordinates_origin : NDArray[np.float_], optional
             The origin for spherical coordinate calculations.
@@ -473,7 +482,7 @@ class PointCloudData:
 
     @classmethod
     def from_range_image(cls, range_data: NDArray[np.floating], fov: FoV,
-                         scalar_fields: Optional[dict[str, NDArray[np.generic]]] = None,
+                         scalar_fields: Optional[dict[str, NDArray[np.generic]] | ScalarFieldManager] = None,
                          spherical_coordinates_origin: Optional[NDArray[np.float_]] = None) -> Self:
         """
         Creates a `PointCloudData` instance from a range image.
@@ -484,7 +493,7 @@ class PointCloudData:
             A 2D array representing the range values.
         fov : FoV
             The field of view defining the angular limits of the range image.
-        scalar_fields : dict[str, NDArray[np.generic]], optional
+        scalar_fields : dict[str, NDArray[np.generic]] | ScalarFieldManager, optional
             Scalar fields corresponding to the range data.
         spherical_coordinates_origin : NDArray[np.float_], optional
             The origin for spherical coordinate calculations.
@@ -494,11 +503,17 @@ class PointCloudData:
         PointCloudData
             A new instance of the `PointCloudData` class.
         """
+        sfm = ScalarFieldManager() if scalar_fields is None else scalar_fields
+        if not isinstance(sfm, ScalarFieldManager) and scalar_fields is not None:
+            sfm = ScalarFieldManager()
+            for sf_id, sf in scalar_fields.items():
+                sfm.create_field(sf_id, sf.flatten())
+
         resolution = range_data.shape
         elevation_range = np.linspace(fov.elevation_min, fov.elevation_max, num=resolution[0], endpoint=True, dtype=np.float32)
         horizontal_range = np.linspace(fov.horizontal_min, fov.horizontal_max, num=resolution[1], endpoint=True, dtype=np.float32)
 
-        elevation_mesh, horizontal_mesh = np.meshgrid(elevation_range, horizontal_range, indexing="ij", dtype=np.float32)
+        elevation_mesh, horizontal_mesh = np.meshgrid(elevation_range, horizontal_range, indexing="ij")
 
         ranges = range_data.flatten()
         elevations = elevation_mesh.flatten()
@@ -507,13 +522,9 @@ class PointCloudData:
         spherical_coordinates = np.vstack((ranges, elevations, horizontals)).T
         spherical_coordinates = spherical_coordinates[~np.isnan(ranges), :]
 
-        nbPoints = spherical_coordinates.shape[0]
-        sfm = ScalarFieldManager(expected_length=nbPoints)
+        sfm_reduced = sfm[~np.isnan(ranges)]
 
-        if scalar_fields:
-            for key, sf in scalar_fields.items():
-                sfm.create_field(key, sf.flatten()[~np.isnan(ranges)])
-        return cls.from_spherical_coordinates(spherical_coordinates, sfm, spherical_coordinates_origin)
+        return cls.from_spherical_coordinates(spherical_coordinates, sfm_reduced, spherical_coordinates_origin)
 
 
     @classmethod
