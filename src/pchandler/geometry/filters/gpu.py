@@ -9,14 +9,13 @@ import logging
 import cudf
 import cuspatial
 import geopandas as gpd
-import numpy as np
 import gc
 
 from numpy.typing import NDArray
 from shapely.geometry import Polygon
 
-from .core import PointCloudData
-from .filters import PointCloudFilter
+from ..core import PointCloudData
+from .core import PointCloudFilter
 
 logger = logging.getLogger(__name__.split(".")[0])
 

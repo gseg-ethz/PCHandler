@@ -35,6 +35,8 @@ from .spherical_coordinate_filters import (
     RangeFilter
 )
 
+from . import gpu
+
 __all__ = ["PointCloudFilter","BoxFilter","SphereFilter","PolygonFilter", "RandomDownsampleFilter", "VoxelDownsample",
            "SphericalOutlierFilter", "CartesianOutlierFilter", "ScalarFieldFilter", "ScalarFieldPercentileFilter",
-           "FoVFilter", "RangeFilter", "get_outline_polygon", "GenericFieldFilter"]
+           "FoVFilter", "RangeFilter", "get_outline_polygon", "GenericFieldFilter", "gpu"]
