@@ -136,3 +136,54 @@ def convert_angles(values: np.ndarray, source_unit: AngleUnit, target_unit: Angl
                 case AngleUnit.RAD: return np.multiply(values, np.pi/200, out=out)
                 case AngleUnit.DEGREE: return np.multiply(values, 180/200, out=out)
 
+
+
+
+def cartesian_to_spherical(xyz: np.ndarray, origin: np.ndarray = None) -> np.ndarray:
+    """
+    Converts Cartesian coordinates to spherical coordinates (range, elevation, azimuth).
+
+    Parameters
+    ----------
+    xyz : np.ndarray
+        An (N x 3) array of Cartesian coordinates.
+    origin : np.ndarray, optional
+        An optional (3,) array to subtract from xyz before conversion.
+
+    Returns
+    -------
+    np.ndarray
+        An (N x 3) array of spherical coordinates.
+    """
+    if origin is not None:
+        xyz = xyz - origin
+    sph = np.zeros_like(xyz, dtype=np.float32)
+    xy_sq = xyz[:, 0] ** 2 + xyz[:, 1] ** 2
+    sph[:, 0] = np.sqrt(xy_sq + xyz[:, 2] ** 2)
+    sph[:, 1] = np.arctan2(np.sqrt(xy_sq), xyz[:, 2])
+    sph[:, 2] = -np.arctan2(xyz[:, 1], xyz[:, 0])
+    return sph
+
+def spherical_to_cartesian(spherical_coords: np.ndarray, origin: np.ndarray = None) -> np.ndarray:
+    """
+    Converts spherical coordinates (range, elevation, azimuth) to Cartesian coordinates.
+
+    Parameters
+    ----------
+    spherical_coords : np.ndarray
+        An (N x 3) array of spherical coordinates.
+    origin : np.ndarray, optional
+        An optional (3,) array to add to the result.
+
+    Returns
+    -------
+    np.ndarray
+        An (N x 3) array of Cartesian coordinates.
+    """
+    xyz = np.zeros((spherical_coords.shape[0], 3), dtype=np.float32)
+    xyz[:, 0] = spherical_coords[:, 0] * np.sin(spherical_coords[:, 1]) * np.cos(spherical_coords[:, 2])
+    xyz[:, 1] = -spherical_coords[:, 0] * np.sin(spherical_coords[:, 1]) * np.sin(spherical_coords[:, 2])
+    xyz[:, 2] = spherical_coords[:, 0] * np.cos(spherical_coords[:, 1])
+    if origin is not None:
+        xyz += origin
+    return xyz

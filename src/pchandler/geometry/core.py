@@ -608,9 +608,6 @@ class PointCloudData:
         return new_pcd
 
 
-
-
-
     @staticmethod
     def _needs_global_shift(xyz: NDArray[np.float_], decimal_magnitude: int = 4) -> bool:
         """
