@@ -12,7 +12,6 @@ from .cartesian_filters import (
     BoxFilter,
     SphereFilter,
     PolygonFilter,
-    get_outline_polygon
 )
 
 from .downsample import (
@@ -39,4 +38,4 @@ from . import gpu
 
 __all__ = ["PointCloudFilter","BoxFilter","SphereFilter","PolygonFilter", "RandomDownsampleFilter", "VoxelDownsample",
            "SphericalOutlierFilter", "CartesianOutlierFilter", "ScalarFieldFilter", "ScalarFieldPercentileFilter",
-           "FoVFilter", "RangeFilter", "get_outline_polygon", "GenericFieldFilter", "gpu"]
+           "FoVFilter", "RangeFilter", "GenericFieldFilter", "gpu"]
