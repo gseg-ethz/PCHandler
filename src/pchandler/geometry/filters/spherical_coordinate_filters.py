@@ -43,7 +43,8 @@ class RangeFilter(PointCloudFilter):
 
     def mask(self, pcd: PointCloudData) -> NDArray[np.bool_]:
         spc = pcd.spherical_coordinates
-        return np.logical_and(spc >= self.low, spc <= self.high)
+        mask = np.logical_and(spc[:, 0] >= self.low, spc[:, 0] <= self.high)
+        return mask
 
 class SphericalPolygonFilter(PointCloudFilter):
     def __init__(self, polygon: Polygon):
