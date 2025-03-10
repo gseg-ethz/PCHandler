@@ -160,11 +160,11 @@ class PointCloudData:
         NDArray[np.float32]
             An (N x 3) array of spherical coordinates (range, elevation, azimuth).
         """
-        xyz_shifted = self.xyz - self.spherical_coordinates_origin
-        if len(xyz_shifted) == 0:
+        if self.nbPoints == 0:
             object.__setattr__(self, "_spherical_coordinates_calculated", True)
-            object.__setattr__(self, "_spherical_coordinates_represented_0_to_2pi", False)
-            return np.empty_like(xyz_shifted, dtype=np.float32)
+            return np.empty_like(self.xyz, dtype=np.float32)
+
+        xyz_shifted = self.xyz - self.spherical_coordinates_origin
 
         sph = np.zeros_like(self.xyz, dtype=np.float32)
         xy_sq = xyz_shifted[:, 0] ** 2 + xyz_shifted[:, 1] ** 2
@@ -204,7 +204,7 @@ class PointCloudData:
     def __repr__(self) -> str:
         nbPoints = self.nbPoints
         scalar_field_keys = [self.scalar_fields.keys()]
-        return f"PointCloudData(): {nbPoints=}; {scalar_field_keys=}"
+        return f"PointCloudData(): {self.__dict__}"
 
     def __str__(self) -> str:
         return f"PointCloudData with {self.nbPoints} points"
