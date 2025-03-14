@@ -66,6 +66,32 @@ class ScalarField:
             operations_performed=self.operations_performed.copy()
         )
 
+    @property
+    def __array_interface__(self) -> dict:
+        """
+        Function for direct numpy interoperability of ScalarField.
+        """
+        return self.data.__array_interface__
+
+    # def __array__(self, dtype: Optional[DTypeLike]=None, copy: Optional[bool]=None) -> NDArray[np.generic]:
+    #     """
+    #     Function for direct numpy interoperability of ScalarField.
+    #     Parameters
+    #     ----------
+    #     dtype: Optional[DTypeLike]
+    #     copy: Optional[bool]
+    #
+    #     Returns
+    #     -------
+    #
+    #     """
+    #     data = self.data
+    #     if dtype is not None and self.data.dtype != dtype:
+    #         data = data.astype(dtype)
+    #     if copy is not None:
+    #         data = data.copy()
+    #     return data
+
     def __len__(self) -> int:
         return self.data.shape[0]
 

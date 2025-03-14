@@ -130,7 +130,7 @@ class PointCloudData:
         if self.scalar_fields.shape[1] != self.xyz.shape[0]:
             raise ValueError(f"Scalar fields must have length equal to the number of points (N)")
 
-        if self.spherical_coordinates_originis is not None and self.spherical_coordinates_origin.shape != (3,):
+        if self.spherical_coordinates_origin is not None and self.spherical_coordinates_origin.shape != (3,):
             raise ValueError(f"spherical_coordinates_origin must be (3,). "
                              f"Got shape {self.spherical_coordinates_origin.shape}")
 
@@ -467,7 +467,7 @@ class PointCloudData:
 
     @classmethod
     def from_spherical_coordinates(cls, spherical_coords: NDArray[np.floating],
-                                   scalar_fields: Optional[ScalarFieldManager, dict[str, NDArray]] = None,
+                                   scalar_fields: Optional[ScalarFieldManager | dict[str, NDArray]] = None,
                                    spherical_coordinates_origin: Optional[
                                        NDArray[np.float_]] = None) -> Self:
         """
