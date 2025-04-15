@@ -48,7 +48,7 @@ class VoxelDownsample:
         # Calculate centroids for each voxel
         centroids = np.zeros((unique.shape[0], 3), dtype=np.float32)
         for i in range(3):  # x, y, z dimensions
-            centroids[:, i] = np.bincount(unique_inverse, weights=self.xyz[:, i], minlength=unique.shape[0])
+            centroids[:, i] = np.bincount(unique_inverse, weights=pcd.xyz[:, i], minlength=unique.shape[0])
 
         counts = np.bincount(unique_inverse, minlength=unique.shape[0])
         centroids /= counts[:, None]  # Normalize to get centroids
@@ -68,7 +68,7 @@ class VoxelDownsample:
                 weights /= np.where(weight_sums[unique_inverse] > 0, weight_sums[unique_inverse], 1)  # Avoid NaNs
 
         sfm = ScalarFieldManager()
-        for field_name, field_values in self.scalar_fields.items():
+        for field_name, field_values in pcd.scalar_fields.items():
             # Compute weighted sum of scalar values within each voxel
             scalar_sum = np.bincount(unique_inverse, weights=field_values * weights, minlength=unique.shape[0])
             weight_sum = np.bincount(unique_inverse, weights=weights, minlength=unique.shape[0])
@@ -98,7 +98,7 @@ class VoxelDownsample:
         #
         # return
         warnings.warn("Normals, and colors are not retained during `voxel_downsample`!")
-        return PointCloudData(centroids, scalar_fields=sfm.scalar_fields,
+        return PointCloudData(centroids, scalar_fields=sfm,
                               spherical_coordinates_origin=pcd.spherical_coordinates_origin,
                               global_coordinate_shift=pcd.global_coordinate_shift,
                               _global_shift_already_applied=True)

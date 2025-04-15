@@ -51,7 +51,6 @@ class PointCloudData:
     global_coordinate_shift: Optional[NDArray[np.float_]] = None
     spherical_coordinates_origin: Optional[NDArray[np.float_]] = None
     _spherical_coordinates_calculated: bool = False
-    _spherical_coordinates_represented_0_to_2pi: Optional[bool] = None
     _global_shift_already_applied: InitVar[bool] = False
 
     def __post_init__(self, _global_shift_already_applied: bool) -> None:
@@ -63,6 +62,7 @@ class PointCloudData:
         _global_shift_already_applied : bool
             Indicates whether the global coordinate shift has already been applied to the `xyz` coordinates prior.
         """
+        # Handle scalar_field conversion from dict to ScalarFieldManager if necessary
         if isinstance(self.scalar_fields, dict):
             sfm = ScalarFieldManager()
             for sf_id, sf in self.scalar_fields.items():
@@ -72,62 +72,10 @@ class PointCloudData:
         if self.scalar_fields is None or self.scalar_fields.shape[1] == 0:
             object.__setattr__(self, "scalar_fields", ScalarFieldManager(expected_length=self.nbPoints))
 
+        self._validate_internal_state()
 
         if self.spherical_coordinates_origin is None:
             object.__setattr__(self, "spherical_coordinates_origin", np.zeros((3,), dtype=np.float_))
-
-        # Validate inputs.
-        if not isinstance(self.xyz, np.ndarray):
-            msg = "xyz must be a numpy array"
-            logger.error(msg)
-            raise TypeError(msg)
-
-        if self.color is not None and not isinstance(self.color, np.ndarray):
-            msg = "color must be a numpy array"
-            logger.error(msg)
-            raise TypeError(msg)
-
-        if self.normals is not None and not isinstance(self.normals, np.ndarray):
-            msg = "normals must be a numpy array"
-            logger.error(msg)
-            raise TypeError(msg)
-
-        if not isinstance(self.scalar_fields, ScalarFieldManager):
-            msg = "scalar_fields must be a ScalarFieldManager"
-            logger.error(msg)
-            raise TypeError(msg)
-
-        # Check dimensions.
-        if self.xyz.ndim != 2 or self.xyz.shape[1] != 3:
-            msg = "xyz should have shape (N, 3)"
-            logger.error(msg)
-            raise ValueError(msg)
-
-        if self.color is not None and self.color.shape != (self.xyz.shape[0], 3):
-            msg = "color must match xyz dimensions"
-            logger.error(msg)
-            raise ValueError(msg)
-
-        if self.normals is not None and self.normals.shape != (self.xyz.shape[0], 3):
-            msg = "normals must match xyz dimensions"
-            logger.error(msg)
-            raise ValueError(msg)
-
-
-        if self.scalar_fields.shape[1] != self.xyz.shape[0]:
-            msg = f"Scalar fields must have length equal to the number of points (N)"
-            logger.error(msg)
-            raise ValueError(msg)
-
-        if self.spherical_coordinates_origin.shape != (3,):
-            msg = "spherical_coordinates_origin must be (3,)"
-            logger.error(msg)
-            raise ValueError(msg)
-
-        if self.global_coordinate_shift is not None and self.global_coordinate_shift.shape != (3,):
-            msg = "global_coordinate_shift must be (3,)"
-            logger.error(msg)
-            raise ValueError(msg)
 
         # Apply a global coordinate shift if needed.
         if self.global_coordinate_shift is None and self._needs_global_shift(self.xyz):
@@ -145,6 +93,50 @@ class PointCloudData:
             object.__setattr__(self, "spherical_coordinates_origin", new_origin)
 
         logger.info(f"PCD created with {self.xyz.shape[0]:_d} number of points")
+
+
+    def _validate_internal_state(self):
+        # Validate inputs.
+        if not isinstance(self.xyz, np.ndarray):
+            raise TypeError(f"xyz must be a numpy array. Got type {type(self.xyz)}.")
+
+        if self.color is not None and not isinstance(self.color, np.ndarray):
+            raise TypeError(f"color must be a numpy array or None. Got type {type(self.color)}")
+
+        if self.normals is not None and not isinstance(self.normals, np.ndarray):
+            raise TypeError(f"normals must be a numpy array or None. Got type {type(self.normals)}")
+
+        if self.global_coordinate_shift is not None and not isinstance(self.global_coordinate_shift, np.ndarray):
+            raise TypeError(f"global_coordinate_shift must be a numpy array or None. "
+                            f"Got type {type(self.global_coordinate_shift)}")
+
+        if self.spherical_coordinates_origin is not None and not isinstance(self.spherical_coordinates_origin, np.ndarray):
+            raise TypeError(f"spherical_coordinates_origin must be a numpy array or None. "
+                            f"Got type {type(self.spherical_coordinates_origin)}")
+
+        if not isinstance(self.scalar_fields, ScalarFieldManager):
+            raise TypeError(f"scalar_fields must be a ScalarFieldManager or a dict. Got type {type(self.scalar_fields)}")
+
+        # Check dimensions.
+        if self.xyz.ndim != 2 or self.xyz.shape[1] != 3:
+            raise ValueError(f"xyz must have shape (N, 3). Got {self.xyz.shape}")
+
+        if self.color is not None and self.color.shape != (self.xyz.shape[0], 3):
+            raise ValueError(f"color must have shape {self.xyz.shape}. Got shape {self.color.shape}")
+
+        if self.normals is not None and self.normals.shape != (self.xyz.shape[0], 3):
+            raise ValueError(f"normals must have shape {self.xyz.shape}. Got shape {self.normals.shape}")
+
+        if self.scalar_fields.shape[1] != self.xyz.shape[0] and self.scalar_fields.shape[1] is not None:
+            raise ValueError(f"Scalar fields must have length equal to the number of points (N)")
+
+        if self.spherical_coordinates_origin is not None and self.spherical_coordinates_origin.shape != (3,):
+            raise ValueError(f"spherical_coordinates_origin must be (3,). "
+                             f"Got shape {self.spherical_coordinates_origin.shape}")
+
+        if self.global_coordinate_shift is not None and self.global_coordinate_shift.shape != (3,):
+            raise ValueError(f"global_coordinate_shift must be (3,). Got shape {self.global_coordinate_shift.shape}")
+
 
     @property
     def nbPoints(self) -> int:
@@ -168,11 +160,11 @@ class PointCloudData:
         NDArray[np.float32]
             An (N x 3) array of spherical coordinates (range, elevation, azimuth).
         """
-        xyz_shifted = self.xyz - self.spherical_coordinates_origin
-        if len(xyz_shifted) == 0:
+        if self.nbPoints == 0:
             object.__setattr__(self, "_spherical_coordinates_calculated", True)
-            object.__setattr__(self, "_spherical_coordinates_represented_0_to_2pi", False)
-            return np.empty_like(xyz_shifted, dtype=np.float32)
+            return np.empty_like(self.xyz, dtype=np.float32)
+
+        xyz_shifted = self.xyz - self.spherical_coordinates_origin
 
         sph = np.zeros_like(self.xyz, dtype=np.float32)
         xy_sq = xyz_shifted[:, 0] ** 2 + xyz_shifted[:, 1] ** 2
@@ -180,18 +172,18 @@ class PointCloudData:
         sph[:, 1] = np.arctan2(np.sqrt(xy_sq), xyz_shifted[:, 2])  # elevation (defined from z-axis downward)
         sph[:, 2] = -np.arctan2(xyz_shifted[:, 1], xyz_shifted[:, 0])  # azimuth
 
-        # Check for continuous representation using a randomly sampled subset of 100 points
-        if self._spherical_coordinates_represented_0_to_2pi is None:
-            hz_sampled = sph[np.random.choice(self.nbPoints, size=100, replace=False), 2] if self.nbPoints > 100 else sph[:, 2]
-
-            # Create a copy with negative angles shifted to [0, 2pi] and check which extent is smaller
-            hz_adjusted = np.where(hz_sampled < 0, hz_sampled + 2 * np.pi, hz_sampled)
-
-            object.__setattr__(self, "_spherical_coordinates_represented_0_to_2pi",
-                               np.ptp(hz_adjusted) < np.ptp(hz_sampled))
-
-        if self._spherical_coordinates_represented_0_to_2pi:
-            sph[:, 2] = np.where(sph[:, 2] < 0, sph[:, 2] + 2 * np.pi, sph[:, 2])
+        # # Check for continuous representation using a randomly sampled subset of 100 points
+        # if self._spherical_coordinates_represented_0_to_2pi is None:
+        #     hz_sampled = sph[np.random.choice(self.nbPoints, size=100, replace=False), 2] if self.nbPoints > 100 else sph[:, 2]
+        #
+        #     # Create a copy with negative angles shifted to [0, 2pi] and check which extent is smaller
+        #     hz_adjusted = np.where(hz_sampled < 0, hz_sampled + 2 * np.pi, hz_sampled)
+        #
+        #     object.__setattr__(self, "_spherical_coordinates_represented_0_to_2pi",
+        #                        np.ptp(hz_adjusted) < np.ptp(hz_sampled))
+        #
+        # if self._spherical_coordinates_represented_0_to_2pi:
+        #     sph[:, 2] = np.where(sph[:, 2] < 0, sph[:, 2] + 2 * np.pi, sph[:, 2])
 
         object.__setattr__(self, "_spherical_coordinates_calculated", True)
         return sph
@@ -212,7 +204,7 @@ class PointCloudData:
     def __repr__(self) -> str:
         nbPoints = self.nbPoints
         scalar_field_keys = [self.scalar_fields.keys()]
-        return f"PointCloudData(): {nbPoints=}; {scalar_field_keys=}"
+        return f"PointCloudData(): {self.__dict__}"
 
     def __str__(self) -> str:
         return f"PointCloudData with {self.nbPoints} points"
@@ -327,8 +319,7 @@ class PointCloudData:
         new_pcd = PointCloudData(new_xyz, color=new_color, normals=new_normals,
                                  scalar_fields=new_sf, global_coordinate_shift=new_gcs,
                                  spherical_coordinates_origin=new_origin,
-                                 _global_shift_already_applied=True,
-                                 _spherical_coordinates_represented_0_to_2pi=self._spherical_coordinates_represented_0_to_2pi)
+                                 _global_shift_already_applied=True)
         if self._spherical_coordinates_calculated:
             object.__setattr__(new_pcd, "spherical_coordinates", self.spherical_coordinates[mask].copy())
             object.__setattr__(new_pcd, "_spherical_coordinates_calculated", True)
@@ -425,7 +416,14 @@ class PointCloudData:
         new_origin : NDArray[np.float_]
             A (3,) array specifying the new origin for spherical coordinate calculations.
         """
-        assert new_origin.shape == (3,), "new_origin must be a 3-element array"
+        if new_origin is not isinstance(np.ndarray):
+            raise TypeError(f"new_origin must be a numpy array. Got {type(new_origin)}")
+        if new_origin.shape != (3,):
+            raise ValueError(f"new_origin must be a numpy array of shape (3,). Got {new_origin.shape}")
+
+        if self.global_coordinate_shift is not None:
+            new_origin -= self.global_coordinate_shift
+
         object.__setattr__(self, "spherical_coordinates_origin", new_origin)
         if self._spherical_coordinates_calculated:
             object.__delattr__(self, "spherical_coordinates")
@@ -469,7 +467,7 @@ class PointCloudData:
 
     @classmethod
     def from_spherical_coordinates(cls, spherical_coords: NDArray[np.floating],
-                                   scalar_fields: Optional[ScalarFieldManager] = None,
+                                   scalar_fields: Optional[ScalarFieldManager | dict[str, NDArray]] = None,
                                    spherical_coordinates_origin: Optional[
                                        NDArray[np.float_]] = None) -> Self:
         """
@@ -613,21 +611,16 @@ class PointCloudData:
 
         # Check if all spherical_coordinates_origin are equal and represented in the same system
         scs = None
-        if all(map(lambda sco_pair: np.array_equal(*sco_pair), sco_pairs)) and \
-                len(set([pcd._spherical_coordinates_represented_0_to_2pi for pcd in pcds])) == 1:
-
+        if all(map(lambda sco_pair: np.array_equal(*sco_pair), sco_pairs)):
             sco = spherical_coordinates_origin[0]
             if all([pcd._spherical_coordinates_calculated for pcd in pcds]):
                 scs = np.vstack([pcd.spherical_coordinates for pcd in pcds])
-                # Todo: Add a check if the merged PCD has introduced a discontinuity
-            scr = pcds[0]._spherical_coordinates_represented_0_to_2pi
         else:
             sco = None
-            scr = None
 
         new_pcd = cls(xyz=xyz_np, color=color_np, normals=normals_np, scalar_fields=scalar_fields,
                       global_coordinate_shift=gcs, _global_shift_already_applied=(gcs is not None),
-                      spherical_coordinates_origin=sco, _spherical_coordinates_represented_0_to_2pi=scr)
+                      spherical_coordinates_origin=sco)
 
         if scs is not None:
             object.__setattr__(new_pcd, "spherical_coordinates", scs)

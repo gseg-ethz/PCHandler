@@ -24,11 +24,6 @@ class FoVFilter(PointCloudFilter):
         hor_min = self.fov.horizontal_min
         hor_max = self.fov.horizontal_max
 
-        if pcd._spherical_coordinates_represented_0_to_2pi:
-            hor_min = hor_min + np.pi if hor_min < 0 else hor_min
-            hor_max = hor_max - np.pi if hor_max > 0 else hor_max
-            if hor_min > hor_max:
-                hor_min, hor_max = hor_max, hor_min
 
         mask = np.logical_and(np.logical_and(spc[:, 1] >= el_min, spc[:, 1] <= el_max),
                               np.logical_and(spc[:, 2] >= hor_min, spc[:, 2] <= hor_max))
@@ -51,6 +46,5 @@ class SphericalPolygonFilter(PointCloudFilter):
         self.polygon = polygon
 
     def mask(self, pcd: PointCloudData) -> NDArray[np.bool_]:
-        # Todo: Solve for -pi to pi and 0 to 2pi inconsistency
         mask = contains_xy(self.polygon, pcd.spherical_coordinates[:, 1], pcd.spherical_coordinates[:, 2])
         return mask

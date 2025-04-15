@@ -66,6 +66,32 @@ class ScalarField:
             operations_performed=self.operations_performed.copy()
         )
 
+    @property
+    def __array_interface__(self) -> dict:
+        """
+        Function for direct numpy interoperability of ScalarField.
+        """
+        return self.data.__array_interface__
+
+    # def __array__(self, dtype: Optional[DTypeLike]=None, copy: Optional[bool]=None) -> NDArray[np.generic]:
+    #     """
+    #     Function for direct numpy interoperability of ScalarField.
+    #     Parameters
+    #     ----------
+    #     dtype: Optional[DTypeLike]
+    #     copy: Optional[bool]
+    #
+    #     Returns
+    #     -------
+    #
+    #     """
+    #     data = self.data
+    #     if dtype is not None and self.data.dtype != dtype:
+    #         data = data.astype(dtype)
+    #     if copy is not None:
+    #         data = data.copy()
+    #     return data
+
     def __len__(self) -> int:
         return self.data.shape[0]
 
@@ -130,9 +156,9 @@ class ScalarFieldManager(MutableMapping):
         return new_manager
 
     def __setitem__(self, key: str, value: ScalarField | NDArray):
-        key = key.lower()
         if not isinstance(key, str):
             raise TypeError("ScalarField key must be a string")
+        key = key.lower()
         if not isinstance(value, ScalarField) and not isinstance(value, np.ndarray):
             raise TypeError("Value must be an instance of ScalarField or NDArray")
         if isinstance(value, ScalarField) and value.name.lower() != key:
