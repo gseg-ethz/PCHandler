@@ -156,9 +156,9 @@ class ScalarFieldManager(MutableMapping):
         return new_manager
 
     def __setitem__(self, key: str, value: ScalarField | NDArray):
-        key = key.lower()
         if not isinstance(key, str):
             raise TypeError("ScalarField key must be a string")
+        key = key.lower()
         if not isinstance(value, ScalarField) and not isinstance(value, np.ndarray):
             raise TypeError("Value must be an instance of ScalarField or NDArray")
         if isinstance(value, ScalarField) and value.name.lower() != key:

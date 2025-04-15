@@ -22,6 +22,9 @@ class BoxFilter(PointCloudFilter):
         if pcd.global_coordinate_shift is not None:
             min_corner = self.min_corner - pcd.global_coordinate_shift
             max_corner = self.max_corner - pcd.global_coordinate_shift
+        else:
+            min_corner = self.min_corner
+            max_corner = self.max_corner
 
         span = max_corner - min_corner
         min_corner[span == 0] = -np.inf
@@ -39,7 +42,7 @@ class SphereFilter(PointCloudFilter):
     def mask(self, pcd: PointCloudData) -> NDArray[np.bool_]:
         point = self.sphere_center_point if pcd.global_coordinate_shift is None else self.sphere_center_point - pcd.global_coordinate_shift
 
-        distances_to_point = np.linalg.norm(self.xyz - point, axis=1)
+        distances_to_point = np.linalg.norm(pcd.xyz - point, axis=1)
         return distances_to_point <= self.radius
 
 class PolygonFilter(PointCloudFilter):

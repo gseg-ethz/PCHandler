@@ -422,7 +422,6 @@ def save_csv(pcd_path: Path, pcd: PointCloudData, delimiter: str = " ", add_head
     common_scalar_fields = pcd_scalar_fields if scalar_fields is None else list(set(scalar_fields) & set(pcd_scalar_fields))
 
     for sf in common_scalar_fields:
-        assert pcd.scalar_fields[sf].shape == (nb_points,)
         dtype_list.append((sf, pcd.scalar_fields[sf].data.dtype.str))
 
     # Create a structured array with the defined dtype

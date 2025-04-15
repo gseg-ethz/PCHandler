@@ -127,7 +127,7 @@ class PointCloudData:
         if self.normals is not None and self.normals.shape != (self.xyz.shape[0], 3):
             raise ValueError(f"normals must have shape {self.xyz.shape}. Got shape {self.normals.shape}")
 
-        if self.scalar_fields.shape[1] != self.xyz.shape[0]:
+        if self.scalar_fields.shape[1] != self.xyz.shape[0] and self.scalar_fields.shape[1] is not None:
             raise ValueError(f"Scalar fields must have length equal to the number of points (N)")
 
         if self.spherical_coordinates_origin is not None and self.spherical_coordinates_origin.shape != (3,):
