@@ -4,7 +4,6 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pchandler"
-#version = "0.2.0"
 description = "Short description of PointCloudHandler (pchandler)"
 requires-python = ">=3.10"
 keywords = ["LiDAR", "Pointclouds"]
@@ -46,7 +45,10 @@ version_scheme = "post-release"
 [project.urls]
 homepage = "https://gseg.igp.ethz.ch/"
 documentation = "https://google.com"
-#repository = "https://gseg-ethz.github.com/DeSpAn"
+repository = "https://github.com/gseg-ethz/PCHandler.git"
+Issues = "https://github.com/gseg-ethz/PCHandler/issues"
+Changelog = "https://github.com/gseg-ethz/PCHandler/blob/main/CHANGELOG.md"
+
 
 #[project.scripts]
 #DeSpAn = "DeSpAn.cli:main"

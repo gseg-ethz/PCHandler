@@ -126,7 +126,6 @@ __all__ = ["data_io", "fov", "geometry", "util", "__version__"]
 
 __author__ = "Nicholas Meyer"
 __email__ = "meyernic@ethz.ch"
-# __version__ = "0.6.8"
 
 import logging
 
