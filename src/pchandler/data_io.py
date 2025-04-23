@@ -213,19 +213,19 @@ def load_ply(
         normals[:, 2] = plydata["vertex"]["nz"]
         logger.debug("Normal vectors loaded successfully.")
 
-    ply_scalar_fields_stripped = [sf.removeprefix("scalar_") for sf in ply_scalar_fields]
+    ply_scalar_fields_stripped = [sf.removeprefix("scalar_").lower() for sf in ply_scalar_fields]
 
     common_scalar_fields = (
         ply_scalar_fields_stripped
         if scalar_fields is None
-        else list(set([sf.removeprefix("scalar_") for sf in scalar_fields]) & set(ply_scalar_fields_stripped))
+        else list(set([sf.removeprefix("scalar_").lower() for sf in scalar_fields]) & set(ply_scalar_fields_stripped))
     )
 
     # scalar_fields_dict = dict()
     sfm = ScalarFieldManager(expected_length=nbPoints)
     for sf in ply_scalar_fields:
         sf_label = sf.removeprefix("scalar_")
-        if sf_label in common_scalar_fields and sf_label.lower() not in [
+        if sf_label.lower() in common_scalar_fields and sf_label.lower() not in [
             "x",
             "y",
             "z",

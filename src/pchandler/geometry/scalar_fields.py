@@ -149,7 +149,7 @@ class ScalarFieldManager(MutableMapping):
         self._fields: dict[str, ScalarField] = {}
         self._expected_length: Optional[int] = expected_length
 
-    def __getitem__(self, key: [str, slice, NDArray[np.bool_], NDArray[np.int_], list]) -> [ScalarField, Self]:
+    def __getitem__(self, key: [str, slice, NDArray[np.bool_], NDArray[np.int_], list]) -> ScalarField | Self:
         # If key is a string, return the corresponding field.
         if isinstance(key, str):
             return self._fields[key.lower()]
