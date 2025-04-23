@@ -17,11 +17,13 @@ dynamic = [
 	"readme",
 ]
 classifiers = [
-	"Programming Language :: Python :: 3"
+	"Programming Language :: Python :: 3",
+	"Programming Language :: Python :: 3.10",
+	"Programming Language :: Python :: 3.11",
+
+    "Private :: Do Not Upload" # REMOVE BEFORE FLIGHT -- PyPI will always reject packages with classifiers beginning with Private ::
 ]
 dependencies = [
-#	"pchandler[cuda12] ~= 1.0",
-#	"pc2img ~= 0.8",
 	"numpy ~= 1.24",
 	"plyfile ~= 0.7",
 	"laspy[lazrs,laszip] ~= 2.4",
@@ -41,6 +43,23 @@ write_to = "src/pchandler/_version.py"
 local_scheme = "no-local-version"
 version_scheme = "post-release"
 
+[tool.black]
+line-length = 120
+target-version = ['py310', 'py311', ]
+
+[tool.isort]
+profile = "black"
+
+[tool.flake8]
+max-line-length = 120
+extend-ignore = ["E203", "W503"]
+# add plugins, e.g. flake8-bugbear
+select = ["B", "C", "E", "F", "W", "T4", "D"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+
 
 [project.urls]
 homepage = "https://gseg.igp.ethz.ch/"
@@ -55,7 +74,17 @@ Changelog = "https://github.com/gseg-ethz/PCHandler/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 doc = ["sphinx ~= 5.1", "sphinx_rtd_theme"]
-dev = ["black ~= 22.10"]
+dev = [
+  "black~=23.1",            # formatter
+  "isort~=5.12",            # import sorter
+  "flake8~=6.0",            # style linter
+  "flake8-bugbear",         # best-practice checks
+  "flake8-docstrings",      # docstring checks
+  "mypy~=1.5",              # static typing
+  "pre-commit~=3.4",        # git hooks runner
+  "pytest~=7.0",            # test framework
+  "coverage~=7.0",          # coverage reporting
+]
 cuda11 = ["geopandas ~= 1.0", "cudf-cu11 ~= 24.10", "cuspatial-cu11 ~= 24.10", "cuproj-cu11 ~= 24.10",
 	"cuml-cu11 ~= 24.10", "dask-cudf-cu11 ~= 24.10"]
 cuda12 = ["geopandas ~= 1.0", "cudf-cu12 ~= 24.10", "cuspatial-cu12 ~= 24.10", "cuproj-cu12 ~= 24.10",
