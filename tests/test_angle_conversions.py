@@ -4,7 +4,7 @@ import unittest
 
 import numpy as np
 
-from pchandler.util import convert_angles, AngleUnit
+from pchandler.util import AngleUnit, convert_angles
 
 
 class TestConvertAngle(unittest.TestCase):
@@ -12,30 +12,25 @@ class TestConvertAngle(unittest.TestCase):
     def test_rad_to_deg(self):
         rad_values = np.array([np.pi, np.pi / 2, np.pi / 4])
         expected_deg = np.array([180, 90, 45])
-        np.testing.assert_array_almost_equal(
-            convert_angles(rad_values, AngleUnit.RAD, AngleUnit.DEGREE), expected_deg)
+        np.testing.assert_array_almost_equal(convert_angles(rad_values, AngleUnit.RAD, AngleUnit.DEGREE), expected_deg)
 
     def test_deg_to_gon(self):
         deg_values = np.array([180, 90, 45])
         expected_gon = np.array([200, 100, 50])
-        np.testing.assert_array_almost_equal(
-            convert_angles(deg_values, AngleUnit.DEGREE, AngleUnit.GON), expected_gon)
+        np.testing.assert_array_almost_equal(convert_angles(deg_values, AngleUnit.DEGREE, AngleUnit.GON), expected_gon)
 
     def test_gon_to_rad(self):
         gon_values = np.array([200, 100, 50])
         expected_rad = np.array([np.pi, np.pi / 2, np.pi / 4])
-        np.testing.assert_array_almost_equal(
-            convert_angles(gon_values, AngleUnit.GON, AngleUnit.RAD), expected_rad)
+        np.testing.assert_array_almost_equal(convert_angles(gon_values, AngleUnit.GON, AngleUnit.RAD), expected_rad)
 
     def test_same_unit_conversion(self):
         values = np.array([1, 2, 3])
-        np.testing.assert_array_equal(
-            convert_angles(values, AngleUnit.DEGREE, AngleUnit.DEGREE), values)
+        np.testing.assert_array_equal(convert_angles(values, AngleUnit.DEGREE, AngleUnit.DEGREE), values)
 
     def test_array_sizes(self):
         large_array = np.linspace(0, 100, 500)
-        self.assertEqual(
-            len(convert_angles(large_array, AngleUnit.RAD, AngleUnit.GON)), 500)
+        self.assertEqual(len(convert_angles(large_array, AngleUnit.RAD, AngleUnit.GON)), 500)
 
     def test_out_parameter(self):
         values = np.array([np.pi, np.pi / 2])
@@ -51,5 +46,5 @@ class TestConvertAngle(unittest.TestCase):
         np.testing.assert_array_almost_equal(values, expected)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

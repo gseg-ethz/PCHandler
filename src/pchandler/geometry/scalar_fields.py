@@ -1,18 +1,19 @@
-import sys
-
-from dataclasses import dataclass, field, InitVar, KW_ONLY
-from collections.abc import MutableMapping
 import logging
-from typing import Iterator, Optional, Iterable
+import sys
+from collections.abc import MutableMapping
+from dataclasses import KW_ONLY, InitVar, dataclass, field
+from typing import Iterable, Iterator, Optional
+
 if sys.version[0] == 3 and sys.version_info[1] >= 11:
     from typing import Self
 else:
     from typing_extensions import Self
 
 import numpy as np
-from numpy.typing import NDArray, DTypeLike
+from numpy.typing import DTypeLike, NDArray
 
 logger = logging.getLogger(__name__.split(".")[0])
+
 
 @dataclass(frozen=True)
 class ScalarField:
@@ -30,11 +31,12 @@ class ScalarField:
     operations_performed : Optional[str]
         Optional description providing additional context for the scalar field.
     """
+
     name: str
     data: NDArray[np.float32]
     _: KW_ONLY
     original_dtype: Optional[DTypeLike] = None
-    operations_performed: list[tuple[str, tuple[...]]] = field(default_factory=list)
+    operations_performed: list[tuple[str, tuple[str, tuple[DTypeLike, DTypeLike]]]] = field(default_factory=list)
     override_forced_dtype_conversion: InitVar[bool] = False
 
     def __post_init__(self, override_forced_dtype_conversion: bool) -> None:
@@ -50,20 +52,22 @@ class ScalarField:
             self.operations_performed.append(("dtype_conversion", (self.data.dtype, np.float32)))
             object.__setattr__(self, "data", self.data.astype(np.float32))
         elif self.data.dtype != np.float32 and override_forced_dtype_conversion:
-            logger.warning(f"Scalar field `{self.name}` not converted to float32. This may not be fully supported."
-                           f"Use at your own risk!")
+            logger.warning(
+                f"Scalar field `{self.name}` not converted to float32. This may not be fully supported."
+                f"Use at your own risk!"
+            )
 
-    def __getitem__(self, key: [slice, NDArray[np.bool_], NDArray[np.int_], list]) -> Self:
+    def __getitem__(self, key: slice | NDArray[np.bool_] | NDArray[np.int_] | list[int | bool]) -> Self:
         """
         Returns a new ScalarField with values indexed by key.
         Depending on the type of key, this may return a view or a copy.
         """
         new_values = self.data.copy()[key]
-        return ScalarField(
+        return type(self)(
             name=self.name,
             data=new_values,
             original_dtype=self.original_dtype,
-            operations_performed=self.operations_performed.copy()
+            operations_performed=self.operations_performed.copy(),
         )
 
     @property
@@ -101,7 +105,7 @@ class ScalarField:
 
         assert lower < upper
         # self.data = self.data / (self.data.max() - self.data.min())
-        np.divide(self.data - lower, upper-lower, out=self.data)
+        np.divide(self.data - lower, upper - lower, out=self.data)
         self.operations_performed.append(("normalize", (lower, upper)))
         logger.debug(f"Normalized scalar field `{self.name}` from (original) span [{lower}, {upper}] to [0, 1].")
 
@@ -123,7 +127,7 @@ class ScalarField:
             match operation:
                 case "normalize":
                     lower, upper = operation_parameters
-                    np.multiply(self.data, upper-lower, out=data)
+                    np.multiply(self.data, upper - lower, out=data)
                     np.add(data, lower, out=data)
                 case "dtype_conversion":
                     data = data.astype(operation_parameters[0])
@@ -135,12 +139,12 @@ class ScalarField:
         return data
 
 
-
 class ScalarFieldManager(MutableMapping):
     """
     Manages a collection of ScalarField objects, ensuring that all fields have the same
     number of data points. Also provides a mechanism to select subsets of the fields.
     """
+
     def __init__(self, expected_length: Optional[int] = None):
         self._fields: dict[str, ScalarField] = {}
         self._expected_length: Optional[int] = expected_length
@@ -181,8 +185,10 @@ class ScalarFieldManager(MutableMapping):
     def shape(self) -> tuple[int, ...]:
         # if len(self) == 0:
         #     return (0,self._expected_length)
-        return (len(self), self._expected_length,)
-
+        return (
+            len(self),
+            self._expected_length,
+        )
 
     def __delitem__(self, key: str):
         del self._fields[key]
@@ -244,27 +250,26 @@ class ScalarFieldManager(MutableMapping):
             name = sfs[0].name
 
             if len(set(map(tuple, [sf.operations_performed for sf in sfs]))) != 1:
-                logger.warning(f"While merging scalar field {common_key} different list of previously performed "
-                               f"operations were encountered. Merged scalar field will have an empty record!")
+                logger.warning(
+                    f"While merging scalar field {common_key} different list of previously performed "
+                    f"operations were encountered. Merged scalar field will have an empty record!"
+                )
                 operations_performed = []
             else:
                 operations_performed = sfs[0].operations_performed
             if len(set(sf.original_dtype for sf in sfs)) != 1:
-                logger.warning(f"While merging scalar field {common_key} different original dtypes were encountered. "
-                               f"Merged scalar field will have an empty record!")
+                logger.warning(
+                    f"While merging scalar field {common_key} different original dtypes were encountered. "
+                    f"Merged scalar field will have an empty record!"
+                )
                 original_dtype = None
             else:
                 original_dtype = sfs[0].original_dtype
 
             data = np.concatenate([sf.data for sf in sfs])
-            sf = ScalarField(name=name, data=data, original_dtype=original_dtype, operations_performed=operations_performed)
+            sf = ScalarField(
+                name=name, data=data, original_dtype=original_dtype, operations_performed=operations_performed
+            )
             new_sfm.add_field(sf)
 
         return new_sfm
-
-
-
-
-
-
-

@@ -1,10 +1,10 @@
 import logging
 
-import open3d as o3d
 import numpy as np
+import open3d as o3d
 
-from .core import PointCloudFilter
 from ..core import PointCloudData
+from .core import PointCloudFilter
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -20,14 +20,16 @@ class SphericalOutlierFilter(PointCloudFilter):
     nb_neighbors : int, default=13
         The number of neighbors to consider for statistical outlier removal.
     """
+
     def __init__(self, std_ratio: float = 0.95, nb_neighbors: int = 13):
         self.std_ratio = std_ratio
         self.nb_neighbors = nb_neighbors
 
     def mask(self, pcd: PointCloudData) -> PointCloudData:
         sp_pcd = o3d.geometry.PointCloud()
-        sp_pcd.points = o3d.utility.Vector3dVector(np.hstack((pcd.spherical_coordinates[:,1:],
-                                                              np.zeros((pcd.nbPoints,1), dtype=np.float32))))
+        sp_pcd.points = o3d.utility.Vector3dVector(
+            np.hstack((pcd.spherical_coordinates[:, 1:], np.zeros((pcd.nbPoints, 1), dtype=np.float32)))
+        )
 
         mask = np.zeros(pcd.nbPoints, dtype=np.bool_)
         _, inliers = sp_pcd.remove_statistical_outlier(self.nb_neighbors, self.std_ratio, True)
@@ -47,4 +49,3 @@ class CartesianOutlierFilter(PointCloudFilter):
         _, inliers = pcd_o3d.remove_statistical_outlier(self.nb_neighbors, self.std_ratio, True)
         mask[inliers] = True
         return mask
-

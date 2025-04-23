@@ -61,24 +61,22 @@ Typical usage patterns include:
     point_cloud_csv = load_csv(pcd_path=Path("input.csv"), delimeter=",")
 """
 
-
-
 ## TODO: Rework to use yield instead of generating a list and iterating over it
 
 
 import csv
+import logging
+import warnings
 from datetime import datetime
 from enum import Enum
 from itertools import compress
-import logging
 from pathlib import Path
-from typing import Any, Callable, Optional, Generator
-import warnings
+from typing import Any, Callable, Generator, Optional
 
-import numpy as np
 import laspy
-from plyfile import PlyElement, PlyData
+import numpy as np
 import pye57
+from plyfile import PlyData, PlyElement
 from yaml import warnings
 
 from .geometry.core import PointCloudData
@@ -123,8 +121,15 @@ def find_pcd_in_directory(directory_path, pcd_file_types: list[str], include_sub
     logger.info(f"Found {len(file_list)} PCD files in {directory_path}")
     return file_list
 
-def load_ply(pcd_path: Path, retain_colors: bool = True, retain_normals: bool = True, scalar_fields: list[str] = None,
-             normalize_intensities: bool = False, **kwargs) -> PointCloudData:
+
+def load_ply(
+    pcd_path: Path,
+    retain_colors: bool = True,
+    retain_normals: bool = True,
+    scalar_fields: list[str] = None,
+    normalize_intensities: bool = False,
+    **kwargs,
+) -> PointCloudData:
     """
     Loads a point cloud from a `.ply` file.
 
@@ -150,7 +155,6 @@ def load_ply(pcd_path: Path, retain_colors: bool = True, retain_normals: bool = 
     """
     logger.info(f"Loading PLY file: {pcd_path}")
 
-
     try:
         with open(pcd_path, "rb") as f:
             plydata = PlyData.read(f)
@@ -158,10 +162,16 @@ def load_ply(pcd_path: Path, retain_colors: bool = True, retain_normals: bool = 
         logger.error(f"Failed to read PLY file {pcd_path}: {e}")
         raise
 
-    nbPoints = plydata['vertex'].count
+    nbPoints = plydata["vertex"].count
     logger.debug(f"PLY file {pcd_path} contains {nbPoints} points")
 
-    xyz = np.empty((nbPoints, 3,), dtype=float)
+    xyz = np.empty(
+        (
+            nbPoints,
+            3,
+        ),
+        dtype=float,
+    )
     xyz[:, 0] = plydata["vertex"]["x"]
     xyz[:, 1] = plydata["vertex"]["y"]
     xyz[:, 2] = plydata["vertex"]["z"]
@@ -174,7 +184,13 @@ def load_ply(pcd_path: Path, retain_colors: bool = True, retain_normals: bool = 
     colors = None
     if retain_colors and len(set(ply_scalar_fields) & set(["r", "g", "b", "red", "green", "blue"])) == 3:
         color_dytpe = plydata["vertex"]["r"].dtype if "r" in ply_scalar_fields else plydata["vertex"]["red"].dtype
-        colors = np.empty((nbPoints, 3,), dtype=color_dytpe)
+        colors = np.empty(
+            (
+                nbPoints,
+                3,
+            ),
+            dtype=color_dytpe,
+        )
         colors[:, 0] = plydata["vertex"]["r"] if "r" in ply_scalar_fields else plydata["vertex"]["red"]
         colors[:, 1] = plydata["vertex"]["g"] if "g" in ply_scalar_fields else plydata["vertex"]["green"]
         colors[:, 2] = plydata["vertex"]["b"] if "b" in ply_scalar_fields else plydata["vertex"]["blue"]
@@ -185,7 +201,13 @@ def load_ply(pcd_path: Path, retain_colors: bool = True, retain_normals: bool = 
 
     normals = None
     if retain_normals and len(set(ply_scalar_fields) & set(["nx", "ny", "nz"])) == 3:
-        normals = np.empty((nbPoints, 3,), dtype=float)
+        normals = np.empty(
+            (
+                nbPoints,
+                3,
+            ),
+            dtype=float,
+        )
         normals[:, 0] = plydata["vertex"]["nx"]
         normals[:, 1] = plydata["vertex"]["ny"]
         normals[:, 2] = plydata["vertex"]["nz"]
@@ -193,15 +215,30 @@ def load_ply(pcd_path: Path, retain_colors: bool = True, retain_normals: bool = 
 
     ply_scalar_fields_stripped = [sf.removeprefix("scalar_") for sf in ply_scalar_fields]
 
-    common_scalar_fields = ply_scalar_fields_stripped if scalar_fields is None else list(
-        set([sf.removeprefix("scalar_") for sf in scalar_fields]) & set(ply_scalar_fields_stripped))
+    common_scalar_fields = (
+        ply_scalar_fields_stripped
+        if scalar_fields is None
+        else list(set([sf.removeprefix("scalar_") for sf in scalar_fields]) & set(ply_scalar_fields_stripped))
+    )
 
     # scalar_fields_dict = dict()
     sfm = ScalarFieldManager(expected_length=nbPoints)
     for sf in ply_scalar_fields:
         sf_label = sf.removeprefix("scalar_")
-        if (sf_label in common_scalar_fields and sf_label.lower() not in
-                ["x", "y", "z", "r", "g", "b", "red", "green", "blue", "nx", "ny", "nz"]):
+        if sf_label in common_scalar_fields and sf_label.lower() not in [
+            "x",
+            "y",
+            "z",
+            "r",
+            "g",
+            "b",
+            "red",
+            "green",
+            "blue",
+            "nx",
+            "ny",
+            "nz",
+        ]:
             sfm.add_field(ScalarField(sf_label, np.array(plydata["vertex"][sf]).squeeze()))
             logger.debug(f"Loaded scalar field: {sf_label}")
     if "Intensity" in sfm and normalize_intensities:
@@ -209,14 +246,21 @@ def load_ply(pcd_path: Path, retain_colors: bool = True, retain_normals: bool = 
             "normalize_intensities has been deprecated, and will be removed in future relases. Please call the "
             "ScalarField.normalize() function on the individual scalar fields after loading instead.",
             DeprecationWarning,
-            stacklevel=2
+            stacklevel=2,
         )
         sfm["Intensity"].normalize()
     logger.info(f"Successfully loaded PLY file: {pcd_path}")
     return PointCloudData(xyz, color=colors, normals=normals, scalar_fields=sfm, **kwargs)
 
-def save_ply(pcd_path: Path, pcd: PointCloudData, retain_colors: bool = True, retain_normals: bool = True,
-             scalar_fields: list[str] = None, convert_scalar_fields_to_original_dtype_and_bounds: bool = False) -> None:
+
+def save_ply(
+    pcd_path: Path,
+    pcd: PointCloudData,
+    retain_colors: bool = True,
+    retain_normals: bool = True,
+    scalar_fields: list[str] = None,
+    convert_scalar_fields_to_original_dtype_and_bounds: bool = False,
+) -> None:
     """
     Saves a `PointCloudData` object to a `.ply` file.
 
@@ -240,24 +284,43 @@ def save_ply(pcd_path: Path, pcd: PointCloudData, retain_colors: bool = True, re
 
     xyz_dtype = np.dtype(np.float64).str if pcd.global_coordinate_shift is not None else pcd.xyz.dtype.str
 
-    dtype_list = [("x", xyz_dtype), ("y", xyz_dtype), ("z", xyz_dtype), ]
+    dtype_list = [
+        ("x", xyz_dtype),
+        ("y", xyz_dtype),
+        ("z", xyz_dtype),
+    ]
 
     if retain_colors and pcd.color is not None:
         assert pcd.color.shape == (nb_points, 3)
         color_dtype = pcd.color.dtype.str
-        dtype_list.extend([("red", color_dtype), ("green", color_dtype), ("blue", color_dtype), ])
+        dtype_list.extend(
+            [
+                ("red", color_dtype),
+                ("green", color_dtype),
+                ("blue", color_dtype),
+            ]
+        )
 
     if retain_normals and pcd.normals is not None:
         assert pcd.normals.shape == (nb_points, 3)
         normal_dtype = pcd.normals.dtype.str
-        dtype_list.extend([("nx", normal_dtype), ("ny", normal_dtype), ("nz", normal_dtype), ])
+        dtype_list.extend(
+            [
+                ("nx", normal_dtype),
+                ("ny", normal_dtype),
+                ("nz", normal_dtype),
+            ]
+        )
 
     pcd_scalar_fields = pcd.scalar_fields.keys()
 
     # Strip `scalar_` from the elements in scalar_fields
-    scalar_fields = [s.lower().removeprefix("scalar_") for s in scalar_fields] if scalar_fields is not None else scalar_fields
-    common_scalar_fields = pcd_scalar_fields if scalar_fields is None else list(set(scalar_fields) &
-                                                                                set(pcd_scalar_fields))
+    scalar_fields = (
+        [s.lower().removeprefix("scalar_") for s in scalar_fields] if scalar_fields is not None else scalar_fields
+    )
+    common_scalar_fields = (
+        pcd_scalar_fields if scalar_fields is None else list(set(scalar_fields) & set(pcd_scalar_fields))
+    )
 
     for sf in common_scalar_fields:
         assert len(pcd.scalar_fields[sf]) == nb_points
@@ -298,8 +361,14 @@ def save_ply(pcd_path: Path, pcd: PointCloudData, retain_colors: bool = True, re
             pcd_np_st[sf_label] = pcd.scalar_fields[sf].data
 
     # TODO: Rename program in comment
-    el = PlyElement.describe(pcd_np_st, "vertex", comments=["Created with dranjan/python-plyfile in gseg-ethz/pchandler",
-                                                            f"Created {datetime.now():%Y-%m-%dT%H:%M:%S%z}"])
+    el = PlyElement.describe(
+        pcd_np_st,
+        "vertex",
+        comments=[
+            "Created with dranjan/python-plyfile in gseg-ethz/pchandler",
+            f"Created {datetime.now():%Y-%m-%dT%H:%M:%S%z}",
+        ],
+    )
 
     if not pcd_path.parent.exists():
         pcd_path.parent.mkdir(parents=True, exist_ok=True)
@@ -309,8 +378,9 @@ def save_ply(pcd_path: Path, pcd: PointCloudData, retain_colors: bool = True, re
     logger.info(f"PLY file saved successfully: {pcd_path}")
 
 
-def load_csv(pcd_path: Path, delimeter: str = " ", scalar_fields: list[str] = None, normalize_intensities: bool = True,
-             **kwargs) -> PointCloudData:
+def load_csv(
+    pcd_path: Path, delimeter: str = " ", scalar_fields: list[str] = None, normalize_intensities: bool = True, **kwargs
+) -> PointCloudData:
     """
     Loads a point cloud from a CSV or ASCII file.
 
@@ -339,11 +409,29 @@ def load_csv(pcd_path: Path, delimeter: str = " ", scalar_fields: list[str] = No
         data = list(reader)
     xyz = np.array([row[:3] for row in data], dtype=np.float32)
 
-    colors = np.empty(shape=(len(data), 3,), dtype=np.uint8) if (scalar_fields is not None and
-            len(set(scalar_fields).intersection({"r", "g", "b"})) == 3) else None
+    colors = (
+        np.empty(
+            shape=(
+                len(data),
+                3,
+            ),
+            dtype=np.uint8,
+        )
+        if (scalar_fields is not None and len(set(scalar_fields).intersection({"r", "g", "b"})) == 3)
+        else None
+    )
 
-    normals = np.empty(shape=(len(data), 3,), dtype=np.float32) if (scalar_fields is not None and
-            len(set(scalar_fields).intersection({"nx", "ny", "nz"})) == 3) else None
+    normals = (
+        np.empty(
+            shape=(
+                len(data),
+                3,
+            ),
+            dtype=np.float32,
+        )
+        if (scalar_fields is not None and len(set(scalar_fields).intersection({"nx", "ny", "nz"})) == 3)
+        else None
+    )
 
     sfm = ScalarFieldManager()
     if scalar_fields is not None:
@@ -353,7 +441,7 @@ def load_csv(pcd_path: Path, delimeter: str = " ", scalar_fields: list[str] = No
                 continue
             elif colors and sf in {"r", "g", "b"}:
                 if sf == "r":
-                    colors[:, 0] = np.array([row[3+i] for row in data], dtype=np.uint8)
+                    colors[:, 0] = np.array([row[3 + i] for row in data], dtype=np.uint8)
                 elif sf == "g":
                     colors[:, 1] = np.array([row[3 + i] for row in data], dtype=np.uint8)
                 else:
@@ -368,24 +456,30 @@ def load_csv(pcd_path: Path, delimeter: str = " ", scalar_fields: list[str] = No
                     normals[:, 2] = np.array([row[3 + i] for row in data], dtype=np.float32)
                 continue
             # scalar_fields_dict[sf] = np.array([row[3+i] for row in data], dtype=np.float32)
-            sfm.add_field(ScalarField(sf, np.array([row[3+i] for row in data], dtype=np.float32)))
+            sfm.add_field(ScalarField(sf, np.array([row[3 + i] for row in data], dtype=np.float32)))
 
     if "Intensity" in sfm and normalize_intensities:
         warnings.warn(
             "normalize_intensities has been deprecated, and will be removed in future relases. Please call the "
             "ScalarField.normalize() function on the individual scalar fields after loading instead.",
             DeprecationWarning,
-            stacklevel=2
+            stacklevel=2,
         )
         sfm["Intensity"].normalize()
-
 
     logger.info(f"CSV file loaded successfully: {pcd_path}")
     return PointCloudData(xyz, color=colors, normals=normals, scalar_fields=sfm, **kwargs)
 
 
-def save_csv(pcd_path: Path, pcd: PointCloudData, delimiter: str = " ", add_header: bool = False, retain_colors: bool = True,
-             retain_normals: bool = True, scalar_fields: list[str] = None) -> None:
+def save_csv(
+    pcd_path: Path,
+    pcd: PointCloudData,
+    delimiter: str = " ",
+    add_header: bool = False,
+    retain_colors: bool = True,
+    retain_normals: bool = True,
+    scalar_fields: list[str] = None,
+) -> None:
     """
     Saves a `PointCloudData` object to a CSV file, accounting for different data types.
 
@@ -408,7 +502,19 @@ def save_csv(pcd_path: Path, pcd: PointCloudData, delimiter: str = " ", add_head
     nb_points = pcd.nbPoints
 
     # Define structured dtype for the output data
-    dtype_list = [("x", "f4"), ("y", "f4"), ("z", "f4"), ] if pcd.global_coordinate_shift is None else [("x", "f8"), ("y", "f8"), ("z", "f8"), ]
+    dtype_list = (
+        [
+            ("x", "f4"),
+            ("y", "f4"),
+            ("z", "f4"),
+        ]
+        if pcd.global_coordinate_shift is None
+        else [
+            ("x", "f8"),
+            ("y", "f8"),
+            ("z", "f8"),
+        ]
+    )
 
     if retain_colors and pcd.color is not None:
         assert pcd.color.shape == (nb_points, 3)
@@ -419,7 +525,9 @@ def save_csv(pcd_path: Path, pcd: PointCloudData, delimiter: str = " ", add_head
         dtype_list.extend([("nx", pcd.normals.dtype.str), ("ny", pcd.normals.dtype.str), ("nz", pcd.normals.dtype.str)])
 
     pcd_scalar_fields = pcd.scalar_fields.keys()
-    common_scalar_fields = pcd_scalar_fields if scalar_fields is None else list(set(scalar_fields) & set(pcd_scalar_fields))
+    common_scalar_fields = (
+        pcd_scalar_fields if scalar_fields is None else list(set(scalar_fields) & set(pcd_scalar_fields))
+    )
 
     for sf in common_scalar_fields:
         dtype_list.append((sf, pcd.scalar_fields[sf].data.dtype.str))
@@ -472,14 +580,20 @@ def save_csv(pcd_path: Path, pcd: PointCloudData, delimiter: str = " ", add_head
         delimiter=delimiter,
         header=header,
         comments="",  # Avoid prepending '#' to the header
-        fmt=fmt
+        fmt=fmt,
     )
 
     logger.info(f"CSV file saved successfully: {pcd_path}")
 
 
-def load_e57(pcd_path: Path, point_cloud_index: Optional[int] = None, retain_intensity: bool = True,
-             retain_colors: bool = True, normalize_intensities: bool = False, **kwargs) -> PointCloudData | Generator[PointCloudData, None, None]:
+def load_e57(
+    pcd_path: Path,
+    point_cloud_index: Optional[int] = None,
+    retain_intensity: bool = True,
+    retain_colors: bool = True,
+    normalize_intensities: bool = False,
+    **kwargs,
+) -> PointCloudData | Generator[PointCloudData, None, None]:
     logger.info(f"Loading E57 file: {pcd_path}")
     e57 = pye57.E57(str(pcd_path), mode="r")
     number_of_scans = e57.scan_count
@@ -494,12 +608,18 @@ def load_e57(pcd_path: Path, point_cloud_index: Optional[int] = None, retain_int
         return _load_all_e57_scans(pcd_path, retain_intensity, retain_colors, normalize_intensities, **kwargs)
     else:
         logger.debug(f"Loading scan index {point_cloud_index} from E57 file.")
-        return _load_single_e57(pcd_path, point_cloud_index, retain_intensity, retain_colors, normalize_intensities, **kwargs)
+        return _load_single_e57(
+            pcd_path, point_cloud_index, retain_intensity, retain_colors, normalize_intensities, **kwargs
+        )
 
 
-
-def _load_all_e57_scans(pcd_path: Path, retain_intensity: bool = True, retain_colors: bool = True,
-                       normalize_intensities: bool = False, **kwargs) -> Generator[PointCloudData, None, None]:
+def _load_all_e57_scans(
+    pcd_path: Path,
+    retain_intensity: bool = True,
+    retain_colors: bool = True,
+    normalize_intensities: bool = False,
+    **kwargs,
+) -> Generator[PointCloudData, None, None]:
     logger.debug(f"Loading multiple scans from E57 file: {pcd_path}")
     e57 = pye57.E57(str(pcd_path), mode="r")
     number_of_scans = e57.scan_count
@@ -508,11 +628,19 @@ def _load_all_e57_scans(pcd_path: Path, retain_intensity: bool = True, retain_co
         yield _load_single_e57(pcd_path, i, retain_intensity, retain_colors, normalize_intensities, **kwargs)
 
 
-def _load_single_e57(pcd_path: Path, point_cloud_index: int, retain_intensity: bool = True, retain_colors: bool = True,
-                    normalize_intensities: bool = False, **kwargs) -> PointCloudData:
+def _load_single_e57(
+    pcd_path: Path,
+    point_cloud_index: int,
+    retain_intensity: bool = True,
+    retain_colors: bool = True,
+    normalize_intensities: bool = False,
+    **kwargs,
+) -> PointCloudData:
     logger.debug(f"Loading single scan {point_cloud_index} from E57 file: {pcd_path}")
     e57 = pye57.E57(str(pcd_path), mode="r")
-    data = e57.read_scan(point_cloud_index, ignore_missing_fields=True, intensity=retain_intensity, colors=retain_colors)
+    data = e57.read_scan(
+        point_cloud_index, ignore_missing_fields=True, intensity=retain_intensity, colors=retain_colors
+    )
     header = e57.get_header(point_cloud_index)
 
     xyz = np.column_stack((data["cartesianX"], data["cartesianY"], data["cartesianZ"]))
@@ -554,13 +682,20 @@ def load_laz(pcd_path, retain_colors: bool = True, scalar_fields: list[str] = No
 
     colors = None
     if retain_colors and len(set(laz_scalar_fields) & set(["red", "green", "blue"])) == 3:
-        colors = np.empty((pcd.header.point_count, 3,), dtype=np.uint8)
+        colors = np.empty(
+            (
+                pcd.header.point_count,
+                3,
+            ),
+            dtype=np.uint8,
+        )
         colors[:, 0] = (pcd["red"] / 256).astype(np.uint8)
         colors[:, 1] = (pcd["green"] / 256).astype(np.uint8)
         colors[:, 2] = (pcd["blue"] / 256).astype(np.uint8)
 
-    common_scalar_fields = laz_scalar_fields if scalar_fields is None else list(set(scalar_fields) &
-                                                                                set(laz_scalar_fields))
+    common_scalar_fields = (
+        laz_scalar_fields if scalar_fields is None else list(set(scalar_fields) & set(laz_scalar_fields))
+    )
 
     # scalar_fields_dict = dict()
     sfm = ScalarFieldManager(expected_length=pcd.header.point_count)
@@ -569,8 +704,14 @@ def load_laz(pcd_path, retain_colors: bool = True, scalar_fields: list[str] = No
             if isinstance(pcd[sf], np.ndarray):
                 scalar_fields_dict[sf] = pcd[sf]
             elif isinstance(pcd[sf], laspy.point.dims.SubFieldView):
-                if sf in ["scan_direction_flag", "edge_of_flight_line", "synthetic", "key_point", "withheld",
-                          "overlap"]:
+                if sf in [
+                    "scan_direction_flag",
+                    "edge_of_flight_line",
+                    "synthetic",
+                    "key_point",
+                    "withheld",
+                    "overlap",
+                ]:
                     scalar_fields_dict[sf] = np.array(pcd[sf], dtype=bool)
                 else:
                     scalar_fields_dict[sf] = np.array(pcd[sf])

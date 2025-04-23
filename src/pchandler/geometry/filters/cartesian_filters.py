@@ -4,14 +4,15 @@ from typing import Tuple
 import alphashape
 import numpy as np
 from numpy.typing import NDArray
-from shapely.geometry import Polygon, MultiPolygon
-from shapely.affinity import scale, translate
 from shapely import contains_xy
+from shapely.affinity import scale, translate
+from shapely.geometry import MultiPolygon, Polygon
 
-from .core import PointCloudFilter
 from ..core import PointCloudData
+from .core import PointCloudFilter
 
 logger = logging.getLogger(__name__.split(".")[0])
+
 
 class BoxFilter(PointCloudFilter):
     def __init__(self, minimum_corner: Tuple[float, float, float], maximum_corner: Tuple[float, float, float]):
@@ -32,6 +33,7 @@ class BoxFilter(PointCloudFilter):
 
         return np.all((pcd.xyz >= min_corner) & (pcd.xyz <= max_corner), axis=1)
 
+
 class SphereFilter(PointCloudFilter):
     def __init__(self, sphere_center_point: NDArray[np.floating], radius: float):
         assert sphere_center_point.shape == (3,)
@@ -40,10 +42,15 @@ class SphereFilter(PointCloudFilter):
         self.radius = radius
 
     def mask(self, pcd: PointCloudData) -> NDArray[np.bool_]:
-        point = self.sphere_center_point if pcd.global_coordinate_shift is None else self.sphere_center_point - pcd.global_coordinate_shift
+        point = (
+            self.sphere_center_point
+            if pcd.global_coordinate_shift is None
+            else self.sphere_center_point - pcd.global_coordinate_shift
+        )
 
         distances_to_point = np.linalg.norm(pcd.xyz - point, axis=1)
         return distances_to_point <= self.radius
+
 
 class PolygonFilter(PointCloudFilter):
     def __init__(self, polygon: Polygon, plane: str = "xy"):
@@ -53,17 +60,18 @@ class PolygonFilter(PointCloudFilter):
         self.plane = plane
 
     def mask(self, pcd: PointCloudData) -> NDArray[np.bool_]:
-        if self.plane == 'xy':
+        if self.plane == "xy":
             dims = [0, 1]
-        elif self.plane == 'xz':
+        elif self.plane == "xz":
             dims = [0, 2]
         else:
             dims = [1, 2]
 
-        polygon = self.polygon if pcd.global_coordinate_shift is None else (
-            translate(self.polygon, *(-1*pcd.global_coordinate_shift[dims])))
+        polygon = (
+            self.polygon
+            if pcd.global_coordinate_shift is None
+            else (translate(self.polygon, *(-1 * pcd.global_coordinate_shift[dims])))
+        )
 
         mask = contains_xy(polygon, pcd.xyz[:, dims[0]], pcd.xyz[:, dims[1]])
         return mask
-
-

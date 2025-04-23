@@ -33,8 +33,8 @@ Typical usage patterns include:
     print(f"Floating-point epsilon: {EPS}")
 """
 
-from enum import Enum
 import logging
+from enum import Enum
 from typing import Optional
 
 import numpy as np
@@ -49,6 +49,7 @@ Type
 ----
 float
 """
+
 
 class AngleUnit(Enum):
     """
@@ -67,12 +68,15 @@ class AngleUnit(Enum):
     -----
     This enum is used to specify the angular unit for conversions and operations.
     """
+
     RAD = "rad"
     DEGREE = "deg"
     GON = "gon"
 
 
-def convert_angles(values: np.ndarray, source_unit: AngleUnit, target_unit: AngleUnit, out: Optional[np.ndarray] = None) -> np.ndarray:
+def convert_angles(
+    values: np.ndarray, source_unit: AngleUnit, target_unit: AngleUnit, out: Optional[np.ndarray] = None
+) -> np.ndarray:
     """
     Converts an array of angles from one unit to another.
 
@@ -125,18 +129,22 @@ def convert_angles(values: np.ndarray, source_unit: AngleUnit, target_unit: Angl
     match source_unit:
         case AngleUnit.RAD:
             match target_unit:
-                case AngleUnit.DEGREE: return np.rad2deg(values, out=out)
-                case AngleUnit.GON: return np.multiply(values, 200/np.pi, out=out)
+                case AngleUnit.DEGREE:
+                    return np.rad2deg(values, out=out)
+                case AngleUnit.GON:
+                    return np.multiply(values, 200 / np.pi, out=out)
         case AngleUnit.DEGREE:
             match target_unit:
-                case AngleUnit.RAD: return np.deg2rad(values, out=out)
-                case AngleUnit.GON: return np.multiply(values, 200/180, out=out)
+                case AngleUnit.RAD:
+                    return np.deg2rad(values, out=out)
+                case AngleUnit.GON:
+                    return np.multiply(values, 200 / 180, out=out)
         case AngleUnit.GON:
             match target_unit:
-                case AngleUnit.RAD: return np.multiply(values, np.pi/200, out=out)
-                case AngleUnit.DEGREE: return np.multiply(values, 180/200, out=out)
-
-
+                case AngleUnit.RAD:
+                    return np.multiply(values, np.pi / 200, out=out)
+                case AngleUnit.DEGREE:
+                    return np.multiply(values, 180 / 200, out=out)
 
 
 def cartesian_to_spherical(xyz: np.ndarray, origin: np.ndarray = None) -> np.ndarray:
@@ -163,6 +171,7 @@ def cartesian_to_spherical(xyz: np.ndarray, origin: np.ndarray = None) -> np.nda
     sph[:, 1] = np.arctan2(np.sqrt(xy_sq), xyz[:, 2])
     sph[:, 2] = -np.arctan2(xyz[:, 1], xyz[:, 0])
     return sph
+
 
 def spherical_to_cartesian(spherical_coords: np.ndarray, origin: np.ndarray = None) -> np.ndarray:
     """

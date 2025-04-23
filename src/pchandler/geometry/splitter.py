@@ -1,22 +1,24 @@
-from abc import ABC, abstractmethod
 import logging
+from abc import ABC, abstractmethod
 
 import numpy as np
 from joblib import Parallel, delayed, parallel_config
 
+from ..fov import FoV, FoVTree
 from .core import PointCloudData
 from .filters.spherical_coordinate_filters import FoVFilter
-from ..fov import FoVTree, FoV
 
 logger = logging.getLogger(__name__.split(".")[0])
+
 
 class PointCloudSplitter(ABC):
     @abstractmethod
     def split(self):
         pass
 
+
 class FoVTreePointCloudSplitter(PointCloudSplitter):
-    def __init__(self, fov_tree: FoVTree, remove_empty: bool = True, n_jobs: int = -1, method: str ="iterative"):
+    def __init__(self, fov_tree: FoVTree, remove_empty: bool = True, n_jobs: int = -1, method: str = "iterative"):
         """
         Initialize the splitter with configuration options.
 
@@ -95,7 +97,7 @@ class FoVTreePointCloudSplitter(PointCloudSplitter):
                 with parallel_config(backend="loky", n_jobs=self.n_jobs, verbose=50, prefer="processes"):
                     level_results = Parallel(return_as="list")(
                         delayed(self._process_iterative_task)(task_pcd, task_fov) for task_pcd, task_fov in tasks
-                )
+                    )
             else:
                 # Process sequentially when only one task is present
                 level_results = [self._process_iterative_task(tasks[0][0], tasks[0][1])]
@@ -108,9 +110,9 @@ class FoVTreePointCloudSplitter(PointCloudSplitter):
 
         return results
 
-
-    def _process_iterative_task(self, pcd: PointCloudData, fov_tree: FoVTree) -> tuple[
-        dict[str, PointCloudData], list[tuple[PointCloudData, FoVTree]]]:
+    def _process_iterative_task(
+        self, pcd: PointCloudData, fov_tree: FoVTree
+    ) -> tuple[dict[str, PointCloudData], list[tuple[PointCloudData, FoVTree]]]:
         """
         Process a single task consisting of a point cloud and a FoVTree node.
 
@@ -139,8 +141,9 @@ class FoVTreePointCloudSplitter(PointCloudSplitter):
         return {}, child_tasks
 
 
-def split_pc_with_fov_tree(pcd: PointCloudData, fov_tree: FoVTree, remove_empty: bool = True, n_jobs: int = -1) \
-        -> dict[str, PointCloudData]:
+def split_pc_with_fov_tree(
+    pcd: PointCloudData, fov_tree: FoVTree, remove_empty: bool = True, n_jobs: int = -1
+) -> dict[str, PointCloudData]:
     # -> list[tuple[str, FoV, PointCloudData]]:
 
     """
@@ -169,14 +172,16 @@ def split_pc_with_fov_tree(pcd: PointCloudData, fov_tree: FoVTree, remove_empty:
         # return [(fov_tree.identifier, fov_tree.node, pcd,)]
 
     # Setup argumenets for call
-    split_packages = [(pcd.extract_angles(child.node), child, remove_empty, n_jobs)
-                      for child in fov_tree.children.values()]
+    split_packages = [
+        (pcd.extract_angles(child.node), child, remove_empty, n_jobs) for child in fov_tree.children.values()
+    ]
     if remove_empty:
         split_packages = [sp for sp in split_packages if sp[0].nbPoints]
     # print(*[FoV(**sp[0].fov, unit="rad") for sp in split_packages], sep='\n')
 
-    split = Parallel(n_jobs=n_jobs, prefer="processes", verbose=50, timeout=10 * 60)(delayed(
-        split_pc_with_fov_tree)(*split_package) for split_package in split_packages)
+    split = Parallel(n_jobs=n_jobs, prefer="processes", verbose=50, timeout=10 * 60)(
+        delayed(split_pc_with_fov_tree)(*split_package) for split_package in split_packages
+    )
 
     split_dict = {k: v for d in split for k, v in d.items()}
     return split_dict

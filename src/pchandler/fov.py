@@ -65,15 +65,13 @@ Example: Use a hierarchical FoV tree for spatial partitioning:
     print("Tree depth:", fov_tree.depth())
 """
 
-
+import logging
+import math
 import sys
-
 from dataclasses import dataclass, field
 from fractions import Fraction
 from itertools import chain
-import logging
-import math
-from typing import cast, Optional, Iterable
+from typing import Iterable, Optional, cast
 
 if sys.version[0] == 3 and sys.version_info[1] >= 11:
     from typing import Self
@@ -82,10 +80,9 @@ else:
 
 import numpy as np
 
-from pchandler.util import AngleUnit, convert_angles, EPS
+from pchandler.util import EPS, AngleUnit, convert_angles
 
 logger = logging.getLogger(__name__.split(".")[0])
-
 
 
 @dataclass(init=False, frozen=True)
@@ -113,9 +110,15 @@ class FoV:
     # _defined_units: tuple[str, ...] = ("rad", "gon", "deg")
     __internal_angular_unit: AngleUnit = AngleUnit.RAD
 
-    def __init__(self, *, horizontal_min: float, elevation_min: float, horizontal_max: float, elevation_max: float,
-                 unit: [str | AngleUnit] = "rad"):
-
+    def __init__(
+        self,
+        *,
+        horizontal_min: float,
+        elevation_min: float,
+        horizontal_max: float,
+        elevation_max: float,
+        unit: [str | AngleUnit] = "rad",
+    ):
         """
         Initializes an FoV instance.
 
@@ -150,8 +153,9 @@ class FoV:
         object.__setattr__(self, "elevation_max", values[3])
 
     @classmethod
-    def from_center_with_extent(cls, centerpoint: tuple[float, float], extent: tuple[float, float],
-                                unit: [str | AngleUnit] = "rad") -> Self:
+    def from_center_with_extent(
+        cls, centerpoint: tuple[float, float], extent: tuple[float, float], unit: [str | AngleUnit] = "rad"
+    ) -> Self:
         """
         Creates an FoV instance from a center point and angular extent.
 
@@ -171,8 +175,13 @@ class FoV:
         """
         fov_min = np.array(centerpoint) - np.array(extent) / 2
         fov_max = np.array(centerpoint) + np.array(extent) / 2
-        return cls(horizontal_min=fov_min[0], horizontal_max=fov_max[0], elevation_min=fov_min[1],
-                   elevation_max=fov_max[1], unit=unit)
+        return cls(
+            horizontal_min=fov_min[0],
+            horizontal_max=fov_max[0],
+            elevation_min=fov_min[1],
+            elevation_max=fov_max[1],
+            unit=unit,
+        )
 
     def as_numpy(self, unit: [str | AngleUnit] = "rad") -> np.ndarray:
         """
@@ -224,10 +233,12 @@ class FoV:
             A dictionary of the FoV boundaries.
         """
         values = self.as_numpy(unit=unit)
-        return {"horizontal_min": cast(float, values[0]),
-                "elevation_min": cast(float, values[1]),
-                "horizontal_max": cast(float, values[2]),
-                "elevation_max": cast(float, values[3])}
+        return {
+            "horizontal_min": cast(float, values[0]),
+            "elevation_min": cast(float, values[1]),
+            "horizontal_max": cast(float, values[2]),
+            "elevation_max": cast(float, values[3]),
+        }
 
     def width(self, unit: [str | AngleUnit] = "rad") -> float:
         """
@@ -268,8 +279,8 @@ class FoV:
 
     def center(self, unit: [str | AngleUnit] = "rad") -> tuple[float, float]:
         values = self.as_dict(unit=unit)
-        elevation_center = (values["elevation_min"] + values["elevation_max"])/2
-        horizontal_center = (values["horizontal_min"] + values["horizontal_max"])/2
+        elevation_center = (values["elevation_min"] + values["elevation_max"]) / 2
+        horizontal_center = (values["horizontal_min"] + values["horizontal_max"]) / 2
         return horizontal_center, elevation_center
 
     def union(self, fov2: Self) -> Self:
@@ -286,10 +297,12 @@ class FoV:
         FoV
             The smallest FoV enclosing both.
         """
-        return FoV(horizontal_min=min(self.horizontal_min, fov2.horizontal_min),
-                   elevation_min=min(self.elevation_min, fov2.elevation_min),
-                   horizontal_max=max(self.horizontal_max, fov2.horizontal_max),
-                   elevation_max=max(self.elevation_max, fov2.elevation_max))
+        return FoV(
+            horizontal_min=min(self.horizontal_min, fov2.horizontal_min),
+            elevation_min=min(self.elevation_min, fov2.elevation_min),
+            horizontal_max=max(self.horizontal_max, fov2.horizontal_max),
+            elevation_max=max(self.elevation_max, fov2.elevation_max),
+        )
 
     def intersect(self, fov2: Self) -> Self:
         """
@@ -305,10 +318,12 @@ class FoV:
         FoV
             The largest FoV contained within both.
         """
-        return FoV(horizontal_min=max(self.horizontal_min, fov2.horizontal_min),
-                   elevation_min=max(self.elevation_min, fov2.elevation_min),
-                   horizontal_max=min(self.horizontal_max, fov2.horizontal_max),
-                   elevation_max=min(self.elevation_max, fov2.elevation_max))
+        return FoV(
+            horizontal_min=max(self.horizontal_min, fov2.horizontal_min),
+            elevation_min=max(self.elevation_min, fov2.elevation_min),
+            horizontal_max=min(self.horizontal_max, fov2.horizontal_max),
+            elevation_max=min(self.elevation_max, fov2.elevation_max),
+        )
 
     def ratio(self) -> float:
         """
@@ -323,22 +338,28 @@ class FoV:
 
     def __repr__(self):
         values = self.as_dict(unit=AngleUnit.GON)
-        return f"({values['horizontal_min']:0.4f}, {values['elevation_min']:0.4f}, " \
-               f"{values['horizontal_max']:0.4f}, {values['elevation_max']:0.4f})"
+        return (
+            f"({values['horizontal_min']:0.4f}, {values['elevation_min']:0.4f}, "
+            f"{values['horizontal_max']:0.4f}, {values['elevation_max']:0.4f})"
+        )
 
     def extend_to_ratio(self, ratio: float) -> Self:
         if self.ratio() - ratio > EPS:
             target_vertical_extent = self.extent()[0] / ratio
-            new_fov = FoV(horizontal_min=self.horizontal_min,
-                          elevation_min=self.elevation_min,
-                          horizontal_max=self.horizontal_max,
-                          elevation_max=self.elevation_min + target_vertical_extent)
+            new_fov = FoV(
+                horizontal_min=self.horizontal_min,
+                elevation_min=self.elevation_min,
+                horizontal_max=self.horizontal_max,
+                elevation_max=self.elevation_min + target_vertical_extent,
+            )
         elif ratio - self.ratio() > EPS:
             target_horizontal_extent = self.extent()[1] * ratio
-            new_fov = FoV(horizontal_min=self.horizontal_min,
-                          elevation_min=self.elevation_min,
-                          horizontal_max=self.horizontal_min + target_horizontal_extent,
-                          elevation_max=self.elevation_max)
+            new_fov = FoV(
+                horizontal_min=self.horizontal_min,
+                elevation_min=self.elevation_min,
+                horizontal_max=self.horizontal_min + target_horizontal_extent,
+                elevation_max=self.elevation_max,
+            )
         else:
             new_fov = self
 
@@ -362,32 +383,34 @@ class FoV:
         if shape[0] == shape[1] == 1:
             return [self]
 
-        horizontal_borders = np.linspace(start=self.horizontal_min,
-                                         stop=self.horizontal_max,
-                                         num=shape[0] + 1,
-                                         endpoint=True,
-                                         retstep=False)
-        elevation_borders = np.linspace(start=self.elevation_min,
-                                        stop=self.elevation_max,
-                                        num=shape[1] + 1,
-                                        endpoint=True,
-                                        retstep=False)
+        horizontal_borders = np.linspace(
+            start=self.horizontal_min, stop=self.horizontal_max, num=shape[0] + 1, endpoint=True, retstep=False
+        )
+        elevation_borders = np.linspace(
+            start=self.elevation_min, stop=self.elevation_max, num=shape[1] + 1, endpoint=True, retstep=False
+        )
 
-        fov_splits = [FoV(horizontal_min=hor_min,
-                          elevation_min=elev_min,
-                          horizontal_max=hor_max,
-                          elevation_max=elev_max)
-                      for hor_min, hor_max in zip(horizontal_borders[:-1], horizontal_borders[1:])
-                      for elev_min, elev_max in zip(elevation_borders[:-1], elevation_borders[1:])]
+        fov_splits = [
+            FoV(horizontal_min=hor_min, elevation_min=elev_min, horizontal_max=hor_max, elevation_max=elev_max)
+            for hor_min, hor_max in zip(horizontal_borders[:-1], horizontal_borders[1:])
+            for elev_min, elev_max in zip(elevation_borders[:-1], elevation_borders[1:])
+        ]
 
         return fov_splits
 
-    def equal_tiles(self, target_extent: tuple[tuple[float, float], str], ) -> list[Self]:
+    def equal_tiles(
+        self,
+        target_extent: tuple[tuple[float, float], str],
+    ) -> list[Self]:
         assert target_extent[0][0] > 0 and target_extent[0][1]
         # assert any(target < own for target, own in zip(target_extent[0], self.extent(target_extent[1])))
 
-        return self.split(shape=(np.ceil(self.extent(target_extent[1])[0] / target_extent[0][0]).astype(int),
-                                 np.ceil(self.extent(target_extent[1])[1] / target_extent[0][1]).astype(int)))
+        return self.split(
+            shape=(
+                np.ceil(self.extent(target_extent[1])[0] / target_extent[0][0]).astype(int),
+                np.ceil(self.extent(target_extent[1])[1] / target_extent[0][1]).astype(int),
+            )
+        )
 
     # def tile(self, target_extent: tuple[tuple[float, float], str], ) -> list[list[Self], ...]:
     #     #TODO: Update to take a FoV
@@ -418,11 +441,13 @@ class FoV:
     #
     def tile(self, target_extent: Self) -> list[list[Self]]:
 
-        horizontal_steps = np.append(np.arange(self.horizontal_min, self.horizontal_max, target_extent.width()),
-                                     self.horizontal_max)
+        horizontal_steps = np.append(
+            np.arange(self.horizontal_min, self.horizontal_max, target_extent.width()), self.horizontal_max
+        )
 
-        elevation_steps = np.append(np.arange(self.elevation_min, self.elevation_max, target_extent.height()),
-                                    self.elevation_max)
+        elevation_steps = np.append(
+            np.arange(self.elevation_min, self.elevation_max, target_extent.height()), self.elevation_max
+        )
 
         horizontal_bins = list(zip(horizontal_steps[:-1], horizontal_steps[1:]))
         elevation_bins = list(zip(elevation_steps[:-1], elevation_steps[1:]))
@@ -435,8 +460,12 @@ class FoV:
             for elev_bin in elevation_bins:
                 if elev_bin[-1] - elev_bin[0] <= 0:
                     continue
-                new_fov = FoV(horizontal_min=hor_bin[0], elevation_min=elev_bin[0], horizontal_max=hor_bin[1],
-                              elevation_max=elev_bin[1])
+                new_fov = FoV(
+                    horizontal_min=hor_bin[0],
+                    elevation_min=elev_bin[0],
+                    horizontal_max=hor_bin[1],
+                    elevation_max=elev_bin[1],
+                )
                 if all(e > EPS for e in new_fov.extent()):
                     horizontal_tiles.append(new_fov)
             if horizontal_tiles:
@@ -447,7 +476,6 @@ class FoV:
         # Keep for legacy
         return tuple(self.split(shape=(2, 2)))
 
-
     @classmethod
     def merge(cls, fovs: Iterable[Self]) -> Self:
         min_horizontal_min = min(fovs, key=lambda fov: fov.horizontal_min).horizontal_min
@@ -455,9 +483,12 @@ class FoV:
         max_horizontal_max = max(fovs, key=lambda fov: fov.horizontal_max).horizontal_max
         max_elevation_max = max(fovs, key=lambda fov: fov.elevation_max).elevation_max
 
-        return cls(horizontal_min=min_horizontal_min, elevation_min=min_elevation_min,
-                   horizontal_max=max_horizontal_max, elevation_max=max_elevation_max)
-
+        return cls(
+            horizontal_min=min_horizontal_min,
+            elevation_min=min_elevation_min,
+            horizontal_max=max_horizontal_max,
+            elevation_max=max_elevation_max,
+        )
 
 
 @dataclass(init=True, frozen=True)
@@ -474,6 +505,7 @@ class FoVTree:
     children : Optional[dict[str, FoVTree]]
         A dictionary of child nodes, if any.
     """
+
     identifier: str
     node: FoV
     children: Optional[dict[str, Self]] = field(default_factory=dict)
@@ -481,8 +513,9 @@ class FoVTree:
     @staticmethod
     def add_identifier(fovs: list[FoV], shape: tuple[int, int]):
         identifier_length = np.ceil(math.log(shape[0] * shape[1], 16)).astype(int)
-        return tuple([(((identifier_length - len(hex_str := f"{i:x}")) * "0" + hex_str), fov)
-                      for i, fov in enumerate(fovs)])
+        return tuple(
+            [(((identifier_length - len(hex_str := f"{i:x}")) * "0" + hex_str), fov) for i, fov in enumerate(fovs)]
+        )
 
     def depth(self) -> int:
         if not self.children:
@@ -496,9 +529,6 @@ class FoVTree:
         children_lists = [c.to_list() for c in self.children.values()]
 
         return list(chain.from_iterable(children_lists))
-
-
-
 
     # @classmethod
     # def build_by_splitting(cls, fov: FoV, target_ratio: float, target_fov_extent: tuple[tuple[float, float], str],
@@ -573,23 +603,24 @@ class FoVTree:
                 return cls("root", tiles[0][0], None)
             return cls(identifier, tiles[0][0], None)
 
-        fov = FoV(horizontal_min=tiles[0][0].horizontal_min,
-                  elevation_min=tiles[0][0].elevation_min,
-                  horizontal_max=tiles[-1][-1].horizontal_max,
-                  elevation_max=tiles[-1][-1].elevation_max)
+        fov = FoV(
+            horizontal_min=tiles[0][0].horizontal_min,
+            elevation_min=tiles[0][0].elevation_min,
+            horizontal_max=tiles[-1][-1].horizontal_max,
+            elevation_max=tiles[-1][-1].elevation_max,
+        )
 
         if len(tiles) * len(tiles[0]) <= min_children:
             flat_tiles = [tile for row in tiles for tile in row]
-            fov_children = {str(i): cls(identifier+str(i), tile, {})
-                            for i, tile in enumerate(flat_tiles)}
-            return cls(identifier, fov, fov_children) #TODO: BUG! Rebuild identifier function to work 2D
+            fov_children = {str(i): cls(identifier + str(i), tile, {}) for i, tile in enumerate(flat_tiles)}
+            return cls(identifier, fov, fov_children)  # TODO: BUG! Rebuild identifier function to work 2D
 
-        q0 = tiles[:len(tiles) // 2]
-        q1 = tiles[len(tiles) // 2:]
-        q00 = [row[:len(row) // 2] for row in q0]
-        q01 = [row[len(row) // 2:] for row in q0]
-        q10 = [row[:len(row) // 2] for row in q1]
-        q11 = [row[len(row) // 2:] for row in q1]
+        q0 = tiles[: len(tiles) // 2]
+        q1 = tiles[len(tiles) // 2 :]
+        q00 = [row[: len(row) // 2] for row in q0]
+        q01 = [row[len(row) // 2 :] for row in q0]
+        q10 = [row[: len(row) // 2] for row in q1]
+        q11 = [row[len(row) // 2 :] for row in q1]
 
         fov_children = {
             "0": cls.build_from_tiles(q00, min_children, identifier=(identifier + "0")),
@@ -636,12 +667,15 @@ class FoVTree:
         return not self.children
 
     @staticmethod
-    def calculate_optimal_shape(fov: FoV, target_ratio: float,
-                                target_extent: tuple[tuple[float, float], str],
-                                max_denominator: float) -> tuple[int, int]:
+    def calculate_optimal_shape(
+        fov: FoV, target_ratio: float, target_extent: tuple[tuple[float, float], str], max_denominator: float
+    ) -> tuple[int, int]:
 
         shape = Fraction(fov.ratio() / target_ratio).limit_denominator(np.round(max_denominator).astype(int))
-        shape = (shape.numerator, shape.denominator,)
+        shape = (
+            shape.numerator,
+            shape.denominator,
+        )
         if shape[0] == shape[1] == 1:
             shape = (2, 2)
 

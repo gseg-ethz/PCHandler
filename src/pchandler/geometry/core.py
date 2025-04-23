@@ -3,25 +3,28 @@ Core module for pchandler.geometry.
 
 Defines the PointCloudData class and its essential methods.
 """
-import sys
-from dataclasses import dataclass, field, InitVar, KW_ONLY
-from functools import cached_property
+
 import gc
 import logging
-from typing import Optional, Dict, Iterable
+import sys
+from dataclasses import KW_ONLY, InitVar, dataclass, field
+from functools import cached_property
+from typing import Dict, Iterable, Optional
+
 if sys.version[0] == 3 and sys.version_info[1] >= 11:
     from typing import Self
 else:
     from typing_extensions import Self
 
 import numpy as np
-from numpy.typing import NDArray
 import open3d as o3d
+from numpy.typing import NDArray
 
-from .scalar_fields import ScalarFieldManager
 from ..fov import FoV
+from .scalar_fields import ScalarFieldManager
 
 logger = logging.getLogger(__name__.split(".")[0])
+
 
 @dataclass(frozen=True)
 class PointCloudData:
@@ -43,6 +46,7 @@ class PointCloudData:
     spherical_coordinates_origin : NDArray[np.float_]
         A (3,) array defining the origin for spherical coordinate calculations.
     """
+
     xyz: NDArray[np.float32]
     _: KW_ONLY
     scalar_fields: ScalarFieldManager = field(default_factory=ScalarFieldManager)
@@ -80,10 +84,10 @@ class PointCloudData:
         # Apply a global coordinate shift if needed.
         if self.global_coordinate_shift is None and self._needs_global_shift(self.xyz):
             shift = self._calculate_optimal_global_shift(self.xyz)
-            object.__setattr__(self, 'global_coordinate_shift', shift)
+            object.__setattr__(self, "global_coordinate_shift", shift)
         if self.global_coordinate_shift is not None and not _global_shift_already_applied:
             shifted_xyz = (self.xyz - self.global_coordinate_shift).astype(np.float32)
-            object.__setattr__(self, 'xyz', shifted_xyz)
+            object.__setattr__(self, "xyz", shifted_xyz)
         else:
             object.__setattr__(self, "xyz", self.xyz.astype(np.float32))
 
@@ -93,7 +97,6 @@ class PointCloudData:
             object.__setattr__(self, "spherical_coordinates_origin", new_origin)
 
         logger.info(f"PCD created with {self.xyz.shape[0]:_d} number of points")
-
 
     def _validate_internal_state(self):
         # Validate inputs.
@@ -107,15 +110,23 @@ class PointCloudData:
             raise TypeError(f"normals must be a numpy array or None. Got type {type(self.normals)}")
 
         if self.global_coordinate_shift is not None and not isinstance(self.global_coordinate_shift, np.ndarray):
-            raise TypeError(f"global_coordinate_shift must be a numpy array or None. "
-                            f"Got type {type(self.global_coordinate_shift)}")
+            raise TypeError(
+                f"global_coordinate_shift must be a numpy array or None. "
+                f"Got type {type(self.global_coordinate_shift)}"
+            )
 
-        if self.spherical_coordinates_origin is not None and not isinstance(self.spherical_coordinates_origin, np.ndarray):
-            raise TypeError(f"spherical_coordinates_origin must be a numpy array or None. "
-                            f"Got type {type(self.spherical_coordinates_origin)}")
+        if self.spherical_coordinates_origin is not None and not isinstance(
+            self.spherical_coordinates_origin, np.ndarray
+        ):
+            raise TypeError(
+                f"spherical_coordinates_origin must be a numpy array or None. "
+                f"Got type {type(self.spherical_coordinates_origin)}"
+            )
 
         if not isinstance(self.scalar_fields, ScalarFieldManager):
-            raise TypeError(f"scalar_fields must be a ScalarFieldManager or a dict. Got type {type(self.scalar_fields)}")
+            raise TypeError(
+                f"scalar_fields must be a ScalarFieldManager or a dict. Got type {type(self.scalar_fields)}"
+            )
 
         # Check dimensions.
         if self.xyz.ndim != 2 or self.xyz.shape[1] != 3:
@@ -131,12 +142,12 @@ class PointCloudData:
             raise ValueError(f"Scalar fields must have length equal to the number of points (N)")
 
         if self.spherical_coordinates_origin is not None and self.spherical_coordinates_origin.shape != (3,):
-            raise ValueError(f"spherical_coordinates_origin must be (3,). "
-                             f"Got shape {self.spherical_coordinates_origin.shape}")
+            raise ValueError(
+                f"spherical_coordinates_origin must be (3,). " f"Got shape {self.spherical_coordinates_origin.shape}"
+            )
 
         if self.global_coordinate_shift is not None and self.global_coordinate_shift.shape != (3,):
             raise ValueError(f"global_coordinate_shift must be (3,). Got shape {self.global_coordinate_shift.shape}")
-
 
     @property
     def nbPoints(self) -> int:
@@ -195,11 +206,13 @@ class PointCloudData:
         -------
             FoV: Field of View object based on spherical coordinates.
         """
-        return FoV(horizontal_min=self.spherical_coordinates[:, 2].min(),
-                   horizontal_max=self.spherical_coordinates[:, 2].max(),
-                   elevation_min=self.spherical_coordinates[:, 1].min(),
-                   elevation_max=self.spherical_coordinates[:, 1].max(),
-                   unit="rad")
+        return FoV(
+            horizontal_min=self.spherical_coordinates[:, 2].min(),
+            horizontal_max=self.spherical_coordinates[:, 2].max(),
+            elevation_min=self.spherical_coordinates[:, 1].min(),
+            elevation_max=self.spherical_coordinates[:, 1].max(),
+            unit="rad",
+        )
 
     def __repr__(self) -> str:
         nbPoints = self.nbPoints
@@ -216,7 +229,9 @@ class PointCloudData:
             indices = item
         return self.sample(indices)
 
-    def _convert_indexing_to_mask(self, selection: NDArray[np.bool_] | NDArray[np.int_] | slice | list[int]) -> NDArray[np.bool_]:
+    def _convert_indexing_to_mask(
+        self, selection: NDArray[np.bool_] | NDArray[np.int_] | slice | list[int]
+    ) -> NDArray[np.bool_]:
         """
         Converts selection types into a boolean mask of shape (self.nbPoints,).
 
@@ -249,7 +264,7 @@ class PointCloudData:
         return mask
 
     def set_color(self, color: NDArray[np.uint8] | NDArray[np.floating]) -> None:
-        if color.shape != (self.nbPoints,3):
+        if color.shape != (self.nbPoints, 3):
             raise ValueError(f"Color shape must be ({self.nbPoints},3), but got {color.shape}")
 
         if np.issubdtype(color.dtype, np.floating):
@@ -257,13 +272,13 @@ class PointCloudData:
                 raise ValueError(f"Color Values must be between {np.iinfo(np.uint8).min} and {np.iinfo(np.uint8).max}.")
             if np.max(color) <= 1.0:
                 color = (color * np.iinfo(np.uint8).max).astype(np.uint8)
-                logger.debug(f"Scaling color values from 0 to 1 to {np.iinfo(np.uint8).min} and "
-                             f"{np.iinfo(np.uint8).max}.")
+                logger.debug(
+                    f"Scaling color values from 0 to 1 to {np.iinfo(np.uint8).min} and " f"{np.iinfo(np.uint8).max}."
+                )
         object.__setattr__(self, "_color", color)
 
     def delete_color(self):
         object.__setattr__(self, "_color", None)
-
 
     def reduce(self, selection: NDArray[np.bool_] | NDArray[np.integer] | slice | list[int]) -> None:
         """
@@ -316,10 +331,15 @@ class PointCloudData:
         new_sf = self.scalar_fields[mask]
         new_gcs = self.global_coordinate_shift.copy() if self.global_coordinate_shift is not None else None
         new_origin = self.spherical_coordinates_origin.copy()
-        new_pcd = PointCloudData(new_xyz, color=new_color, normals=new_normals,
-                                 scalar_fields=new_sf, global_coordinate_shift=new_gcs,
-                                 spherical_coordinates_origin=new_origin,
-                                 _global_shift_already_applied=True)
+        new_pcd = PointCloudData(
+            new_xyz,
+            color=new_color,
+            normals=new_normals,
+            scalar_fields=new_sf,
+            global_coordinate_shift=new_gcs,
+            spherical_coordinates_origin=new_origin,
+            _global_shift_already_applied=True,
+        )
         if self._spherical_coordinates_calculated:
             object.__setattr__(new_pcd, "spherical_coordinates", self.spherical_coordinates[mask].copy())
             object.__setattr__(new_pcd, "_spherical_coordinates_calculated", True)
@@ -371,33 +391,37 @@ class PointCloudData:
         if self.global_coordinate_shift is None:
             xyz_homogeneous = np.hstack((xyz_sco, np.ones((self.nbPoints + 1, 1), dtype=self.xyz.dtype))).transpose()
         else:
-            xyz_homogeneous = np.hstack((xyz_sco + self.global_coordinate_shift,
-                                         np.ones((self.nbPoints + 1, 1),
-                                                 dtype=np.float64))).transpose()
+            xyz_homogeneous = np.hstack(
+                (xyz_sco + self.global_coordinate_shift, np.ones((self.nbPoints + 1, 1), dtype=np.float64))
+            ).transpose()
 
         transformed_xyz_homogeneous = transformation_matrix @ xyz_homogeneous
         w = transformed_xyz_homogeneous[-1]
-        transformed_xyz = np.where(w != 0, transformed_xyz_homogeneous[:-1] / w,
-                                   transformed_xyz_homogeneous[:-1]).transpose()
+        transformed_xyz = np.where(
+            w != 0, transformed_xyz_homogeneous[:-1] / w, transformed_xyz_homogeneous[:-1]
+        ).transpose()
 
         # Check if global coordinate shift has become unnecessary
         if self.global_coordinate_shift is not None and not self._needs_global_shift(transformed_xyz[:-1, :]):
             object.__setattr__(self, "global_coordinate_shift", None)
         # Check if old global shift still works, if so apply
         elif self.global_coordinate_shift is not None and not self._needs_global_shift(
-                transformed_xyz[:-1, :] - self.global_coordinate_shift):
+            transformed_xyz[:-1, :] - self.global_coordinate_shift
+        ):
             transformed_xyz = transformed_xyz - self.global_coordinate_shift
             # object.__setattr__(self, "xyz", transformed_xyz.astype(self.xyz.dtype, casting="same_kind"))
         # Old global shift doesn't work
         elif self.global_coordinate_shift is not None:
-            object.__setattr__(self, "global_coordinate_shift",
-                               self._calculate_optimal_global_shift(transformed_xyz[:-1, :]))
+            object.__setattr__(
+                self, "global_coordinate_shift", self._calculate_optimal_global_shift(transformed_xyz[:-1, :])
+            )
             transformed_xyz = transformed_xyz - self.global_coordinate_shift
             # object.__setattr__(self, "xyz", transformed_xyz.astype(self.xyz.dtype, casting="same_kind"))
 
         elif self._needs_global_shift(transformed_xyz[:-1, :]):
-            object.__setattr__(self, "global_coordinate_shift",
-                               self._calculate_optimal_global_shift(transformed_xyz[:-1, :]))
+            object.__setattr__(
+                self, "global_coordinate_shift", self._calculate_optimal_global_shift(transformed_xyz[:-1, :])
+            )
             transformed_xyz = transformed_xyz - self.global_coordinate_shift
 
         object.__setattr__(self, "xyz", transformed_xyz[:-1, :].astype(self.xyz.dtype, casting="same_kind"))
@@ -446,8 +470,7 @@ class PointCloudData:
         return pcd_o3d
 
     @classmethod
-    def from_o3d(cls, pcd_o3d: o3d.geometry.PointCloud,
-                 scan_center: Optional[NDArray[np.float_]] = None) -> Self:
+    def from_o3d(cls, pcd_o3d: o3d.geometry.PointCloud, scan_center: Optional[NDArray[np.float_]] = None) -> Self:
         """
         Creates a `PointCloudData` instance from an Open3D `PointCloud`.
 
@@ -466,10 +489,12 @@ class PointCloudData:
         return cls(np.asarray(pcd_o3d.points), spherical_coordinates_origin=scan_center)
 
     @classmethod
-    def from_spherical_coordinates(cls, spherical_coords: NDArray[np.floating],
-                                   scalar_fields: Optional[ScalarFieldManager | dict[str, NDArray]] = None,
-                                   spherical_coordinates_origin: Optional[
-                                       NDArray[np.float_]] = None) -> Self:
+    def from_spherical_coordinates(
+        cls,
+        spherical_coords: NDArray[np.floating],
+        scalar_fields: Optional[ScalarFieldManager | dict[str, NDArray]] = None,
+        spherical_coordinates_origin: Optional[NDArray[np.float_]] = None,
+    ) -> Self:
         """
         Creates a `PointCloudData` instance from spherical coordinates.
 
@@ -496,9 +521,13 @@ class PointCloudData:
         return cls(xyz, scalar_fields=scalar_fields, spherical_coordinates_origin=spherical_coordinates_origin)
 
     @classmethod
-    def from_range_image(cls, range_data: NDArray[np.floating], fov: FoV,
-                         scalar_fields: Optional[dict[str, NDArray[np.generic]] | ScalarFieldManager] = None,
-                         spherical_coordinates_origin: Optional[NDArray[np.float_]] = None) -> Self:
+    def from_range_image(
+        cls,
+        range_data: NDArray[np.floating],
+        fov: FoV,
+        scalar_fields: Optional[dict[str, NDArray[np.generic]] | ScalarFieldManager] = None,
+        spherical_coordinates_origin: Optional[NDArray[np.float_]] = None,
+    ) -> Self:
         """
         Creates a `PointCloudData` instance from a range image.
 
@@ -525,8 +554,12 @@ class PointCloudData:
                 sfm.create_field(sf_id, sf.flatten())
 
         resolution = range_data.shape
-        elevation_range = np.linspace(fov.elevation_min, fov.elevation_max, num=resolution[0], endpoint=True, dtype=np.float32)
-        horizontal_range = np.linspace(fov.horizontal_min, fov.horizontal_max, num=resolution[1], endpoint=True, dtype=np.float32)
+        elevation_range = np.linspace(
+            fov.elevation_min, fov.elevation_max, num=resolution[0], endpoint=True, dtype=np.float32
+        )
+        horizontal_range = np.linspace(
+            fov.horizontal_min, fov.horizontal_max, num=resolution[1], endpoint=True, dtype=np.float32
+        )
 
         elevation_mesh, horizontal_mesh = np.meshgrid(elevation_range, horizontal_range, indexing="ij")
 
@@ -540,7 +573,6 @@ class PointCloudData:
         sfm_reduced = sfm[~np.isnan(ranges)]
 
         return cls.from_spherical_coordinates(spherical_coordinates, sfm_reduced, spherical_coordinates_origin)
-
 
     @classmethod
     def merge_pcd(cls, pcds: Iterable[Self]) -> Self:
@@ -594,7 +626,16 @@ class PointCloudData:
         else:
             gcs = None
             xyz_64 = [x.astype(np.float64) for x in xyz]
-            gcs_None_removed = [np.zeros(3,) if g is None else g for g in global_coordinate_shift]
+            gcs_None_removed = [
+                (
+                    np.zeros(
+                        3,
+                    )
+                    if g is None
+                    else g
+                )
+                for g in global_coordinate_shift
+            ]
             xyz_np = np.vstack(tuple(map(lambda x: np.add(*x), zip(xyz_64, gcs_None_removed))))
             del xyz, xyz_64
             gc.collect()
@@ -618,16 +659,21 @@ class PointCloudData:
         else:
             sco = None
 
-        new_pcd = cls(xyz=xyz_np, color=color_np, normals=normals_np, scalar_fields=scalar_fields,
-                      global_coordinate_shift=gcs, _global_shift_already_applied=(gcs is not None),
-                      spherical_coordinates_origin=sco)
+        new_pcd = cls(
+            xyz=xyz_np,
+            color=color_np,
+            normals=normals_np,
+            scalar_fields=scalar_fields,
+            global_coordinate_shift=gcs,
+            _global_shift_already_applied=(gcs is not None),
+            spherical_coordinates_origin=sco,
+        )
 
         if scs is not None:
             object.__setattr__(new_pcd, "spherical_coordinates", scs)
             object.__setattr__(new_pcd, "_spherical_coordinates_calculated", True)
 
         return new_pcd
-
 
     @staticmethod
     def _needs_global_shift(xyz: NDArray[np.float_], decimal_magnitude: int = 4) -> bool:
@@ -650,7 +696,7 @@ class PointCloudData:
         ----
         Check if the span is too large to apply a shift --> Would consequently need a float64 representation!
         """
-        return np.any(np.abs(xyz) >= 10 ** decimal_magnitude)
+        return np.any(np.abs(xyz) >= 10**decimal_magnitude)
 
     @staticmethod
     def _calculate_optimal_global_shift(xyz: NDArray[np.float_], decimal_magnitude: int = 4) -> NDArray[np.float_]:

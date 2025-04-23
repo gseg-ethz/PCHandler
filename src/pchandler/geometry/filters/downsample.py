@@ -4,9 +4,9 @@ import warnings
 import numpy as np
 from numpy.typing import NDArray
 
-from .core import PointCloudFilter
 from ..core import PointCloudData
 from ..scalar_fields import ScalarFieldManager
+from .core import PointCloudFilter
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -32,7 +32,6 @@ class RandomDownsampleFilter(PointCloudFilter):
 class VoxelDownsample:
     _possible_weighting_method: list[str] = ["nearest", "constant", "linear"]
 
-
     def __init__(self, voxel_size: float, weigthing_method: str = "linear"):
         if weigthing_method not in self._possible_weighting_method:
             raise ValueError(f"Weighing method '{weigthing_method}' is not supported.")
@@ -42,8 +41,9 @@ class VoxelDownsample:
         self.weigthing_method = weigthing_method
 
     def sample(self, pcd: PointCloudData) -> PointCloudData:
-        unique, unique_inverse = np.unique(np.round(pcd.xyz / self.voxel_size).astype(np.int32), axis=0,
-                                           return_inverse=True)
+        unique, unique_inverse = np.unique(
+            np.round(pcd.xyz / self.voxel_size).astype(np.int32), axis=0, return_inverse=True
+        )
 
         # Calculate centroids for each voxel
         centroids = np.zeros((unique.shape[0], 3), dtype=np.float32)
@@ -98,7 +98,10 @@ class VoxelDownsample:
         #
         # return
         warnings.warn("Normals, and colors are not retained during `voxel_downsample`!")
-        return PointCloudData(centroids, scalar_fields=sfm,
-                              spherical_coordinates_origin=pcd.spherical_coordinates_origin,
-                              global_coordinate_shift=pcd.global_coordinate_shift,
-                              _global_shift_already_applied=True)
+        return PointCloudData(
+            centroids,
+            scalar_fields=sfm,
+            spherical_coordinates_origin=pcd.spherical_coordinates_origin,
+            global_coordinate_shift=pcd.global_coordinate_shift,
+            _global_shift_already_applied=True,
+        )

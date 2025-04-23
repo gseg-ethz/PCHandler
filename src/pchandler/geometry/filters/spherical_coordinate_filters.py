@@ -5,12 +5,11 @@ from numpy.typing import NDArray
 from shapely import contains_xy
 from shapely.geometry import Polygon
 
-from ..core import PointCloudData
 from ...fov import FoV
+from ..core import PointCloudData
 from .core import PointCloudFilter
 
 logger = logging.getLogger(__name__.split(".")[0])
-
 
 
 class FoVFilter(PointCloudFilter):
@@ -24,9 +23,10 @@ class FoVFilter(PointCloudFilter):
         hor_min = self.fov.horizontal_min
         hor_max = self.fov.horizontal_max
 
-
-        mask = np.logical_and(np.logical_and(spc[:, 1] >= el_min, spc[:, 1] <= el_max),
-                              np.logical_and(spc[:, 2] >= hor_min, spc[:, 2] <= hor_max))
+        mask = np.logical_and(
+            np.logical_and(spc[:, 1] >= el_min, spc[:, 1] <= el_max),
+            np.logical_and(spc[:, 2] >= hor_min, spc[:, 2] <= hor_max),
+        )
 
         return mask
 
@@ -40,6 +40,7 @@ class RangeFilter(PointCloudFilter):
         spc = pcd.spherical_coordinates
         mask = np.logical_and(spc[:, 0] >= self.low, spc[:, 0] <= self.high)
         return mask
+
 
 class SphericalPolygonFilter(PointCloudFilter):
     def __init__(self, polygon: Polygon):

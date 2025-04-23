@@ -1,5 +1,5 @@
-from abc import ABC, abstractmethod
 import logging
+from abc import ABC, abstractmethod
 from typing import Callable
 
 import numpy as np
@@ -79,6 +79,7 @@ class GenericFieldFilter(PointCloudFilter):
     A generic filter that uses a user-supplied function to generate a mask
     from a given field.
     """
+
     def __init__(self, field_label: str, filter_func: Callable):
         """
         Parameters:

@@ -2,8 +2,8 @@ import logging
 
 import alphashape
 import numpy as np
-from shapely.geometry import Polygon, MultiPolygon
 from shapely.affinity import scale, translate
+from shapely.geometry import MultiPolygon, Polygon
 
 from .core import PointCloudData
 
@@ -38,11 +38,11 @@ def get_outline_polygon(pcd: PointCloudData, plane: str, alpha_value: float = 10
         If the outline computation results in an unsupported geometry type.
     """
     match plane:
-        case 'xy':
+        case "xy":
             proj_pts = pcd.xyz[:, :2]
-        case 'xz':
+        case "xz":
             proj_pts = pcd.xyz[:, [0, 2]]
-        case 'yz':
+        case "yz":
             proj_pts = pcd.xyz[:, 1:]
         case _:
             raise ValueError
@@ -69,16 +69,14 @@ def get_outline_polygon(pcd: PointCloudData, plane: str, alpha_value: float = 10
 
     if pcd.global_coordinate_shift is not None:
         match plane:
-            case 'xy':
+            case "xy":
                 gs = pcd.global_coordinate_shift[:2]
-            case 'xz':
+            case "xz":
                 gs = pcd.global_coordinate_shift[[0, 2]]
-            case 'yz':
+            case "yz":
                 gs = pcd.global_coordinate_shift[1:]
             case _:
                 raise ValueError
         als = translate(als, *gs)
 
     return als
-
-

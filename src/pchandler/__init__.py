@@ -139,28 +139,15 @@ if not logging.getLogger().hasHandlers():
         "version": 1,
         "disable_existing_loggers": False,
         "formatters": {
-            "simple": {
-                "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-            },
+            "simple": {"format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"},
             "detailed": {
                 "format": "[%(levelname)s|%(module)s|L%(lineno)d] %(asctime)s: %(message)s",
-                "datefmt": "%Y-%m-%dT%H:%M:%S%z"
-            }
+                "datefmt": "%Y-%m-%dT%H:%M:%S%z",
+            },
         },
         "handlers": {
-            "stderr": {
-                "class": "logging.StreamHandler",
-                "formatter": "detailed",
-                "stream": "ext://sys.stderr"
-            }
+            "stderr": {"class": "logging.StreamHandler", "formatter": "detailed", "stream": "ext://sys.stderr"}
         },
-        "loggers": {
-            "root": {
-                "level": "WARNING",
-                "handlers": [
-                    "stderr"
-                ]
-            }
-        }
+        "loggers": {"root": {"level": "WARNING", "handlers": ["stderr"]}},
     }
     logging.config.dictConfig(config)

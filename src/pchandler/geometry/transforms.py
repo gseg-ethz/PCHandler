@@ -6,7 +6,9 @@ Provides helper functions for transforming point clouds and converting between c
 
 import numpy as np
 from numpy.typing import NDArray
+
 from .core import PointCloudData
+
 
 def transform_point_cloud(pcd: PointCloudData, transformation_matrix: np.ndarray) -> None:
     """
@@ -27,10 +29,12 @@ def translate(pcd: PointCloudData, translation: NDArray[np.floating]) -> PointCl
     transformation_matrix[:3, 3] = translation
     return pcd.transform(transformation_matrix)
 
+
 def scale(pcd: PointCloudData, scale: float) -> PointCloudData:
     scale_matrix = np.eye(4)
     scale_matrix[:3, 3] = scale
     return pcd.transform(scale_matrix)
+
 
 # Todo: Add rotation and more complex
 
