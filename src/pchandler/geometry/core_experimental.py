@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import copy
 from enum import StrEnum
 from abc import abstractmethod, ABC
-import copy
-from functools import cached_property
+from functools import wraps, cached_property
 from typing import Generic, TypeVar, Optional, Union, Any, Self, overload, TypeAlias, Type, Callable, Tuple
 
 import numpy as np
@@ -12,11 +12,11 @@ T = TypeVar("T")
 FoV = TypeVar("FoV")
 NumOrArray: TypeAlias  = np.ndarray|float|int|list|tuple
 
-from functools import wraps
 
 class CoordSystemEnum(StrEnum):
     Cartesian = 'cart'
     Spherical = 'spher'
+
 
 def check_in_range(value: NumOrArray, target_min: float, target_max: float):
     value: np.ndarray = np.asarray(value)
@@ -42,7 +42,6 @@ def check_spherical_coordinates(array: np.ndarray):
     check_hz_angles(array[:, 2])
 
 
-
 def bypass_immutable(method):
     @wraps(method)
     def wrapper(self: 'DataArray', *args, **kwargs):
@@ -58,13 +57,14 @@ def bypass_immutable(method):
 def return_copy(deep=True):
     def decorator(method):
         @wraps(method)
-        def wrapper(self: 'DataArray', *args, **kwargs):
+        def wrapper(self: DataArray, *args, **kwargs):
             result = method(self, *args, **kwargs)
             if not self._immutable:
                 return result
             return copy.deepcopy(result) if deep else copy.copy(result)
         return wrapper
     return decorator
+
 
 class ImmutableField(Generic[T]):
     def __init__(
@@ -87,6 +87,7 @@ class ImmutableField(Generic[T]):
 
         setattr(obj, self.name, value)
 
+
 class DataArray(np.lib.mixins.NDArrayOperatorsMixin):
     _num_rows: Optional[int] = None
     _num_cols: Optional[int] = None
@@ -97,7 +98,55 @@ class DataArray(np.lib.mixins.NDArrayOperatorsMixin):
             self.__dict__ = copy.deepcopy(self.__dict__)
         else:
             self._arr: np.ndarray = self.validate(np.asarray(array))
-            self._immutable: bool = immutable
+            self.set_immutability(immutable)
+
+    @return_copy(deep=True)
+    def __getitem__(self, index: Any) -> np.ndarray:
+        return self.arr[index]             # Returns a view of the array
+
+    def __setitem__(self, index, value: np.ndarray|float|int|bool):
+        if self.immutable:
+            raise AttributeError("Cannot modify coordinates; object is immutable.")
+        if isinstance(value, DataArray):
+            self.arr[index] = value[index]
+        else:
+            self.arr[index] = value
+
+    @property
+    def shape(self) -> Tuple[int, ...]: return self._arr.shape
+    @property
+    def ndim(self) -> int: return self._arr.ndim
+    @property
+    def size(self) -> int: return self._arr.size
+    @property
+    def base(self) -> np.ndarray|None: return self._arr.base
+
+    def __array__(self) -> np.ndarray: return self._arr
+
+    def __array_ufunc__(self, ufunc, method, *inputs, **kwargs) -> np.ndarray|tuple[np.ndarray,...]|tuple[DataArray,...]:
+        arrays = [x.arr if isinstance(x, DataArray) else x for x in inputs]
+        result = getattr(ufunc, method)(*arrays, **kwargs)
+
+        if isinstance(result, tuple):
+            return tuple(x if np.issubdtype(x.dtype, np.bool_) else DataArray(x) for x in result)
+        elif isinstance(result, np.ndarray):
+            return result if np.issubdtype(result.dtype, np.bool_) else DataArray(result)
+        else:
+            return result
+
+    @property
+    def immutable(self) -> bool: return self._immutable
+
+    def set_immutability(self, value: bool) -> None:
+        self._arr.setflags(write=not value)   # Blocks assignment to array as well
+        self._immutable: bool = value         # Blocks attribute setting
+
+    def copy(self, index: Optional[Any] = None, deep=False) -> Self:
+        if deep or self.immutable:
+            func: Callable = copy.deepcopy
+        else:
+            func: Callable = copy.copy
+        return func(self if index is None else self[index])
 
     def validate(self, array: np.ndarray) -> np.ndarray:
         if not isinstance(array, np.ndarray):
@@ -125,59 +174,6 @@ class DataArray(np.lib.mixins.NDArrayOperatorsMixin):
                 raise ValueError( f"Expected array with {self._num_cols} columns. Received array shape {array.shape=}.")
 
         return array
-
-    @property
-    def shape(self) -> Tuple[int, ...]:
-        return self._arr.shape
-
-    @property
-    def ndim(self) -> int:
-        return self._arr.ndim
-
-    @property
-    def size(self) -> int:
-        return self._arr.size
-
-    @property
-    def base(self) -> np.ndarray|None:
-        return self._arr.base
-
-    @property
-    def immutable(self) -> bool: return self._immutable
-
-    def __array__(self) -> np.ndarray: return self._arr
-
-    def __array_ufunc__(self, ufunc, method, *inputs, **kwargs) -> (
-            np.ndarray|tuple[np.ndarray,...]|tuple[DataArray,...]):
-        arrays = [x.arr if isinstance(x, DataArray) else x for x in inputs]
-        result = getattr(ufunc, method)(*arrays, **kwargs)
-
-        if isinstance(result, tuple):
-            return tuple(x if np.issubdtype(x.dtype, np.bool_) else DataArray(x) for x in result)
-        elif isinstance(result, np.ndarray):
-            return result if np.issubdtype(result.dtype, np.bool_) else DataArray(result)
-        else:
-            return result
-
-    def set_immutability(self, value: bool) -> None:
-        self._arr.setflags(write=not value)   # Blocks assignment to array as well
-        self._immutable: bool = value         # Blocks attribute setting
-
-    @return_copy(deep=True)
-    def __getitem__(self, index: Any) -> np.ndarray:
-        return self.arr[index]             # Returns a view of the array
-
-    def __setitem__(self, index, value: np.ndarray|float|int|bool):
-        if self.immutable:
-            raise AttributeError("Cannot modify coordinates; object is immutable.")
-        if isinstance(value, DataArray):
-            self.arr[index] = value[index]
-        else:
-            self.arr[index] = value
-
-    def copy(self, index: Optional[Any] = None, deep=False) -> Self:
-        func: Callable = copy.deepcopy if deep else copy.copy
-        return func(self if index is None else self[index])
 
 
 class Coordinates3D(DataArray):
@@ -349,6 +345,7 @@ class AbstractPointCloud(Coordinates3D, ABC):
     def fov(self) -> FoV:
         raise NotImplementedError
 
+
 class BasePointCloud(AbstractPointCloud, CartesianCoordinates):
     arr: CartesianCoordinates = ImmutableField[CartesianCoordinates](
         "arr", type_=CartesianCoordinates)
@@ -357,6 +354,7 @@ class BasePointCloud(AbstractPointCloud, CartesianCoordinates):
 class SphericalPointCloud(AbstractPointCloud, SphericalCoordinates):
     arr: SphericalCoordinates = ImmutableField[SphericalCoordinates](
         "arr", type_=SphericalCoordinates)
+
 
 class TlsPointCloud(BasePointCloud):
     global_transform: np.ndarray = ImmutableField[np.ndarray]('global_transform', type_=np.ndarray)
@@ -376,7 +374,6 @@ class TlsPointCloud(BasePointCloud):
 
 class MultiScanPointCloud(BasePointCloud):
     pass
-
 
 
 @overload
@@ -425,27 +422,4 @@ def cartesian2spherical(coords: np.ndarray|CartesianCoordinates) -> np.ndarray|S
         raise TypeError("Input coordinates must either be CartesianCoordinates or np.ndarray")
 
     return SphericalCoordinates(_cart2spher_arr(coords.__array__()))
-
-
-
-
-
-if __name__ == "__main__":
-    arr = np.random.rand(10, 3)
-    arr2 = np.random.rand(10, 3)
-    temp = BasePointCloud(arr, intensity=np.random.rand(10), rgb=np.random.rand(10) )
-
-    temp2 = SphericalPointCloud(arr2, immutable=True, intensity=np.random.rand(10), rgb=np.random.rand(10))
-    # print(temp2.arr)
-    # print(temp.arr)
-    #
-    # print(temp * (np.ones(3)*2))
-    print(temp.__dict__)
-    spher = temp.to_spherical()
-    print(type(temp))
-    print(type(temp2))
-    print(type(temp2.arr))
-    print(type(spher))
-    b = temp[1:3]
-    print(len(temp[1:3]))
 
