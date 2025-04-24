@@ -50,12 +50,22 @@ class PointCloudData:
     xyz: NDArray[np.float32]
     _: KW_ONLY
     scalar_fields: ScalarFieldManager = field(default_factory=ScalarFieldManager)
+    # TODO 'JA COMMENT' Discussion point, should color and normals be base variables of a point cloud class or are they scalar fields?
+    #   For example, for ScanMatcher, the goal is solely on intensity data. Local normals may be calculated but in the scope colours are not used
+    #   Maybe the argument stands to store them in the scalar fields and create set an attribute
     color: Optional[NDArray[np.uint8]] = None
     normals: Optional[NDArray[np.float32]] = None
     global_coordinate_shift: Optional[NDArray[np.float_]] = None
+    # TODO 'JA COMMENT' discussion on spherical / cartesian coordinates support. Probably depends largely on the use
+    #   cases we do or need to support
     spherical_coordinates_origin: Optional[NDArray[np.float_]] = None
     _spherical_coordinates_calculated: bool = False
+    # TODO 'JA COMMENT' Similar comment about the global shift. Do we support multiple multiple scans? If we track the
+    #   scan origin coordinate, are the points in the class scan-centered coordinates (origin @ 0,0,0) or in global
+    #   coordinates? How do we then support transformations in a robust manner
     _global_shift_already_applied: InitVar[bool] = False
+    # TODO 'JA COMMENT' Another discussion and decision then leads to, do we need to track all the transformations to
+    #   enable forward and backward transformations?
 
     def __post_init__(self, _global_shift_already_applied: bool) -> None:
         """
@@ -75,6 +85,7 @@ class PointCloudData:
 
         if self.scalar_fields is None or self.scalar_fields.shape[1] == 0:
             object.__setattr__(self, "scalar_fields", ScalarFieldManager(expected_length=self.nbPoints))
+
 
         self._validate_internal_state()
 
@@ -98,6 +109,9 @@ class PointCloudData:
 
         logger.info(f"PCD created with {self.xyz.shape[0]:_d} number of points")
 
+    # TODO 'JA COMMENT' My gut feeling (or personal preference when thinking of my BW_TargetDetection code) is to
+    #   break up the point cloud class through a series of subclasses. In turn we can then break up the validation steps
+    #   to each subclass where it is implemented
     def _validate_internal_state(self):
         # Validate inputs.
         if not isinstance(self.xyz, np.ndarray):
@@ -149,6 +163,8 @@ class PointCloudData:
         if self.global_coordinate_shift is not None and self.global_coordinate_shift.shape != (3,):
             raise ValueError(f"global_coordinate_shift must be (3,). Got shape {self.global_coordinate_shift.shape}")
 
+    # TODO 'JA COMMENT' Do we want to keep with python naming conventions? I like to also wrap __len__ to return the
+    #   same result
     @property
     def nbPoints(self) -> int:
         """
@@ -171,18 +187,23 @@ class PointCloudData:
         NDArray[np.float32]
             An (N x 3) array of spherical coordinates (range, elevation, azimuth).
         """
+        # TODO 'JA COMMENT' is there instances or use case for initialising an array with zero points?
+        # TODO 'JA COMMENT' this code I assume is never reached base on 'self.xyz.ndim != 2 or self.xyz.shape[1] != 3'
         if self.nbPoints == 0:
             object.__setattr__(self, "_spherical_coordinates_calculated", True)
             return np.empty_like(self.xyz, dtype=np.float32)
 
         xyz_shifted = self.xyz - self.spherical_coordinates_origin
 
+        # TODO 'JA COMMENT' my personal preference is to shift all data conversions to a separate module in individual
+        #   functions. That way this becomes method becomes concise
         sph = np.zeros_like(self.xyz, dtype=np.float32)
         xy_sq = xyz_shifted[:, 0] ** 2 + xyz_shifted[:, 1] ** 2
         sph[:, 0] = np.sqrt(xy_sq + xyz_shifted[:, 2] ** 2)  # range
         sph[:, 1] = np.arctan2(np.sqrt(xy_sq), xyz_shifted[:, 2])  # elevation (defined from z-axis downward)
         sph[:, 2] = -np.arctan2(xyz_shifted[:, 1], xyz_shifted[:, 0])  # azimuth
 
+        # TODO 'JA COMMENT' assuming this comment is redundant and just a clear convention for Hz and V angles is used
         # # Check for continuous representation using a randomly sampled subset of 100 points
         # if self._spherical_coordinates_represented_0_to_2pi is None:
         #     hz_sampled = sph[np.random.choice(self.nbPoints, size=100, replace=False), 2] if self.nbPoints > 100 else sph[:, 2]
@@ -196,9 +217,14 @@ class PointCloudData:
         # if self._spherical_coordinates_represented_0_to_2pi:
         #     sph[:, 2] = np.where(sph[:, 2] < 0, sph[:, 2] + 2 * np.pi, sph[:, 2])
 
+        # TODO 'JA COMMENT' if you're using cached_property, is tracking this with a flat of use?
+        #   It appears to be used when converting the data and is a crude way to navigate the frozen dataclass
+        # TODO 'JA C
         object.__setattr__(self, "_spherical_coordinates_calculated", True)
         return sph
 
+    # TODO 'JA COMMENT' Look into the implementation of FoV. Jon's Target detection depends on a similar class.
+    #   Adding a class method '.from_spherical_coordinates(array:np.ndarray[N,3])' will clean this up
     @property
     def fov(self) -> FoV:
         """
@@ -214,6 +240,9 @@ class PointCloudData:
             unit="rad",
         )
 
+    # TODO 'JA COMMENT' Another point for future discussion, handling of angular coordinates. My personal preference is
+    #   to always use radians for computation with conversion functions used when converting user inputs or outputting
+    #   results in more meaningful values. This way tighter validation can be on spherical coordinates being passed
     def __repr__(self) -> str:
         nbPoints = self.nbPoints
         scalar_field_keys = [self.scalar_fields.keys()]
@@ -296,10 +325,14 @@ class PointCloudData:
         """
 
         mask = self._convert_indexing_to_mask(selection)
-
+        # TODO 'JA COMMENT' Looking at how many times this object.__setattr__ pattern is used, my feeling is that the
+        #   benefits of a dataclass is being lost. My understanding is that the dataclass streamlines the __init__,
+        #   __repr__ and equality based methods. But if we have a heave __post_init__ and constantly calling __setattr__
+        #   I feel there's a cleaner approach. E.g. self implemented @property @_color.setter or a custom __setattr__
         object.__setattr__(self, "xyz", self.xyz[mask])
         object.__setattr__(self, "scalar_fields", self.scalar_fields[mask])
 
+        # TODO 'JA COMMENT'
         if self.color is not None:
             object.__setattr__(self, "color", self.color[mask])
         if self.normals is not None:
@@ -324,6 +357,9 @@ class PointCloudData:
         """
         mask = self._convert_indexing_to_mask(selection)
 
+        # TODO 'JA COMMENT' clean up function by defining variables in calling function?
+        #   Creating a to_dict function may be useful for clean unpacking with **{} and dict union functions
+        #   e.g. PointCloudData(**(self.to_dict(), **{'color': None}))
         new_xyz = self.xyz[mask].copy()
         new_color = self.color[mask].copy() if self.color is not None else None
         new_normals = self.normals[mask].copy() if self.normals is not None else None
@@ -387,6 +423,7 @@ class PointCloudData:
         """
         assert transformation_matrix.shape == (4, 4)
 
+        #
         xyz_sco = np.vstack((self.xyz, self.spherical_coordinates_origin[np.newaxis, :]))
         if self.global_coordinate_shift is None:
             xyz_homogeneous = np.hstack((xyz_sco, np.ones((self.nbPoints + 1, 1), dtype=self.xyz.dtype))).transpose()

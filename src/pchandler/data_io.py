@@ -329,7 +329,7 @@ def save_ply(
         if convert_scalar_fields_to_original_dtype_and_bounds and pcd.scalar_fields[sf].original_dtype is not None:
             dtype_list.append((sf_label, pcd.scalar_fields[sf].original_dtype.str))
         else:
-            dtype_list.append((sf_label, pcd.scalar_fields[sf].data.dtype.str))
+            dtype_list.append((sf_label, pcd.scalar_fields[sf].arr.dtype.str))
 
     pcd_np_st = np.empty((nb_points,), dtype=dtype_list)
 
@@ -358,7 +358,7 @@ def save_ply(
         if convert_scalar_fields_to_original_dtype_and_bounds:
             pcd_np_st[sf_label] = pcd.scalar_fields[sf].create_rollback()
         else:
-            pcd_np_st[sf_label] = pcd.scalar_fields[sf].data
+            pcd_np_st[sf_label] = pcd.scalar_fields[sf].arr
 
     # TODO: Rename program in comment
     el = PlyElement.describe(
@@ -530,7 +530,7 @@ def save_csv(
     )
 
     for sf in common_scalar_fields:
-        dtype_list.append((sf, pcd.scalar_fields[sf].data.dtype.str))
+        dtype_list.append((sf, pcd.scalar_fields[sf].arr.dtype.str))
 
     # Create a structured array with the defined dtype
     data = np.empty(nb_points, dtype=dtype_list)
@@ -556,7 +556,7 @@ def save_csv(
         data["nz"] = pcd.normals[:, 2]
 
     for sf in common_scalar_fields:
-        data[sf] = pcd.scalar_fields[sf].data
+        data[sf] = pcd.scalar_fields[sf].arr
 
     # Convert structured array to a plain 2D array
     plain_data = np.stack([data[field] for field in data.dtype.names], axis=-1)

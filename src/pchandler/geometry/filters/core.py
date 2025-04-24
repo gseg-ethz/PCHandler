@@ -10,6 +10,9 @@ from ..core import PointCloudData
 logger = logging.getLogger(__name__.split(".")[0])
 
 
+# TODO Should the filter provide the option for points "inside" and "outside"?
+#   Are we dealing with cases where we need to analyse the outliers?
+#   My opinion would be that we should have it as an OPTIONAL in cases of debugging and help with error analysis
 class PointCloudFilter(ABC):
     """
     Abstract base class for filters on a PointCloudData.
@@ -98,7 +101,7 @@ class GenericFieldFilter(PointCloudFilter):
             _ = pcd.spherical_coordinates  # Ensure it's computed.
             data = pcd.spherical_coordinates
         elif self.field in pcd.scalar_fields:
-            data = pcd.scalar_fields[self.field].data
+            data = pcd.scalar_fields[self.field].arr
         elif hasattr(pcd, self.field):
             data = getattr(pcd, self.field)
         else:

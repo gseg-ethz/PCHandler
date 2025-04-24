@@ -17,7 +17,7 @@ class ScalarFieldFilter(PointCloudFilter):
 
     def mask(self, pcd: PointCloudData) -> NDArray[np.bool_]:
         assert self.field_label in pcd.scalar_fields.keys(), f"Field {self.field_label} is not defined."
-        scalar_field_data = pcd.scalar_fields[self.field_label].data
+        scalar_field_data = pcd.scalar_fields[self.field_label].arr
 
         return np.logical_and(scalar_field_data >= self.lower_bound, scalar_field_data <= self.upper_bound)
 
@@ -34,6 +34,6 @@ class ScalarFieldPercentileFilter(PointCloudFilter):
         lower_bound, upper_bound = np.percentile(
             pcd.scalar_fields[self.field_label], [self.lower_percentile, self.upper_percentile]
         )
-        scalar_field_data = pcd.scalar_fields[self.field_label].data
+        scalar_field_data = pcd.scalar_fields[self.field_label].arr
 
         return np.logical_and(scalar_field_data >= lower_bound, scalar_field_data <= upper_bound)
