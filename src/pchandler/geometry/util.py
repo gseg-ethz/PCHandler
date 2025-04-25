@@ -1,4 +1,6 @@
+import copy
 import logging
+from functools import wraps
 
 import alphashape
 import numpy as np
@@ -54,7 +56,7 @@ def get_outline_polygon(pcd: PointCloudData, plane: str, alpha_value: float = 10
     if nb_points > 0:
         proj_pts_norm = proj_pts_norm[np.random.permutation(proj_pts_norm.shape[0])[:nb_points], :]
 
-    # Add noise to reduce risk of underdefined dimensionality
+    # Add noise to reduce the risk of underdefined dimensionality
     noise = np.random.normal(scale=1e-6, size=proj_pts_norm.shape)
     proj_pts_norm = proj_pts_norm + noise
 
@@ -80,3 +82,29 @@ def get_outline_polygon(pcd: PointCloudData, plane: str, alpha_value: float = 10
         als = translate(als, *gs)
 
     return als
+
+
+def bypass_immutable(method):
+    @wraps(method)
+    def wrapper(self, *args, **kwargs):
+        original_state: bool = getattr(self, '_immutable', False)
+        self.set_immutability(not original_state)
+        try:
+            return method(self, *args, **kwargs)
+        finally:
+            self.set_immutability(original_state)
+    return wrapper
+
+
+def return_copy(deep=True):
+    def decorator(method):
+        @wraps(method)
+        def wrapper(self, *args, **kwargs):
+            result = method(self, *args, **kwargs)
+            if not self._immutable:
+                return result
+            return copy.deepcopy(result) if deep else copy.copy(result)
+        return wrapper
+    return decorator
+
+
