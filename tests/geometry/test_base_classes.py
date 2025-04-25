@@ -1,7 +1,8 @@
 import pytest
 import numpy as np
 
-from pchandler.geometry.base_classes import DataArray
+from pchandler.geometry.base_classes import (
+    DataArray, DataArray2D, DataArray3D, DataArrayNx2, DataArrayNx3, DataArrayMxNx3, DataArray4D, DataArray1D)
 
 
 class TestDataArray:
@@ -60,10 +61,18 @@ class TestDataArray:
         assert np.issubdtype(d.dtype, np.bool_)
         assert np.mean(b) == 4
 
+    def test_helper_properties(self):
+        a: DataArray = DataArray(np.ones((5,3)))
+        assert a.ndim == 2
+        assert a.shape == (5,3)
+        assert a.dtype == np.float64
+        assert a.size == np.prod(a.shape)
+        assert a.base is None
+
     @pytest.mark.parametrize("values, error_type", [
         (('str', {'23': 1}, {1, 3, 5}, False, None,
           np.empty(3, dtype=np.dtype('c16')), 1j * np.arange(5)), TypeError),
-        ((np.array([]), np.random.rand(3,3,3,3)), ValueError)])
+        ((np.array([]), np.empty(0, dtype=np.dtype('f4'))), ValueError)])
     def test_validation_func_invalid_values(self, values, error_type):
         for val in values:
             with pytest.raises(error_type):
@@ -137,3 +146,92 @@ class TestDataArray:
         d = test_data.copy(deep=False)
         assert id(d) != id(test_data)
         assert id(d.arr) != id(test_data.arr)
+
+
+class TestDataArray1D:
+    def test_initialisation(self):
+        a: DataArray1D = DataArray1D(np.ones((5,)))
+        assert a.ndim == 1
+
+        b: DataArray1D = DataArray1D(np.ones((5,1)))
+        assert b.ndim == 1
+
+
+        c: DataArray1D = DataArray1D(np.ones((1, 5)))
+        assert c.ndim == 1
+
+        assert np.array(42).ndim == 0
+        d: DataArray1D = DataArray1D(np.array(42))
+        assert d.ndim == 1
+
+        with pytest.raises( ValueError ):
+            DataArray1D(np.random.randn(5, 3, 3))
+
+        DataArray1D._num_rows = 3
+        e: DataArray1D = DataArray1D(np.array([1, 2, 3]))
+
+        with pytest.raises( ValueError ):
+            DataArray1D(np.array([1, 2]))
+
+
+class TestDataArray2D:
+    def test_initialisation(self):
+        a: DataArray2D = DataArray2D(np.ones((5,3)))
+        assert a.ndim == 2
+
+        with pytest.raises( ValueError ):
+            DataArray2D(np.random.randn(5,3, 3))
+
+class TestDataArrayNx2:
+    def test_initialisation(self):
+        a: DataArrayNx2 = DataArrayNx2(np.ones((5,2)))
+        assert a.ndim == 2
+        assert a.shape[1] == 2
+        assert len(a) == 5
+
+    def test_invalid_values(self):
+        for val in (np.random.rand(5, 3), np.random.rand(10, 2, 4), np.random.rand(5, 1)):
+            with pytest.raises(ValueError):
+                DataArrayNx2(val)
+
+class TestDataArrayNx3:
+    def test_initialisation(self):
+        a: DataArrayNx3 = DataArrayNx3(np.ones((5,3)))
+        assert a.ndim == 2
+        assert a.shape[1] == 3
+
+    def test_invalid_values(self):
+        for val in (np.random.rand(5, 2), np.random.rand(10, 2, 4), np.random.rand(5, 1)):
+            with pytest.raises(ValueError):
+                DataArrayNx3(val)
+
+class TestDataArray3D:
+    def test_initialisation(self):
+        a: DataArray3D = DataArray3D(np.ones((5,3,8)))
+        assert a.ndim == 3
+
+    def test_invalid_values(self):
+        for val in (np.random.rand(5, 2), np.random.rand(10, 2, 4, 4), np.random.rand(5)):
+            with pytest.raises(ValueError):
+                DataArray3D(val)
+
+class TestDataArrayMxNx3:
+    def test_initialisation(self):
+        a: DataArrayMxNx3 = DataArrayMxNx3(np.ones((5,3,3)))
+        assert a.ndim == 3
+
+    def test_invalid_values(self):
+        for val in (np.random.rand(5, 2, 2), np.random.rand(10, 2, 4), np.random.rand(5, 1, 1)):
+            with pytest.raises(ValueError):
+                DataArrayMxNx3(val)
+
+
+class TestDataArray4D:
+    def test_initialisation(self):
+        a: DataArray4D = DataArray4D(np.ones((5,3,8, 4)))
+        assert a.ndim == 4
+
+    def test_invalid_values(self):
+        for val in (np.random.rand(5, 2), np.random.rand(10, 2, 4), np.random.rand(5), np.random.rand(5,5,5,5,5)):
+            with pytest.raises(ValueError):
+                DataArray4D(val)

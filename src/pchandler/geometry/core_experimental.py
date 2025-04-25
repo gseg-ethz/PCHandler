@@ -6,7 +6,7 @@ from typing import Optional, Any, Self
 import numpy as np
 
 from pchandler.geometry.base_classes import ImmutableField
-from pchandler.geometry.coordinates import CoordinateSet3D, CartesianCoordinates, SphericalCoordinates
+from pchandler.geometry.coordinates import CoordinateSet3D
 
 
 class PointCloud(CoordinateSet3D, ABC):

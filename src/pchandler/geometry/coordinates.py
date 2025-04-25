@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from enum import IntEnum
 from functools import cached_property
-from typing import Literal
+from typing import Literal, Any
 
 import numpy as np
 
+from pchandler.geometry.util import bypass_immutable
 from pchandler.geometry.base_classes import DataArrayNx3
 from pchandler.geometry.validation import check_spherical_coordinates, NumOrArray
 
@@ -14,35 +15,46 @@ class CoordSysEnum(IntEnum):
     CART = 0
     SPHER = 1
 
+def _spher2cart_arr(spherical: np.ndarray) -> np.ndarray:
+    xyz: np.ndarray = np.zeros_like(spherical)
+    xyz[:, 0], xyz[:, 1], xyz[:, 2] = _spher2cart_vec(spherical[:, 0], spherical[:, 1], spherical[:, 2])
+    return xyz
 
-def spherical2cartesian(coords: np.ndarray) -> np.ndarray:
-    def _spher2cart_arr(spherical: np.ndarray) -> np.ndarray:
-        xyz: np.ndarray = np.zeros_like(spherical)
-        xyz[:, 0], xyz[:, 1], xyz[:, 2] = _spher2cart_vec(spherical[:, 0], spherical[:, 1], spherical[:, 2])
-        return xyz
+def _spher2cart_vec(rho: NumOrArray, theta: NumOrArray, phi: NumOrArray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    x: NumOrArray = rho * np.sin(theta) * np.cos(phi)
+    y: NumOrArray = rho * np.sin(theta) * np.sin(phi)
+    z: NumOrArray = rho * np.cos(theta)
+    return x, y, z
 
-    def _spher2cart_vec(rho: NumOrArray, theta: NumOrArray, phi: NumOrArray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        x: NumOrArray = rho * np.sin(theta) * np.cos(phi)
-        y: NumOrArray = rho * np.sin(theta) * np.sin(phi)
-        z: NumOrArray = rho * np.cos(theta)
-        return x, y, z
+def spherical2cartesian(*args: Any) -> np.ndarray|tuple[Any]:
+    if len(args) == 1:
+        return _spher2cart_arr(args[0])
+    elif len(args) == 3:
+        return _spher2cart_vec(*args)
+    else:
+        raise ValueError('Unknown number of arguments. Expected (1) a single array or (3) individual coordinates')
 
-    return _spher2cart_arr(coords)
+def _cart2spher_arr(xyz: np.ndarray) -> np.ndarray:
+    spherical: np.ndarray = np.zeros_like(xyz)
+    spherical[:, 0], spherical[:, 1], spherical[:, 2] = _cart2spher_vec(xyz[:, 0], xyz[:, 1], xyz[:, 2])
+    return spherical
 
-def cartesian2spherical(coords: np.ndarray) -> np.ndarray:
-    def _cart2spher_arr(xyz: np.ndarray) -> np.ndarray:
-        spherical: np.ndarray = np.zeros_like(xyz)
-        spherical[:, 0], spherical[:, 1], spherical[:, 2] = _cart2spher_vec(x=xyz[:, 0], y=xyz[:, 1], z=xyz[:, 2])
-        return spherical
+def _cart2spher_vec(x: NumOrArray, y: NumOrArray, z: NumOrArray) -> tuple[NumOrArray, NumOrArray, NumOrArray]:
+    xy_2: NumOrArray = x ** 2 + y ** 2
+    rho: NumOrArray = np.sqrt(xy_2 + z ** 2)            # [  0, inf] slope distance
+    theta: NumOrArray = np.arctan2(np.sqrt(xy_2), z)    # [  0, +pi] zenith angle
+    phi: NumOrArray = np.arctan2(y, x)                  # [-pi, +pi] horizonal angle
+    return rho, theta, phi
 
-    def _cart2spher_vec(x: NumOrArray, y: NumOrArray, z: NumOrArray) -> tuple[NumOrArray, NumOrArray, NumOrArray]:
-        xy_2: NumOrArray = x ** 2 + y ** 2
-        rho: NumOrArray = np.sqrt(xy_2 + z ** 2)            # [  0, inf] slope distance
-        theta: NumOrArray = np.arctan2(np.sqrt(xy_2), z)    # [  0, +pi] zenith angle
-        phi: NumOrArray = np.arctan2(y, x)                  # [-pi, +pi] horizonal angle
-        return rho, theta, phi
+def cartesian2spherical(*coords: Any) -> np.ndarray|tuple[Any]:
+    if len(coords) == 1:
+        return _cart2spher_arr(coords[0])
 
-    return _cart2spher_arr(coords)
+    elif len(coords) == 3:
+        return _cart2spher_vec(*coords)
+
+    else:
+        raise ValueError('Unknown number of arguments. Expected (1) a single array or (3) individual coordinates')
 
 
 # TODO Implement a Storage and View Structure design
@@ -55,104 +67,202 @@ def cartesian2spherical(coords: np.ndarray) -> np.ndarray:
 #  - mutability in place will depend on if the overarching array is provided as mutable
 #  - invalidate cache on mutation
 class CoordinateSet3D(DataArrayNx3):
-    _coord_system: CoordSysEnum = CoordSysEnum.CART
+    coord_system: CoordSysEnum = CoordSysEnum.CART
 
-    def __init__(self, array,
-                 coord_system: Literal['cartesian']|Literal['spherical']|CoordSysEnum = CoordSysEnum.CART, **kwargs):
+    def __init__(self,
+                 array,
+                 coord_system: Literal['cartesian']|Literal['spherical']|CoordSysEnum = CoordSysEnum.CART,
+                 **kwargs):
 
         super().__init__(array, **kwargs)
         if coord_system not in CoordSysEnum:
             raise ValueError("coord_system must be from 'CoordSysEnum'")
 
-        self._coord_system = CoordSysEnum[coord_system] if isinstance(coord_system, str) else coord_system
+        self.coord_system = CoordSysEnum[coord_system] if isinstance(coord_system, str) else coord_system
 
     @property
     def num_points(self) -> int:
         return len(self)
 
     @property
-    def _cartesian_view(self):
-        return CartesianView(self)
+    def _prop_names(self) -> frozenset[str]:
+        return frozenset([])
 
-    @property
-    def _spherical_view(self):
-        return SphericalView(self)
+    def invalidate_cache(self):
+        for name in self._prop_names:
+            if name in self.__dict__:
+                del self.__dict__[name]
 
-    def clear_cache(self):
-        self._cartesian_view._invalidate_cache()
-        self._spherical_view._invalidate_cache()
+    def _convert_to_system(self, target_system: CoordSysEnum):
+        if self.coord_system != target_system:
 
-    def _convert_to_system(self, system: CoordSysEnum):
-        if self._coord_system != system:
+            self.invalidate_cache()
+            self.coord_system = target_system
 
-            self.clear_cache()
-            self._coord_system = system
-
-            if self._coord_system == CoordSysEnum.SPHER:
+            if self.coord_system == CoordSysEnum.CART:
                 self.arr = spherical2cartesian(self.arr)
             else:
                 self.arr = cartesian2spherical(self.arr)
-
-    def to_cartesian(self):
-        self._convert_to_system(CoordSysEnum.CART)
-
-    def to_spherical(self):
-        self._convert_to_system(CoordSysEnum.SPHER)
 
     def validate(self, array: np.ndarray) -> np.ndarray:
         if not np.issubdtype(array.dtype, np.floating):
             raise TypeError(f"Expected floating point array. Received {array.dtype}.")
 
-        if self._coord_system == CoordSysEnum.SPHER:
+        if self.coord_system == CoordSysEnum.SPHER:
             check_spherical_coordinates(array)
         return array
 
 
-class CartesianView:
-    _prop_names: tuple[str, ...] = ("x", "y", "z", "xyz")
-
-    def __init__(self, parent: CoordinateSet3D):
-        self.parent: CoordinateSet3D = parent
-        self.parent.xyz = self.xyz
-        self.parent.x = self.xyz[:, 0].view()
-        self.parent.y = self.xyz[:, 1].view()
-        self.parent.z = self.xyz[:, 2].view()
-
-    def _get_data(self):
-        if self.parent._coord_system == CoordSysEnum.SPHER:
-            return spherical2cartesian(self.parent.arr)
-        return self.parent.arr.view()
+class CartesianCoordinates(CoordinateSet3D):
+    @property
+    def _prop_names(self) -> frozenset[str]:
+        return super()._prop_names | frozenset({'x', 'y', 'z', 'xyz'})
 
     @cached_property
+    def _xyz(self) -> np.ndarray:
+        return spherical2cartesian(self.arr)
+
+    @property
     def xyz(self) -> np.ndarray:
-        return self._get_data()
+        return self._get_cartesian_data()
 
-    def _invalidate_cache(self):
-        for name in self._prop_names:
-            if name in self.__dict__:
-                del self.__dict__[name]
+    @xyz.setter
+    def xyz(self, xyz: np.ndarray) -> None:
+        if self.coord_system != CoordSysEnum.CART:
+            self._convert_to_system(CoordSysEnum.CART)
+        self.arr = xyz
+
+    @property
+    def x(self) -> NumOrArray:
+        return self.xyz[:, 0].view()
+
+    @x.setter
+    def x(self, x: NumOrArray) -> None:
+        if self.coord_system != CoordSysEnum.CART:
+            raise ValueError("Cannot set 'x' whilst coord system is SPHERICAL")
+        self.xyz[:, 0] = x
+
+    @property
+    def y(self) -> NumOrArray:
+        return self.xyz[:, 1].view()
+
+    @y.setter
+    def y(self, y: NumOrArray) -> None:
+        if self.coord_system != CoordSysEnum.CART:
+            raise ValueError("Cannot set 'y' whilst coord system is SPHERICAL")
+        self.xyz[:, 1] = y
+
+    @property
+    def z(self) -> NumOrArray:
+        return self.xyz[:, 2].view()
+
+    @z.setter
+    def z(self, z: NumOrArray) -> None:
+        if self.coord_system != CoordSysEnum.CART:
+            raise ValueError("Cannot set 'z' whilst coord system is SPHERICAL")
+        self.xyz[:, 2] = z
+
+    def _get_cartesian_data(self):
+        if self.coord_system == CoordSysEnum.SPHER:
+            return self._xyz
+        return self.arr.view()
+
+    @bypass_immutable
+    def to_spherical(self):
+        self._convert_to_system(CoordSysEnum.SPHER)
 
 
-class SphericalView:
-    _prop_names: tuple[str, ...] = ("rho", "theta", "phi", 'hz', 'v', 'r', 'spher')
+class SphereCoordinates(CoordinateSet3D):
+    @property
+    def _prop_names(self) -> frozenset[str]:
+        return super()._prop_names | frozenset(['rho', 'theta', 'phi', 'r', 'v', 'hz', 'spher'])
 
-    def __init__(self, parent: CoordinateSet3D):
-        self.parent: CoordinateSet3D = parent
-        self.parent.spher = self.spher
-        self.parent.r = self.rho = self.spher[:, 0].view()
-        self.parent.v = self.theta = self.spher[:, 1].view()
-        self.parent.hz = self.phi = self.spher[:, 2].view()
+    @property
+    def spher(self) -> np.ndarray:
+        return self._get_spherical_data()
 
-    def _get_data(self):
-        if self.parent._coord_system == CoordSysEnum.CART:
-            return cartesian2spherical(self.parent.arr)
-        return self.parent.arr.view()
+    @spher.setter
+    def spher(self, spher: np.ndarray) -> None:
+        if self.coord_system != CoordSysEnum.SPHER:
+            self._convert_to_system(CoordSysEnum.SPHER)
+        self.arr = spher
+
 
     @cached_property
-    def spher(self) -> np.ndarray:
-        return self._get_data()
+    def _spher(self) -> np.ndarray:
+        return cartesian2spherical(self.arr)
 
-    def _invalidate_cache(self):
-        for name in self._prop_names:
-            if name in self.__dict__:
-                del self.__dict__[name]
+    @property
+    def r(self):
+        return self.spher[:, 0].view()
+
+    @r.setter
+    def r(self, r: NumOrArray) -> None:
+        if self.coord_system != CoordSysEnum.SPHER:
+            raise ValueError("Cannot set 'r' whilst coord system is CARTESIAN")
+        self.spher[:, 0] = r
+
+    @property
+    def v(self):
+        return self.spher[:, 1].view()
+
+    @v.setter
+    def v(self, v: NumOrArray) -> None:
+        if self.coord_system != CoordSysEnum.SPHER:
+            raise ValueError("Cannot set 'v' whilst coord system is SPHERICAL")
+        self.spher[:, 1] = v
+
+    @property
+    def hz(self):
+        return self.spher[:, 2].view()
+
+    @hz.setter
+    def hz(self, hz: NumOrArray) -> None:
+        if self.coord_system != CoordSysEnum.SPHER:
+            raise ValueError("Cannot set 'hz' whilst coord system is SPHERICAL")
+        self.spher[:, 2] = hz
+
+    @property
+    def rho(self):
+        return self.r
+
+    @rho.setter
+    def rho(self, rho: NumOrArray) -> None:
+        if self.coord_system != CoordSysEnum.SPHER:
+            raise ValueError("Cannot set 'rho' whilst coord system is SPHERICAL")
+        self.spher[:, 0] = rho
+
+    @property
+    def theta(self):
+        return self.v
+
+    @theta.setter
+    def theta(self, theta: NumOrArray) -> None:
+        if self.coord_system != CoordSysEnum.SPHER:
+            raise ValueError("Cannot set 'theta' whilst coord system is SPHERICAL")
+        self.spher[:, 1] = theta
+
+    @property
+    def phi(self):
+        return self.hz
+
+    @phi.setter
+    def phi(self, phi: NumOrArray) -> None:
+        if self.coord_system != CoordSysEnum.SPHER:
+            raise ValueError("Cannot set 'phi' whilst coord system is SPHERICAL")
+        self.spher[:, 2] = phi
+
+    def _get_spherical_data(self):
+        if self.coord_system == CoordSysEnum.CART:
+            return self._spher
+        return self.arr.view()
+
+    @bypass_immutable
+    def to_cartesian(self):
+        self._convert_to_system(CoordSysEnum.CART)
+
+
+class GeneralCoordinates(CartesianCoordinates, SphereCoordinates):
+    @property
+    def _prop_names(self):
+        return super()._prop_names

@@ -40,7 +40,7 @@ class DataArray(np.lib.mixins.NDArrayOperatorsMixin):
             self.__dict__ = copy.deepcopy(self.__dict__)
 
         else:
-            self._arr: np.ndarray = self.validate(np.asarray(array))
+            self._arr: np.ndarray = self.validate(array)
             self.set_immutability(immutable)
 
     @return_copy(deep=True)
@@ -81,7 +81,6 @@ class DataArray(np.lib.mixins.NDArrayOperatorsMixin):
     def __array_interface__(self) -> dict:
         return self._arr.__array_interface__
 
-    # TODO should I add more typing and enforce it?
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs) -> np.ndarray|tuple[np.ndarray,...]|tuple[DataArray,...]:
         arrays = [x.arr if isinstance(x, DataArray) else x for x in inputs]
         result = getattr(ufunc, method)(*arrays, **kwargs)
@@ -120,7 +119,7 @@ class DataArray(np.lib.mixins.NDArrayOperatorsMixin):
         if array.size == 0:
             raise ValueError('Array is empty.')
 
-        if array.ndim is not None:
+        if self._array_ndims is not None:
             if array.ndim == 0:
                 array = array.reshape(1,)
             elif array.ndim != self._array_ndims:
@@ -128,17 +127,28 @@ class DataArray(np.lib.mixins.NDArrayOperatorsMixin):
 
         return array
 
-
-class DataArray2D(DataArray):
-    _array_ndims: int = 2
+class DataArray1D(DataArray):
+    _array_ndims: int = 1
     _num_rows: Optional[int] = None
-    _num_cols: Optional[int] = None
 
     def validate(self, array: np.ndarray) -> np.ndarray:
+        if self._array_ndims == 1:
+            if array.ndim == (self._array_ndims+1) and 1 in array.shape:
+                array = array.reshape(-1)
+
         array = super().validate(array)
 
         if array.shape[0] != self._num_rows and self._num_rows is not None:
             raise ValueError(f"Expected array with {self._num_rows} rows. Received array shape {array.shape=}.")
+
+        return array
+
+class DataArray2D(DataArray):
+    _array_ndims: int = 2
+    _num_cols: Optional[int] = None
+
+    def validate(self, array: np.ndarray) -> np.ndarray:
+        array = super().validate(array)
 
         if array.shape[1] != self._num_cols and self._num_cols is not None:
             raise ValueError(f"Expected array with {self._num_cols} columns. Received array shape {array.shape=}.")
@@ -172,3 +182,6 @@ class DataArray3D(DataArray2D):
 
 class DataArrayMxNx3(DataArray3D):
     _num_channels: int = 3
+
+class DataArray4D(DataArray3D):
+    _array_ndims = 4

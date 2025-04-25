@@ -88,7 +88,7 @@ def bypass_immutable(method):
     @wraps(method)
     def wrapper(self, *args, **kwargs):
         original_state: bool = getattr(self, '_immutable', False)
-        self.set_immutability(not original_state)
+        self.set_immutability(False)
         try:
             return method(self, *args, **kwargs)
         finally:
