@@ -43,6 +43,7 @@ class DataArray(np.lib.mixins.NDArrayOperatorsMixin):
             self._arr: np.ndarray = self.validate(array)
             self.set_immutability(immutable)
 
+    # TODO discuss and decide on a copy / deepcopy / view approach
     @return_copy(deep=True)
     def __getitem__(self, index: Any) -> np.ndarray:
         return self.arr[index]             # Returns a view of the array

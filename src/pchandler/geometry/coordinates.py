@@ -15,46 +15,30 @@ class CoordSysEnum(IntEnum):
     CART = 0
     SPHER = 1
 
-def _spher2cart_arr(spherical: np.ndarray) -> np.ndarray:
+def spherical2cartesian(spherical: np.ndarray) -> np.ndarray:
     xyz: np.ndarray = np.zeros_like(spherical)
-    xyz[:, 0], xyz[:, 1], xyz[:, 2] = _spher2cart_vec(spherical[:, 0], spherical[:, 1], spherical[:, 2])
+    xyz[:, 0], xyz[:, 1], xyz[:, 2] = spher2cart_vec(spherical[:, 0], spherical[:, 1], spherical[:, 2])
     return xyz
 
-def _spher2cart_vec(rho: NumOrArray, theta: NumOrArray, phi: NumOrArray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def spher2cart_vec(rho: NumOrArray, theta: NumOrArray, phi: NumOrArray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     x: NumOrArray = rho * np.sin(theta) * np.cos(phi)
     y: NumOrArray = rho * np.sin(theta) * np.sin(phi)
     z: NumOrArray = rho * np.cos(theta)
     return x, y, z
 
-def spherical2cartesian(*args: Any) -> np.ndarray|tuple[Any]:
-    if len(args) == 1:
-        return _spher2cart_arr(args[0])
-    elif len(args) == 3:
-        return _spher2cart_vec(*args)
-    else:
-        raise ValueError('Unknown number of arguments. Expected (1) a single array or (3) individual coordinates')
 
-def _cart2spher_arr(xyz: np.ndarray) -> np.ndarray:
+def cartesian2spherical(xyz: np.ndarray) -> np.ndarray:
     spherical: np.ndarray = np.zeros_like(xyz)
-    spherical[:, 0], spherical[:, 1], spherical[:, 2] = _cart2spher_vec(xyz[:, 0], xyz[:, 1], xyz[:, 2])
+    spherical[:, 0], spherical[:, 1], spherical[:, 2] = cart2spher_vec(xyz[:, 0], xyz[:, 1], xyz[:, 2])
     return spherical
 
-def _cart2spher_vec(x: NumOrArray, y: NumOrArray, z: NumOrArray) -> tuple[NumOrArray, NumOrArray, NumOrArray]:
+def cart2spher_vec(x: NumOrArray, y: NumOrArray, z: NumOrArray) -> tuple[NumOrArray, NumOrArray, NumOrArray]:
     xy_2: NumOrArray = x ** 2 + y ** 2
     rho: NumOrArray = np.sqrt(xy_2 + z ** 2)            # [  0, inf] slope distance
     theta: NumOrArray = np.arctan2(np.sqrt(xy_2), z)    # [  0, +pi] zenith angle
     phi: NumOrArray = np.arctan2(y, x)                  # [-pi, +pi] horizonal angle
     return rho, theta, phi
 
-def cartesian2spherical(*coords: Any) -> np.ndarray|tuple[Any]:
-    if len(coords) == 1:
-        return _cart2spher_arr(coords[0])
-
-    elif len(coords) == 3:
-        return _cart2spher_vec(*coords)
-
-    else:
-        raise ValueError('Unknown number of arguments. Expected (1) a single array or (3) individual coordinates')
 
 
 # TODO Implement a Storage and View Structure design
@@ -116,7 +100,7 @@ class CoordinateSet3D(DataArrayNx3):
 class CartesianCoordinates(CoordinateSet3D):
     @property
     def _prop_names(self) -> frozenset[str]:
-        return super()._prop_names | frozenset({'x', 'y', 'z', 'xyz'})
+        return super()._prop_names | frozenset({'_xyz'})
 
     @cached_property
     def _xyz(self) -> np.ndarray:
@@ -175,7 +159,7 @@ class CartesianCoordinates(CoordinateSet3D):
 class SphereCoordinates(CoordinateSet3D):
     @property
     def _prop_names(self) -> frozenset[str]:
-        return super()._prop_names | frozenset(['rho', 'theta', 'phi', 'r', 'v', 'hz', 'spher'])
+        return super()._prop_names | frozenset(['_spher'])
 
     @property
     def spher(self) -> np.ndarray:
