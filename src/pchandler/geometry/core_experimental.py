@@ -5,7 +5,7 @@ from typing import Optional, Any, Self
 
 import numpy as np
 
-from pchandler.geometry.base_classes import ImmutableField
+from pchandler.base_classes import ImmutableField
 from pchandler.geometry.coordinates import CoordinateSet3D
 
 

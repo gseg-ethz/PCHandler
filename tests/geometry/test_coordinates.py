@@ -7,6 +7,7 @@ import numpy as np
 
 from pchandler.geometry.coordinates import CoordinateSet3D, GeneralCoordinates, cartesian2spherical, spherical2cartesian, cart2spher_vec, spher2cart_vec, CoordSysEnum
 from pchandler.geometry.validation import check_spherical_coordinates
+from tests.utils import numpy_in_dict_equality_check
 
 
 @dataclass(frozen=True)
@@ -94,7 +95,8 @@ class TestGeneralisedCoordinates:
         dict_cart_before = copy.deepcopy(coords.__dict__)
 
         assert np.all(coords == coords.xyz)
-        assert dict_cart_before == coords.__dict__  # if xyz coords, cached_property should not be initialised
+        # if xyz coords, cached_property should not be initialised
+        assert numpy_in_dict_equality_check(dict_cart_before, coords.__dict__) == True
 
         assert np.all(a == coords.spher)
         assert np.all(b == coords.spher)
@@ -107,17 +109,21 @@ class TestGeneralisedCoordinates:
 
         assert np.any(coords.arr != a)
 
-        assert dict_cart_before != coords.__dict__  # dict should've changed now
+        assert numpy_in_dict_equality_check(dict_cart_before, coords.__dict__) == False
+
         assert "_spher" in coords.__dict__
         coords.to_spherical()
         assert np.all(b == coords.spher)
         assert np.all(b == coords.arr)
         dict_spher_before = copy.deepcopy(coords.__dict__)
-        assert dict_spher_before == coords.__dict__
+
+        assert numpy_in_dict_equality_check(dict_cart_before, coords.__dict__) == True
+
         assert np.any(coords.arr != a)
         assert np.all(a == coords.xyz)
 
-        assert dict_spher_before != coords.__dict__
+
+        assert numpy_in_dict_equality_check(dict_cart_before, coords.__dict__) == False
 
         assert "_xyz" in coords.__dict__
         coords.invalidate_cache()

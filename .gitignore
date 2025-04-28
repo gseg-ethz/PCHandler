@@ -1,6 +1,3 @@
-# Actions
-src/**/_version.py
-
 # BAK files
 **/*.bak
 
@@ -194,3 +191,5 @@ fabric.properties
 
 # idea folder, uncomment if you don't need it
 # .idea
+
+.old/

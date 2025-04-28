@@ -2,18 +2,22 @@ from __future__ import annotations
 
 from enum import IntEnum
 from functools import cached_property
-from typing import Literal, Any
+from typing import Literal
 
 import numpy as np
 
 from pchandler.geometry.util import bypass_immutable
-from pchandler.geometry.base_classes import DataArrayNx3
+from pchandler.base_classes import DataArrayNx3
 from pchandler.geometry.validation import check_spherical_coordinates, NumOrArray
 
 
 class CoordSysEnum(IntEnum):
     CART = 0
     SPHER = 1
+
+CoordSystemNamesT = Literal['cartesian']|Literal['spherical']|CoordSysEnum
+
+
 
 def spherical2cartesian(spherical: np.ndarray) -> np.ndarray:
     xyz: np.ndarray = np.zeros_like(spherical)
@@ -53,10 +57,7 @@ def cart2spher_vec(x: NumOrArray, y: NumOrArray, z: NumOrArray) -> tuple[NumOrAr
 class CoordinateSet3D(DataArrayNx3):
     coord_system: CoordSysEnum = CoordSysEnum.CART
 
-    def __init__(self,
-                 array,
-                 coord_system: Literal['cartesian']|Literal['spherical']|CoordSysEnum = CoordSysEnum.CART,
-                 **kwargs):
+    def __init__(self, array, coord_system: CoordSystemNamesT = CoordSysEnum.CART, **kwargs):
 
         super().__init__(array, **kwargs)
         if coord_system not in CoordSysEnum:
@@ -89,6 +90,8 @@ class CoordinateSet3D(DataArrayNx3):
                 self.arr = cartesian2spherical(self.arr)
 
     def validate(self, array: np.ndarray) -> np.ndarray:
+        array = super().validate(array)
+
         if not np.issubdtype(array.dtype, np.floating):
             raise TypeError(f"Expected floating point array. Received {array.dtype}.")
 

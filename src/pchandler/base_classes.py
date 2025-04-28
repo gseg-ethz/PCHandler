@@ -5,7 +5,7 @@ from typing import Generic, TypeVar, Optional, Any, Self, Callable
 
 import numpy as np
 
-from pchandler.geometry.util import return_copy
+from pchandler.geometry.util import return_copy, enforce_immutability
 
 T = TypeVar("T")
 FoV = TypeVar("FoV")
@@ -26,6 +26,7 @@ class ImmutableField(Generic[T]):
         if self.type_ is not None and not isinstance(value, self.type_):
             raise TypeError(f"Expected value of type {self.type_}, got {type(value)}.")
 
+        # TODO reimplement custom field validation methods
         setattr(obj, self.name, value)
 
 
@@ -43,16 +44,15 @@ class DataArray(np.lib.mixins.NDArrayOperatorsMixin):
             self._arr: np.ndarray = self.validate(array)
             self.set_immutability(immutable)
 
-    # TODO discuss and decide on a copy / deepcopy / view approach
+    # TODO fix the copy and view methodolgy.
+    #  E.g. buffer w/ read only. View muted / frozen access full object, copy everytime
     @return_copy(deep=True)
     def __getitem__(self, index: Any) -> np.ndarray:
         return self.arr[index]             # Returns a view of the array
 
     # TODO resolve an index type
-    def __setitem__(self, index, value: np.ndarray|float|int|bool):
-        if self.immutable:
-            raise AttributeError("Cannot modify coordinates; object is immutable.")
-
+    @enforce_immutability
+    def __setitem__(self, index, value: np.ndarray|float|int|bool) -> DataArray|np.ndarray|float|int|bool:
         self.arr[index] = value[index] if isinstance(value, DataArray) else value
 
     @property
@@ -82,7 +82,10 @@ class DataArray(np.lib.mixins.NDArrayOperatorsMixin):
     def __array_interface__(self) -> dict:
         return self._arr.__array_interface__
 
-    def __array_ufunc__(self, ufunc, method, *inputs, **kwargs) -> np.ndarray|tuple[np.ndarray,...]|tuple[DataArray,...]:
+
+    def __array_ufunc__(self, ufunc, method, *inputs, **kwargs) \
+            -> np.ndarray|tuple[np.ndarray,...]|tuple[DataArray,...]:
+
         arrays = [x.arr if isinstance(x, DataArray) else x for x in inputs]
         result = getattr(ufunc, method)(*arrays, **kwargs)
 

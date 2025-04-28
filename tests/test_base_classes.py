@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 
-from pchandler.geometry.base_classes import (
+from pchandler.base_classes import (
     DataArray, DataArray2D, DataArray3D, DataArrayNx2, DataArrayNx3, DataArrayMxNx3, DataArray4D, DataArray1D)
 
 
