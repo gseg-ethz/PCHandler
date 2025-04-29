@@ -2,33 +2,34 @@ from __future__ import annotations
 
 from enum import IntEnum
 from functools import cached_property
-from typing import Literal
+from typing import Literal, Any
+
+from enum import IntEnum
 
 import numpy as np
+import numpy.typing as npt
 
-from pchandler.geometry.util import bypass_immutable
+from pchandler.util import bypass_immutable
 from pchandler.base_classes import DataArrayNx3
-from pchandler.geometry.validation import check_spherical_coordinates, NumOrArray
+from pchandler.geometry.validation import check_spherical_coordinates
+from pchandler.types import NumOrArray
 
+
+def spher2cart_vec(rho: npt.ArrayLike, theta: npt.ArrayLike, phi: npt.ArrayLike) -> tuple[npt.ArrayLike, npt.ArrayLike, npt.ArrayLike]:
+    x: npt.ArrayLike = rho * np.sin(theta) * np.cos(phi)
+    y: npt.ArrayLike = rho * np.sin(theta) * np.sin(phi)
+    z: npt.ArrayLike = rho * np.cos(theta)
+    return x, y, z
 
 class CoordSysEnum(IntEnum):
     CART = 0
     SPHER = 1
 
-CoordSystemNamesT = Literal['cartesian']|Literal['spherical']|CoordSysEnum
 
-
-
-def spherical2cartesian(spherical: np.ndarray) -> np.ndarray:
-    xyz: np.ndarray = np.zeros_like(spherical)
+def spherical2cartesian(spherical: npt.NDArray) -> npt.NDArray:
+    xyz: npt.NDArray = np.zeros_like(spherical)
     xyz[:, 0], xyz[:, 1], xyz[:, 2] = spher2cart_vec(spherical[:, 0], spherical[:, 1], spherical[:, 2])
     return xyz
-
-def spher2cart_vec(rho: NumOrArray, theta: NumOrArray, phi: NumOrArray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    x: NumOrArray = rho * np.sin(theta) * np.cos(phi)
-    y: NumOrArray = rho * np.sin(theta) * np.sin(phi)
-    z: NumOrArray = rho * np.cos(theta)
-    return x, y, z
 
 
 def cartesian2spherical(xyz: np.ndarray) -> np.ndarray:
@@ -36,11 +37,11 @@ def cartesian2spherical(xyz: np.ndarray) -> np.ndarray:
     spherical[:, 0], spherical[:, 1], spherical[:, 2] = cart2spher_vec(xyz[:, 0], xyz[:, 1], xyz[:, 2])
     return spherical
 
-def cart2spher_vec(x: NumOrArray, y: NumOrArray, z: NumOrArray) -> tuple[NumOrArray, NumOrArray, NumOrArray]:
-    xy_2: NumOrArray = x ** 2 + y ** 2
-    rho: NumOrArray = np.sqrt(xy_2 + z ** 2)            # [  0, inf] slope distance
-    theta: NumOrArray = np.arctan2(np.sqrt(xy_2), z)    # [  0, +pi] zenith angle
-    phi: NumOrArray = np.arctan2(y, x)                  # [-pi, +pi] horizonal angle
+def cart2spher_vec(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    xy_2: np.ndarray = x ** 2 + y ** 2
+    rho: np.ndarray = np.sqrt(xy_2 + z ** 2)            # [  0, inf] slope distance
+    theta: np.ndarray = np.arctan2(np.sqrt(xy_2), z)    # [  0, +pi] zenith angle
+    phi: np.ndarray = np.arctan2(y, x)                  # [-pi, +pi] horizonal angle
     return rho, theta, phi
 
 
@@ -57,7 +58,10 @@ def cart2spher_vec(x: NumOrArray, y: NumOrArray, z: NumOrArray) -> tuple[NumOrAr
 class CoordinateSet3D(DataArrayNx3):
     coord_system: CoordSysEnum = CoordSysEnum.CART
 
-    def __init__(self, array, coord_system: CoordSystemNamesT = CoordSysEnum.CART, **kwargs):
+    def __init__(self,
+                 array,
+                 coord_system: Literal['cartesian']|Literal['spherical']|CoordSysEnum = CoordSysEnum.CART,
+                 **kwargs):
 
         super().__init__(array, **kwargs)
         if coord_system not in CoordSysEnum:
@@ -90,8 +94,6 @@ class CoordinateSet3D(DataArrayNx3):
                 self.arr = cartesian2spherical(self.arr)
 
     def validate(self, array: np.ndarray) -> np.ndarray:
-        array = super().validate(array)
-
         if not np.issubdtype(array.dtype, np.floating):
             raise TypeError(f"Expected floating point array. Received {array.dtype}.")
 
