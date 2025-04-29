@@ -35,11 +35,11 @@ class TestDataArray:
         with pytest.raises( AttributeError ):
             array2.arr = array1.arr
 
-        array2.set_immutability(False)
+        array2.set_mutability(False)
         array2.arr = array1.arr
         np.testing.assert_array_equal(array1, array2)
 
-        array2.set_immutability(True)
+        array2.set_mutability(True)
         array3 = DataArray(np.random.rand(5,3), immutable=True)
         with pytest.raises( AttributeError ):
             array2.arr = array3.arr
@@ -102,14 +102,14 @@ class TestDataArray:
         assert np.all(temp == test_data)
         assert np.all(temp2 == test_data) # change in test_data will be observed in the view of temp2
 
-        test_data.set_immutability(True)
+        test_data.set_mutability(True)
         # Test's creates a deep copy
         temp3: np.ndarray = test_data[:]  # should create a copy
         assert id(temp3) != id(test_data.arr)
         assert temp3.base is None
         assert np.all(temp3 == test_data)
 
-        test_data.set_immutability(False)
+        test_data.set_mutability(False)
 
         test_data[0, :] = np.ones(3)
         assert np.all(temp == test_data)
@@ -142,7 +142,7 @@ class TestDataArray:
         assert a[0, 0] != c[0, 0]
         assert np.all(a[1, :] == c[1, :])
 
-        test_data.set_immutability(True)    # copy should become deep copy to avoid views assigning values
+        test_data.set_mutability(True)    # copy should become deep copy to avoid views assigning values
         d = test_data.copy(deep=False)
         assert id(d) != id(test_data)
         assert id(d.arr) != id(test_data.arr)

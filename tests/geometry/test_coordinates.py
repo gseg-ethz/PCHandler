@@ -69,7 +69,7 @@ class TestGeneralisedCoordinates:
         a = np.random.randn(100,3)
         example_dataclass = Example(a.copy())
         example_coordinates = GeneralCoordinates(a.copy(), immutable=True)
-        print(f"{example_coordinates.immutable=}")
+        print(f"{example_coordinates.mutable=}")
 
         old_val = example_dataclass.xyz[0, 0]
         example_dataclass.xyz[0, 0] = 25

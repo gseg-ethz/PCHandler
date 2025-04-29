@@ -5,14 +5,14 @@ from typing import Optional, Any, Self
 
 import numpy as np
 
-from pchandler.base_classes import ImmutableField
+from pchandler.base_classes import CustomField
 from pchandler.geometry.coordinates import CoordinateSet3D
 
 
 class PointCloud(CoordinateSet3D, ABC):
-    arr: CoordinateSet3D = ImmutableField[CoordinateSet3D]("arr", type_=CoordinateSet3D)
-    scalar_fields: dict = ImmutableField[dict]("scalar_fields", type_=dict)
-    _optimized: bool = ImmutableField[bool]("_optimized", type_=bool)
+    arr: CoordinateSet3D = CustomField[CoordinateSet3D]("arr", type_=CoordinateSet3D)
+    scalar_fields: dict = CustomField[dict]("scalar_fields", type_=dict)
+    _optimized: bool = CustomField[bool]("_optimized", type_=bool)
 
     def __init__(self, array: np.ndarray|Self, *args, immutable:bool = False, optimize: bool = True, **kwargs):
         self.reduction_pt: Optional[np.ndarray] = kwargs.pop("reduction_pt", None)
@@ -24,18 +24,18 @@ class PointCloud(CoordinateSet3D, ABC):
         self._optimized = optimize
         super().__init__(array, *args, immutable=immutable, **kwargs)
 
-    def set_immutability(self, value: bool) -> None:
+    def set_mutability(self, value: bool) -> None:
         self.reduction_pt.setflags(write=not value)
-        super().set_immutability(value)
+        super().set_mutability(value)
 
     # TODO not working yet
     def __getitem__(self, index: Any) -> Self:
         array: np.ndarray = self.arr[index]
 
         for k, v in self.scalar_fields.items():
-            self.scalar_fields[k] = v[index].copy() if self.immutable else v[index]
+            self.scalar_fields[k] = v[index].copy() if self.mutable else v[index]
 
-        return type(self)(array, immutable=self.immutable, **self.scalar_fields)
+        return type(self)(array, immutable=self.mutable, **self.scalar_fields)
 
     def optimize(self, array: np.ndarray|Self) -> Self:
         self.reduction_pt: Optional[np.ndarray] = self._compute_reduction_point(array)
@@ -71,17 +71,17 @@ class PointCloud(CoordinateSet3D, ABC):
 
 
 class BasePointCloud(AbstractPointCloud, CartesianCoordinates):
-    arr: CartesianCoordinates = ImmutableField[CartesianCoordinates](
+    arr: CartesianCoordinates = CustomField[CartesianCoordinates](
         "arr", type_=CartesianCoordinates)
 
 
 class SphericalPointCloud(AbstractPointCloud, SphericalCoordinates):
-    arr: SphericalCoordinates = ImmutableField[SphericalCoordinates](
+    arr: SphericalCoordinates = CustomField[SphericalCoordinates](
         "arr", type_=SphericalCoordinates)
 
 
 class TlsPointCloud(BasePointCloud):
-    global_transform: np.ndarray = ImmutableField[np.ndarray]('global_transform', type_=np.ndarray)
+    global_transform: np.ndarray = CustomField[np.ndarray]('global_transform', type_=np.ndarray)
 
     @property
     def intensity(self) -> np.ndarray:

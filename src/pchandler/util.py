@@ -7,11 +7,11 @@ def bypass_immutable(method):
     @wraps(method)
     def wrapper(self, *args: Any, **kwargs: dict[str, Any]) -> Any:
         original_state: bool = getattr(self, "_immutable", False)
-        self.set_immutability(False)
+        self.set_mutability(False)
         try:
             return method(self, *args, **kwargs)
         finally:
-            self.set_immutability(original_state)
+            self.set_mutability(original_state)
 
     return wrapper
 
@@ -21,7 +21,7 @@ def return_copy(deep=True):
         @wraps(method)
         def wrapper(self, *args: Any, **kwargs: dict[str, Any]) -> Any:
             result: Any = method(self, *args, **kwargs)
-            if not self._immutable:
+            if not self._mutability:
                 return result
             return copy.deepcopy(result) if deep else copy.copy(result)
 

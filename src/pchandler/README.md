@@ -30,10 +30,13 @@ DataArray
     ├──RGBImage
     └──RGBImageStack
 ```
+```
+DataArray
+```
+
 
 ```
 PointCloud(FlexibleCoordinates)
 ├──scalar_fields
 └──metadata
-
 ```
