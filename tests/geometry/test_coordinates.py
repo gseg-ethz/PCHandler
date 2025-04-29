@@ -122,6 +122,7 @@ class TestGeneralisedCoordinates:
         assert np.any(coords.arr != a)
         assert np.all(a == coords.xyz)
 
+        assert dict_spher_before != coords.__dict__
 
         assert numpy_in_dict_equality_check(dict_cart_before, coords.__dict__) == False
 
