@@ -197,3 +197,4 @@ fabric.properties
 
 .venv/
 .github/
+.htmlReport/

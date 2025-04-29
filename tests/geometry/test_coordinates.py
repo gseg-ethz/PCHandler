@@ -7,7 +7,7 @@ import numpy as np
 
 from pchandler.geometry.coordinates import CoordinateSet3D, GeneralCoordinates, cartesian2spherical, spherical2cartesian, cart2spher_vec, spher2cart_vec, CoordSysEnum
 from pchandler.geometry.validation import check_spherical_coordinates
-from tests.utils import numpy_in_dict_equality_check
+from tests.utils import compare_ndarray_nested_dicts
 
 
 @dataclass(frozen=True)
@@ -53,9 +53,9 @@ class TestConversions:
         assert v == expected[1]
         assert hz == expected[2]
         x, y, z = spher2cart_vec(r, v, hz)
-        assert x == xyz[0]
-        assert y == xyz[1]
-        assert z == xyz[2]
+        assert np.isclose(x, xyz[0])
+        assert np.isclose(y, xyz[1])
+        assert np.isclose(z, xyz[2])
 
 
 class TestGeneralisedCoordinates:
@@ -83,48 +83,51 @@ class TestGeneralisedCoordinates:
             example_coordinates.xyz[0, 0] = 25
 
     def test_properties(self):
+        # TODO restructure this for readability and more "unit like"
         a = np.random.randn(100,3)
-        b = cartesian2spherical(a)
-        coords = GeneralCoordinates(a.copy())
+        b = cartesian2spherical(a.copy())       #spherical
+        coords = GeneralCoordinates(a.copy())   #cartesian
 
         assert coords.coord_system == CoordSysEnum.CART
         assert np.all(a == coords)
         assert np.all(a[:, 0] == coords.x)
         assert np.all(a[:, 1] == coords.y)
         assert np.all(a[:, 2] == coords.z)
-        dict_cart_before = copy.deepcopy(coords.__dict__)
+        cartesian_dict_before = copy.deepcopy(coords.__dict__)
 
         assert np.all(coords == coords.xyz)
         # if xyz coords, cached_property should not be initialised
-        assert numpy_in_dict_equality_check(dict_cart_before, coords.__dict__) == True
+        assert compare_ndarray_nested_dicts(cartesian_dict_before, coords.__dict__) == True
 
-        assert np.all(a == coords.spher)
-        assert np.all(b == coords.spher)
-        assert np.all(b[:, 0] == coords.r)
-        assert np.all(b[:, 1] == coords.v)
-        assert np.all(b[:, 2] == coords.hz)
-        assert np.all(b[:, 0] == coords.rho)
-        assert np.all(b[:, 1] == coords.theta)
-        assert np.all(b[:, 2] == coords.phi)
+        assert np.any(a != coords.spher)
+        assert np.all(np.isclose(b, coords.spher))
+        assert np.all(np.isclose(b[:, 0], coords.r))
+        assert np.all(np.isclose(b[:, 1], coords.v))
+        assert np.all(np.isclose(b[:, 2], coords.hz))
+        assert np.all(np.isclose(b[:, 0], coords.rho))
+        assert np.all(np.isclose(b[:, 1], coords.theta))
+        assert np.all(np.isclose(b[:, 2], coords.phi))
 
-        assert np.any(coords.arr != a)
+        # Although spherical coordinates are now cached, base array should be cartesian
+        assert coords.coord_system == CoordSysEnum.CART
+        assert np.all(coords.arr == a)
 
-        assert numpy_in_dict_equality_check(dict_cart_before, coords.__dict__) == False
+        assert compare_ndarray_nested_dicts(cartesian_dict_before, coords.__dict__) == False
 
         assert "_spher" in coords.__dict__
         coords.to_spherical()
-        assert np.all(b == coords.spher)
-        assert np.all(b == coords.arr)
-        dict_spher_before = copy.deepcopy(coords.__dict__)
+        assert np.all(np.isclose(b, coords.spher))
+        assert np.all(np.isclose(b, coords.arr))
+        spherical_dict_before = copy.deepcopy(coords.__dict__)
 
-        assert numpy_in_dict_equality_check(dict_cart_before, coords.__dict__) == True
+        assert compare_ndarray_nested_dicts(spherical_dict_before, coords.__dict__) == True
 
         assert np.any(coords.arr != a)
-        assert np.all(a == coords.xyz)
+        assert np.all(np.isclose(a, coords.xyz))
 
-        assert dict_spher_before != coords.__dict__
+        assert spherical_dict_before != coords.__dict__
 
-        assert numpy_in_dict_equality_check(dict_cart_before, coords.__dict__) == False
+        assert compare_ndarray_nested_dicts(cartesian_dict_before, coords.__dict__) == False
 
         assert "_xyz" in coords.__dict__
         coords.invalidate_cache()

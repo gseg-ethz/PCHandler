@@ -1,127 +1,38 @@
-[project]
+[tool.poetry]
 name = "pchandler"
-description = "Short description of PointCloudHandler (pchandler)"
-requires-python = ">=3.10"
-keywords = ["LiDAR", "Pointclouds"]
-license = {text = "Proprietary"}
+version = "0.1.0"
+description = ""
 authors = [
-	{name = "Nicholas Meyer", email = "meyernic@ethz.ch"},
-]
-maintainers = [
-    {name = "Jon Allemand", email = "jonal@ethz.ch"}
-]
-version = "2025.0.1"
-dynamic = [
-	"version",
-	"readme",
-]
-classifiers = [
-	"Programming Language :: Python :: 3",
-	"Programming Language :: Python :: 3.10",
-	"Programming Language :: Python :: 3.11",
-
-    "Private :: Do Not Upload" # REMOVE BEFORE FLIGHT -- PyPI will always reject packages with classifiers beginning with Private ::
+    "Steve steve@email.com"
 ]
 readme = "README.md"
-dependencies = [
-	"numpy ~= 1.24",
-	"black (>=25.1.0,<26.0.0)",
-]
 
+[tool.poetry.dependencies]
+python = "^3.12"
+numpy = "^2.2.5"
+pytest = "^8.3.5"
 
-[build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.group.dev.dependencies]
-mypy = "^1.15.0"
 pytest = "^8.3.5"
-ruff = "^0.11.7"
-mkdocs = "^1.6.1"
-pre-commit = "^4.2.0"
+coverage = "^7.8.0"
+black = "^25.1.0"
+mypy = "^1.15.0"
+poetry-core = "^2.1.2"
 
-[tool.ruff]
-# Exclude a variety of commonly ignored directories.
-exclude = [
-    ".bzr",
-    ".direnv",
-    ".eggs",
-    ".git",
-    ".git-rewrite",
-    ".hg",
-    ".ipynb_checkpoints",
-    ".mypy_cache",
-    ".nox",
-    ".pants.d",
-    ".pyenv",
-    ".pytest_cache",
-    ".pytype",
-    ".ruff_cache",
-    ".svn",
-    ".tox",
-    ".venv",
-    ".vscode",
-    "__pypackages__",
-    "_build",
-    "buck-out",
-    "build",
-    "dist",
-    "node_modules",
-    "site-packages",
-    "venv",
-]
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
 
-[tool.setuptools.dynamic]
-readme = {file = ["README.md"]}
-# Same as Black.
-line-length = 88
-indent-width = 4
-
-[tool.setuptools_scm]
-write_to = "src/pchandler/_version.py"
-local_scheme = "no-local-version"
-version_scheme = "post-release"
-
-[tool.black]
-line-length = 120
-target-version = ['py310', 'py311', ]
-
-[tool.ruff.lint]
-# Enable Pyflakes (`F`) and a subset of the pycodestyle (`E`)  codes by default.
-# Unlike Flake8, Ruff doesn't enable pycodestyle warnings (`W`) or
-# McCabe complexity (`C901`) by default.
-select = ["E4", "E7", "E9", "F"]
-ignore = []
-
-[tool.isort]
-profile = "black"
-# Allow fix for all enabled rules (when `--fix`) is provided.
-fixable = ["ALL"]
-unfixable = []
-
-[tool.flake8]
-max-line-length = 120
-extend-ignore = ["E203", "W503"]
-# add plugins, e.g. flake8-bugbear
-select = ["B", "C", "E", "F", "W", "T4", "D"]
-# Allow unused variables when underscore-prefixed.
-dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
-
-[tool.mypy]
-python_version = "3.11"
-strict = true
-[tool.ruff.format]
-# Like Black, use double quotes for strings.
-quote-style = "double"
-
-# Like Black, indent with spaces, rather than tabs.
-indent-style = "space"
-
-[project.urls]
-homepage = "https://gseg.igp.ethz.ch/"
-documentation = "https://google.com"
-repository = "https://github.com/gseg-ethz/PCHandler.git"
-Issues = "https://github.com/gseg-ethz/PCHandler/issues"
-Changelog = "https://github.com/gseg-ethz/PCHandler/blob/main/CHANGELOG.md"
-# Like Black, respect magic trailing commas.
-
+#[tool.pytest.ini_options]
+#pythonpath = "src"
+#addopts = [
+#    "--import-mode=importlib",
+#    "-s",
+#    "-v"
+#]
+#
+#[tool.coverage.run]
+#source = ["pchandler"]
+#branch = true
+#data_file = "coverage.coverage"
