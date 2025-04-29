@@ -1,12 +1,13 @@
+from __future__ import annotations
+
 import numpy as np
+import numpy.typing as npt
 
-from pchandler.base_types import NumOrArray
 
-
-def check_in_range(value: NumOrArray, target_min: float, target_max: float):
-    value: np.ndarray = np.asarray(value)
-    val_min: float|int = value.min()
-    val_max: float|int = value.max()
+def check_in_range(value: npt.ArrayLike, target_min: float, target_max: float) -> None:
+    value = np.asarray(value)
+    val_min: float | int = value.min()
+    val_max: float | int = value.max()
 
     if (val_min < target_min) and (val_max > target_max):
         raise ValueError(f'Min and max values [{val_min},{val_max}] exceeds bounds [{target_min},{target_max}].')
