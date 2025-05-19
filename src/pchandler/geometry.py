@@ -124,9 +124,9 @@ class PointCloudData:
         An (N x 3) uint8 array containing the *r*, *g*, and *b* color values for each point.
     normals : Optional[NDArray[np.float32]]
         An (N x 3) array representing the normal vectors for each point.
-    global_coordinate_shift : Optional[NDArray[np.float_]]
+    global_coordinate_shift : Optional[NDArray[np.float64]]
         A (3,) array specifying the global coordinate shift applied to the point cloud.
-    spherical_coordinates_origin : NDArray[np.float_]
+    spherical_coordinates_origin : NDArray[np.float64]
         A (3,) array specifying the origin for spherical coordinate calculations.
     _spherical_coordinates_calculated : bool
         A flag indicating if spherical coordinates have been calculated.
@@ -139,8 +139,8 @@ class PointCloudData:
     scalar_fields: dict[str, NDArray[np.generic]] = field(default_factory=dict)
     color: Optional[NDArray[np.uint8]] = None
     normals: Optional[NDArray[np.float32]] = None
-    global_coordinate_shift: Optional[NDArray[np.float_]] = None
-    spherical_coordinates_origin: NDArray[np.float_] = None
+    global_coordinate_shift: Optional[NDArray[np.float64]] = None
+    spherical_coordinates_origin: NDArray[np.float64] = None
     _spherical_coordinates_calculated: bool = False
     _spherical_coordinates_represented_0_to_2pi: Optional[bool] = None
     _global_shift_already_applied: InitVar[bool] = False
@@ -167,7 +167,7 @@ class PointCloudData:
             Indicates whether the global coordinate shift has already been applied to the `xyz` coordinates prior.
         """
         if self.spherical_coordinates_origin is None:
-            object.__setattr__(self, "spherical_coordinates_origin", np.zeros((3,), dtype=np.float_))
+            object.__setattr__(self, "spherical_coordinates_origin", np.zeros((3,), dtype=np.float64))
 
         assert isinstance(self.xyz, np.ndarray)
         assert self.color is None or isinstance(self.color, np.ndarray)
@@ -205,13 +205,13 @@ class PointCloudData:
        #     scalar_fields["scalar_Intensity"] = scalar_fields["scalar_Intensity"].astype(np.float32)
 
     @staticmethod
-    def __check_for_need_of_global_shift(xyz: NDArray[np.float_], _decimal_magnitude: int = 4) -> bool:
+    def __check_for_need_of_global_shift(xyz: NDArray[np.float64], _decimal_magnitude: int = 4) -> bool:
         """
         Determines if a global coordinate shift is necessary.
 
         Parameters
         ----------
-        xyz : NDArray[np.float_]
+        xyz : NDArray[np.float64]
             The array of (N x 3) coordinates to check.
         _decimal_magnitude : int, default=4
             The threshold magnitude for deciding if a shift is needed.
@@ -224,20 +224,20 @@ class PointCloudData:
         return any((np.abs(xyz) >= 10 ** _decimal_magnitude).flatten())
 
     @staticmethod
-    def __calculate_optimal_global_shift(xyz: NDArray[np.float_], _decimal_magnitude: int = 4) -> NDArray[np.float_]:
+    def __calculate_optimal_global_shift(xyz: NDArray[np.float64], _decimal_magnitude: int = 4) -> NDArray[np.float64]:
         """
         Calculates an optimal global shift based on the median of the coordinates.
 
         Parameters
         ----------
-        xyz : NDArray[np.float_]
+        xyz : NDArray[np.float64]
             The array of (N x 3) coordinates.
         _decimal_magnitude : int, default=4
             The precision used to calculate the shift.
 
         Returns
         -------
-        NDArray[np.float_]
+        NDArray[np.float64]
             The calculated global shift as a (3,) array.
         """
         return np.median(np.round(xyz, decimals=-(_decimal_magnitude - 1)), axis=0)
@@ -245,7 +245,7 @@ class PointCloudData:
 
     @classmethod
     def from_range_image(cls, range_data: NDArray[np.floating], fov: FoV, scalar_fields: dict[str, NDArray[np.generic]] = None,
-                         spherical_coordinates_origin: NDArray[np.float_] = None) -> Self:
+                         spherical_coordinates_origin: NDArray[np.float64] = None) -> Self:
         """
         Creates a `PointCloudData` instance from a range image.
 
@@ -257,7 +257,7 @@ class PointCloudData:
             The field of view defining the angular limits of the range image.
         scalar_fields : dict[str, NDArray[np.generic]], optional
             Scalar fields corresponding to the range data.
-        spherical_coordinates_origin : NDArray[np.float_], optional
+        spherical_coordinates_origin : NDArray[np.float64], optional
             The origin for spherical coordinate calculations.
 
         Returns
@@ -289,7 +289,7 @@ class PointCloudData:
     @classmethod
     def from_spherical_coordinates(cls, spherical_coordinates: NDArray[np.floating],
                                    scalar_fields: dict[str, NDArray[np.generic]] = None,
-                                   spherical_coordinates_origin:  NDArray[np.float_] = None) -> Self:
+                                   spherical_coordinates_origin:  NDArray[np.float64] = None) -> Self:
         """
         Creates a `PointCloudData` instance from spherical coordinates.
 
@@ -299,7 +299,7 @@ class PointCloudData:
             An (N x 3) array of spherical coordinates (range, elevation, azimuth).
         scalar_fields : dict[str, NDArray[np.generic]], optional
             Scalar fields associated with the spherical coordinates.
-        spherical_coordinates_origin : NDArray[np.float_], optional
+        spherical_coordinates_origin : NDArray[np.float64], optional
             The origin for spherical coordinate calculations.
 
         Returns
@@ -760,13 +760,13 @@ class PointCloudData:
         self._reduce_points_to(np.logical_not(filter_mask))
         return new_pcd
 
-    def change_spherical_coordinates_origin(self, spherical_coordinates_origin: NDArray[np.float_]) -> None:
+    def change_spherical_coordinates_origin(self, spherical_coordinates_origin: NDArray[np.float64]) -> None:
         """
         Changes the origin used for spherical coordinate calculations.
 
         Parameters
         ----------
-        spherical_coordinates_origin : NDArray[np.float_]
+        spherical_coordinates_origin : NDArray[np.float64]
             A (3,) array specifying the new origin for spherical coordinate calculations.
         """
         assert spherical_coordinates_origin.shape == (3,)
@@ -923,7 +923,7 @@ class PointCloudData:
         return pcd_o3d
 
     @classmethod
-    def from_o3d(cls, pcd_o3d: o3d.geometry.PointCloud, scan_center: Optional[NDArray[np.float_]] = None):
+    def from_o3d(cls, pcd_o3d: o3d.geometry.PointCloud, scan_center: Optional[NDArray[np.float64]] = None):
         """
         Creates a `PointCloudData` instance from an Open3D `PointCloud`.
 

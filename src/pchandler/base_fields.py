@@ -1,14 +1,13 @@
 from __future__ import annotations
-from typing import Any, Generic, TypeVar, Optional, TypedDict
+from typing import Any, Generic, TypeVar, Optional, TypedDict, Callable
 from dataclasses import dataclass
 import warnings
 
 import numpy as np
 import copy
 
-from pchandler.base_types import ValidatorsT
-
 T = TypeVar('T')
+ValidatorsT = list[Callable[[T], T]]
 
 
 class FieldOptionsType(TypedDict, Generic[T]):
