@@ -8,36 +8,40 @@ from src.pchandler.base_fields import ValidatedNumpyField
 def is_even(x):
     if not x % 2 == 0:
         raise ValueError("Not an even number")
-    return x
 
 
-class CustomCoerceField(ValidatedField):
+class CoercedField(ValidatedField):
     def __init__(self, *args, **kwargs):
         kwargs |= {'coerce': True}
         super().__init__(*args, **kwargs)
 
 
-class CustomOptionalField(ValidatedField):
+class OptionalField(ValidatedField):
     def __init__(self, *args, **kwargs):
         kwargs |= {'optional': True}
         super().__init__(*args, **kwargs)
 
 
-class CustomValidatorField(ValidatedField):
+class IsEvenField(ValidatedField):
     def __init__(self, *args, **kwargs):
         kwargs |= {'validators': [is_even]}
         super().__init__(*args, **kwargs)
 
 
 class CustomFields:
-    name: CustomCoerceField = CustomCoerceField(str)
-    length: CustomOptionalField = CustomOptionalField(float)
-    weight: CustomValidatorField = CustomValidatorField(int)
+    coerced_string: CoercedField = CoercedField(str)
+    optional_float: OptionalField = OptionalField(float)
+    even_number: IsEvenField = IsEvenField(int)
+
+    def __init__(self, input_string, input_float, input_number):
+        self.coerced_string = input_string
+        self.optional_float = input_float
+        self.even_number = input_number
 
 
 class CustomObject:
-    name: ValidatedField = ValidatedField(str, coerce=True)
-    length: ValidatedField = ValidatedField(float, optional=True, default=None)
+    name: ValidatedField = ValidatedField[str](str, coerce=True)
+    length: ValidatedField = ValidatedField[float](float, optional=True, default=None)
     frozen: ValidatedField = ValidatedField(float, freezable=True)
     weight: ValidatedField = ValidatedField(int, validators=[is_even])
     height: ValidatedField = ValidatedField(float, default=22.0, coerce=True)
@@ -100,16 +104,16 @@ class TestCustomFields:
             obj.frozen = 1234567
 
     def test_non_class_attribute(self):
-        a = CustomFields.length
+        a = CustomFields.optional_float
         assert hasattr(a, 'name')
         assert hasattr(a, 'private_name')
         assert hasattr(a, 'options_name')
 
-        assert getattr(a, 'name') == 'length'
-        assert getattr(a, 'private_name') == '_length'
-        assert getattr(a, 'options_name') == '_length_options'
+        assert getattr(a, 'name') == 'optional_float'
+        assert getattr(a, 'private_name') == '_optional_float'
+        assert getattr(a, 'options_name') == '_optional_float_options'
 
-    @pytest.mark.parametrize('invalid_value', (False, {'abc': 123}, (1, 2, 3), 'asdasd'))
+    @pytest.mark.parametrize('invalid_value', (False, {'abc': 123}, (1, 2, 3), 'not_valid'))
     def test_invalid_type(self, invalid_value):
         obj: CustomObject = CustomObject('abc', None, 122, frozen=123.4)
         with pytest.raises(TypeError):

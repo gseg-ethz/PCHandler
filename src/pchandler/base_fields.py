@@ -1,13 +1,14 @@
-from __future__ import annotations
-from typing import Any, Generic, TypeVar, Optional, TypedDict, Callable
-from dataclasses import dataclass
-import warnings
+from __future__     import annotations
 
-import numpy as np
-import copy
+import  warnings
+import  copy
+from    typing      import Any, Generic, TypeVar, Optional, TypedDict, Callable
+from    dataclasses import dataclass
+
+import  numpy as np
 
 T = TypeVar('T')
-ValidatorsT = list[Callable[[T], T]]
+ValidatorsT = list[Callable[[T], None]]
 
 
 class FieldOptionsType(TypedDict, Generic[T]):
@@ -32,6 +33,7 @@ class FieldOptions(Generic[T]):
 
     def __post_init__(self):
         self.validators = self.validators or []
+
 
 class ValidatedField(Generic[T]):
     def __init__(self,
@@ -122,7 +124,6 @@ class ValidatedField(Generic[T]):
             delattr(instance, self.private_name)
 
 
-
 class ValidatedNumpyField(ValidatedField):
     __ndim__: int | None = None
     __shape__: tuple[Optional[int], ...] | None = None
@@ -141,6 +142,7 @@ class ValidatedNumpyField(ValidatedField):
         super().__set_name__(owner, name)
         self.nd_array_name = self.private_name + "_ndarray"
 
+    # TODO need to decide on an approach about the type coercion. For example min_scalar_type()
     @staticmethod
     def check_coercion(value: Any, opts: FieldOptions) -> T:
         if opts.coerce:
@@ -159,7 +161,6 @@ class ValidatedNumpyField(ValidatedField):
         if opts.freezable:
             value.setflags(write=False)
         super().freeze(value, opts)
-
 
     def _check_ndarray(self, value: np.ndarray):
         if self.__dtype__ is not None and self.__dtype__ != value.dtype:

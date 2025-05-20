@@ -73,6 +73,8 @@ class PointCloudData:
                 sfm.create_field(sf_id, sf)
             object.__setattr__(self, "scalar_fields", sfm)
 
+        # TODO there's a bug here as a 1D array has shape (N,) and throws an index error
+        #  Better would be to use .squeeze() then check if ndim == 1
         if self.scalar_fields is None or self.scalar_fields.shape[1] == 0:
             object.__setattr__(self, "scalar_fields", ScalarFieldManager(expected_length=self.nbPoints))
 
@@ -364,6 +366,7 @@ class PointCloudData:
         self.reduce(~mask)
         return new_pcd
 
+    # TODO Why not just do a deepcopy?
     def copy(self) -> Self:
         """
         Creates a copy of the current point cloud.
