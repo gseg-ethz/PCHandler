@@ -3,8 +3,7 @@ from __future__     import annotations
 
 import  warnings
 import  copy
-from    abc         import ABC, abstractmethod
-from    typing      import Any, Generic, TypeVar, Optional, TypedDict, Callable
+from    typing      import Any, Generic, TypeVar, Optional, TypedDict, Callable, Unpack
 from    dataclasses import dataclass
 
 import  numpy as np
@@ -36,8 +35,11 @@ class FieldOptions(Generic[T]):
     def __post_init__(self):
         self.validators = self.validators or []
 
+
+
 # TODO Discuss w/ Nicholas thought's on default parameters here - e.g. should it be most or least flexible to start?
-class ValidatedAttribute(Generic[T]):
+#  An example would be any Point3D or 4x4 array type
+class BaseDescriptor(Generic[T]):
     def __init__(self,
                  type_: type[T],
                  optional: bool = False,
@@ -125,21 +127,38 @@ class ValidatedAttribute(Generic[T]):
         if hasattr(instance, self.private_name):
             delattr(instance, self.private_name)
 
+class CoerceDescriptor(BaseDescriptor):
+    def __init__(self, *args, **kwargs) -> None:
+        kwargs |= {'coerce': True}
+        super().__init__(*args, **kwargs)
 
-class ValidatedArrayAttribute(ValidatedAttribute):
-    # TODO discuss if it's worth extending to create class and instance level definitions
-    __ndim__: int | None = None
-    __shape__: tuple[Optional[int], ...] = (None,)
-    __dtype__: np.dtype = None
+class OptionalDescriptor(BaseDescriptor):
+    def __init__(self, *args, **kwargs) -> None:
+        kwargs |= {'optional': True}
+        super().__init__(*args, **kwargs)
+
+class FrozenDescriptor(BaseDescriptor):
+    def __init__(self, *args, **kwargs) -> None:
+        kwargs |= {'freezable': True}
+        super().__init__(*args, **kwargs)
+
+
+class ArrayDescriptor(BaseDescriptor):
+    # TODO discuss if it's worth extending to create class and instance level definitions like the Base descriptor
+    #  In my opinion it would lead to less "classes"
 
     def __init__(self,
                  optional: bool = False,
                  coerce: bool = False,
                  freezable: bool = False,
                  default: Optional[T] = None,
-                 validators: ValidatorsT = None):
-        type_ = np.ndarray
-        super().__init__(type_, optional, coerce, freezable, default, validators)
+                 validators: ValidatorsT = None) -> None:
+        super().__init__(type_=np.ndarray,
+                         optional=optional,
+                         coerce=coerce,
+                         freezable=freezable,
+                         default=default,
+                         validators=validators)
 
     def __set_name__(self, owner, name):
         super().__set_name__(owner, name)
@@ -156,144 +175,11 @@ class ValidatedArrayAttribute(ValidatedAttribute):
                 raise TypeError(f"Cannot coerce type {type(value)} to {opts.type_.__name__}")
         return value
 
-    def validate(self, value: np.ndarray, opts) -> np.ndarray:
-        super().validate(value, opts)
-        self._check_ndarray(value)
-        return value
-
     def freeze(self, value: np.ndarray, opts):
         if opts.freezable:
             value.setflags(write=False)
         super().freeze(value, opts)
 
-    def _check_ndarray(self, value: np.ndarray):
-        if self.__dtype__ is not None and self.__dtype__ != value.dtype:
-            raise TypeError(f"Input array does not have the expected type of {self.__dtype__}")
-
-        if self.__ndim__ is not None and self.__ndim__ != value.ndim:
-            raise ValueError(f"Expected array with {self.__ndim__} dimensions. Received [{value.shape=}].")
-
-        if self.__shape__ is not None:
-            for i, size_dim in enumerate(self.__shape__):
-                if size_dim is not None and size_dim != value.shape[i]:
-                    raise ValueError(f"Dimension {i} shape does not match, expected {size_dim} != {value.shape[i]}")
-
-
-class VectorAttribute(ValidatedArrayAttribute):
-    # TODO should we put in a function that squeeze's the array incase a vector is passed of another shape (1, 1, N)?
-    __ndim__: int = 1
-
-
-class Array2dAttribute(ValidatedArrayAttribute):
-    __ndim__: int = 2
-
-
-class Array3dAttribute(ValidatedArrayAttribute):
-    __ndim__: int = 3
-
-
-class PointSet2D(Array2dAttribute):
-    # TODO Discuss w/ Nicholas about whether to extend this to define and validate this on a per-instance_basis
-    __shape__: tuple[Optional[int], ...] = (None, 2)
-
-
-class PointSet3D(Array3dAttribute):
-    __shape__: tuple[Optional[int], ...] = (None, 3)
-
-
-
-class ValidatedArray(np.lib.mixins.NDArrayOperatorsMixin):
-    arr: ValidatedArrayAttribute = ValidatedArrayAttribute()
-
-    def __len__(self) -> int:
-        return self.arr.shape[0]
-
-    def __init__(self, array: np.ndarray | ValidatedArray):
-
-        if isinstance(array, ValidatedArray):
-            self.__dict__ = copy.deepcopy(self.__dict__)
-        else:
-            array = self.coerce(array)
-            self.arr: np.ndarray = array
-
-    def __getitem__(self, index: Any) -> np.ndarray:
-        return self.arr[index]
-
-    def __setitem__(self, index, value: np.ndarray | float | int | bool) \
-            -> ValidatedArray | np.ndarray | float | int | bool:
-        self.arr[index] = value[index] if isinstance(value, ValidatedArray) else value
-
-    def __array__(self) -> np.ndarray:
-        return self.arr
-
-    @property
-    def __array_interface__(self) -> dict:
-        return self.arr.__array_interface__
-
-    def __array_ufunc__(self, ufunc, method, *inputs, **kwargs) \
-            -> np.ndarray|tuple[np.ndarray,...]|tuple[ValidatedArray,...]:
-
-        arrays = [x.arr if isinstance(x, ValidatedArray) else x for x in inputs]
-        result = getattr(ufunc, method)(*arrays, **kwargs)
-
-        if isinstance(result, tuple):
-            return tuple(x if np.issubdtype(x.dtype, np.bool_) else type(self)(x) for x in result)
-
-        elif isinstance(result, np.ndarray):
-            return result if np.issubdtype(result.dtype, np.bool_) else type(self)(result)
-
-        else:
-            return result
-
-    def coerce(self, array: np.ndarray) -> np.ndarray:
-        return array
-
-    @property
-    def ndim(self) -> int:
-        return self.arr.ndim
-
-    @property
-    def shape(self) -> tuple[int, ...]:
-        return self.arr.shape
-
-    @property
-    def dtype(self) -> np.dtype:
-        return self.arr.dtype
-
-    @property
-    def size(self) -> int:
-        return self.arr.size
-
-    @property
-    def base(self):
-        return self.arr.base
-
-    def copy(self, deep: bool = False) -> ValidatedArray:
-        return copy.deepcopy(self) if deep else copy.copy(self)
-
-    @property
-    def view(self):
-        return self.arr.view(type(self))
-
-class ReadOnlyArrayAttribute(ValidatedArray):
-    arr: ValidatedArrayAttribute = ValidatedArrayAttribute(freezable=True)
-
-class ValidatedVector(ValidatedArray):
-    arr: VectorAttribute = VectorAttribute()
-
-    def coerce(self, value: np.ndarray):
-        value = value.squeeze()
-        return super().coerce(value)
-
-class ValidatedArray2D(ValidatedArray):
-    arr: Array2dAttribute = Array2dAttribute()
-
-class ValidatedArrayNx3(ValidatedArray):
-    arr: PointSet3D = PointSet3D()
-
-
-class ValidatedArrayNx2(ValidatedArray):
-    arr: PointSet2D = PointSet2D()
 
 
 # class ValidatedFieldMeta(type):

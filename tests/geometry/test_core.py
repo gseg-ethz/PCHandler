@@ -4,7 +4,7 @@ import copy
 import numpy as np
 
 from pchandler.core import PointCloudData
-from src.pchandler.geometry.scalar_fields import ScalarFieldManager
+from src.pchandler.scalar_fields import ScalarFieldManager
 
 
 @pytest.fixture(scope="session", autouse=True)
