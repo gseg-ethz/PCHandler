@@ -3,7 +3,7 @@ import logging
 import numpy as np
 from numpy.typing import NDArray
 
-from pchandler.core import PointCloudData
+from ..core import PointCloudData
 from .core import PointCloudFilter
 
 logger = logging.getLogger(__name__.split(".")[0])

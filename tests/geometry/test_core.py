@@ -3,7 +3,7 @@ import copy
 
 import numpy as np
 
-from src.pchandler.geometry.core import PointCloudData
+from pchandler.core import PointCloudData
 from src.pchandler.geometry.scalar_fields import ScalarFieldManager
 
 

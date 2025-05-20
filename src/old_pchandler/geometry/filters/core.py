@@ -5,7 +5,7 @@ from typing import Callable
 import numpy as np
 from numpy.typing import NDArray
 
-from pchandler.core import PointCloudData
+from ..core import PointCloudData
 
 logger = logging.getLogger(__name__.split(".")[0])
 
