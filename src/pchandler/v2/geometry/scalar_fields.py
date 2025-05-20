@@ -2,7 +2,7 @@ import logging
 import sys
 from collections.abc import MutableMapping
 from dataclasses import KW_ONLY, InitVar, dataclass, field
-from typing import Iterable, Iterator, Optional, Union, Any
+from typing import Any, Iterable, Iterator, Optional, Union, cast, overload
 
 if sys.version_info[0] == 3 and sys.version_info[1] >= 11:
     from typing import Self
@@ -11,6 +11,8 @@ else:
 
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
+
+from ..typing import ScalarFieldOperations, IndexLike
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -36,7 +38,7 @@ class ScalarField:
     data: NDArray[np.float32]
     _: KW_ONLY
     original_dtype: Optional[DTypeLike] = None
-    operations_performed: list[tuple[str, tuple[str, tuple[DTypeLike, DTypeLike]]]] = field(default_factory=list)
+    operations_performed: list[ScalarFieldOperations] = field(default_factory=list)
     override_forced_dtype_conversion: InitVar[bool] = False
 
     def __post_init__(self, override_forced_dtype_conversion: bool) -> None:
@@ -97,10 +99,10 @@ class ScalarField:
     #     return data
 
     def __len__(self) -> int:
-        shape = self.data.shape
-        return shape[0]
+        length: int = self.data.shape[0]
+        return length
 
-    def normalize(self, lower: float = None, upper: float = None) -> None:
+    def normalize(self, lower: Optional[float] = None, upper: Optional[float] = None) -> None:
         lower = self.data.min() if lower is None else lower
         upper = self.data.max() if upper is None else upper
 
@@ -114,7 +116,7 @@ class ScalarField:
         if self.original_dtype is None:
             logger.debug(f"Scalar field `{self.name}` wasn't converted. No operation performed.")
             return
-        if self.original_dtype.kind not in ["u", "i"]:
+        if np.dtype(self.original_dtype).kind not in ["u", "i"]:
             logger.debug(f"Scalar field `{self.name}` was originally a float. No operation performed.")
             return
 
@@ -127,11 +129,11 @@ class ScalarField:
         for operation, operation_parameters in self.operations_performed[::-1]:
             match operation:
                 case "normalize":
-                    lower, upper = operation_parameters
+                    lower, upper = cast(tuple[float, float],operation_parameters)
                     np.multiply(self.data, upper - lower, out=data)
                     np.add(data, lower, out=data)
                 case "dtype_conversion":
-                    data = data.astype(operation_parameters[0])
+                    data = data.astype(cast(DTypeLike,operation_parameters[0]))
                 case _:
                     return ValueError(f"Operation {operation} not supported.")
         assert self.original_dtype is None or data.dtype == self.original_dtype
@@ -140,7 +142,7 @@ class ScalarField:
         return data
 
 
-class ScalarFieldManager(MutableMapping):
+class ScalarFieldManager(MutableMapping[str, ScalarField]):
     """
     Manages a collection of ScalarField objects, ensuring that all fields have the same
     number of data points. Also provides a mechanism to select subsets of the fields.
@@ -150,17 +152,23 @@ class ScalarFieldManager(MutableMapping):
         self._fields: dict[str, ScalarField] = {}
         self._expected_length: Optional[int] = expected_length
 
-    def __getitem__(self, key: [str, slice, NDArray[np.bool_], NDArray[np.int_], list]) -> ScalarField | Self:
+    @overload
+    def __getitem__(self, key: str) -> ScalarField: ...
+
+    @overload
+    def __getitem__(self, key: IndexLike) -> Self: ...
+
+    def __getitem__(self, key: Union[str, IndexLike]) -> ScalarField | Self:
         # If key is a string, return the corresponding field.
         if isinstance(key, str):
             return self._fields[key.lower()]
         # Otherwise, assume we are slicing across all fields.
-        new_manager = ScalarFieldManager()
+        new_manager = type(self)()
         for sf_field in self._fields.values():
             new_manager.add_field(sf_field[key])
         return new_manager
 
-    def __setitem__(self, key: str, value: ScalarField | NDArray):
+    def __setitem__(self, key: str, value: ScalarField | NDArray[np.generic]) -> None:
         if not isinstance(key, str):
             raise TypeError("ScalarField key must be a string")
         key = key.lower()
@@ -230,8 +238,6 @@ class ScalarFieldManager(MutableMapping):
         """
         return iter(self._fields.items())
 
-    def __len__(self) -> int:
-        return len(self._fields)
 
     def __contains__(self, key: str) -> bool:
         return key.lower() in self._fields
