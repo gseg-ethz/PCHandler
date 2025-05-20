@@ -3,15 +3,18 @@ import copy
 from typing import Any, Optional
 
 import numpy as np
+import numpy.typing as npt
+
 
 from src.pchandler.base_descriptors import ArrayDescriptor
 
+NpMixinT = np.lib.mixins.NDArrayOperatorsMixin
 
-class ValidatedArray(np.lib.mixins.NDArrayOperatorsMixin):
+class ValidatedArray(NpMixinT):
     __ndim__: int | None = None
     __shape__: tuple[Optional[int], ...] = (None,)
     __dtype__: np.dtype = None
-    _arr: ArrayDescriptor = ArrayDescriptor()
+    _arr: ArrayDescriptor = ArrayDescriptor(np.ndarray)
 
     def __init__(self, array: np.ndarray | ValidatedArray):
 
@@ -26,10 +29,10 @@ class ValidatedArray(np.lib.mixins.NDArrayOperatorsMixin):
     def __getitem__(self, index: Any) -> np.ndarray:
         return self._arr[index]
 
-    def __setitem__(self, index, value: np.ndarray | float | int | bool) \
-            -> ValidatedArray | np.ndarray | float | int | bool:
+    def __setitem__(self, index, value: np.ndarray | NpMixinT |  float | int | bool) \
+            -> ValidatedArray | NpMixinT | np.ndarray | float | int | bool:
         # TODO need to re-implement the logic here to validate the item being set.
-        self._arr[index] = value[index] if isinstance(value, ValidatedArray) else value
+        self._arr[index] = value[index] if isinstance(value, (np.ndarray, NpMixinT)) else value
 
     def __array__(self) -> np.ndarray:
         return self._arr
@@ -102,16 +105,16 @@ class ValidatedArray(np.lib.mixins.NDArrayOperatorsMixin):
         return self._arr.view(type(self))
 
 class OptionalArray(ValidatedArray):
-    _arr: ArrayDescriptor = ArrayDescriptor(optional=True)
+    _arr: ArrayDescriptor = ArrayDescriptor(ValidatedArray, optional=True)
 
 class ReadOnlyArray(ValidatedArray):
-    _arr: ArrayDescriptor = ArrayDescriptor(freezable=True)
+    _arr: ArrayDescriptor = ArrayDescriptor(ValidatedArray, freezable=True, coerce=True)
 
-class _LengthNArray(ValidatedArray):
+class _LengthArray(ValidatedArray):
     def __len__(self) -> int:
         return self._arr.shape[0]
 
-class Vector(_LengthNArray):
+class Vector(_LengthArray):
     __ndim__: int = 1
     __shape__: tuple[Optional[int]] = (None,)
 
@@ -120,37 +123,38 @@ class Vector(_LengthNArray):
         return super().coerce_array(value)
 
 
+class Point2d(Vector):
+    _arr: ArrayDescriptor = ArrayDescriptor(Vector, default=np.zeros(2).astype(np.float32) )
+    __shape__: tuple[int] = (2,)
+
+
+class Point3d(Vector):
+    # TODO should we make the dtype default to float32?
+    _arr: ArrayDescriptor = ArrayDescriptor(Vector, default=np.zeros(3).astype(np.float32) )
+    __shape__: tuple[int] = (3,)
+
+
 class Array2d(ValidatedArray):
     __ndim__: int = 2
     __shape__: tuple[Optional[int], Optional[int]] = (None, None)
+
+
+class ArrayNx2(Array2d, _LengthArray):
+    __shape__: tuple[Optional[int], int] = (None, 2)
+
+
+class ArrayNx3(Array2d, _LengthArray):
+    __shape__: tuple[Optional[int], int] = (None, 3)
+
+
+class TransformMatrix(Array2d):
+    _arr: ArrayDescriptor = ArrayDescriptor(Array2d, default=np.eye(4).astype(np.float32) )
+    __shape__: tuple[int, int] = (4, 4)
+    __dtype__: np.dtype = np.float32
+
 
 
 class Array3d(ValidatedArray):
     __ndim__: int = 3
     __shape__: tuple[Optional[int], Optional[int], Optional[int]] = (None, None, None)
 
-
-class ArrayNx2(Array2d, _LengthNArray):
-    __shape__: tuple[Optional[int], int] = (None, 2)
-
-
-class ArrayNx3(Array2d, _LengthNArray):
-    __shape__: tuple[Optional[int], int] = (None, 3)
-
-
-class TransformMatrix(ValidatedArray):
-    _arr: ArrayDescriptor = ArrayDescriptor( default=np.eye(3).astype(np.float32) )
-    __shape__: tuple[int, int] = (4, 4)
-    __dtype__: np.dtype = np.float32
-
-
-class Point3d(Vector):
-    __shape__: tuple[int] = (3,)
-
-
-class Point2d(Vector):
-    __shape__: tuple[int] = (2,)
-
-
-class TransformMatrixDescriptor(Array2d):
-    __shape__: tuple[int, int] = (4, 4)

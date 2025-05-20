@@ -1,15 +1,16 @@
 from __future__     import annotations
 
-
 import  warnings
 import  copy
 from    typing      import Any, Generic, TypeVar, Optional, TypedDict, Callable, Unpack
 from    dataclasses import dataclass
 
-import  numpy as np
+import  numpy           as np
+import  numpy.typing    as npt
 
 T = TypeVar('T')
 ValidatorsT = list[Callable[[T], None]]
+NpMixinT = np.lib.mixins.NDArrayOperatorsMixin
 
 
 class FieldOptionsType(TypedDict, Generic[T]):
@@ -99,8 +100,7 @@ class BaseDescriptor(Generic[T]):
                 return None
         return value
 
-    @staticmethod
-    def check_coercion(value: Any, opts: FieldOptions) -> T:
+    def check_coercion(self, value: Any, opts: FieldOptions) -> T:
         if opts.coerce:
             try:
                 value = opts.type_(value)
@@ -147,37 +147,29 @@ class ArrayDescriptor(BaseDescriptor):
     # TODO discuss if it's worth extending to create class and instance level definitions like the Base descriptor
     #  In my opinion it would lead to less "classes"
 
-    def __init__(self,
-                 optional: bool = False,
-                 coerce: bool = False,
-                 freezable: bool = False,
-                 default: Optional[T] = None,
-                 validators: ValidatorsT = None) -> None:
-        super().__init__(type_=np.ndarray,
-                         optional=optional,
-                         coerce=coerce,
-                         freezable=freezable,
-                         default=default,
-                         validators=validators)
-
     def __set_name__(self, owner, name):
         super().__set_name__(owner, name)
         # TODO something needs to be done with this or it's removed
         self.nd_array_name = self.private_name + "_ndarray"
 
     # TODO need to decide on an approach about the type coercion. For example min_scalar_type()
-    @staticmethod
-    def check_coercion(value: Any, opts: FieldOptions) -> T:
+    def check_coercion(self, value: Any, opts: FieldOptions) -> T:
+        print(super().check_coercion(value, opts))
         if opts.coerce:
-            if isinstance(value, (tuple, list, np.ndarray)):
-                value = np.asarray(value)
+            if isinstance(value, (tuple, list)):
+                return np.asarray(value)
+            if isinstance(value, (NpMixinT, npt.ArrayLike, np.ndarray)):
+                return opts.type_(value)
             else:
                 raise TypeError(f"Cannot coerce type {type(value)} to {opts.type_.__name__}")
         return value
 
-    def freeze(self, value: np.ndarray, opts):
+    def freeze(self, value: np.ndarray|NpMixinT, opts):
         if opts.freezable:
-            value.setflags(write=False)
+            if isinstance(value, np.ndarray):
+                value.setflags(write=False)
+            else:
+                value._arr.setflags(write=False)
         super().freeze(value, opts)
 
 

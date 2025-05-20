@@ -1,9 +1,17 @@
 import pytest
 
 import numpy as np
+import numpy.typing as npt
 
+from pchandler.base_descriptors import ArrayDescriptor
 from src.pchandler.base_arrays import ValidatedArray, Vector, ArrayNx3, ArrayNx2, Array2d, ReadOnlyArray
 
+
+class TempAbc:
+    abc: ArrayDescriptor = ArrayDescriptor(ArrayNx3, default=np.ones((5, 3)), coerce=True)
+
+    def __init__(self, abc):
+        self.abc = abc
 
 class TestDataArray:
     def test_mutability(self):
@@ -16,7 +24,11 @@ class TestDataArray:
         assert np.all(test_data == array2)
         assert np.all(test_data != array)
         assert test_id == id(test_data)
+        assert isinstance(test_data, np.lib.mixins.NDArrayOperatorsMixin)
 
+    def test_with_descriptor(self):
+        temp = TempAbc(np.array([[1, 2, 3], [2, 3, 4]]))
+        assert isinstance(temp.abc, ArrayNx3)
 
     def test_immutability(self) -> None:
         test_data = ValidatedArray(np.random.rand(5,3))
@@ -142,4 +154,5 @@ class TestDataArrayNx2:
         for val in (np.random.rand(5, 3), np.random.rand(10, 2, 4), np.random.rand(5, 1)):
             with pytest.raises(ValueError):
                 ArrayNx2(val)
+
 
