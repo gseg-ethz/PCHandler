@@ -4,12 +4,12 @@ import copy
 from abc import ABC, abstractmethod
 from enum import IntEnum
 from functools import cached_property
-from typing import Self, Optional
+from typing import Optional, Self
 
 import numpy as np
 
-from src.pchandler.base_descriptors import ArrayDescriptor, Descriptor
-from src.pchandler.base_arrays import Vector3, ArrayNx3, TransformArray4x4, NpMixinT
+from pchandler.v2.base_arrays import ArrayNx3, NpMixinT, TransformArray4x4, Vector3
+from pchandler.v2.base_descriptors import Descriptor
 
 
 class CoordSysEnum(IntEnum):
@@ -49,7 +49,7 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
     @property
     def yxz(self) -> np.ndarray:
-        return self.xyz[:,[1,0,2]]
+        return self.xyz[:, [1, 0, 2]]
 
     @cached_property
     def spher(self) -> np.ndarray:
@@ -126,12 +126,14 @@ class GlobalShiftedCoordinates(CartesianCoordinates):
     transform: np.ndarray | TransformArray4x4 = Descriptor(TransformArray4x4, optional=False)
     coordinate_system: CoordSysEnum = Descriptor(CoordSysEnum, optional=False, default=CoordSysEnum.SCAN)
 
-    def __init__(self,
-                 coordinates: np.ndarray|Self, shift: np.ndarray = None,
-                 global_offset: Optional[np.ndarray|Vector3] = None,
-                 transform_matrix: Optional[np.ndarray | TransformArray4x4] = None,
-                 coord_system: Optional[CoordSysEnum] = CoordSysEnum.SCAN
-                 ) -> None:
+    def __init__(
+        self,
+        coordinates: np.ndarray | Self,
+        shift: np.ndarray = None,
+        global_offset: Optional[np.ndarray | Vector3] = None,
+        transform_matrix: Optional[np.ndarray | TransformArray4x4] = None,
+        coord_system: Optional[CoordSysEnum] = CoordSysEnum.SCAN,
+    ) -> None:
         if isinstance(coordinates, GlobalShiftedCoordinates):
             self.__dict__ |= copy.deepcopy(coordinates.__dict__)
         else:
@@ -166,17 +168,17 @@ class GlobalShiftedCoordinates(CartesianCoordinates):
         return xyz, t_new
 
     def __setitem__(self, key: str, value: np.ndarray):
-        if key == '_arr':
-            del self.__dict__['spher']
+        if key == "_arr":
+            del self.__dict__["spher"]
         super().__setitem__(key, value)
 
     @staticmethod
     def _compute_shift(xyz, decimal_magnitude: int = 4):
-        return Vector3(np.median(np.round(xyz, decimals = -(decimal_magnitude - 1)), axis = 0))
+        return Vector3(np.median(np.round(xyz, decimals=-(decimal_magnitude - 1)), axis=0))
 
     @staticmethod
-    def _is_shift_needed(xyz: ArrayNx3|np.ndarray, decimal_magnitude: int = 4) -> np.bool_:
-        return np.any(np.abs(xyz) >= 10 ** decimal_magnitude)
+    def _is_shift_needed(xyz: ArrayNx3 | np.ndarray, decimal_magnitude: int = 4) -> np.bool_:
+        return np.any(np.abs(xyz) >= 10**decimal_magnitude)
 
     def to_spherical(self) -> SphericalCoordinates:
         return SphericalCoordinates(xyz2rhv(self))
@@ -186,9 +188,6 @@ class GlobalShiftedCoordinates(CartesianCoordinates):
         return spherical2cartesian(spherical) - spherical.global_offset
 
 
-
-
-
 def rhv2xyz(spher: np.ndarray | NpMixinT) -> np.ndarray:
     xyz = np.zeros_like(spher)
     xyz[:, 0] = spher.r * np.sin(spher.v) * np.cos(spher.hz)
@@ -196,11 +195,11 @@ def rhv2xyz(spher: np.ndarray | NpMixinT) -> np.ndarray:
     xyz[:, 2] = spher.r * np.cos(spher.v)
     return xyz
 
+
 def xyz2rhv(cart: np.ndarray | NpMixinT) -> np.ndarray:
     spher: np.ndarray = np.zeros_like(cart)
-    xy_2: np.ndarray = cart.x ** 2 + cart.y ** 2
-    spher[:, 0] = np.sqrt(xy_2 + cart.z ** 2)       # [  0, inf] slope distance
-    spher[:, 1] = np.arctan2(cart.y, cart.x)        # [-pi, +pi] horizonal angle
-    spher[:, 2] = np.arctan2(np.sqrt(xy_2), cart.z) # [  0, +pi] zenith angle
+    xy_2: np.ndarray = cart.x**2 + cart.y**2
+    spher[:, 0] = np.sqrt(xy_2 + cart.z**2)  # [  0, inf] slope distance
+    spher[:, 1] = np.arctan2(cart.y, cart.x)  # [-pi, +pi] horizonal angle
+    spher[:, 2] = np.arctan2(np.sqrt(xy_2), cart.z)  # [  0, +pi] zenith angle
     return spher
-

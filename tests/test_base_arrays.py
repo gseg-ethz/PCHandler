@@ -2,9 +2,9 @@ import pytest
 
 import numpy as np
 
-from pchandler.base_descriptors import ArrayDescriptor, Descriptor
-from src.pchandler.base_arrays import (ValidatedArray, VectorN, ArrayNx3, ArrayNx2, Array2d, NpMixinT,
-                                       Vector2, Vector3, TransformArray4x4)
+from pchandler.v2.base_descriptors import ArrayDescriptor, Descriptor
+from pchandler.v2.base_arrays import (ValidatedArray, VectorN, ArrayNx3, ArrayNx2, Array2d, NpMixinT,
+                                      Vector2, Vector3, TransformArray4x4)
 
 
 class ReadOnlyArray(ValidatedArray):

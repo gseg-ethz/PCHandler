@@ -3,10 +3,8 @@ import copy
 from typing import Any, Optional
 
 import numpy as np
-import numpy.typing as npt
 
-
-from src.pchandler.base_descriptors import ArrayDescriptor
+from pchandler.v2.base_descriptors import ArrayDescriptor
 
 NpMixinT = np.lib.mixins.NDArrayOperatorsMixin
 
