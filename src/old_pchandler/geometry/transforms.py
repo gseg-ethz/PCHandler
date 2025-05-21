@@ -7,7 +7,7 @@ Provides helper functions for transforming point clouds and converting between c
 import numpy as np
 from numpy.typing import NDArray
 
-from pchandler.core import PointCloudData
+from .core import PointCloudData
 
 
 def transform_point_cloud(pcd: PointCloudData, transformation_matrix: np.ndarray) -> None:

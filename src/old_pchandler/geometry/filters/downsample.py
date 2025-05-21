@@ -4,7 +4,7 @@ import warnings
 import numpy as np
 from numpy.typing import NDArray
 
-from pchandler.core import PointCloudData
+from ..core import PointCloudData
 from ..scalar_fields import ScalarFieldManager
 from .core import PointCloudFilter
 

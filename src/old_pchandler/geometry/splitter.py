@@ -5,7 +5,7 @@ import numpy as np
 from joblib import Parallel, delayed, parallel_config
 
 from ..fov import FoV, FoVTree
-from pchandler.core import PointCloudData
+from .core import PointCloudData
 from .filters.spherical_coordinate_filters import FoVFilter
 
 logger = logging.getLogger(__name__.split(".")[0])
