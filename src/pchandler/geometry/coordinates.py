@@ -30,7 +30,6 @@ class Abstract3dCoordinates(ABC, ArrayNx3):
         pass
 
 
-
 class CartesianCoordinates(Abstract3dCoordinates):
     @property
     def x(self) -> np.ndarray:
@@ -50,13 +49,13 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
     @property
     def yxz(self) -> np.ndarray:
-        return np.vstack((self.y, self.x, self.z)).T
+        return self.xyz[:,[1,0,2]]
 
     @cached_property
     def spher(self) -> np.ndarray:
         return xyz2rhv(self)
 
-    @cached_property
+    @property
     def r(self):
         return self.spher[:, 0]
 

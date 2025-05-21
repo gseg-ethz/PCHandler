@@ -130,7 +130,7 @@ __email__ = "meyernic@ethz.ch"
 import logging
 
 from . import data_io, fov, geometry, util
-from ._version import __version__
+from .._version import __version__
 
 logger = logging.getLogger(__name__.split(".")[0])
 

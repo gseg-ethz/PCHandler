@@ -164,6 +164,7 @@ class TestCustomNumpyFields:
     def test_manual_override(self, custom_npy_fld_obj):
         custom_npy_fld_obj.__dict__['_read_only_options']._frozen = False
 
+
         custom_npy_fld_obj.read_only = np.array([1, 2, 3, 4, 5])
         assert np.all(custom_npy_fld_obj.read_only == np.array([1, 2, 3, 4, 5]))
 
