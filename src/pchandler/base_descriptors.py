@@ -6,7 +6,6 @@ from    typing      import Any, Generic, TypeVar, Optional, TypedDict, Callable,
 from    dataclasses import dataclass
 
 import  numpy           as np
-import  numpy.typing    as npt
 
 T = TypeVar('T')
 ValidatorsT = list[Callable[[T], None]]
@@ -37,10 +36,9 @@ class FieldOptions(Generic[T]):
         self.validators = self.validators or []
 
 
-
-# TODO Discuss w/ Nicholas thought's on default parameters here - e.g. should it be most or least flexible to start?
+# DISCUSS what should be default parameters here - e.g. should it be most or least flexible to start?
 #  An example would be any Point3D or 4x4 array type
-class BaseDescriptor(Generic[T]):
+class Descriptor(Generic[T]):
     def __init__(self,
                  type_: type[T],
                  optional: bool = False,
@@ -93,7 +91,7 @@ class BaseDescriptor(Generic[T]):
             if not opts.optional and opts.default is None:
                 raise ValueError(f"{self.name} is required and cannot be None")
 
-            if opts.default:
+            if opts.default is not None:
                 warnings.warn(f"Setting attribute '{self.name}' to the default of {opts.default} rather than None")
                 value = opts.default
             else:
@@ -104,6 +102,8 @@ class BaseDescriptor(Generic[T]):
         if opts.coerce:
             try:
                 value = opts.type_(value)
+            except ValueError as e:
+                raise e     # For example when using custom Validated array types, they will also throw ValueErrors
             except Exception:
                 raise TypeError(f"Cannot coerce type {type(value)} to {opts.type_.__name__}")
         return value
@@ -119,7 +119,7 @@ class BaseDescriptor(Generic[T]):
             validator(value)
 
     def __delete__(self, instance):
-        # TODO could be argued if this should be included as the behaviour is not clear. E.g. parameters are erased
+        # DISCUSS Does it make sense to include at this point? Are we ever deleting attributes or just overwriting them
         opts = self._get_instance_options(instance)
         if opts.freezable and opts._frozen:
             raise ValueError(f"Attribute '{self.name}' is frozen and cannot be deleted")
@@ -127,39 +127,46 @@ class BaseDescriptor(Generic[T]):
         if hasattr(instance, self.private_name):
             delattr(instance, self.private_name)
 
-class CoerceDescriptor(BaseDescriptor):
+class CoerceDescriptor(Descriptor):
     def __init__(self, *args, **kwargs) -> None:
         kwargs |= {'coerce': True}
         super().__init__(*args, **kwargs)
 
-class OptionalDescriptor(BaseDescriptor):
+class OptionalDescriptor(Descriptor):
     def __init__(self, *args, **kwargs) -> None:
         kwargs |= {'optional': True}
         super().__init__(*args, **kwargs)
 
-class FrozenDescriptor(BaseDescriptor):
+class FrozenDescriptor(Descriptor):
     def __init__(self, *args, **kwargs) -> None:
         kwargs |= {'freezable': True}
         super().__init__(*args, **kwargs)
 
 
-class ArrayDescriptor(BaseDescriptor):
-    # TODO discuss if it's worth extending to create class and instance level definitions like the Base descriptor
+class ArrayDescriptor(Descriptor):
+    # DISCUSS if it's worth extending to create class and instance level definitions like the Base descriptor
     #  In my opinion it would lead to less "classes"
+    def __init__(self,
+                 optional: bool = False,
+                 coerce: bool = True,
+                 freezable: bool = False,
+                 default: Optional[T] = None,
+                 validators: ValidatorsT = None) -> None:
+        super().__init__(
+            type_=np.ndarray,
+            optional=optional,
+            coerce=coerce,
+            freezable=freezable,
+            default=default,
+            validators=validators)
 
-    def __set_name__(self, owner, name):
-        super().__set_name__(owner, name)
-        # TODO something needs to be done with this or it's removed
-        self.nd_array_name = self.private_name + "_ndarray"
-
-    # TODO need to decide on an approach about the type coercion. For example min_scalar_type()
+    # DISCUSS need to decide on an approach about the type coercion. For example min_scalar_type()
     def check_coercion(self, value: Any, opts: FieldOptions) -> T:
-        print(super().check_coercion(value, opts))
         if opts.coerce:
             if isinstance(value, (tuple, list)):
-                return np.asarray(value)
-            if isinstance(value, (NpMixinT, npt.ArrayLike, np.ndarray)):
-                return opts.type_(value)
+                value = np.asarray(value)
+            if isinstance(value, np.ndarray):
+                return value
             else:
                 raise TypeError(f"Cannot coerce type {type(value)} to {opts.type_.__name__}")
         return value
@@ -172,26 +179,8 @@ class ArrayDescriptor(BaseDescriptor):
                 value._arr.setflags(write=False)
         super().freeze(value, opts)
 
+    def __getitem__(self, item):
+        pass
 
-
-# class ValidatedFieldMeta(type):
-#     __field_base_classes__ = ['ValidatedField']
-#
-#     def __new__(mcs, name, bases, namespace):
-#         _annotations = namespace.get('__annotations__', {})
-#         fields = {}
-#
-#         # Create the class first
-#         cls = super().__new__(mcs, name, bases, namespace)
-#
-#         # Process any Field definitions in annotations
-#         for key, annotation in _annotations.items():
-#             for field_base in mcs.__field_base_classes__:
-#                 if isinstance(annotation, str) and field_base in annotation:
-#                     try:
-#                         field = eval(annotation)
-#                         field.__set_name__(cls, key)
-#                         setattr(cls, key, field)
-#                     except Exception as e:
-#                         raise TypeError(f"Failed to create field for {key}: {e}") from e
-#         return cls
+    def __setitem__(self, key, value):
+        pass

@@ -10,21 +10,33 @@ from src.pchandler.base_descriptors import ArrayDescriptor
 
 NpMixinT = np.lib.mixins.NDArrayOperatorsMixin
 
+
 class ValidatedArray(NpMixinT):
     __ndim__: int | None = None
     __shape__: tuple[Optional[int], ...] = (None,)
-    __dtype__: np.dtype = None
-    _arr: ArrayDescriptor = ArrayDescriptor(np.ndarray)
+    __dtype__: np.dtype = None   # DISCUSS what to have a base dtype... should we make the dtype default to float32?
+    _arr: np.ndarray = ArrayDescriptor()
 
-    def __init__(self, array: np.ndarray | ValidatedArray):
+    def __init__(self, array: Optional[np.ndarray | ValidatedArray] = None ):
 
         if isinstance(array, ValidatedArray):
             self.validate(array._arr)
             self.__dict__ = copy.deepcopy(self.__dict__)
+
+        elif array is None:
+            self._arr = None    # type: ignore  This will be converted or throw error if default exists
+
         else:
             array = self.coerce_array(array)
             self.validate(array)
             self._arr: np.ndarray = array
+
+    def _get_default(self) -> np.ndarray | NpMixinT:
+        default = type(self).__dict__['_arr'].__dict__['_options'].default
+        if default is None:
+            raise ValueError(f'Initial value for the array must be passed in.')
+        else:
+            return default
 
     def __getitem__(self, index: Any) -> np.ndarray:
         return self._arr[index]
@@ -78,59 +90,48 @@ class ValidatedArray(NpMixinT):
         return array
 
     @property
-    def ndim(self) -> int:
-        return self._arr.ndim
+    def ndim(self) -> int: return self._arr.ndim
 
     @property
-    def shape(self) -> tuple[int, ...]:
-        return self._arr.shape
+    def shape(self) -> tuple[int, ...]: return self._arr.shape
 
     @property
-    def dtype(self) -> np.dtype:
-        return self._arr.dtype
+    def dtype(self) -> np.dtype: return self._arr.dtype
 
     @property
-    def size(self) -> int:
-        return self._arr.size
+    def size(self) -> int: return self._arr.size
 
     @property
-    def base(self):
-        return self._arr.base
+    def base(self): return self._arr.base
 
     def copy(self, deep: bool = False) -> ValidatedArray:
         return copy.deepcopy(self) if deep else copy.copy(self)
 
     @property
-    def view(self):
-        return self._arr.view(type(self))
+    def view(self): return self._arr.view(type(self))
 
-class OptionalArray(ValidatedArray):
-    _arr: ArrayDescriptor = ArrayDescriptor(ValidatedArray, optional=True)
 
-class ReadOnlyArray(ValidatedArray):
-    _arr: ArrayDescriptor = ArrayDescriptor(ValidatedArray, freezable=True, coerce=True)
-
-class _LengthArray(ValidatedArray):
+class _LenArray(ValidatedArray):
     def __len__(self) -> int:
         return self._arr.shape[0]
 
-class Vector(_LengthArray):
+
+class VectorN(_LenArray):
     __ndim__: int = 1
     __shape__: tuple[Optional[int]] = (None,)
 
-    def coerce_array(self, value: np.ndarray) -> np.ndarray:
+    def coerce_array(self, value: np.ndarray|NpMixinT) -> np.ndarray:
         value = value.squeeze()
         return super().coerce_array(value)
 
 
-class Point2d(Vector):
-    _arr: ArrayDescriptor = ArrayDescriptor(Vector, default=np.zeros(2).astype(np.float32) )
+class Vector2(VectorN):
+    _arr: np.ndarray = ArrayDescriptor(default=np.zeros(2))
     __shape__: tuple[int] = (2,)
 
 
-class Point3d(Vector):
-    # TODO should we make the dtype default to float32?
-    _arr: ArrayDescriptor = ArrayDescriptor(Vector, default=np.zeros(3).astype(np.float32) )
+class Vector3(VectorN):
+    _arr: np.ndarray = ArrayDescriptor(default=np.zeros(3))
     __shape__: tuple[int] = (3,)
 
 
@@ -139,19 +140,17 @@ class Array2d(ValidatedArray):
     __shape__: tuple[Optional[int], Optional[int]] = (None, None)
 
 
-class ArrayNx2(Array2d, _LengthArray):
+class ArrayNx2(Array2d, _LenArray):
     __shape__: tuple[Optional[int], int] = (None, 2)
 
 
-class ArrayNx3(Array2d, _LengthArray):
+class ArrayNx3(Array2d, _LenArray):
     __shape__: tuple[Optional[int], int] = (None, 3)
 
 
-class TransformMatrix(Array2d):
-    _arr: ArrayDescriptor = ArrayDescriptor(Array2d, default=np.eye(4).astype(np.float32) )
+class TransformArray4x4(Array2d):
+    _arr: np.ndarray = ArrayDescriptor(default=np.eye(4))
     __shape__: tuple[int, int] = (4, 4)
-    __dtype__: np.dtype = np.float32
-
 
 
 class Array3d(ValidatedArray):

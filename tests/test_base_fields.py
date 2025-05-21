@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 
-from src.pchandler.base_descriptors import BaseDescriptor, CoerceDescriptor, OptionalDescriptor, ArrayDescriptor, FrozenDescriptor
+from src.pchandler.base_descriptors import Descriptor, CoerceDescriptor, OptionalDescriptor, ArrayDescriptor, FrozenDescriptor
 
 
 def is_even(x):
@@ -10,18 +10,18 @@ def is_even(x):
 
 
 
-class IsEvenField(BaseDescriptor):
+class IsEvenField(Descriptor):
     def __init__(self, *args, **kwargs):
         kwargs |= {'validators': [is_even]}
         super().__init__(*args, **kwargs)
 
 
 class MainObject:
-    name: BaseDescriptor = CoerceDescriptor(str)
-    length: BaseDescriptor = OptionalDescriptor(float, optional=False, default=None)
-    frozen: BaseDescriptor = FrozenDescriptor(float)
-    weight: BaseDescriptor = IsEvenField(int)
-    height: BaseDescriptor = CoerceDescriptor(float, default=22.0)
+    name: Descriptor = CoerceDescriptor(str)
+    length: Descriptor = OptionalDescriptor(float, optional=False, default=None)
+    frozen: Descriptor = FrozenDescriptor(float)
+    weight: Descriptor = IsEvenField(int)
+    height: Descriptor = CoerceDescriptor(float, default=22.0)
 
     def __init__(self, name, length, weight, frozen, height=None):
         self.name = name
@@ -126,12 +126,10 @@ class CustomReadOnly(ArrayDescriptor):
 
 
 class CustomNpyFieldTestObject:
-    vector: ArrayDescriptor = ArrayDescriptor(coerce=True)
-    read_only: ArrayDescriptor = ArrayDescriptor(freezable=True)
+    vector: ArrayDescriptor = ArrayDescriptor(np.ndarray, coerce=True)
+    read_only: ArrayDescriptor = ArrayDescriptor(np.ndarray, freezable=True)
 
     def __init__(self, vector=np.array([1, 2, 3]), read_only = np.ones((10,10))):
-
-        print(f'ID: {id(self)}')
         self.vector = vector
         self.read_only = read_only
 
@@ -148,7 +146,7 @@ class TestCustomNumpyFields:
     def test_array_coercion(self, custom_npy_fld_obj):
         vector = [1, 2, 3]
         custom_npy_fld_obj.vector = vector
-        assert np.all(custom_npy_fld_obj.vector == np.array(vector))
+        assert np.all(np.isclose(custom_npy_fld_obj.vector, np.array(vector)))
         with pytest.raises(TypeError):
             custom_npy_fld_obj.vector = {'abc', 123}
 

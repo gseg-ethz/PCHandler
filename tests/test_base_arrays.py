@@ -1,34 +1,47 @@
 import pytest
 
 import numpy as np
-import numpy.typing as npt
 
-from pchandler.base_descriptors import ArrayDescriptor
-from src.pchandler.base_arrays import ValidatedArray, Vector, ArrayNx3, ArrayNx2, Array2d, ReadOnlyArray
+from pchandler.base_descriptors import ArrayDescriptor, Descriptor
+from src.pchandler.base_arrays import (ValidatedArray, VectorN, ArrayNx3, ArrayNx2, Array2d, NpMixinT,
+                                       Vector2, Vector3, TransformArray4x4)
+
+
+class ReadOnlyArray(ValidatedArray):
+    _arr: np.ndarray = ArrayDescriptor(freezable=True, coerce=True)
+
 
 
 class TempAbc:
-    abc: ArrayDescriptor = ArrayDescriptor(ArrayNx3, default=np.ones((5, 3)), coerce=True)
+    abc: ArrayNx3 = Descriptor(ArrayNx3, default=np.ones((5, 3)), coerce=True)
 
-    def __init__(self, abc):
+    def __init__(self, abc=None):
         self.abc = abc
 
 class TestDataArray:
     def test_mutability(self):
-        array = np.random.rand(5,3)
-        array2 = np.random.rand(5,3)
-        test_data = ValidatedArray(array)
-        test_id = id(test_data)
-        np.testing.assert_array_almost_equal(test_data, array)
-        test_data._arr = array2
-        assert np.all(test_data == array2)
-        assert np.all(test_data != array)
-        assert test_id == id(test_data)
-        assert isinstance(test_data, np.lib.mixins.NDArrayOperatorsMixin)
+        a = np.random.rand(5,3)
+        b = np.random.rand(5,3)
+        a_array = ValidatedArray(a)
+        original_id = id(a_array)
+        np.testing.assert_array_almost_equal(a_array, a)
+        a_array._arr = b
+        assert np.all(a_array == b)                 # Check the new values are assigned
+        assert np.all(a_array != a)                 # Check that the values have changed
+        assert original_id == id(a_array)           # Check that it's still the same object
+        assert isinstance(a_array, NpMixinT)        # Check it's still one of these classes
 
     def test_with_descriptor(self):
-        temp = TempAbc(np.array([[1, 2, 3], [2, 3, 4]]))
-        assert isinstance(temp.abc, ArrayNx3)
+        a = TempAbc(np.array([[1, 2, 3], [2, 3, 4]]))
+        assert isinstance(a.abc, ArrayNx3)
+        assert np.all(a.abc == np.array([[1, 2, 3], [2, 3, 4]]))
+
+        b = TempAbc()
+        assert isinstance(b.abc, ArrayNx3)
+        assert np.all(b.abc == np.ones((5, 3)))
+
+        with pytest.raises(ValueError):
+            TempAbc(np.random.rand(10,10,10))
 
     def test_immutability(self) -> None:
         test_data = ValidatedArray(np.random.rand(5,3))
@@ -61,7 +74,8 @@ class TestDataArray:
         assert a.base is None
 
     @pytest.mark.parametrize("values, error_type", [
-        (('str', {'23': 1}, {1, 3, 5}, False, None), TypeError)])
+        (('str', {'23': 1}, {1, 3, 5}, False), TypeError),
+        ((None,), ValueError)])
     def test_validation_func_invalid_values(self, values, error_type):
         for val in values:
             print(f'Trying {val=}')
@@ -115,24 +129,24 @@ class TestDataArray:
 
 class TestDataArray1D:
     def test_initialisation(self):
-        a: Vector = Vector(np.ones((5,)))
+        a: VectorN = VectorN(np.ones((5,)))
         assert a.ndim == 1
 
-        b: Vector = Vector(np.ones((5, 1)))
+        b: VectorN = VectorN(np.ones((5, 1)))
         assert b.ndim == 1
 
-        c: Vector = Vector(np.ones((1, 5)))
+        c: VectorN = VectorN(np.ones((1, 5)))
         assert c.ndim == 1
 
         # with pytest.raises( ValueError ):
         assert np.array(42).ndim == 0
         with pytest.raises(ValueError):
-            d: Vector = Vector(np.array(42))
+            d: VectorN = VectorN(np.array(42))
 
         with pytest.raises( ValueError ):
-            Vector(np.random.randn(5, 3, 3))
+            VectorN(np.random.randn(5, 3, 3))
 
-        assert np.all(Vector(np.array([[1, 2]])) == np.array([[1, 2]]))
+        assert np.all(VectorN(np.array([[1, 2]])) == np.array([[1, 2]]))
 
 
 class TestDataArray2D:
@@ -154,5 +168,19 @@ class TestDataArrayNx2:
         for val in (np.random.rand(5, 3), np.random.rand(10, 2, 4), np.random.rand(5, 1)):
             with pytest.raises(ValueError):
                 ArrayNx2(val)
+
+class TestDefaults:
+    def test_vector_2d(self):
+        a = Vector2()
+        assert np.all(a == 0)
+
+    def test_vector_3d(self):
+        b = Vector3()
+        assert np.all(b == 0)
+
+    def test_4x4_matrix(self):
+        c = TransformArray4x4()
+        assert np.all(c == np.eye(4))
+
 
 
