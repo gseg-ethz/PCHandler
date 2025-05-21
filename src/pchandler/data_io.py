@@ -77,8 +77,8 @@ import pye57
 from plyfile import PlyData, PlyElement
 from yaml import warnings
 
-from pchandler.core import PointCloudData
-from .scalar_fields import ScalarField, ScalarFieldManager
+from .geometry.core import PointCloudData
+from .geometry.scalar_fields import ScalarField, ScalarFieldManager
 
 logger = logging.getLogger(__name__.split(".")[0])
 

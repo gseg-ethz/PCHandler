@@ -3,8 +3,8 @@ import copy
 import numpy as np
 import pytest
 
-from pchandler.geometry import PointCloudData
-from pchandler.geometry.scalar_fields import ScalarFieldManager
+from pchandler.v2.geometry import PointCloudData
+from pchandler.v2.geometry.scalar_fields import ScalarFieldManager
 
 
 @pytest.fixture(scope="session", autouse=True)

@@ -20,8 +20,8 @@ import numpy as np
 import open3d as o3d
 from numpy.typing import NDArray
 
-from pchandler.old_pchandler.fov import FoV
-from pchandler.old_pchandler.geometry.scalar_fields import ScalarFieldManager
+from ..fov import FoV
+from .scalar_fields import ScalarFieldManager
 
 logger = logging.getLogger(__name__.split(".")[0])
 

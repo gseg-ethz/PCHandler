@@ -4,7 +4,7 @@ import copy
 from abc import ABC, abstractmethod
 from enum import IntEnum
 from functools import cached_property
-from typing import Optional, Self
+from typing import Optional, Self, overload
 
 import numpy as np
 
@@ -13,19 +13,19 @@ from pchandler.v2.base_descriptors import Descriptor
 
 
 class CoordSysEnum(IntEnum):
-    LOCAL = 0
-    SCAN = 1
+    OPTIMAL = 0
+    SOC = 1
     PROJECT = 2
 
 
 class Abstract3dCoordinates(ABC, ArrayNx3):
-    @abstractmethod
     @property
+    @abstractmethod
     def xyz(self) -> np.ndarray:
         pass
 
-    @abstractmethod
     @property
+    @abstractmethod
     def spher(self) -> np.ndarray:
         pass
 
@@ -67,11 +67,20 @@ class CartesianCoordinates(Abstract3dCoordinates):
     def v(self):
         return self.spher[:, 2]
 
+    @property
+    def rhv(self):
+        return self.spher
+
     def to_spherical(self) -> SphericalCoordinates:
+        if 'spher' in self.__dict__:
+            return SphericalCoordinates(self.spher.copy())
+
         return SphericalCoordinates(xyz2rhv(self))
 
     @classmethod
     def from_spherical(cls, spherical: SphericalCoordinates):
+        if 'xyz' in cls.__dict__:
+            return cls(spherical.xyz.copy())
         return spherical.to_cartesian()
 
 
@@ -124,7 +133,7 @@ class SphericalCoordinates(Abstract3dCoordinates):
 class GlobalShiftedCoordinates(CartesianCoordinates):
     global_offset: np.ndarray | Vector3 = Descriptor(Vector3, optional=False)
     transform: np.ndarray | TransformArray4x4 = Descriptor(TransformArray4x4, optional=False)
-    coordinate_system: CoordSysEnum = Descriptor(CoordSysEnum, optional=False, default=CoordSysEnum.SCAN)
+    coordinate_system: CoordSysEnum = Descriptor(CoordSysEnum, optional=False, default=CoordSysEnum.SOC)
 
     def __init__(
         self,
@@ -132,7 +141,7 @@ class GlobalShiftedCoordinates(CartesianCoordinates):
         shift: np.ndarray = None,
         global_offset: Optional[np.ndarray | Vector3] = None,
         transform_matrix: Optional[np.ndarray | TransformArray4x4] = None,
-        coord_system: Optional[CoordSysEnum] = CoordSysEnum.SCAN,
+        coord_system: Optional[CoordSysEnum] = CoordSysEnum.SOC,
     ) -> None:
         if isinstance(coordinates, GlobalShiftedCoordinates):
             self.__dict__ |= copy.deepcopy(coordinates.__dict__)
@@ -185,21 +194,21 @@ class GlobalShiftedCoordinates(CartesianCoordinates):
 
     @classmethod
     def from_spherical(cls, spherical: SphericalCoordinates) -> CartesianCoordinates:
-        return spherical2cartesian(spherical) - spherical.global_offset
+        return rhv2xyz(spherical) - spherical.global_offset
 
 
-def rhv2xyz(spher: np.ndarray | NpMixinT) -> np.ndarray:
+def rhv2xyz(spher: np.ndarray | NpMixinT) -> np.ndarray | NpMixinT:
     xyz = np.zeros_like(spher)
-    xyz[:, 0] = spher.r * np.sin(spher.v) * np.cos(spher.hz)
-    xyz[:, 1] = spher.r * np.sin(spher.v) * np.sin(spher.hz)
-    xyz[:, 2] = spher.r * np.cos(spher.v)
+    xyz[:, 0] = spher[:, 0] * np.sin(spher[:, 2]) * np.cos(spher[:, 1])
+    xyz[:, 1] = spher[:, 0] * np.sin(spher[:, 2]) * np.sin(spher[:, 1])
+    xyz[:, 2] = spher[:, 0] * np.cos(spher[:, 2])
     return xyz
 
 
 def xyz2rhv(cart: np.ndarray | NpMixinT) -> np.ndarray:
     spher: np.ndarray = np.zeros_like(cart)
-    xy_2: np.ndarray = cart.x**2 + cart.y**2
-    spher[:, 0] = np.sqrt(xy_2 + cart.z**2)  # [  0, inf] slope distance
-    spher[:, 1] = np.arctan2(cart.y, cart.x)  # [-pi, +pi] horizonal angle
-    spher[:, 2] = np.arctan2(np.sqrt(xy_2), cart.z)  # [  0, +pi] zenith angle
+    xy_2: np.ndarray = cart[:, 0]**2 + cart[:, 1]**2
+    spher[:, 0] = np.sqrt(xy_2 + cart[:, 2]**2)  # [  0, inf] slope distance
+    spher[:, 1] = np.arctan2(cart[:, 1], cart[:, 0])  # [-pi, +pi] horizonal angle
+    spher[:, 2] = np.arctan2(np.sqrt(xy_2), cart[:, 2])  # [  0, +pi] zenith angle
     return spher
