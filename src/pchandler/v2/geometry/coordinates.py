@@ -8,8 +8,7 @@ from typing import Optional, Self, overload
 
 import numpy as np
 
-from pchandler.v2.base_arrays import ArrayNx3, NpMixinT, TransformArray4x4, Vector3
-from pchandler.v2.base_descriptors import Descriptor
+from pchandler.v2.base_arrays import
 
 
 class CoordSysEnum(IntEnum):
@@ -83,6 +82,9 @@ class CartesianCoordinates(Abstract3dCoordinates):
             return cls(spherical.xyz.copy())
         return spherical.to_cartesian()
 
+
+class CartesianKdTree(CartesianCoordinates):
+    _arr: np.ndarray = Descriptor(KdTree)
 
 class SphericalCoordinates(Abstract3dCoordinates):
     # TODO add in some spherical coordinate validation based on defined coordinates system

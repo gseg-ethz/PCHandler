@@ -1,157 +1,211 @@
 from __future__ import annotations
-import copy
 from typing import Any, Optional
+from copy import deepcopy
 
+# noinspection PyPackageRequirements
 import numpy as np
-
-from pchandler.v2.base_descriptors import ArrayDescriptor
+# noinspection PyPackageRequirements
+from numpydantic import NDArray, Shape
+# noinspection PyPackageRequirements
+from pydantic import BaseModel, ConfigDict, model_validator, field_validator
 
 NpMixinT = np.lib.mixins.NDArrayOperatorsMixin
 
+def make_ndarray_type(*args: Optional[int|str], dtype = None):
+    """
+    Helper function to generate the numpydantic type for a ndarray.
 
-class ValidatedArray(NpMixinT):
-    __ndim__: int | None = None
-    __shape__: tuple[Optional[int], ...] = (None,)
-    __dtype__: np.dtype = None   # DISCUSS what to have a base dtype... should we make the dtype default to float32?
-    _arr: np.ndarray = ArrayDescriptor()
+    Calling 'make_ndarray_type(None, 3, dtype=np.float32)' would return a numpydantic dtype corresponding to an array
+    of shape (N, 3) with dtype = np.float32 and would provide pydantic validation on this
+    """
+    if len(args) == 0:
+        shape_list = ['*', '...']
+    else:
+        shape_list: list = [str(x) if x is not None else "*" for x in args]
 
-    def __init__(self, array: Optional[np.ndarray | ValidatedArray] = None ):
+    return NDArray[Shape[', '.join(shape_list)], dtype if dtype is not None else Any]
 
-        if isinstance(array, ValidatedArray):
-            self.validate(array._arr)
-            self.__dict__ = copy.deepcopy(self.__dict__)
 
-        elif array is None:
-            self._arr = None    # type: ignore  This will be converted or throw error if default exists
+ArrayT = NDArray[Shape['*, ...'], Any]
+Array_NxM = NDArray[Shape['*, *'], Any]
+Array_Nx2 = NDArray[Shape['*, 2'], Any]
+Array_Nx3 = NDArray[Shape['*, 3'], Any]
+Array_3x3 = NDArray[Shape['4, 4'], Any]
+Array_4x4 = NDArray[Shape['4, 4'], Any]
+Vector_N = NDArray[Shape['*'], Any]
+Vector_2 = NDArray[Shape['2'], Any]
+Vector_3 = NDArray[Shape['3'], Any]
 
-        else:
-            array = self.coerce_array(array)
-            self.validate(array)
-            self._arr: np.ndarray = array
 
-    def _get_default(self) -> np.ndarray | NpMixinT:
-        default = type(self).__dict__['_arr'].__dict__['_options'].default
-        if default is None:
-            raise ValueError(f'Initial value for the array must be passed in.')
-        else:
-            return default
+def __get_args_as_arrays__(instance, *args, **kwargs):
+    arrays = []
+    for x in args:
+        if isinstance(x, type(instance)):
+            arrays.append(x.arr)
+        elif isinstance(x, np.ndarray):
+            arrays.append(x)
+    return arrays
 
-    def __getitem__(self, index: Any) -> np.ndarray:
-        return self._arr[index]
 
-    def __setitem__(self, index, value: np.ndarray | NpMixinT |  float | int | bool) \
-            -> ValidatedArray | NpMixinT | np.ndarray | float | int | bool:
-        # TODO need to re-implement the logic here to validate the item being set.
-        self._arr[index] = value[index] if isinstance(value, (np.ndarray, NpMixinT)) else value
+class BaseArray(BaseModel, NpMixinT):
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        revalidate_instances="always",
+        frozen=False,
+        extra='allow')
+    arr: ArrayT
 
-    def __array__(self) -> np.ndarray:
-        return self._arr
+    # noinspection PyNestedDecorators
+    @field_validator('arr', mode='before')
+    @classmethod
+    def coerce(cls, array: list | tuple | np.ndarray) -> Any:
+        if isinstance(array, (list, tuple)):
+            array = np.asarray(array)
+        elif not isinstance(array, np.ndarray):
+            raise TypeError(f'Cannot convert {type(array)} to numpy array')
 
-    @property
-    def __array_interface__(self) -> dict:
-        return self._arr.__array_interface__
+        if isinstance(cls.model_fields['arr'].annotation, NDArray):
 
-    def __array_ufunc__(self, ufunc, method, *inputs, **kwargs) \
-            -> np.ndarray|tuple[np.ndarray,...]|tuple[ValidatedArray,...]:
+            base_type = cls.model_fields['arr'].annotation.__dict__['__args__'][1]
+            if base_type is not Any:
+                if np.can_cast(array.dtype, base_type):
+                    return array.astype(base_type)
+                raise TypeError(f'Cannot convert {array.dtype} to {cls.arr.dtype}')
 
-        arrays = [x._arr if isinstance(x, ValidatedArray) else x for x in inputs]
-        result = getattr(ufunc, method)(*arrays, **kwargs)
-
-        if isinstance(result, tuple):
-            return tuple(x if np.issubdtype(x.dtype, np.bool_) else type(self)(x) for x in result)
-
-        elif isinstance(result, np.ndarray):
-            return result if np.issubdtype(result.dtype, np.bool_) else type(self)(result)
-
-        else:
-            return result
-
-    def validate(self, value: np.ndarray) -> None:
-        self._check_ndarray(value)
-
-    def _check_ndarray(self, value: np.ndarray):
-        if not isinstance(value, np.ndarray):
-            raise TypeError(f"Input of '{value}' is not actually a numpy array: {type(value)}")
-
-        if self.__dtype__ is not None and self.__dtype__ != value.dtype:
-            raise TypeError(f"Input array does not have the expected type of {self.__dtype__}")
-
-        if self.__ndim__ is not None and self.__ndim__ != value.ndim:
-            raise ValueError(f"Expected array with {self.__ndim__} dimensions. Received [{value.shape=}].")
-
-        if self.__shape__ is not None:
-            for i, size_dim in enumerate(self.__shape__):
-                if size_dim is not None and size_dim != value.shape[i]:
-                    raise ValueError(f"Dimension {i} shape does not match, expected {size_dim} != {value.shape[i]}")
-
-    def coerce_array(self, array: np.ndarray) -> np.ndarray:
         return array
 
-    @property
-    def ndim(self) -> int: return self._arr.ndim
+    # noinspection PyNestedDecorators
+    @field_validator('arr', mode='before')
+    @classmethod
+    def copy(cls, array: Any) -> Any:
+        return deepcopy(array)
+
+    @model_validator(mode='after')
+    def freeze(self):
+        if self.model_config['frozen']:
+            self.arr.setflags(write=False)
+        return self
+
+    # def __array_function__(self, func, types, *args, **kwargs):
+    #     arrays = __get_args_as_arrays__(self, args, **kwargs)
+    #     return func(arrays, **kwargs)
+
+    def __array__(self):
+        return self.arr
 
     @property
-    def shape(self) -> tuple[int, ...]: return self._arr.shape
+    def T(self):
+        return self.arr.T
 
     @property
-    def dtype(self) -> np.dtype: return self._arr.dtype
+    def __array_interface__(self):
+        return self.arr.__array_interface__
+
+    # TODO need to determine which key numpy functions should return this array class
+    #  The not implemented approach looks best
+    # def __array_ufunc__(self, ufunc, method, *args, **kwargs):
+    #     arrays = __get_args_as_arrays__(self, *args, **kwargs)
+    #     return getattr(ufunc, method)(arrays, **kwargs)
+
+
+    def __array_finalize__(self, obj):
+        # TODO need to read up and implement this to rebuild the object of self
+        raise NotImplementedError('')
 
     @property
-    def size(self) -> int: return self._arr.size
+    def shape(self):
+        return self.arr.shape
 
     @property
-    def base(self): return self._arr.base
-
-    def copy(self, deep: bool = False) -> ValidatedArray:
-        return copy.deepcopy(self) if deep else copy.copy(self)
+    def dtype(self):
+        return self.arr.dtype
 
     @property
-    def view(self): return self._arr.view(type(self))
+    def ndim(self):
+        return self.arr.ndim
+
+    @property
+    def base(self):
+        return self.arr.base
+
+    @property
+    def size(self):
+        return self.arr.size
+
+    def min(self):
+        return self.arr.min()
+
+    def max(self):
+        return self.arr.max()
+
+    def copy_array(self):
+        return self.arr.copy()
+
+    def get_view(self):
+        return self.arr.view()
+
+    def __len__(self):
+        raise NotImplementedError('Length of an undefined array shape is not clear')
+
+    def __getitem__(self, item):
+        return self.arr[item]
+
+    def __setitem__(self, key, value):
+        self.arr[key] = value
 
 
-class _LenArray(ValidatedArray):
-    def __len__(self) -> int:
-        return self._arr.shape[0]
+class LimitedColumnArray(BaseArray):
+    def __len__(self):
+        return self.arr.shape[0]
 
 
-class VectorN(_LenArray):
-    __ndim__: int = 1
-    __shape__: tuple[Optional[int]] = (None,)
-
-    def coerce_array(self, value: np.ndarray|NpMixinT) -> np.ndarray:
-        value = value.squeeze()
-        return super().coerce_array(value)
+class BaseVector(LimitedColumnArray):
+    arr: Vector_N
 
 
-class Vector2(VectorN):
-    _arr: np.ndarray = ArrayDescriptor(default=np.zeros(2))
-    __shape__: tuple[int] = (2,)
+class Array2D(BaseArray):
+    arr: Array_NxM
 
 
-class Vector3(VectorN):
-    _arr: np.ndarray = ArrayDescriptor(default=np.zeros(3))
-    __shape__: tuple[int] = (3,)
+class ArrayNx2(LimitedColumnArray):
+    arr: Array_Nx2
 
 
-class Array2d(ValidatedArray):
-    __ndim__: int = 2
-    __shape__: tuple[Optional[int], Optional[int]] = (None, None)
+class ArrayNx3(LimitedColumnArray):
+    arr: Array_Nx3
 
 
-class ArrayNx2(Array2d, _LenArray):
-    __shape__: tuple[Optional[int], int] = (None, 2)
+class Array3x3(BaseArray):
+    arr: Array_3x3
 
 
-class ArrayNx3(Array2d, _LenArray):
-    __shape__: tuple[Optional[int], int] = (None, 3)
+class Array4x4(BaseArray):
+    arr: Array_4x4
 
 
-class TransformArray4x4(Array2d):
-    _arr: np.ndarray = ArrayDescriptor(default=np.eye(4))
-    __shape__: tuple[int, int] = (4, 4)
+class _ReadOnly:
+    # noinspection PyNestedDecorators
+    @field_validator('arr', mode='before')
+    @classmethod
+    def coerce(cls, array: np.ndarray) -> np.ndarray:
+        return array
+
+    # noinspection PyNestedDecorators
+    @field_validator('arr', mode='before')
+    @classmethod
+    def copy(cls, array: np.ndarray) -> np.ndarray:
+        return array
 
 
-class Array3d(ValidatedArray):
-    __ndim__: int = 3
-    __shape__: tuple[Optional[int], Optional[int], Optional[int]] = (None, None, None)
+class ReadOnlyArray(_ReadOnly, BaseArray):
+    model_config = ConfigDict(strict=True, frozen=True)
 
+
+class ReadOnlyVector(_ReadOnly, BaseVector):
+    model_config = ConfigDict(strict=True, frozen=True)
+
+
+if __name__ == '__main__':
+    a = ArrayNx3(arr=np.random.rand(10,3))
+    print('Hellp')

@@ -12,7 +12,7 @@ else:
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
 
-from ..typing import ScalarFieldOperations, IndexLike
+from ..custom_types import ScalarFieldOperations, IndexLike
 
 logger = logging.getLogger(__name__.split(".")[0])
 
