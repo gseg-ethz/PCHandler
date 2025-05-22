@@ -41,9 +41,9 @@ class PointCloudData:
         An (N x 3) array of colors.
     normals : Optional[NDArray[np.float32]]
         An (N x 3) array of normal vectors.
-    global_coordinate_shift : Optional[NDArray[np.float_]]
+    global_coordinate_shift : Optional[NDArray[np.float64]]
         A (3,) array applied to center the coordinates.
-    spherical_coordinates_origin : NDArray[np.float_]
+    spherical_coordinates_origin : NDArray[np.float64]
         A (3,) array defining the origin for spherical coordinate calculations.
     """
 
@@ -52,8 +52,8 @@ class PointCloudData:
     scalar_fields: ScalarFieldManager = field(default_factory=ScalarFieldManager)
     color: Optional[NDArray[np.uint8]] = None
     normals: Optional[NDArray[np.float32]] = None
-    global_coordinate_shift: Optional[NDArray[np.float_]] = None
-    spherical_coordinates_origin: Optional[NDArray[np.float_]] = None
+    global_coordinate_shift: Optional[NDArray[np.float64]] = None
+    spherical_coordinates_origin: Optional[NDArray[np.float64]] = None
     _spherical_coordinates_calculated: bool = False
     _global_shift_already_applied: InitVar[bool] = False
 
@@ -79,7 +79,7 @@ class PointCloudData:
         self._validate_internal_state()
 
         if self.spherical_coordinates_origin is None:
-            object.__setattr__(self, "spherical_coordinates_origin", np.zeros((3,), dtype=np.float_))
+            object.__setattr__(self, "spherical_coordinates_origin", np.zeros((3,), dtype=np.float64))
 
         # Apply a global coordinate shift if needed.
         if self.global_coordinate_shift is None and self._needs_global_shift(self.xyz):
@@ -431,13 +431,13 @@ class PointCloudData:
             object.__setattr__(self, "_spherical_coordinates_calculated", False)
         return
 
-    def change_spherical_coordinates_origin(self, new_origin: NDArray[np.float_]) -> None:
+    def change_spherical_coordinates_origin(self, new_origin: NDArray[np.float64]) -> None:
         """
         Changes the origin used for spherical coordinate calculations.
 
         Parameters
         ----------
-        new_origin : NDArray[np.float_]
+        new_origin : NDArray[np.float64]
             A (3,) array specifying the new origin for spherical coordinate calculations.
         """
         if new_origin is not isinstance(np.ndarray):
@@ -470,7 +470,7 @@ class PointCloudData:
         return pcd_o3d
 
     @classmethod
-    def from_o3d(cls, pcd_o3d: o3d.geometry.PointCloud, scan_center: Optional[NDArray[np.float_]] = None) -> Self:
+    def from_o3d(cls, pcd_o3d: o3d.geometry.PointCloud, scan_center: Optional[NDArray[np.float64]] = None) -> Self:
         """
         Creates a `PointCloudData` instance from an Open3D `PointCloud`.
 
@@ -493,7 +493,7 @@ class PointCloudData:
         cls,
         spherical_coords: NDArray[np.floating],
         scalar_fields: Optional[ScalarFieldManager | dict[str, NDArray]] = None,
-        spherical_coordinates_origin: Optional[NDArray[np.float_]] = None,
+        spherical_coordinates_origin: Optional[NDArray[np.float64]] = None,
     ) -> Self:
         """
         Creates a `PointCloudData` instance from spherical coordinates.
@@ -504,7 +504,7 @@ class PointCloudData:
             An (N x 3) array of spherical coordinates (range, elevation, azimuth).
         scalar_fields : ScalarFieldManager, optional
             Scalar fields associated with the spherical coordinates.
-        spherical_coordinates_origin : NDArray[np.float_], optional
+        spherical_coordinates_origin : NDArray[np.float64], optional
             The origin for spherical coordinate calculations.
 
         Returns
@@ -526,7 +526,7 @@ class PointCloudData:
         range_data: NDArray[np.floating],
         fov: FoV,
         scalar_fields: Optional[dict[str, NDArray[np.generic]] | ScalarFieldManager] = None,
-        spherical_coordinates_origin: Optional[NDArray[np.float_]] = None,
+        spherical_coordinates_origin: Optional[NDArray[np.float64]] = None,
     ) -> Self:
         """
         Creates a `PointCloudData` instance from a range image.
@@ -539,7 +539,7 @@ class PointCloudData:
             The field of view defining the angular limits of the range image.
         scalar_fields : dict[str, NDArray[np.generic]] | ScalarFieldManager, optional
             Scalar fields corresponding to the range data.
-        spherical_coordinates_origin : NDArray[np.float_], optional
+        spherical_coordinates_origin : NDArray[np.float64], optional
             The origin for spherical coordinate calculations.
 
         Returns
@@ -676,13 +676,13 @@ class PointCloudData:
         return new_pcd
 
     @staticmethod
-    def _needs_global_shift(xyz: NDArray[np.float_], decimal_magnitude: int = 4) -> bool:
+    def _needs_global_shift(xyz: NDArray[np.float64], decimal_magnitude: int = 4) -> bool:
         """
         Determines if a global coordinate shift is necessary.
 
         Parameters
         ----------
-        xyz : NDArray[np.float_]
+        xyz : NDArray[np.float64]
             The array of (N x 3) coordinates to check.
         decimal_magnitude : int, default=4
             The threshold magnitude for deciding if a shift is needed.
@@ -698,20 +698,20 @@ class PointCloudData:
         return np.any(np.abs(xyz) >= 10**decimal_magnitude)
 
     @staticmethod
-    def _calculate_optimal_global_shift(xyz: NDArray[np.float_], decimal_magnitude: int = 4) -> NDArray[np.float_]:
+    def _calculate_optimal_global_shift(xyz: NDArray[np.float64], decimal_magnitude: int = 4) -> NDArray[np.float64]:
         """
         Calculates an optimal global shift based on the median of the coordinates.
 
         Parameters
         ----------
-        xyz : NDArray[np.float_]
+        xyz : NDArray[np.float64]
             The array of (N x 3) coordinates.
         decimal_magnitude : int, default=4
             The precision used to calculate the shift.
 
         Returns
         -------
-        NDArray[np.float_]
+        NDArray[np.float64]
             The calculated global shift as a (3,) array.
         """
         return np.median(np.round(xyz, decimals=-(decimal_magnitude - 1)), axis=0)

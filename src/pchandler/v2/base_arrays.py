@@ -1,13 +1,18 @@
 from __future__ import annotations
+
+from pathlib import Path
+import uuid
+import functools
 from typing import Any, Optional
 from copy import deepcopy
+from functools import wraps
 
 # noinspection PyPackageRequirements
 import numpy as np
 # noinspection PyPackageRequirements
 from numpydantic import NDArray, Shape
 # noinspection PyPackageRequirements
-from pydantic import BaseModel, ConfigDict, model_validator, field_validator
+from pydantic import BaseModel, ConfigDict, model_validator, field_validator, UUID4, Field
 
 NpMixinT = np.lib.mixins.NDArrayOperatorsMixin
 
@@ -37,13 +42,34 @@ Vector_2 = NDArray[Shape['2'], Any]
 Vector_3 = NDArray[Shape['3'], Any]
 
 
+def force_output_type(enabled=True):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            result = func(*args, **kwargs)
+            base_t = type(args[0])
+
+            if not enabled:
+                return result
+
+            if isinstance(result, (list, tuple, set)):
+                return type(result)(base_t(arr=item)
+                                    if issubclass(type(item), np.ndarray|base_t)
+                                    else item
+                                    for item in result)
+
+            return base_t(arr=result) if issubclass(type(result), np.ndarray|base_t) else result
+        return wrapper
+    return decorator
+
+
 def __get_args_as_arrays__(instance, *args, **kwargs):
     arrays = []
     for x in args:
         if isinstance(x, type(instance)):
             arrays.append(x.arr)
-        elif isinstance(x, np.ndarray):
-            arrays.append(x)
+        else:
+            arrays.append(np.asarray(x))
     return arrays
 
 
@@ -55,14 +81,16 @@ class BaseArray(BaseModel, NpMixinT):
         frozen=False,
         extra='allow')
     arr: ArrayT
+    cache_uuid: UUID4 = Field(default_factory=lambda: Path(str(uuid.uuid4()) + '.mat'), exclude=True)
+    offloaded: bool = Field(default=False, exclude=True)
 
     # noinspection PyNestedDecorators
     @field_validator('arr', mode='before')
     @classmethod
     def coerce(cls, array: list | tuple | np.ndarray) -> Any:
-        if isinstance(array, (list, tuple)):
+        if isinstance(array, (list, tuple)) or issubclass(type(array), NpMixinT):
             array = np.asarray(array)
-        elif not isinstance(array, np.ndarray):
+        elif not isinstance(array, np.ndarray) and not issubclass(type(array), cls):
             raise TypeError(f'Cannot convert {type(array)} to numpy array')
 
         if isinstance(cls.model_fields['arr'].annotation, NDArray):
@@ -104,10 +132,14 @@ class BaseArray(BaseModel, NpMixinT):
 
     # TODO need to determine which key numpy functions should return this array class
     #  The not implemented approach looks best
-    # def __array_ufunc__(self, ufunc, method, *args, **kwargs):
-    #     arrays = __get_args_as_arrays__(self, *args, **kwargs)
-    #     return getattr(ufunc, method)(arrays, **kwargs)
+    @force_output_type(enabled=True)
+    def __array_ufunc__(self, ufunc, method, *args, **kwargs):
+        arrays = __get_args_as_arrays__(self, *args, **kwargs)
+        return getattr(ufunc, method)(*arrays, **kwargs)
 
+    # # TODO need to read more on this
+    # def __array_function__(self, *args, **kwargs):
+    #     pass
 
     def __array_finalize__(self, obj):
         # TODO need to read up and implement this to rebuild the object of self
@@ -204,6 +236,7 @@ class ReadOnlyArray(_ReadOnly, BaseArray):
 
 class ReadOnlyVector(_ReadOnly, BaseVector):
     model_config = ConfigDict(strict=True, frozen=True)
+
 
 
 if __name__ == '__main__':
