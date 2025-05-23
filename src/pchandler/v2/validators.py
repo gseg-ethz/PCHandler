@@ -2,18 +2,18 @@ import numpy as np
 from numpy import ndarray, floating, asarray, issubdtype
 
 
-def check_spherical_angle_ranges(array: np.ndarray) -> np.ndarray:
-    array[:, 0] = check_radius_ranges(array[:, 0])
-    array[:, 1] = check_azimuthal_ranges(array[:, 1])
-    array[:, 2] = check_zenith_angles(array[:, 2])
+def validate_spherical_angles(array: np.ndarray) -> np.ndarray:
+    array[:, 0] = validate_radius(array[:, 0])
+    array[:, 1] = validate_azimuthal_angles(array[:, 1])
+    array[:, 2] = validate_zenith_angles(array[:, 2])
     return array
 
-def check_radius_ranges(array: np.ndarray) -> np.ndarray:
+def validate_radius(array: np.ndarray) -> np.ndarray:
     if array.min() < 0:
         raise ValueError("Radius must be positive")
     return array
 
-def check_azimuthal_ranges(array: np.ndarray) -> np.ndarray:
+def validate_azimuthal_angles(array: np.ndarray) -> np.ndarray:
     if -np.pi <= array.min() and array.max() <= np.pi:
         return array
 
@@ -25,7 +25,7 @@ def check_azimuthal_ranges(array: np.ndarray) -> np.ndarray:
                          f'Instead the range of [{array.min()}, {array.max()}] was received.')
 
 
-def check_zenith_angles(array: np.ndarray) -> np.ndarray:
+def validate_zenith_angles(array: np.ndarray) -> np.ndarray:
     if 0 <= array.min() and array.max() <= np.pi:
         return array
 

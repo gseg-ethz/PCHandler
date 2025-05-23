@@ -5,7 +5,7 @@ Re-exports key classes and functions from the submodules.
 
 # from . import filters, scalar_fields, splitter, util
 # from pchandler.core import PointCloudData
-# from .transforms import scale, translate
+# from .transform_ledger import scale, translate
 # from .util import get_outline_polygon
 #
 # __all__ = [

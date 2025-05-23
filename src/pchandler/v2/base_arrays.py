@@ -31,18 +31,18 @@ def make_ndarray_type(*args: Optional[int|str], dtype = None):
     return NDArray[Shape[', '.join(shape_list)], dtype if dtype is not None else Any]
 
 
-ArrayT = NDArray[Shape['*, ...'], Any]
-Array_NxM = NDArray[Shape['*, *'], Any]
-Array_Nx2 = NDArray[Shape['*, 2'], Any]
-Array_Nx3 = NDArray[Shape['*, 3'], Any]
-Array_3x3 = NDArray[Shape['4, 4'], Any]
-Array_4x4 = NDArray[Shape['4, 4'], Any]
-Vector_N = NDArray[Shape['*'], Any]
-Vector_2 = NDArray[Shape['2'], Any]
-Vector_3 = NDArray[Shape['3'], Any]
+Array_T = NDArray[Shape['*, ...'], Any]
+Array_NxM_T = NDArray[Shape['*, *'], Any]
+Array_Nx2_T = NDArray[Shape['*, 2'], Any]
+Array_Nx3_T = NDArray[Shape['*, 3'], Any]
+Array_3x3_T = NDArray[Shape['4, 4'], Any]
+Array_4x4_T = NDArray[Shape['4, 4'], Any]
+Vector_N_T = NDArray[Shape['*'], Any]
+Vector_2_T = NDArray[Shape['2'], Any]
+Vector_3_T = NDArray[Shape['3'], Any]
 
 
-def force_output_type(enabled=True):
+def force_output_type(enabled=False):
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
@@ -78,10 +78,11 @@ class BaseArray(BaseModel, NpMixinT):
         arbitrary_types_allowed=True,
         validate_assignment=True,
         revalidate_instances="always",
+        validate_default=True,
         frozen=False,
         extra='allow')
-    arr: ArrayT
-    cache_uuid: UUID4 = Field(default_factory=lambda: Path(str(uuid.uuid4()) + '.mat'), exclude=True)
+    arr: Array_T
+    cache_uuid: UUID4 = Field(default_factory=lambda: uuid.uuid4(), exclude=True)
     offloaded: bool = Field(default=False, exclude=True)
 
     # noinspection PyNestedDecorators
@@ -130,7 +131,7 @@ class BaseArray(BaseModel, NpMixinT):
     def __array_interface__(self):
         return self.arr.__array_interface__
 
-    @force_output_type(enabled=True)
+    @force_output_type(enabled=False)
     def __array_ufunc__(self, ufunc, method, *args, **kwargs):
         arrays = __get_args_as_arrays__(self, *args, **kwargs)
         return getattr(ufunc, method)(*arrays, **kwargs)
@@ -179,6 +180,8 @@ class BaseArray(BaseModel, NpMixinT):
     def __setitem__(self, key, value):
         self.arr[key] = value
 
+CustomArrayLikeT = np.ndarray | NpMixinT
+
 
 class LimitedColumnArray(BaseArray):
     def __len__(self):
@@ -186,27 +189,27 @@ class LimitedColumnArray(BaseArray):
 
 
 class BaseVector(LimitedColumnArray):
-    arr: Vector_N
+    arr: Vector_N_T
 
 
 class Array2D(BaseArray):
-    arr: Array_NxM
+    arr: Array_NxM_T
 
 
 class ArrayNx2(LimitedColumnArray):
-    arr: Array_Nx2
+    arr: Array_Nx2_T
 
 
 class ArrayNx3(LimitedColumnArray):
-    arr: Array_Nx3
+    arr: Array_Nx3_T
 
 
 class Array3x3(BaseArray):
-    arr: Array_3x3 = Field(default_factory=lambda: Array4x4(arr=np.eye(3)))
+    arr: Array_3x3_T = Field(default_factory=lambda: Array4x4(arr=np.eye(3)))
 
 
 class Array4x4(BaseArray):
-    arr: Array_4x4 = Field(default_factory=lambda: Array4x4(arr=np.eye(4)))
+    arr: Array_4x4_T = Field(default_factory=lambda: Array4x4(arr=np.eye(4)))
 
 
 class _ReadOnly:
@@ -230,7 +233,3 @@ class ReadOnlyArray(_ReadOnly, BaseArray):
 class ReadOnlyVector(_ReadOnly, BaseVector):
     model_config = ConfigDict(strict=True, frozen=True)
 
-
-if __name__ == '__main__':
-    a = ArrayNx3(arr=np.random.rand(10,3))
-    print('Hellp')

@@ -3,8 +3,9 @@ import sys
 
 import numpy as np
 
+from pchandler.v2.base_arrays import ArrayNx3
 from pchandler.v2.geometry.coordinates import (
-    CartesianCoordinates, Abstract3dCoordinates, SphericalCoordinates, ArrayNx3, rhv2xyz, xyz2rhv
+    CartesianCoordinates, Abstract3dCoordinates, SphericalCoordinates, rhv2xyz, xyz2rhv
 )
 
 PI = np.pi
@@ -44,8 +45,8 @@ def large_xyz():
     return np.random.rand(1_000_000, 3)
 
 @pytest.fixture(scope='function')
-def cart_obj(large_xyz):
-    return CartesianCoordinates(large_xyz)
+def cart_obj(large_xyz) -> CartesianCoordinates:
+    return CartesianCoordinates(arr=large_xyz)
 
 class TestConversions:
     def test_cartesian_to_spherical(self, known_xyz, known_spher):
@@ -63,7 +64,7 @@ class TestConversions:
 class TestCartesianCoordinates:
     def test_small_array(self, small_xyz, large_xyz, known_xyz):
         for array in (small_xyz, large_xyz):
-            a = CartesianCoordinates(array)
+            a = CartesianCoordinates(arr=array)
             assert isinstance(a, CartesianCoordinates)
             assert isinstance(a, Abstract3dCoordinates)
             assert isinstance(a, ArrayNx3)
