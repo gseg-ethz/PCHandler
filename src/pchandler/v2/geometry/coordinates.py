@@ -4,11 +4,14 @@ import copy
 from abc import ABC, abstractmethod
 from enum import IntEnum
 from functools import cached_property
-from typing import Optional, Self, overload
+from typing import Optional, Self, overload, Annotated
+from unittest import case
 
 import numpy as np
+from pydantic import BaseModel, ConfigDict, Field, computed_field, validate_call, model_validator, field_validator
+from numpydantic import Shape, NDArray
 
-from pchandler.v2.base_arrays import
+from pchandler.v2.base_arrays import Array_Nx3, Vector_3, Array4x4
 
 
 class CoordSysEnum(IntEnum):
@@ -17,7 +20,8 @@ class CoordSysEnum(IntEnum):
     PROJECT = 2
 
 
-class Abstract3dCoordinates(ABC, ArrayNx3):
+class Abstract3dCoordinates(ABC, Array_Nx3):
+    arr: Annotated[NDArray[Shape['*, 3'], Any]]
     @property
     @abstractmethod
     def xyz(self) -> np.ndarray:
@@ -28,8 +32,19 @@ class Abstract3dCoordinates(ABC, ArrayNx3):
     def spher(self) -> np.ndarray:
         pass
 
+Float64Vector3 = NDArray[Shape['3'], np.float64]
+
+class GlobalShift(Vector_3):
+    arr: Float64Vector3
+    old_shift: Float64Vector3
+
+    @validate_call
+    def update_shift(self, new_shift: np.ndarray|Vector_3) -> None:
+        self.old_shift = self.arr.copy()
+        self.arr = new_shift
 
 class CartesianCoordinates(Abstract3dCoordinates):
+    global_shift: GlobalShift
     @property
     def x(self) -> np.ndarray:
         return self._arr[:, 0]
@@ -83,9 +98,6 @@ class CartesianCoordinates(Abstract3dCoordinates):
         return spherical.to_cartesian()
 
 
-class CartesianKdTree(CartesianCoordinates):
-    _arr: np.ndarray = Descriptor(KdTree)
-
 class SphericalCoordinates(Abstract3dCoordinates):
     # TODO add in some spherical coordinate validation based on defined coordinates system
     @property
@@ -131,65 +143,75 @@ class SphericalCoordinates(Abstract3dCoordinates):
     def from_cartesian(cls, xyz: CartesianCoordinates):
         return xyz.to_spherical()
 
-
 class GlobalShiftedCoordinates(CartesianCoordinates):
-    global_offset: np.ndarray | Vector3 = Descriptor(Vector3, optional=False)
-    transform: np.ndarray | TransformArray4x4 = Descriptor(TransformArray4x4, optional=False)
-    coordinate_system: CoordSysEnum = Descriptor(CoordSysEnum, optional=False, default=CoordSysEnum.SOC)
+    project_transform: Array4x4|None = None
+    current_system: CoordSysEnum = CoordSysEnum.SOC
+    optimal_shift: Vector_3 = Field(default_factory=lambda: Vector_3())
+    is_optimally_shifted: bool = False
 
-    def __init__(
-        self,
-        coordinates: np.ndarray | Self,
-        shift: np.ndarray = None,
-        global_offset: Optional[np.ndarray | Vector3] = None,
-        transform_matrix: Optional[np.ndarray | TransformArray4x4] = None,
-        coord_system: Optional[CoordSysEnum] = CoordSysEnum.SOC,
-    ) -> None:
-        if isinstance(coordinates, GlobalShiftedCoordinates):
-            self.__dict__ |= copy.deepcopy(coordinates.__dict__)
-        else:
-            super().__init__(coordinates)
+    @model_validator(mode='after')
+    def update_coord_systems(self):
+        match self.current_system:
+            case CoordSysEnum.OPTIMAL:
+                self.update_global_shift()
 
-        if global_offset is not None:
-            self.global_offset = Vector3(global_offset)
-        if transform_matrix is not None:
-            self.transform = TransformArray4x4(transform_matrix)
-        if coord_system is not None:
-            self.coordinate_system = CoordSysEnum.SCAN
+            case CoordSysEnum.SOC:
+                self.update_global_shift()
 
-    # DISCUSS: the idea here is that whenever initialised, the scan center coordinates are always provided
-    #  A transformation can be provided with it
+            case CoordSysEnum.PROJECT:
+                self.convert_to_(CoordSysEnum.SOC)
+                self.update_global_shift()
+            case _:
+                self.current_system = CoordSysEnum.SOC
 
-    def as_proj(self) -> CartesianCoordinates:
-        return self.transform @ self.as_soc()
+    def update_global_shift(self):
+        if self._is_shift_needed():
+            shift = self.compute_shift()
+            self.arr -= shift
+            self.optimal_shift = shift if self.optimal_shift is None else self.optimal_shift + shift
+            self.current_system = CoordSysEnum.OPTIMAL
 
-    def as_soc(self) -> CartesianCoordinates:
-        return self + self.global_offset
+        self.is_optimally_shifted = True
 
-    def as_local(self) -> CartesianCoordinates:
-        return self
+    def convert_to_(self, system: CoordSysEnum):
+        if self.current_system == system:
+            return
 
-    def compute_global_shift(self, xyz: ArrayNx3, decimal_magnitude: int = 4) -> tuple[ArrayNx3, Vector3]:
+        match self.current_system:
+            case CoordSysEnum.OPTIMAL:
+                if system == CoordSysEnum.SOC:
+                    self.arr += self.optimal_shift
+                else:
+                    if self.project_transform is None:
+                        raise ValueError('Should not have object in Project system if no global transform exists')
+                    self.arr = self.project_transform @ (self.arr + self.optimal_shift)
 
-        delta_t: Vector3 = Vector3()
-        if self._is_shift_needed(xyz):
-            delta_t = self._compute_shift(xyz, decimal_magnitude)
-        t_new = Vector3(self.global_offset - delta_t)
-        xyz = ArrayNx3((self._arr + delta_t).astype(self.__dtype__))
-        return xyz, t_new
+            case CoordSysEnum.SOC:
+                if system == CoordSysEnum.PROJECT:
+                    if self.project_transform is None:
+                        raise ValueError('Should not have object in Project system if no global transform exists')
+                    self.arr = self.project_transform @ self.arr
+                else:
+                    self.arr -= self.optimal_shift
+
+            case CoordSysEnum.PROJECT:
+                if system == CoordSysEnum.OPTIMAL:
+                    self.arr = (np.linalg.inv(self.project_transform) @ self.arr) - self.optimal_shift
+                else:
+                    self.arr = (np.linalg.inv(self.project_transform) @ self.arr)
+
+        self.current_system = system
+
+    def _compute_shift(self, decimal_magnitude: int = 4):
+        return Vector_3(np.median(np.round(self.arr, decimals=-(decimal_magnitude - 1)), axis=0))
+
+    def _is_shift_needed(self, decimal_magnitude: int = 4) -> np.bool_:
+        return np.any(np.abs(self.arr) >= 10 ** decimal_magnitude)
 
     def __setitem__(self, key: str, value: np.ndarray):
         if key == "_arr":
             del self.__dict__["spher"]
         super().__setitem__(key, value)
-
-    @staticmethod
-    def _compute_shift(xyz, decimal_magnitude: int = 4):
-        return Vector3(np.median(np.round(xyz, decimals=-(decimal_magnitude - 1)), axis=0))
-
-    @staticmethod
-    def _is_shift_needed(xyz: ArrayNx3 | np.ndarray, decimal_magnitude: int = 4) -> np.bool_:
-        return np.any(np.abs(xyz) >= 10**decimal_magnitude)
 
     def to_spherical(self) -> SphericalCoordinates:
         return SphericalCoordinates(xyz2rhv(self))

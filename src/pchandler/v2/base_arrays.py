@@ -130,20 +130,13 @@ class BaseArray(BaseModel, NpMixinT):
     def __array_interface__(self):
         return self.arr.__array_interface__
 
-    # TODO need to determine which key numpy functions should return this array class
-    #  The not implemented approach looks best
     @force_output_type(enabled=True)
     def __array_ufunc__(self, ufunc, method, *args, **kwargs):
         arrays = __get_args_as_arrays__(self, *args, **kwargs)
         return getattr(ufunc, method)(*arrays, **kwargs)
 
-    # # TODO need to read more on this
     # def __array_function__(self, *args, **kwargs):
     #     pass
-
-    def __array_finalize__(self, obj):
-        # TODO need to read up and implement this to rebuild the object of self
-        raise NotImplementedError('')
 
     @property
     def shape(self):
@@ -209,11 +202,11 @@ class ArrayNx3(LimitedColumnArray):
 
 
 class Array3x3(BaseArray):
-    arr: Array_3x3
+    arr: Array_3x3 = Field(default_factory=lambda: Array4x4(arr=np.eye(3)))
 
 
 class Array4x4(BaseArray):
-    arr: Array_4x4
+    arr: Array_4x4 = Field(default_factory=lambda: Array4x4(arr=np.eye(4)))
 
 
 class _ReadOnly:
@@ -236,7 +229,6 @@ class ReadOnlyArray(_ReadOnly, BaseArray):
 
 class ReadOnlyVector(_ReadOnly, BaseVector):
     model_config = ConfigDict(strict=True, frozen=True)
-
 
 
 if __name__ == '__main__':
