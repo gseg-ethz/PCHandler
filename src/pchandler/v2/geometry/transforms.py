@@ -4,18 +4,58 @@ Transforms module for pchandler.geometry.
 Provides helper functions for transforming point clouds and converting between coordinate systems.
 """
 from __future__ import annotations
-from typing import Optional, overload
+
 import copy
+from typing import Optional, overload, MutableMapping
+from collections import OrderedDict
 
 
-import numpy as np
-from numpy.typing import NDArray
-from collections import OrderedDict, MutableMapping
-from pydantic import BaseModel, model_validator, ValidationError, ConfigDict, validate_call
+import numpy    as np
+from pydantic   import BaseModel, model_validator, ValidationError, ConfigDict, validate_call
 
+from ..base_arrays import Array_4x4_T, Array4x4, BaseVector, Array_3x3_T
 
-from .core import PointCloudData
-from ..base_arrays import Array_4x4_T, Array4x4, BaseVector
+class Transform(Array4x4):
+    @classmethod
+    def from_translation(cls, vector: BaseVector) -> Transform:
+        return cls.generate(translation=vector)
+
+    @classmethod
+    def from_rotation(cls, matrix: Array_3x3_T) -> Transform:
+        return cls.generate(rotation=matrix)
+
+    @classmethod
+    def from_matrix(cls, matrix: Array_4x4_T) -> Transform:
+        return cls(arr=matrix)
+
+    @classmethod
+    def generate(cls, rotation=None, translation=None, scale=None):
+        """
+        Takes the form x0 = (T @ R * s + t) @ x1
+
+        Rotation  Translation     Scale:
+        | R 0 |     | I t |      | s 0 |
+        | 0 1 |     | 0 1 |      | 0 1 |
+        """
+        if rotation is None and translation is None and scale is None:
+            raise ValueError('TransformRecord must have at least one of the arguments')
+
+        affine = np.eye(4)
+        if rotation:
+            affine[:3, :3] @= rotation
+
+        if translation:
+            affine[:3, 3] += translation
+
+        if scale:
+            affine[np.eye(3)] *= scale
+
+        return cls.from_matrix(affine)
+
+    def as_record(self, forward=True):
+        if forward:
+            return TransformRecord(forward=self.arr)
+        return TransformRecord(backward=self.arr)
 
 class TransformRecord(BaseModel):
     forward: Optional[Array_4x4_T] = None
@@ -31,6 +71,10 @@ class TransformRecord(BaseModel):
 
         if self.backward is None:
             self.backward = np.linalg.inv(self.forward)
+
+
+
+
 
 
 class TransformLedger(OrderedDict, MutableMapping   [str, TransformRecord]):
@@ -62,7 +106,6 @@ class TransformLedger(OrderedDict, MutableMapping   [str, TransformRecord]):
         else:
             raise ValueError(f'Cannot set transform record value of type: {type(value)}')
 
-    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def rollback_record(self, index: int) -> tuple[np.ndarray, TransformLedger]:
         previous_history = type(self)()
         remaining_transforms: TransformLedger[str, TransformRecord] = copy.deepcopy(self)
@@ -83,38 +126,6 @@ class GlobalShift(BaseVector):
     model_config = ConfigDict(extra='forbid')
 
     def as_record(self):
-        forward = np.eye(4); forward[:3, :3] = -self.arr
-        backward = np.eye(4); backward[:3, :3] = self.arr
+        (forward := np.eye(4))[:3, 3] = -self.arr
+        (backward := np.eye(4))[:3, 3] = self.arr
         return TransformRecord(forward=forward, backward=backward)
-
-
-
-def transform_point_cloud(pcd: PointCloudData, transformation_matrix: np.ndarray) -> None:
-    """
-    Applies a 4x4 transformation matrix to the given point cloud.
-
-    Parameters
-    ----------
-    pcd : PointCloudData
-        The point cloud to transform.
-    transformation_matrix : np.ndarray
-        A (4 x 4) transformation matrix.
-    """
-    pcd.transform(transformation_matrix)
-
-
-def translate(pcd: PointCloudData, translation: NDArray[np.floating]) -> PointCloudData:
-    transformation_matrix = np.eye(4)
-    transformation_matrix[:3, 3] = translation
-    return pcd.transform(transformation_matrix)
-
-
-def scale(pcd: PointCloudData, scale: float) -> PointCloudData:
-    scale_matrix = np.eye(4)
-    scale_matrix[:3, 3] = scale
-    return pcd.transform(scale_matrix)
-
-
-# Todo: Add rotation and more complex
-
-# def rotate(pcd: PointCloudData, rotation: np.ndarray) -> PointCloudData:

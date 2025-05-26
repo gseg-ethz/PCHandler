@@ -3,15 +3,25 @@ from __future__ import annotations
 import warnings
 from abc import ABC, abstractmethod
 from enum import IntEnum
-from functools import cached_property
+from functools import cached_property, wraps
 from typing import Optional, Annotated
 
 import numpy as np
-from pydantic import Field, model_validator, BeforeValidator
+from pydantic import Field, model_validator, BeforeValidator, validate_call, ConfigDict, field_validator
 
-from ..base_arrays import ArrayNx3, CustomArrayLikeT, Array_Nx3_T, Array_4x4_T
-from ..validators import validate_spherical_angles
-from .transforms import TransformRecord, TransformLedger, GlobalShift
+from ..base_arrays import ArrayNx3, CustomArrayLikeT, Array_Nx3_T, Array_4x4_T, Vector_3_T, output_array_like
+from ..validators import validate_spherical_angles, enforce_azimuths
+from .transforms import TransformRecord, TransformLedger, GlobalShift, Transform
+
+PI = np.pi
+TWO_PI = 2 * PI
+HALF_PI = 0.5 * PI
+
+class TransformType(IntEnum):
+    TRANSLATE = 0
+    ROTATE = 1
+    SCALE = 2
+    AFFINE = 3
 
 
 class CoordSysEnum(IntEnum):
@@ -23,15 +33,36 @@ class CoordSysEnum(IntEnum):
 
 class Abstract3dCoordinates(ABC, ArrayNx3):
     transform_ledger: TransformLedger[str, [Array_4x4_T]] = Field(default_factory=TransformLedger)
+    spherical_origin: Optional[Vector_3_T] = None
+
+    @field_validator('transform_ledger', mode='before')
+    @classmethod
+    def initialise_empty_ledger(cls, value: dict|TransformLedger):
+        if isinstance(value, dict):
+            return TransformLedger(**value)
+        return value
+
     @property
     @abstractmethod
     def xyz(self) -> np.ndarray:
-        pass
+        raise NotImplementedError
 
     @property
     @abstractmethod
     def spher(self) -> np.ndarray:
-        pass
+        raise NotImplementedError
+
+def update_transform_ledger(name: str):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(instance: Abstract3dCoordinates, *args, **kwargs):
+            result = func(instance, *args, **kwargs)
+
+            result.transform_ledger[name] = TransformRecord(forward=args[0])
+        return wrapper
+    return decorator
+
+
 
 
 class CartesianCoordinates(Abstract3dCoordinates):
@@ -58,7 +89,10 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
     @cached_property
     def spher(self) -> np.ndarray:
-        return xyz2rhv(self.arr)
+        if self.spherical_origin is None:
+            warnings.warn('Scan center of point cloud is ambiguous and results can not be guaranteed')
+            return xyz2rhv(self.arr, np.zeros(3))
+        return xyz2rhv(self.arr, self.spherical_origin)
 
     @property
     def r(self):
@@ -77,41 +111,62 @@ class CartesianCoordinates(Abstract3dCoordinates):
         return self.spher
 
     def to_spherical(self) -> SphericalCoordinates:
-        spherical = SphericalCoordinates(**(self.model_dump() | {'arr': self.spher.copy()}))
+        spherical = SphericalCoordinates(**dict(
+            self.model_copy(update={'arr': self.spher.copy()}, deep=True)))
         delattr(self, 'spher')
         return spherical
 
     @classmethod
     def from_spherical(cls, spherical: SphericalCoordinates):
-        cartesian = cls(**(spherical.model_dump() | {'arr': spherical.xyz.copy()}))
+        cartesian = cls(**dict(
+            spherical.model_copy( update={'arr': spherical.xyz.copy()}, deep=True)))
         delattr(spherical, 'xyz')
         return cartesian
 
+    @update_transform_ledger('MATRIX')
+    @output_array_like(enabled=True, as_update=True)
+    def __rmatmul__(self, other):
+        if other.shape == (4, 4):
+            return np.matmul(other, self.H.T).T[:, :3]
+        return np.matmul(other, self.T).T
+
+    @update_transform_ledger('MATRIX')
+    @output_array_like(enabled=True, as_update=True)
+    def __matmul__(self, other):
+        if other.shape == (4, 4):
+            return np.matmul(self.H, other)[:, :3]
+        return np.matmul(self, other)
+
+    @update_transform_ledger('MATRIX')
+    @output_array_like(enabled=True, as_update=True)
+    def __imatmul__(self, other):
+        if other.shape == (4, 4):
+            self.arr = np.matmul(other, self.H.T)[:, :3]
+        self.arr = np.matmul(other, self.T)
+
     def transform(self, affine=None, rotation=None, translation=None, scale=None):
-        """
-        Takes the form x0 = (T @ R * s + t) @ x1
 
-        Rotation  Translation     Scale:
-        | R 0 |     | I t |      | s 0 |
-        | 0 1 |     | 0 1 |      | 0 1 |
-        """
-        if affine is None:
-            affine = np.eye(4)
-            if rotation:
-                affine[:3, :3] @= rotation
+        t = Transform.from_matrix(affine) if affine else np.eye(4)
 
-            if translation:
-                affine[:3, 3] += translation
+        if rotation: t @= rotation
+        if translation: t += translation
+        if scale: t *= scale
 
-            if scale:
-                affine[np.eye(3)] *= scale
-
-        self.arr = affine @ self.arr
+        self.arr = t @ self.H.T
         self.transform_ledger['AFFINE'] = TransformRecord(forward=affine)
 
 
 class SphericalCoordinates(Abstract3dCoordinates):
     arr: Annotated[Array_Nx3_T, BeforeValidator(validate_spherical_angles)]
+
+    # Add methods to apply tilt and yaw rotations
+    def rotate(self, yaw=None, pitch=None):
+        if yaw:
+            self.arr[:, 1] = enforce_azimuths(self.hz + yaw)
+
+        if pitch:
+            self.arr[:, 2] = np.abs(temp := self.v - pitch)
+            self.arr[np.logical_or(temp < 0, temp > PI), 1] = enforce_azimuths(self.hz + TWO_PI)
 
     @property
     def spher(self) -> np.ndarray:
@@ -135,7 +190,10 @@ class SphericalCoordinates(Abstract3dCoordinates):
 
     @cached_property
     def xyz(self) -> np.ndarray:
-        return rhv2xyz(self)
+        if self.spherical_origin is None:
+            warnings.warn('Spherical origin was not defined, so coordinates assumed to be at scan origin')
+            rhv2xyz(self.arr, np.zeros(3))
+        return rhv2xyz(self.arr, self.spherical_origin)
 
     @property
     def x(self) -> np.ndarray:
@@ -150,13 +208,15 @@ class SphericalCoordinates(Abstract3dCoordinates):
         return self.xyz[:, 2]
 
     def to_cartesian(self) -> CartesianCoordinates:
-        out = CartesianCoordinates(**(self.model_dump() | {'arr': self.xyz.copy()}))
+        cartesian = CartesianCoordinates(**dict(
+            self.model_copy( update={'arr': self.xyz.copy()}, deep=True )))
         delattr(self, 'xyz')
-        return out
+        return cartesian
 
     @classmethod
     def from_cartesian(cls, cartesian: CartesianCoordinates):
-        spherical = cls(**(cartesian.model_dump() | {'arr': cartesian.spher.copy()}))
+        spherical = cls(**dict(
+            cartesian.model_copy( update={'arr': cartesian.spher.copy()}, deep=True )))
         delattr(cartesian, 'spher')
         return spherical
 
@@ -175,44 +235,46 @@ class OptimisedCartesianCoordinates(CartesianCoordinates):
     def _optimal_range(decimal_magnitude: int = 4):
         return 10 ** decimal_magnitude
 
+    def initialise_transform_ledger(self):
+        if np.all(self.global_shift.arr == 0):
+            self.transform_ledger['GLOB'] = self.global_shift.as_record()
+        else:
+            self.transform_ledger['OPT'] = self.global_shift.as_record()
+
     @model_validator(mode='after')
-    def update_global_shift(self):
+    def update_coordinate_system_info(self):
         if self.is_shift_needed():
             self.compute_shift()
             self.arr -= self.global_shift
             self.transform_ledger['OPT'] = self.global_shift.as_record()
             self.current_system = CoordSysEnum.OPTIMAL
 
+        if len(self.transform_ledger) == 0:
+            self.initialize_transform_ledger()
+
     def as_global_coords(self):
         transform, _ = self.transform_ledger.rollback_record(0)
         return transform @ self
 
-    def to_spherical(self):
-        raise AttributeError('Cannot get spherical coordinates from an array with an undefined scan origin. '
-                             'Use TLSScan if origin of cloud is at (0, 0, 0)')
-
     @cached_property
     def spher(self) -> np.ndarray:
-        raise AttributeError('Cannot get spherical coordinates from an array with an undefined scan origin. '
-                             'Use TLSScan if origin of cloud is at (0, 0, 0)')
+        return xyz2rhv(self.as_global_coords())
 
-class TLSCoordinates(OptimisedCartesianCoordinates, CartesianCoordinates):
+class TLSCoordinates(OptimisedCartesianCoordinates):
     """Assumption should be made then that the user has origin at 0,0,0"""
     current_system: CoordSysEnum = CoordSysEnum.SOC
+    spherical_origin: Vector_3_T = np.zeros(3, dtype=np.float32)
     project_transformation: Optional[Array_4x4_T] = None
     is_soc_optimal: bool = False
 
     @model_validator(mode='after')
-    def update_global_shift(self):
-        pass
-
-    @model_validator(mode='after')
-    def initialize_transforms(self):
-        if (self.project_transformation is None) or np.all(np.isclose(self.project_transformation, np.eye(4))):
-            self.transform_ledger['SOC'] = TransformRecord(backward=np.eye(4))
-        else:
-            self.transform_ledger['PROJ'] = TransformRecord(backward=self.project_transformation)
-            self.transform_ledger['SOC'] = TransformRecord(forward=np.eye(4))
+    def update_coordinate_system_info(self):
+        if len(self.transform_ledger) == 0:
+            if (self.project_transformation is None) or np.all(np.isclose(self.project_transformation, np.eye(4))):
+                self.transform_ledger['SOC'] = TransformRecord(backward=np.eye(4))
+            else:
+                self.transform_ledger['PROJ'] = TransformRecord(backward=self.project_transformation)
+                self.transform_ledger['SOC'] = TransformRecord(forward=np.eye(4))
 
         if self.is_shift_needed():
             self.compute_shift()
@@ -247,21 +309,25 @@ class TLSCoordinates(OptimisedCartesianCoordinates, CartesianCoordinates):
     def spher(self) -> np.ndarray:
         return xyz2rhv(self.as_soc_coords())
 
-
-
-
-def rhv2xyz(spher: CustomArrayLikeT) -> CustomArrayLikeT:
-    xyz: CustomArrayLikeT = np.zeros_like(spher)
+@validate_call(config=ConfigDict(arbitrary_types_allowed=True))
+def rhv2xyz(spher: CustomArrayLikeT, origin_shift: Vector_3_T|None = None) -> np.ndarray:
+    xyz: np.ndarray = np.zeros_like(spher)
     xyz[:, 0] = spher[:, 0] * np.sin(spher[:, 2]) * np.cos(spher[:, 1])
     xyz[:, 1] = spher[:, 0] * np.sin(spher[:, 2]) * np.sin(spher[:, 1])
     xyz[:, 2] = spher[:, 0] * np.cos(spher[:, 2])
-    return xyz
 
+    return xyz if origin_shift is None else xyz - origin_shift
 
-def xyz2rhv(cart: CustomArrayLikeT) -> CustomArrayLikeT:
-    spher: CustomArrayLikeT = np.zeros_like(cart)
-    xy_2: CustomArrayLikeT = cart[:, 0]**2 + cart[:, 1]**2
-    spher[:, 0] = np.sqrt(xy_2 + cart[:, 2]**2)  # [  0, inf] slope distance
-    spher[:, 1] = np.arctan2(cart[:, 1], cart[:, 0])  # [-pi, +pi] horizonal angle
-    spher[:, 2] = np.arctan2(np.sqrt(xy_2), cart[:, 2])  # [  0, +pi] zenith angle
+@validate_call(config=ConfigDict(arbitrary_types_allowed=True))
+def xyz2rhv(cart: CustomArrayLikeT, origin_shift: Vector_3_T = np.zeros(3)) -> np.ndarray:
+    spher: np.ndarray = np.zeros_like(cart)
+
+    # Apply the shift in place to avoid creating additional copies
+    dx, dy, dz = origin_shift
+
+    xy_2: CustomArrayLikeT = (cart[:, 0] + dx)**2 + (cart[:, 1] + dy)**2
+    spher[:, 0] = np.sqrt(xy_2 + (cart[:, 2] + dz)**2)  # [  0, inf] slope distance
+    spher[:, 1] = np.arctan2((cart[:, 1] + dy), (cart[:, 0] + dx))  # [-pi, +pi] horizonal angle
+    spher[:, 2] = np.arctan2(np.sqrt(xy_2), cart[:, 2] + dz)  # [  0, +pi] zenith angle
+
     return spher

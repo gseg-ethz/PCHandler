@@ -1,6 +1,9 @@
 import numpy as np
 from numpy import ndarray, floating, asarray, issubdtype
 
+PI = np.pi
+TWO_PI = 2 * PI
+HALF_PI = 0.5 * PI
 
 def validate_spherical_angles(array: np.ndarray) -> np.ndarray:
     array[:, 0] = validate_radius(array[:, 0])
@@ -37,4 +40,7 @@ def validate_zenith_angles(array: np.ndarray) -> np.ndarray:
         raise ValueError(f'The range of the zenith (vertical) angles should be in [0, pi].'
                          f'Instead the range of [{array.min()}, {array.max()}] was received.')
 
-
+def enforce_azimuths(array: np.ndarray) -> np.ndarray:
+    array[array < 0] += TWO_PI
+    array[array > TWO_PI] -= TWO_PI
+    return array

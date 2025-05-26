@@ -3,9 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 import uuid
 import functools
-from typing import Any, Optional
+from typing import Any, Optional, Literal
 from copy import deepcopy
 from functools import wraps
+from unittest import case
 
 # noinspection PyPackageRequirements
 import numpy as np
@@ -42,37 +43,38 @@ Vector_2_T = NDArray[Shape['2'], Any]
 Vector_3_T = NDArray[Shape['3'], Any]
 
 
-def force_output_type(enabled=False):
+# TODO need to find a nice way to get all the relevant right mixins
+def output_array_like(enabled=False, as_update=True):
     def decorator(func):
         @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            result = func(*args, **kwargs)
-            base_t = type(args[0])
+        def wrapper(instance: BaseArray, *args, **kwargs):
+            arraylike: bool = isinstance(instance, BaseArray)
+            if not arraylike:
+                raise TypeError('This decorated function must be attached to a method of BaseArray subclass')
+
+            result = func(instance, *args, **kwargs)
 
             if not enabled:
                 return result
 
-            if isinstance(result, (list, tuple, set)):
-                return type(result)(base_t(arr=item)
-                                    if issubclass(type(item), np.ndarray|base_t)
-                                    else item
-                                    for item in result)
+            if not as_update:
+                return type(instance)(arr=result)
+            return instance.get_copy(update={'arr': result})
 
-            return base_t(arr=result) if issubclass(type(result), np.ndarray|base_t) else result
         return wrapper
     return decorator
 
 
-def __get_args_as_arrays__(instance, *args, **kwargs):
-    arrays = []
-    for x in args:
-        if isinstance(x, type(instance)):
-            arrays.append(x.arr)
-        else:
-            arrays.append(np.asarray(x))
-    return arrays
+def __get_args_as_arrays__(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        array_args = list(args)
+        for i, x in enumerate(args[3:], 3):
+            array_args[i] = x.arr if isinstance(x, type(array_args[0])) else np.asarray(x)
+        return func(*array_args, **kwargs)
+    return wrapper
 
-
+# TODO find a way to enable positional args without error and type highlighting
 class BaseArray(BaseModel, NpMixinT):
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
@@ -80,10 +82,11 @@ class BaseArray(BaseModel, NpMixinT):
         revalidate_instances="always",
         validate_default=True,
         frozen=False,
-        extra='allow')
-    arr: Array_T
+        extra='ignore')
+    arr: Array_T = Field(kw_only=False)
     cache_uuid: UUID4 = Field(default_factory=lambda: uuid.uuid4(), exclude=True)
     offloaded: bool = Field(default=False, exclude=True)
+
 
     # noinspection PyNestedDecorators
     @field_validator('arr', mode='before')
@@ -104,11 +107,11 @@ class BaseArray(BaseModel, NpMixinT):
 
         return array
 
-    # noinspection PyNestedDecorators
-    @field_validator('arr', mode='before')
-    @classmethod
-    def copy(cls, array: Any) -> Any:
-        return deepcopy(array)
+    def get_copy(self, update=None, include=None, exclude=None):
+        data = self.model_dump(
+            include=include,
+            exclude=set(set(exclude or {}) | set((update or {}).keys())))
+        return self.model_validate({**data, **(deepcopy(update) or {})})
 
     @model_validator(mode='after')
     def freeze(self):
@@ -116,9 +119,10 @@ class BaseArray(BaseModel, NpMixinT):
             self.arr.setflags(write=False)
         return self
 
-    # def __array_function__(self, func, types, *args, **kwargs):
-    #     arrays = __get_args_as_arrays__(self, args, **kwargs)
-    #     return func(arrays, **kwargs)
+
+    @__get_args_as_arrays__
+    def __array_ufunc__(self, ufunc, method, *args, **kwargs):
+        return getattr(ufunc, method)(*args, **kwargs)
 
     def __array__(self):
         return self.arr
@@ -130,11 +134,6 @@ class BaseArray(BaseModel, NpMixinT):
     @property
     def __array_interface__(self):
         return self.arr.__array_interface__
-
-    @force_output_type(enabled=False)
-    def __array_ufunc__(self, ufunc, method, *args, **kwargs):
-        arrays = __get_args_as_arrays__(self, *args, **kwargs)
-        return getattr(ufunc, method)(*arrays, **kwargs)
 
     # def __array_function__(self, *args, **kwargs):
     #     pass
@@ -165,30 +164,55 @@ class BaseArray(BaseModel, NpMixinT):
     def max(self):
         return self.arr.max()
 
-    def copy_array(self):
-        return self.arr.copy()
-
-    def get_view(self):
-        return self.arr.view()
-
     def __len__(self):
         raise NotImplementedError('Length of an undefined array shape is not clear')
 
     def __getitem__(self, item):
-        return self.arr[item]
+        return self.sample(item)
 
     def __setitem__(self, key, value):
         self.arr[key] = value
 
+    def __delitem__(self, key):
+        np.delete(self.arr, self.create_mask(key))
+
+    def create_mask(self, indices):
+        mask = np.zeros_like(self.arr, dtype=np.bool_)
+        mask[indices] = True
+        return mask
+
+    def sample(self, index):
+        return self.get_copy(update={'arr': self.arr[self.create_mask(index)]})
+
+    def reduce(self, index):
+        self.arr = self.arr[self.create_mask(index)]
+
+    def extract(self, index):
+        extracted = self.sample(index)
+        self.reduce(~index)
+        return extracted
+
 CustomArrayLikeT = np.ndarray | NpMixinT
 
 
-class LimitedColumnArray(BaseArray):
+class _FixedLengthArray(BaseArray):
     def __len__(self):
         return self.arr.shape[0]
 
+    def create_mask(self, indices):
+        mask = np.zeros_like(self, dtype=np.bool_)
+        if mask.ndim == 1:
+            mask[indices] = True
+        else:
+            mask[indices, :] = True
+        return mask
 
-class BaseVector(LimitedColumnArray):
+    @property
+    def H(self):
+        return np.column_stack((self.arr, np.ones(len(self), dtype=self.dtype)))
+
+
+class BaseVector(_FixedLengthArray):
     arr: Vector_N_T
 
 
@@ -196,19 +220,22 @@ class Array2D(BaseArray):
     arr: Array_NxM_T
 
 
-class ArrayNx2(LimitedColumnArray):
+class ArrayNx2(_FixedLengthArray):
     arr: Array_Nx2_T
 
 
-class ArrayNx3(LimitedColumnArray):
+class ArrayNx3(_FixedLengthArray):
     arr: Array_Nx3_T
 
 
-class Array3x3(BaseArray):
+class _TransformMatrixType(BaseArray):
+
+
+class Array3x3(_TransformMatrixType):
     arr: Array_3x3_T = Field(default_factory=lambda: Array4x4(arr=np.eye(3)))
 
 
-class Array4x4(BaseArray):
+class Array4x4(_TransformMatrixType):
     arr: Array_4x4_T = Field(default_factory=lambda: Array4x4(arr=np.eye(4)))
 
 
