@@ -71,7 +71,7 @@ class PointCloudFilter(ABC):
             A new PointCloudData instance containing only the sampled points.
         """
         m = self.mask(pcd)
-        return pcd.sample(m)
+        return pcd.sample()
 
 
 class GenericFieldFilter(PointCloudFilter):

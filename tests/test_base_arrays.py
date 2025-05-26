@@ -135,17 +135,14 @@ class TestBaseArray(BaseTests):
 
         def test_array_copy(self):
             a = self.cls(arr=np.random.rand(100,100))
-            b = a.copy_array()
+            b = a.get_copy()
+            assert id(a.arr) != id(b.arr)
             assert np.all(np.isclose(b, a))
             assert id(a) != id(b)
 
-        def test_get_view(self):
-            a = self.cls(arr=np.random.rand(100,100))
-            b = a.get_view()
-            assert id(a) != id(b)
-            assert b.base is not None
 
     def test_initialised_obj_not_a_view(self):
+        # DISCUSS should we always create a copy? Would be part of the validation function
         a = np.ones((10,10))
         obj1 = self.cls(arr=a)
         obj2 = self.cls(arr=a)

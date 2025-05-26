@@ -9,7 +9,7 @@ from typing import Optional, Annotated
 import numpy as np
 from pydantic import Field, model_validator, BeforeValidator, validate_call, ConfigDict, field_validator
 
-from ..base_arrays import ArrayNx3, CustomArrayLikeT, Array_Nx3_T, Array_4x4_T, Vector_3_T, output_array_like
+from ..base_arrays import ArrayNx3, CustomArrayLikeT, Array_Nx3_T, Array_4x4_T, Vector_3_T, BaseArray
 from ..validators import validate_spherical_angles, enforce_azimuths
 from .transforms import TransformRecord, TransformLedger, GlobalShift, Transform
 
@@ -52,6 +52,19 @@ class Abstract3dCoordinates(ABC, ArrayNx3):
     def spher(self) -> np.ndarray:
         raise NotImplementedError
 
+    def __getitem__(self, key):
+        return self.sample(*key)
+
+    def __setitem__(self, key, value):
+        self.arr[key] = value
+
+    def __rmatmul__(self, other):
+        temp = self.H.T if other.shape == (4, 4) else self.T
+        # Todo add to the transformation ledger
+        self.transform_ledger['RMATMUL'] = Transform.from_matrix(other)
+        return self.get_copy(array=super(BaseArray, self).__rmatmul__(temp).T[:, :3])
+
+
 def update_transform_ledger(name: str):
     def decorator(func):
         @wraps(func)
@@ -61,7 +74,6 @@ def update_transform_ledger(name: str):
             result.transform_ledger[name] = TransformRecord(forward=args[0])
         return wrapper
     return decorator
-
 
 
 
@@ -110,6 +122,10 @@ class CartesianCoordinates(Abstract3dCoordinates):
     def rhv(self):
         return self.spher
 
+    @property
+    def fov(self):
+        return self.spher.fov
+
     def to_spherical(self) -> SphericalCoordinates:
         spherical = SphericalCoordinates(**dict(
             self.model_copy(update={'arr': self.spher.copy()}, deep=True)))
@@ -123,43 +139,25 @@ class CartesianCoordinates(Abstract3dCoordinates):
         delattr(spherical, 'xyz')
         return cartesian
 
-    @update_transform_ledger('MATRIX')
-    @output_array_like(enabled=True, as_update=True)
-    def __rmatmul__(self, other):
-        if other.shape == (4, 4):
-            return np.matmul(other, self.H.T).T[:, :3]
-        return np.matmul(other, self.T).T
-
-    @update_transform_ledger('MATRIX')
-    @output_array_like(enabled=True, as_update=True)
-    def __matmul__(self, other):
-        if other.shape == (4, 4):
-            return np.matmul(self.H, other)[:, :3]
-        return np.matmul(self, other)
-
-    @update_transform_ledger('MATRIX')
-    @output_array_like(enabled=True, as_update=True)
-    def __imatmul__(self, other):
-        if other.shape == (4, 4):
-            self.arr = np.matmul(other, self.H.T)[:, :3]
-        self.arr = np.matmul(other, self.T)
-
     def transform(self, affine=None, rotation=None, translation=None, scale=None):
 
-        t = Transform.from_matrix(affine) if affine else np.eye(4)
+        affine = Transform.from_matrix(affine) if affine else np.eye(4)
 
-        if rotation: t @= rotation
-        if translation: t += translation
-        if scale: t *= scale
+        if rotation is not None:
+            affine[:3, :3] @= rotation
+        if translation is not None:
+            affine[:3, 3] += translation
+        if scale is not None:
+            affine[[0, 1, 2], [0, 1, 2]] *= scale
 
-        self.arr = t @ self.H.T
+        self.arr = (affine @ self.H.T).T[:, :3]
         self.transform_ledger['AFFINE'] = TransformRecord(forward=affine)
 
 
 class SphericalCoordinates(Abstract3dCoordinates):
     arr: Annotated[Array_Nx3_T, BeforeValidator(validate_spherical_angles)]
 
-    # Add methods to apply tilt and yaw rotations
+    # DISCUSS - Add methods to apply tilt and yaw rotations easily (e.g. for spherical image projection shifts?
     def rotate(self, yaw=None, pitch=None):
         if yaw:
             self.arr[:, 1] = enforce_azimuths(self.hz + yaw)
@@ -167,6 +165,10 @@ class SphericalCoordinates(Abstract3dCoordinates):
         if pitch:
             self.arr[:, 2] = np.abs(temp := self.v - pitch)
             self.arr[np.logical_or(temp < 0, temp > PI), 1] = enforce_azimuths(self.hz + TWO_PI)
+
+    @property
+    def fov(self):
+        raise NotImplementedError
 
     @property
     def spher(self) -> np.ndarray:
@@ -209,18 +211,22 @@ class SphericalCoordinates(Abstract3dCoordinates):
 
     def to_cartesian(self) -> CartesianCoordinates:
         cartesian = CartesianCoordinates(**dict(
-            self.model_copy( update={'arr': self.xyz.copy()}, deep=True )))
+            self.model_copy(
+                update={'arr': self.xyz.copy()},
+                deep=True )))
         delattr(self, 'xyz')
         return cartesian
 
     @classmethod
     def from_cartesian(cls, cartesian: CartesianCoordinates):
         spherical = cls(**dict(
-            cartesian.model_copy( update={'arr': cartesian.spher.copy()}, deep=True )))
+            cartesian.model_copy(
+                update={'arr': cartesian.spher.copy()},
+                deep=True )))
         delattr(cartesian, 'spher')
         return spherical
 
-
+# DISCUSS - Nomenclature needs to be decided
 class OptimisedCartesianCoordinates(CartesianCoordinates):
     global_shift: GlobalShift = Field(default_factory=lambda: GlobalShift(arr=np.zeros(3)))
 

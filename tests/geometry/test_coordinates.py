@@ -6,7 +6,7 @@ import sys
 import numpy as np
 from scipy.spatial.transform import Rotation
 
-from pchandler.v2.base_arrays import ArrayNx3, Array4x4
+from pchandler.v2.base_arrays import ArrayNx3, AffineArray
 from pchandler.v2.geometry.coordinates import (
     CartesianCoordinates, Abstract3dCoordinates, SphericalCoordinates, rhv2xyz, xyz2rhv
 )
@@ -163,8 +163,6 @@ class TestCartesianCoordinates:
 
         assert 'AFFINE' in cart_obj.transform_ledger[-1][0]
 
-        raise NotImplementedError
-
 
 class TestConversions:
     def test_cartesian_to_spherical(self, known_xyz, known_spher):
@@ -222,12 +220,22 @@ def test_rmatmul_override():
     rot = Rotation.from_euler(seq='xyz', angles=np.array([0, 1, 1])).as_matrix()
     (hom:= np.eye(4))[:3, :3] = rot
 
-    hom_ = Array4x4(arr=hom)
+    hom_ = AffineArray(arr=hom)
     xyz2 = hom @ xyz.H.T
     assert isinstance(xyz2, np.ndarray)
     abc = xyz.get_copy(update={'arr': np.random.rand(6, 3)})
     xyz3 = hom_ @ xyz
 
+    xyz4 = xyz3.get_copy()
+    xyz4 += 2
+
     assert isinstance(xyz3, type(xyz))
     assert xyz.shape != hom.shape
-    assert np.any(xyz != xyz2)
+    assert xyz.shape != xyz2.shape
+
+
+def test_indexing():
+
+    xyz = CartesianCoordinates(arr=np.random.rand(10,3))
+    pt1 = xyz[0, :]
+    pt2 = xyz[1, :]

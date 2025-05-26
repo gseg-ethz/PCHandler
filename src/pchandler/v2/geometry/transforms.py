@@ -13,9 +13,9 @@ from collections import OrderedDict
 import numpy    as np
 from pydantic   import BaseModel, model_validator, ValidationError, ConfigDict, validate_call
 
-from ..base_arrays import Array_4x4_T, Array4x4, BaseVector, Array_3x3_T
+from ..base_arrays import Array_4x4_T, AffineArray, BaseVector, Array_3x3_T
 
-class Transform(Array4x4):
+class Transform(AffineArray):
     @classmethod
     def from_translation(cls, vector: BaseVector) -> Transform:
         return cls.generate(translation=vector)
@@ -81,20 +81,12 @@ class TransformLedger(OrderedDict, MutableMapping   [str, TransformRecord]):
     def __int__(self):
         super(TransformLedger, self).__init__()
 
-    @overload
-    def __getitem__(self, index: int) -> tuple[str, TransformRecord]:
-        ...
-
-    @overload
-    def __getitem__(self, index: str) -> TransformRecord:
-        ...
-
     def __getitem__(self, key: str|int) -> TransformRecord|tuple[str, TransformRecord]:
         if isinstance(key, int):
-            return list(super(TransformLedger, self).items())[key][1]
+            return list(super(TransformLedger, self).items())[key]
         return super(TransformLedger, self).__getitem__(key)
 
-    def __setitem__(self, key: str|int, value: np.ndarray|Array4x4|TransformRecord):
+    def __setitem__(self, key: str|int, value: np.ndarray|AffineArray|TransformRecord):
         if isinstance(value, TransformRecord):
             if isinstance(key, int):
                 key = list(super(TransformLedger, self).items())[key]
