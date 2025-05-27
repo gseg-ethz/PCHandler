@@ -13,9 +13,9 @@ from collections import OrderedDict
 import numpy    as np
 from pydantic   import BaseModel, model_validator, ValidationError, ConfigDict, validate_call
 
-from ..base_arrays import Array_4x4_T, AffineArray, BaseVector, Array_3x3_T
+from ..base_arrays import Array_4x4_T, Transform4x4, BaseVector, Array_3x3_T
 
-class Transform(AffineArray):
+class Transform(Transform4x4):
     @classmethod
     def from_translation(cls, vector: BaseVector) -> Transform:
         return cls.generate(translation=vector)
@@ -75,8 +75,6 @@ class TransformRecord(BaseModel):
 
 
 
-
-
 class TransformLedger(OrderedDict, MutableMapping   [str, TransformRecord]):
     def __int__(self):
         super(TransformLedger, self).__init__()
@@ -86,7 +84,7 @@ class TransformLedger(OrderedDict, MutableMapping   [str, TransformRecord]):
             return list(super(TransformLedger, self).items())[key]
         return super(TransformLedger, self).__getitem__(key)
 
-    def __setitem__(self, key: str|int, value: np.ndarray|AffineArray|TransformRecord):
+    def __setitem__(self, key: str|int, value: np.ndarray | Transform4x4 | TransformRecord):
         if isinstance(value, TransformRecord):
             if isinstance(key, int):
                 key = list(super(TransformLedger, self).items())[key]

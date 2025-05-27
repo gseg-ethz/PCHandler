@@ -1,11 +1,32 @@
-from typing import Optional
+from typing import Optional, TypedDict, Unpack
+
 from pydantic import Field
+import numpy as np
+
 from .coordinates import CartesianCoordinates, TLSCoordinates
 from .scalar_fields_pydantic import ScalarFieldManager
+from ...
+
+
+class ConfigPointCloud(TypedDict):
+    project_optimal_center: np.ndarray
+    optimal: bool
+    read_only: bool
+    transform_to_project_coords:
 
 
 class BasePointCloud(CartesianCoordinates):
     sfm: Optional[ScalarFieldManager] = Field(default_factory=ScalarFieldManager)
+
+    def __new__(cls, *args, **kwargs):
+        # TODO logic for handling the different point cloud types based on parameters
+        """
+
+        Parameters
+        ----------
+        args
+        kwargs
+        """
 
     def __getitem__(self, item):
         pass
@@ -25,9 +46,6 @@ class BasePointCloud(CartesianCoordinates):
         pass
 
     def merge(self):
-        pass
-
-    def copy(self):
         pass
 
     def to_o3d(self):

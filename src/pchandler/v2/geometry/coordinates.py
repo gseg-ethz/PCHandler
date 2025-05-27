@@ -228,7 +228,7 @@ class SphericalCoordinates(Abstract3dCoordinates):
 
 # DISCUSS - Nomenclature needs to be decided
 class OptimisedCartesianCoordinates(CartesianCoordinates):
-    global_shift: GlobalShift = Field(default_factory=lambda: GlobalShift(arr=np.zeros(3)))
+    optimal_shift: GlobalShift = Field(default_factory=lambda: GlobalShift(arr=np.zeros(3)))
 
     def compute_shift(self, decimal_magnitude: int = 4):
         value = np.median(np.round(self.arr, decimals=-(decimal_magnitude - 1)), axis=0)
@@ -251,9 +251,11 @@ class OptimisedCartesianCoordinates(CartesianCoordinates):
     def update_coordinate_system_info(self):
         if self.is_shift_needed():
             self.compute_shift()
-            self.arr -= self.global_shift
+            self.arr = self.arr - self.global_shift
             self.transform_ledger['OPT'] = self.global_shift.as_record()
             self.current_system = CoordSysEnum.OPTIMAL
+
+        self.arr = self.arra
 
         if len(self.transform_ledger) == 0:
             self.initialize_transform_ledger()

@@ -1,74 +1,46 @@
 from __future__ import annotations
 
-import uuid
-import functools
 from functools import cached_property
-from typing import Any, Optional, Callable
-from copy import deepcopy
-
+from typing import Any, Optional, TypedDict, Unpack
 
 import numpy as np
 from numpydantic import NDArray, Shape
 from pydantic import BaseModel, ConfigDict, model_validator, field_validator, UUID4, Field
 
-NpMixinT = np.lib.mixins.NDArrayOperatorsMixin
+# Base types for Pydantic validation
+Array_T = NDArray[Shape['*, ...'], Any]         # Any array like object. E.g. image stacks (
+Array_NxM_T = NDArray[Shape['*, *'], Any]       # Intensity image, depth image
+Array_NxM_3_T = NDArray[Shape['*, *, 3'], Any]    # RGB or normal image
+Array_Nx2_T = NDArray[Shape['*, 2'], Any]       # Image coordinates or plane coordinates
+Array_Nx3_T = NDArray[Shape['*, 3'], Any]       # 3D Coordinates / Scalar Field triplets (RGB, normals)
+Array_3x3_T = NDArray[Shape['4, 4'], Any]       # Rotation Matrix
+Array_4x4_T = NDArray[Shape['4, 4'], Any]       # Affine Transformation
+Vector_N_T = NDArray[Shape['*'], Any]           # Scalar Fields
+Vector_2_T = NDArray[Shape['2'], Any]           # Image coordinate / translation vector
+Vector_3_T = NDArray[Shape['3'], Any]           # 3D coordinate / translation vector
 
-def make_ndarray_type(*args: Optional[int|str], dtype = None):
-    """
-    Helper function to generate the numpydantic type for a ndarray.
 
-    Calling 'make_ndarray_type(None, 3, dtype=np.float32)' would return a numpydantic dtype corresponding to an array
-    of shape (N, 3) with dtype = np.float32 and would provide pydantic validation on this
-    """
-    if len(args) == 0:
-        shape_list = ['*', '...']
-    else:
-        shape_list: list = [str(x) if x is not None else "*" for x in args]
-
-    return NDArray[Shape[', '.join(shape_list)], dtype if dtype is not None else Any]
-
-# Validation types for Pydantic
-Array_T = NDArray[Shape['*, ...'], Any]
-Array_NxM_T = NDArray[Shape['*, *'], Any]
-Array_Nx2_T = NDArray[Shape['*, 2'], Any]
-Array_Nx3_T = NDArray[Shape['*, 3'], Any]
-Array_3x3_T = NDArray[Shape['4, 4'], Any]
-Array_4x4_T = NDArray[Shape['4, 4'], Any]
-Vector_N_T = NDArray[Shape['*'], Any]
-Vector_2_T = NDArray[Shape['2'], Any]
-Vector_3_T = NDArray[Shape['3'], Any]
-
-CustomArrayLikeT = np.ndarray | NpMixinT
-
-def __get_args_as_arrays__(func):
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        array_args = list(args)
-
-        for i, x in enumerate(args[3:], 3):
-            array_args[i] = x.arr if isinstance(x, type(array_args[0])) else np.asarray(x)
-
-        return func(*array_args, **kwargs)
-    return wrapper
-
-# DECIDE: mixins only add when needed?
-class BaseArray(BaseModel, NpMixinT):
+# TODO define the scope -> Do we want an all functioning array class or just define the critical ones
+#  Scalar Fields
+#  Coordinates
+#  Transformations
+#  Images (depth / RGB / stacks)
+#  This will then define if Mixins to be included at base or not
+#  Gut feeling is to include default mixins but always return numpy array
+#   -> This is based on the idea that other 'subclassed' or container instances will be included in these funcs.
+class BaseArray(BaseModel):
     """
     BaseArray is designed to be a subclassable, automatic validator for array based classes.
 
     In line with the PCHandler project, the main idea is that it can be extended to support the following:
         -> Coordinate Classes
         -> Scalar Fields
-        -> Transformation Matrices (4x4 Affine and 3x3 Rotation (for example))
-        -> Scalar Fields
+        -> Transformation Matrices (4x4 Affine and 3x3 matrices -> intrinsic / extrinsic)
 
-    The shape of each should be clearly validated.
-    The dtype should also be able to be validated.
-    The objects should support additional attribute information.
-    Arrays can also be lazy loaded.
-
-    These should also be easily sampled from
-
+    The shape of each should be validated any time an object or attribute is changed.
+    The dtype should also be able to be validated (e.g. RGB or Optimised Coordinates).
+    Objects can also be easily extended to support other attribute information (e.g. lazy loading, image metadata).
+    Objects can also be frozen absolutely -> e.g. a loaded read-only array's coordinates "never" change"
     """
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
@@ -79,107 +51,98 @@ class BaseArray(BaseModel, NpMixinT):
         extra='ignore')
     arr: Array_T
 
-    # noinspection PyNestedDecorators
-    @field_validator('arr', mode='before')
-    @classmethod
-    def coerce(cls, array: list | tuple | np.ndarray) -> Any:
-        if isinstance(array, (list, tuple)) or issubclass(type(array), NpMixinT):
-            array = np.asarray(array)
-
-        elif not isinstance(array, np.ndarray) and not issubclass(type(array), cls):
-            raise TypeError(f'Cannot convert {type(array)} to numpy array')
-
-        if isinstance(cls.model_fields['arr'].annotation, NDArray):
-            base_type = cls.model_fields['arr'].annotation.__dict__['__args__'][1]
-
-            if base_type is not Any:
-                if np.can_cast(array.dtype, base_type):
-                    return array.astype(base_type)
-
-                raise TypeError(f'Cannot convert {array.dtype} to {cls.arr.dtype}')
-
-        return array
-
     @model_validator(mode='after')
     def freeze(self):
         if self.model_config['frozen']:
             self.arr.setflags(write=False)
         return self
 
+    # TODO THIS MUST STAY - __array__ is deprecated
     @property
-    def __array__(self):
-        return self.arr
+    def __array_interface__(self) -> dict:
+        """
+        Gives access for all numpy functions to the root array object
+        """
+        return self.arr.__array_interface__
 
-    # @property
-    # def __array_interface__(self):
-    #     return self.arr.__array_interface__
-    #
-    # @__get_args_as_arrays__
-    # def __array_ufunc__(self, ufunc, method, *args, **kwargs):
-    #     # TODO best way to apply functions in place for 'out'
-    #     if 'out' in kwargs:
-    #         output_target = kwargs.pop('out')[0]
-    #
-    #         if isinstance(output_target, type(self)):
-    #             output_target.arr[:] = getattr(ufunc, method)(*args, **kwargs)
-    #         else:
-    #             output_target[:] = getattr(ufunc, method)(*args, **kwargs)
-    #
-    #         return output_target
-    #     return getattr(ufunc, method)(*args, **kwargs)
+    def __array_wrap__(self, out_arr, context=None, return_scalar=False):
+        """
+        This function provides access to the returned object from numpy class methods / functions
 
-    def get_copy(self, array=None, *, update=None, include=None, exclude=None, as_view: bool = False):
-        """If no parameters, copy the whole array as is"""
+        for example np.add(a, b) returns a numpy array but can be caught here to return always as type(self).
+        """
+        return super().__array_wrap__(self, out_arr, context, return_scalar)
+
+    def __array_finalize__(self, obj):
+        """
+        Finalise the createion process of a new instance (after __new__)
+        """
+        return super().__array_finalize__()
+
+    def update_copy(self, array: np.array|BaseArray|None = None, *args, deep: bool = False, **kwargs) -> BaseArray:
+        """
+        This function is designed to be more efficient by not dumping the memory heavy array if it's to be updated in
+        the new instance.
+        E.g. if 'arr' is in the update dict {'arr': np.random.rand(10000, 3)}, don't dump the existing, just add this
+        new value.
+        """
+        update = kwargs.get('update', {})
+        include = set(kwargs.get('include', []))
+        exclude = set(kwargs.get('exclude', [])) | {'T'}
+
         update = update or {}
+        # NOTE array positional arg takes precedence over update dict
+        # TODO decide if extra logic required
 
         if array is not None:
-            # This will override any 'update' parameter
-            array = array.reshape(-1, 3) if array.size == 3 else array
-            update |= {'arr': array}
+            update['arr'] = array.arr if isinstance(array, BaseArray) else array
 
-        data = self.model_dump(
-            include=include,
-            exclude=set(set(exclude or {}) | set((update or {}).keys())))
+        return self.copy(deep=deep, include=include, exclude=exclude, update=update)
 
-        if as_view:
-            self.model_validate({**data, **update})
+    # TODO discuss -> default is ALWAYS a copy to avoid references and views -> Particularly with global shift.
+    #  Views for point cloud data are of little benefit unless 'slicing'
+    #  There may be more benefit on image operations
+    def copy(self, *args, deep=True, **kwargs):
+        """
+        Produce a deep or shallow copy of the model. If no 'update' parameters passed then copy the whole model.
+        """
+        update = kwargs.get('update', None)
+        if update is not None:
+            new_model = self.model_copy(update=update, deep=deep)
+            new_model.model_validate(new_model, strict=True)
+            return new_model
+        return self.model_copy(deep=deep, *args, **kwargs)
 
-        return self.model_validate(deepcopy({**data, **update}))
+    def view(self, cls: Optional[type] = None):
+        raise NotImplementedError
 
     @cached_property
-    def T(self):
-        return self.arr.T
+    def T(self): return self.arr.T
 
     @property
-    def shape(self):
-        return self.arr.shape
+    def shape(self): return self.arr.shape
 
     @property
-    def dtype(self):
-        return self.arr.dtype
+    def dtype(self): return self.arr.dtype
 
     @property
-    def ndim(self):
-        return self.arr.ndim
+    def ndim(self): return self.arr.ndim
 
     @property
-    def base(self):
-        return self.arr.base
+    def base(self): return self.arr.base
 
     @property
-    def size(self):
-        return self.arr.size
+    def size(self): return self.arr.size
 
-    def min(self):
-        return self.arr.min()
+    def min(self): return self.arr.min()
 
-    def max(self):
-        return self.arr.max()
+    def max(self): return self.arr.max()
 
     def __len__(self):
         raise NotImplementedError('Length of an undefined array shape is not clear')
 
-    # TODO overwrite these for coordinate_sets
+    # TODO overwrite these for coordinate_sets -> This could become abstract as well as others to force this object not
+    #  to be usable
     def __getitem__(self, item):
         return self.arr[*item]
 
@@ -190,23 +153,26 @@ class BaseArray(BaseModel, NpMixinT):
         np.delete(self.arr, self.create_mask(key))
 
     def create_mask(self, *indices):
-        mask = np.zeros_like(self.arr, dtype=np.bool_)
-        mask[*indices] = True
+        if isinstance(indices, slice):
+            mask = indices
+        else:
+            mask = np.zeros_like(self.arr, dtype=np.bool_)
+            mask[*indices] = True
         return mask
 
-    def sample(self, *index, sub_ok=False):
-        # DISCUSS creating mask will always COPY (according to docs)
+    def sample(self, *index, as_ndarray=False):
+        """Sample produces a copy of the sampled points"""
         mask = self.create_mask(*index)
-
-        if sub_ok:
-            return self.get_copy(self.arr[mask])
-
-        return self.arr[mask].copy()
+        if as_ndarray:
+            return self.arr[mask].copy()
+        return self.updated_copy(array=self.arr[mask])
 
     def reduce(self, *index):
+        """Reduces the array to the points indexed"""
         self.arr = self.arr[self.create_mask(*index)]
 
     def extract(self, index):
+        """Returns the points indexed but also reduces the indexed array by these points"""
         mask = self.create_mask(*index)
         extracted = self.sample(mask)
         self.reduce(~mask)
@@ -217,6 +183,8 @@ class _FixedLengthArray(BaseArray):
     def __len__(self):
         return self.arr.shape[0]
 
+
+class _HomogeneousArray(BaseArray):
     @property
     def H(self):
         return np.column_stack((self.arr, np.ones(len(self), dtype=self.dtype)))
@@ -230,35 +198,36 @@ class Array2D(BaseArray):
     arr: Array_NxM_T
 
 
-class ArrayNx2(_FixedLengthArray):
+class ArrayNx2(_FixedLengthArray, _HomogeneousArray):
     arr: Array_Nx2_T
 
 
-class ArrayNx3(_FixedLengthArray):
+class ArrayNx3(_FixedLengthArray, _HomogeneousArray):
     arr: Array_Nx3_T
 
 
 class _TransformArray(BaseArray):
     def __matmul__(self, other):
-        # Ensure's that the right multiply method from the point set is used to recreate that object (and history)
-        if isinstance(other, ArrayNx3):
+        # This is transforming the other object. Therefore use it's __rmatmul__ to enable adding the transform to ledger
+        if isinstance(other, (ArrayNx3, ArrayNx2)):
             return other.__rmatmul__(self)
 
-        # TODO need to determine how the transform history stack works
         if isinstance(other, type(self)):
+            # DISCUSS do transforms need
             return self.get_copy(array=self.__matmul__(other))
 
         return self.__matmul__(other)
 
 
-class RotationArray(_TransformArray):
-    arr: Array_3x3_T = Field(default_factory=lambda: RotationArray(arr=np.eye(3)))
+class Transform3x3(_TransformArray):
+    arr: Array_3x3_T = Field(default_factory=lambda: Transform3x3(arr=np.eye(3)))
 
 
-class AffineArray(_TransformArray):
-    arr: Array_4x4_T = Field(default_factory=lambda: AffineArray(arr=np.eye(4)))
+class Transform4x4(_TransformArray):
+    arr: Array_4x4_T = Field(default_factory=lambda: Transform4x4(arr=np.eye(4)))
 
 
+# TODO decide if to keep these or add more
 class _ReadOnly:
     # noinspection PyNestedDecorators
     @field_validator('arr', mode='before')
@@ -279,4 +248,3 @@ class ReadOnlyArray(_ReadOnly, BaseArray):
 
 class ReadOnlyVector(_ReadOnly, BaseVector):
     model_config = ConfigDict(strict=True, frozen=True)
-
