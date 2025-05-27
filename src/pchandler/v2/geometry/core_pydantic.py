@@ -1,9 +1,11 @@
+from typing import Optional
+from pydantic import Field
 from .coordinates import CartesianCoordinates, TLSCoordinates
-from .scalar_fields import ScalarFieldManager
+from .scalar_fields_pydantic import ScalarFieldManager
 
 
 class BasePointCloud(CartesianCoordinates):
-    sfm: ScalarFieldManager
+    sfm: Optional[ScalarFieldManager] = Field(default_factory=ScalarFieldManager)
 
     def __getitem__(self, item):
         pass
@@ -44,16 +46,16 @@ class BasePointCloud(CartesianCoordinates):
 
     @property
     def normals(self):
-        pass
+        return self.sfm.normals
 
     @property
     def rgb(self):
-        pass
+        return self.sfm.rgb
 
     @property
     def intensity(self):
-        pass
+        return self.sfm.intensity
 
     @property
     def reflectance(self):
-        pass
+        return self.sfm.reflectance

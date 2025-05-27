@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 import functools
+from functools import cached_property
 from typing import Any, Optional, Callable
 from copy import deepcopy
 
@@ -39,14 +40,6 @@ Vector_3_T = NDArray[Shape['3'], Any]
 
 CustomArrayLikeT = np.ndarray | NpMixinT
 
-def override_ufuncs(method_map: dict[str, Callable]):
-    def class_decorator(cls):
-        for method_name, func in method_map.items():
-            setattr(cls, method_name, func)
-        return cls
-    return class_decorator
-
-
 def __get_args_as_arrays__(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
@@ -58,7 +51,7 @@ def __get_args_as_arrays__(func):
         return func(*array_args, **kwargs)
     return wrapper
 
-
+# DECIDE: mixins only add when needed?
 class BaseArray(BaseModel, NpMixinT):
     """
     BaseArray is designed to be a subclassable, automatic validator for array based classes.
@@ -84,9 +77,7 @@ class BaseArray(BaseModel, NpMixinT):
         validate_default=True,
         frozen=False,
         extra='ignore')
-    arr: Array_T = Field(kw_only=False)
-    cache_uuid: UUID4 = Field(default_factory=lambda: uuid.uuid4(), exclude=True)
-    offloaded: bool = Field(default=False, exclude=True)
+    arr: Array_T
 
     # noinspection PyNestedDecorators
     @field_validator('arr', mode='before')
@@ -116,24 +107,28 @@ class BaseArray(BaseModel, NpMixinT):
         return self
 
     @property
-    def __array_interface__(self):
-        return self.arr.__array_interface__
+    def __array__(self):
+        return self.arr
 
-    @__get_args_as_arrays__
-    def __array_ufunc__(self, ufunc, method, *args, **kwargs):
-        # TODO best way to apply functions in place for 'out'
-        if 'out' in kwargs:
-            output_target = kwargs.pop('out')[0]
+    # @property
+    # def __array_interface__(self):
+    #     return self.arr.__array_interface__
+    #
+    # @__get_args_as_arrays__
+    # def __array_ufunc__(self, ufunc, method, *args, **kwargs):
+    #     # TODO best way to apply functions in place for 'out'
+    #     if 'out' in kwargs:
+    #         output_target = kwargs.pop('out')[0]
+    #
+    #         if isinstance(output_target, type(self)):
+    #             output_target.arr[:] = getattr(ufunc, method)(*args, **kwargs)
+    #         else:
+    #             output_target[:] = getattr(ufunc, method)(*args, **kwargs)
+    #
+    #         return output_target
+    #     return getattr(ufunc, method)(*args, **kwargs)
 
-            if isinstance(output_target, type(self)):
-                output_target.arr[:] = getattr(ufunc, method)(*args, **kwargs)
-            else:
-                output_target[:] = getattr(ufunc, method)(*args, **kwargs)
-
-            return output_target
-        return getattr(ufunc, method)(*args, **kwargs)
-
-    def get_copy(self, array=None, *, update=None, include=None, exclude=None):
+    def get_copy(self, array=None, *, update=None, include=None, exclude=None, as_view: bool = False):
         """If no parameters, copy the whole array as is"""
         update = update or {}
 
@@ -146,18 +141,14 @@ class BaseArray(BaseModel, NpMixinT):
             include=include,
             exclude=set(set(exclude or {}) | set((update or {}).keys())))
 
+        if as_view:
+            self.model_validate({**data, **update})
+
         return self.model_validate(deepcopy({**data, **update}))
 
-    @property
+    @cached_property
     def T(self):
         return self.arr.T
-
-    # TODO decide on helper name
-    @property
-    def H(self):
-        return self.get_copy(
-            np.column_stack((self.arr, np.ones(len(self), dtype=self.dtype)))
-        )
 
     @property
     def shape(self):
@@ -203,7 +194,8 @@ class BaseArray(BaseModel, NpMixinT):
         mask[*indices] = True
         return mask
 
-    def sample(self, *index, sub_ok=True):
+    def sample(self, *index, sub_ok=False):
+        # DISCUSS creating mask will always COPY (according to docs)
         mask = self.create_mask(*index)
 
         if sub_ok:
@@ -248,13 +240,15 @@ class ArrayNx3(_FixedLengthArray):
 
 class _TransformArray(BaseArray):
     def __matmul__(self, other):
+        # Ensure's that the right multiply method from the point set is used to recreate that object (and history)
         if isinstance(other, ArrayNx3):
             return other.__rmatmul__(self)
+
+        # TODO need to determine how the transform history stack works
         if isinstance(other, type(self)):
             return self.get_copy(array=self.__matmul__(other))
-        else:
-            return self.__matmul__(other)
 
+        return self.__matmul__(other)
 
 
 class RotationArray(_TransformArray):
