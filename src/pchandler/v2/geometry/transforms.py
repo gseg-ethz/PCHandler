@@ -12,9 +12,9 @@ from collections import OrderedDict
 
 import numpy    as np
 from numpy import typing as npt
-from pydantic   import BaseModel, model_validator, ValidationError, ConfigDict, validate_call, Field
+from pydantic import BaseModel, model_validator, ValidationError, ConfigDict, validate_call, Field, field_validator
 
-from custom_types import IndexLike
+from ..custom_types import IndexLike
 from ..base_arrays import Array_4x4_T, BaseArray, BaseVector, Array_3x3_T, ArrayNx3, ArrayNx2
 
 
@@ -24,6 +24,12 @@ class _TransformArray(BaseArray):
     def sample(self, *args, **kwargs): raise NotImplementedError
     def extract(self, *args, **kwargs): raise NotImplementedError
     def reduce(self, *args, **kwargs): raise NotImplementedError
+
+    @field_validator('arr', mode='before')
+    @classmethod
+    def always_copy(cls, arr):
+        return copy.deepcopy(arr)
+
     def __matmul__(self, other):
         # This is transforming the other object. Therefore use it's __rmatmul__ to enable adding the transform to ledger
         if isinstance(other, (ArrayNx3, ArrayNx2)):
@@ -34,6 +40,17 @@ class _TransformArray(BaseArray):
             return self.get_copy(array=self.__matmul__(other))
 
         return self.__matmul__(other)
+
+        # TODO these functions need decorators/wrappers in coordinates to add transform to ledger (or call super)
+        def __matmul__(self, other):
+            return self.update_copy(self.arr @ other)
+
+        def __rmatmul__(self, other):
+            return self.update_copy(other @ self.arr)
+
+        def __imatmul__(self, other):
+            self.arr @= other
+            return self
 
 
 

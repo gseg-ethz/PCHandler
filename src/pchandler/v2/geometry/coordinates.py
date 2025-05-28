@@ -31,7 +31,7 @@ class CoordSysEnum(IntEnum):
     GLOBAL = 3
 
 
-class Abstract3dCoordinates(ABC, ArrayNx3):
+class Abstract3dCoordinates(ArrayNx3, ABC):
     transform_ledger: TransformLedger[str, [Array_4x4_T]] = Field(default_factory=TransformLedger)
     spherical_origin: Optional[Vector_3_T] = None
 
@@ -267,7 +267,7 @@ class OptimisedCartesianCoordinates(CartesianCoordinates):
 
 class TLSCoordinates(OptimisedCartesianCoordinates):
     """Assumption should be made then that the user has origin at 0,0,0"""
-    current_system: CoordSysEnum = CoordSysEnum.SOC
+    current_system: CoordSysEnum = CoordSysEnum.SOCS
     spherical_origin: Vector_3_T = np.zeros(3, dtype=np.float32)
     project_transformation: Optional[Array_4x4_T] = None
     is_soc_optimal: bool = False

@@ -8,7 +8,7 @@ from numpydantic import NDArray, Shape
 from pydantic import BaseModel, ValidationError, ConfigDict
 
 from pchandler.v2.base_arrays import (
-    BaseArray, make_ndarray_type, _HomogeneousArray, _SampleArray, _ImageLike, _FixedLengthArray
+    BaseArray, make_ndarray_type, _HomogeneousArray, _SampleArray, _ImageLike, _FixedLengthArray, BaseVector
 )
 
 
@@ -122,9 +122,7 @@ class TestBaseArray(BaseTests):
 
         assert isinstance(b, np.ndarray)
 
-        d = np.where(a == 1)
-
-        assert np.all(d)
+        assert np.allclose(a, 1)
 
 
     def test_initialisation(self):
@@ -383,7 +381,7 @@ class TestSamplingArray(BaseTests):
             b.create_mask("asdasd")
 
         with pytest.raises(ValidationError):
-            a = self.cls(arr=np.zeros((10,3), dtype=np.complex_))
+            a = self.cls(arr=np.zeros((10,3), dtype=np.complex128))
 
         assert mask.shape == a.shape == b.shape
 
@@ -544,8 +542,19 @@ class TestHomogeneousArray(BaseTests):
     def test_np_operator_mixins(self):
         super().test_np_operator_mixins()
 
+    def test_other(self):
+        pass
+
 class TestBaseVector(BaseTests):
-    pass
+    with pytest.raises(ValidationError):
+        vec = BaseVector(arr=np.random.rand(10, 3))
+
+    vec = BaseVector(arr=np.random.rand(10))
+
+    assert len(vec) == 10
+    assert np.sum(vec) < 10
+
+    assert vec.shape == (10,)
 
 class TestArrayNx2(BaseTests):
     pass
@@ -554,7 +563,7 @@ class TestArrayNx3(BaseTests):
     pass
 
 class TestReadOnlyArray(BaseTests):
-
+    pass
 
 class TestReadOnlyVector(BaseTests):
     pass

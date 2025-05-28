@@ -127,13 +127,11 @@ class BaseArray(ABC, BaseModel):
 
         return arr
 
-
     @model_validator(mode='after')
     def freeze(self) -> Self:
         if self.model_config['frozen']:
             self.arr.setflags(write=False)
         return self
-
 
     def update_copy(self,
                     array: npt.NDArray|BaseArray|None = None, *,
@@ -150,18 +148,25 @@ class BaseArray(ABC, BaseModel):
         if array is not None:
             update['arr'] = array.arr if isinstance(array, BaseArray) else array
 
-        copied_model = self.model_copy(update=update, deep=deep)
-        return copied_model.model_validate(copied_model, strict=True)
+        return self.copy(deep=deep, update=update)
 
     def copy(self, *, deep: bool = True, **kwargs) -> Self:
         """
-        Produce a deep or shallow copy of the model.
-        If no 'update' parameters passed then copy the whole model.
+        Produce a deep or shallow copy of the model. Updates the model also if parameter is parsed.
         """
-        update = kwargs.get('update', {})
         if not deep:
             raise NotImplementedError(f'Shallow copy is not implemented on this class: {type(self)}')
-        return self.model_copy(deep=deep, update=update)
+
+        update = kwargs.get('update', {})
+
+        result = self.model_copy(deep=deep, update=update)
+
+        # Delete excluded fields on the copy
+        for name, field_info in result.model_fields.items():
+            if field_info.exclude:
+                delattr(result, name)
+
+        return result.model_validate(result, strict=True)
 
     def view(self, cls: Optional[type] = None) -> Self:
         # This is a placeholder for the ability to subclass an array to act like a view
@@ -244,18 +249,46 @@ class _FixedLengthArray(_SampleArray):
         for i in self.arr:
             yield i
 
+    def create_mask(self, selection: IndexLike) -> Vector_N_T:
 
-    def create_mask(self, *indices: IndexLike) -> Vector_N_T:
-        """Creates a boolean mask.
+        if isinstance(selection, np.ndarray) and selection.dtype == np.bool_:
+            if selection.shape != (self.nbPoints,):
+                raise ValueError(f"Boolean mask must have shape ({self.nbPoints},), but got {selection.shape}")
+            return selection
 
-        This ensures all new objects are a copy of an array and no views/references
-        """
         mask = np.zeros(len(self), dtype=np.bool_)
-        mask[indices] = True
+
+        if isinstance(selection, list):
+            mask[np.array(selection)] = True
+
+        elif isinstance(selection, np.ndarray):
+            mask[selection] = True
+
+        elif not isinstance(selection, (tuple, slice, int)):
+            raise TypeError(f"Unsupported selection type: {type(selection)}. Must be slice, list, or np.ndarray.")
+        else:
+            mask[selection] = True
+
+        if mask.ndim != 1:
+            raise ValueError(f'Input selection must correspond to a selection of rows in the array (1D).')
+
         return mask
 
-    def sample(self):
-        raise NotImplementedError
+    def sample(self, index: IndexLike) -> _FixedLengthArray:
+        mask = self.create_mask(index)
+        return self.update_copy( array=self.arr[mask] if self.ndim == 1 else self.arr[mask, :] )
+
+    def reduce(self, index: IndexLike) -> None:
+        """Reduces the array to the points indexed"""
+        mask = self.create_mask(index)
+        self.arr = self.arr[mask] if self.ndim == 1 else self.arr[mask, :]
+
+    def extract(self, index: IndexLike) -> Self:
+        """Returns the points indexed but also reduces the indexed array by these points"""
+        mask = self.create_mask(index)
+        extracted = self.sample(mask)
+        self.reduce(~mask)
+        return extracted
 
     def __add__(self, other):
         return self.update_copy(self.arr + other)
@@ -296,18 +329,6 @@ class _FixedLengthArray(_SampleArray):
     def __itruediv__(self, other):
         self.arr /= other
         return self
-
-    # TODO these functions need decorators/wrappers in coordinates to add transform to ledger (or call super)
-    def __matmul__(self, other):
-        return self.update_copy(self.arr @ other)
-
-    def __rmatmul__(self, other):
-        return self.update_copy(other @ self.arr)
-
-    def __imatmul__(self, other):
-        self.arr @= other
-        return self
-
 
 
 class BaseVector(_FixedLengthArray):

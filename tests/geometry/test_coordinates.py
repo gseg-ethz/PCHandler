@@ -6,10 +6,11 @@ import sys
 import numpy as np
 from scipy.spatial.transform import Rotation
 
-from pchandler.v2.base_arrays import ArrayNx3, Transform4x4
+from pchandler.v2.base_arrays import ArrayNx3
 from pchandler.v2.geometry.coordinates import (
     CartesianCoordinates, Abstract3dCoordinates, SphericalCoordinates, rhv2xyz, xyz2rhv
 )
+from pchandler.v2.geometry.transforms import Transform
 
 PI = np.pi
 PI_2 = np.pi * 2
@@ -220,7 +221,7 @@ def test_rmatmul_override():
     rot = Rotation.from_euler(seq='xyz', angles=np.array([0, 1, 1])).as_matrix()
     (hom:= np.eye(4))[:3, :3] = rot
 
-    hom_ = Transform4x4(arr=hom)
+    hom_ = Transform(arr=hom)
     xyz2 = hom @ xyz.H.T
     assert isinstance(xyz2, np.ndarray)
     abc = xyz.get_copy(update={'arr': np.random.rand(6, 3)})
