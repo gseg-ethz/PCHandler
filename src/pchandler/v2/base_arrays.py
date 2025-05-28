@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from functools import cached_property
-from typing import Any, Optional, TypedDict, Unpack
+from typing import Any, Optional, Generator
 
 import numpy as np
 from numpydantic import NDArray, Shape
-from pydantic import BaseModel, ConfigDict, model_validator, field_validator, UUID4, Field
+from pydantic import BaseModel, ConfigDict, model_validator
 
-# Base types for Pydantic validation
+# DISCUSS -> Should we shift this to custom types? For now this is a rather independent module
 Array_T = NDArray[Shape['*, ...'], Any]         # Any array like object. E.g. image stacks (
 Array_NxM_T = NDArray[Shape['*, *'], Any]       # Intensity image, depth image
 Array_NxM_3_T = NDArray[Shape['*, *, 3'], Any]    # RGB or normal image
@@ -57,62 +57,57 @@ class BaseArray(BaseModel):
             self.arr.setflags(write=False)
         return self
 
-    # TODO THIS MUST STAY - __array__ is deprecated
+    # DECISION -> Stick with __array_interface__ as __array__ will be deprecated
     @property
     def __array_interface__(self) -> dict:
-        """
-        Gives access for all numpy functions to the root array object
-        """
+        """ Gives access for all numpy functions to the root array object """
         return self.arr.__array_interface__
+
+    # TODO Test if __array_ufunc__ implementation is required
 
     def __array_wrap__(self, out_arr, context=None, return_scalar=False):
         """
-        This function provides access to the returned object from numpy class methods / functions
-
-        for example np.add(a, b) returns a numpy array but can be caught here to return always as type(self).
+        Access to the returned object from numpy class methods / functions
+        e.g. c = np.add(a,b); __array_wrap__ gets the returned np.ndarray c
         """
         return super().__array_wrap__(self, out_arr, context, return_scalar)
 
     def __array_finalize__(self, obj):
         """
-        Finalise the createion process of a new instance (after __new__)
+        Finalise the creation process of a new instance (after __new__)
         """
-        return super().__array_finalize__()
+        return super().__array_finalize__(obj)
 
-    def update_copy(self, array: np.array|BaseArray|None = None, *args, deep: bool = False, **kwargs) -> BaseArray:
+    # TODO discuss -> default is ALWAYS a copy to avoid references and views -> Particularly with global shift.
+    #  Views for point cloud data are of little benefit unless 'slicing'
+    #  There may be more benefit on image operations
+    def update_copy(self, array: np.array|BaseArray|None = None, *, deep: bool = False, **kwargs) -> BaseArray:
         """
         This function is designed to be more efficient by not dumping the memory heavy array if it's to be updated in
         the new instance.
         E.g. if 'arr' is in the update dict {'arr': np.random.rand(10000, 3)}, don't dump the existing, just add this
         new value.
         """
-        update = kwargs.get('update', {})
-        include = set(kwargs.get('include', []))
-        exclude = set(kwargs.get('exclude', [])) | {'T'}
 
-        update = update or {}
-        # NOTE array positional arg takes precedence over update dict
-        # TODO decide if extra logic required
+        update = kwargs.get('update', {})
 
         if array is not None:
             update['arr'] = array.arr if isinstance(array, BaseArray) else array
 
-        return self.copy(deep=deep, include=include, exclude=exclude, update=update)
+        # TODO check on cached properties. Should these be dumped on update?
+        copied_model = self.model_copy(update=update, deep=deep)
 
-    # TODO discuss -> default is ALWAYS a copy to avoid references and views -> Particularly with global shift.
-    #  Views for point cloud data are of little benefit unless 'slicing'
-    #  There may be more benefit on image operations
-    def copy(self, *args, deep=True, **kwargs):
-        """
-        Produce a deep or shallow copy of the model. If no 'update' parameters passed then copy the whole model.
-        """
-        update = kwargs.get('update', None)
-        if update is not None:
-            new_model = self.model_copy(update=update, deep=deep)
-            new_model.model_validate(new_model, strict=True)
-            return new_model
-        return self.model_copy(deep=deep, *args, **kwargs)
+        return copied_model.model_validate(copied_model, strict=True)
 
+    def copy(self, *, deep=True, **kwargs):
+        """
+        Produce a deep or shallow copy of the model.
+        If no 'update' parameters passed then copy the whole model.
+        """
+        return self.model_copy(deep=deep, **kwargs)
+
+    # DISCUSS This is disabled by default. All objects should be copied.
+    #  Should only be implemented on a class you know you want to work with views.
     def view(self, cls: Optional[type] = None):
         raise NotImplementedError
 
@@ -141,17 +136,19 @@ class BaseArray(BaseModel):
     def __len__(self):
         raise NotImplementedError('Length of an undefined array shape is not clear')
 
-    # TODO overwrite these for coordinate_sets -> This could become abstract as well as others to force this object not
-    #  to be usable
     def __getitem__(self, item):
-        return self.arr[*item]
+        return self.update_copy(self.arr[*item])
 
     def __setitem__(self, key, value):
-        self.arr[key] = value
+        if isinstance(value, BaseArray):
+            self.arr[*key] = value.arr
+        else:
+            self.arr[*key] = value
 
     def __delitem__(self, key):
         np.delete(self.arr, self.create_mask(key))
 
+    # To Decide if slices should be possible for view generation
     def create_mask(self, *indices):
         if isinstance(indices, slice):
             mask = indices
@@ -178,24 +175,35 @@ class BaseArray(BaseModel):
         self.reduce(~mask)
         return extracted
 
+# General Basis for any 2D array (although e.g. images)
+class Array2D(BaseArray):
+    arr: Array_NxM_T
+
 
 class _FixedLengthArray(BaseArray):
-    def __len__(self):
+    """
+    Array to support objects like Coordinate sets or vectors which have "len()" or number of items == rows
+    """
+    def __len__(self) -> int:
         return self.arr.shape[0]
+
+    def __iter__(self) -> Generator[np.ndarray]:
+        for i in self.arr:
+            yield i
+
+#
+class BaseVector(_FixedLengthArray):
+    arr: Vector_N_T
+
+    @property
+    def norm(self):
+        return np.linalg.norm(self.arr)
 
 
 class _HomogeneousArray(BaseArray):
     @property
-    def H(self):
+    def H(self) -> np.ndarray:
         return np.column_stack((self.arr, np.ones(len(self), dtype=self.dtype)))
-
-
-class BaseVector(_FixedLengthArray):
-    arr: Vector_N_T
-
-
-class Array2D(BaseArray):
-    arr: Array_NxM_T
 
 
 class ArrayNx2(_FixedLengthArray, _HomogeneousArray):
@@ -205,46 +213,10 @@ class ArrayNx2(_FixedLengthArray, _HomogeneousArray):
 class ArrayNx3(_FixedLengthArray, _HomogeneousArray):
     arr: Array_Nx3_T
 
-
-class _TransformArray(BaseArray):
-    def __matmul__(self, other):
-        # This is transforming the other object. Therefore use it's __rmatmul__ to enable adding the transform to ledger
-        if isinstance(other, (ArrayNx3, ArrayNx2)):
-            return other.__rmatmul__(self)
-
-        if isinstance(other, type(self)):
-            # DISCUSS do transforms need
-            return self.get_copy(array=self.__matmul__(other))
-
-        return self.__matmul__(other)
-
-
-class Transform3x3(_TransformArray):
-    arr: Array_3x3_T = Field(default_factory=lambda: Transform3x3(arr=np.eye(3)))
-
-
-class Transform4x4(_TransformArray):
-    arr: Array_4x4_T = Field(default_factory=lambda: Transform4x4(arr=np.eye(4)))
-
-
-# TODO decide if to keep these or add more
-class _ReadOnly:
-    # noinspection PyNestedDecorators
-    @field_validator('arr', mode='before')
-    @classmethod
-    def coerce(cls, array: np.ndarray) -> np.ndarray:
-        return array
-
-    # noinspection PyNestedDecorators
-    @field_validator('arr', mode='before')
-    @classmethod
-    def copy(cls, array: np.ndarray) -> np.ndarray:
-        return array
-
-
-class ReadOnlyArray(_ReadOnly, BaseArray):
-    model_config = ConfigDict(strict=True, frozen=True)
-
-
-class ReadOnlyVector(_ReadOnly, BaseVector):
-    model_config = ConfigDict(strict=True, frozen=True)
+# Example of creating a read only class
+# class ReadOnlyArray(BaseArray):
+#     model_config = ConfigDict(strict=True, frozen=True)
+#
+#
+# class ReadOnlyVector(BaseVector):
+#     model_config = ConfigDict(strict=True, frozen=True)

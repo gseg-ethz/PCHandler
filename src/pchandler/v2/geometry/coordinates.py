@@ -9,13 +9,14 @@ from typing import Optional, Annotated
 import numpy as np
 from pydantic import Field, model_validator, BeforeValidator, validate_call, ConfigDict, field_validator
 
-from ..base_arrays import ArrayNx3, CustomArrayLikeT, Array_Nx3_T, Array_4x4_T, Vector_3_T, BaseArray
+from ..base_arrays import ArrayNx3, Array_Nx3_T, Array_4x4_T, Vector_3_T, BaseArray
 from ..validators import validate_spherical_angles, enforce_azimuths
 from .transforms import TransformRecord, TransformLedger, GlobalShift, Transform
 
 PI = np.pi
 TWO_PI = 2 * PI
 HALF_PI = 0.5 * PI
+
 
 class TransformType(IntEnum):
     TRANSLATE = 0
@@ -25,8 +26,7 @@ class TransformType(IntEnum):
 
 
 class CoordSysEnum(IntEnum):
-    OPTIMAL = 0
-    SOC = 1
+    SOCS = 1
     PROJECT = 2
     GLOBAL = 3
 

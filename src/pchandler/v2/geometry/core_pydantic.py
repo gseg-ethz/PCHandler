@@ -5,7 +5,7 @@ import numpy as np
 
 from .coordinates import CartesianCoordinates, TLSCoordinates
 from .scalar_fields_pydantic import ScalarFieldManager
-from ...
+
 
 
 class ConfigPointCloud(TypedDict):
@@ -15,11 +15,15 @@ class ConfigPointCloud(TypedDict):
     transform_to_project_coords:
 
 
+class PointCloudFactory:
+    def __new__(cls, pcds: list[...], *args, **kwargs) -> BasePointCloud|TLSCloud|list[BasePointCloud]|list[TLSCloud]:
+
 class BasePointCloud(CartesianCoordinates):
     sfm: Optional[ScalarFieldManager] = Field(default_factory=ScalarFieldManager)
 
-    def __new__(cls, *args, **kwargs):
+    def __new__(cls, arbitrary=False, force_unoptimised=False, project_transformation=False, *args, **kwargs):
         # TODO logic for handling the different point cloud types based on parameters
+        if arbitrary:
         """
 
         Parameters

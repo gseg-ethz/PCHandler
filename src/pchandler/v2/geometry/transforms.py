@@ -11,11 +11,36 @@ from collections import OrderedDict
 
 
 import numpy    as np
-from pydantic   import BaseModel, model_validator, ValidationError, ConfigDict, validate_call
+from pydantic   import BaseModel, model_validator, ValidationError, ConfigDict, validate_call, Field
 
-from ..base_arrays import Array_4x4_T, Transform4x4, BaseVector, Array_3x3_T
+from ..base_arrays import Array_4x4_T, BaseArray, BaseVector, Array_3x3_T, ArrayNx3, ArrayNx2
 
-class Transform(Transform4x4):
+
+
+class _TransformArray(BaseArray):
+    def __matmul__(self, other):
+        # This is transforming the other object. Therefore use it's __rmatmul__ to enable adding the transform to ledger
+        if isinstance(other, (ArrayNx3, ArrayNx2)):
+            return other.__rmatmul__(self)
+
+        if isinstance(other, type(self)):
+            # DISCUSS do transforms need
+            return self.get_copy(array=self.__matmul__(other))
+
+        return self.__matmul__(other)
+
+
+
+class _Transform3x3(_TransformArray):
+    arr: Array_3x3_T = Field(default_factory=lambda: np.eye(3))
+
+
+class _Transform4x4(_TransformArray):
+    arr: Array_4x4_T = Field(default_factory=lambda: np.eye(4))
+
+
+
+class Transform(_Transform4x4):
     @classmethod
     def from_translation(cls, vector: BaseVector) -> Transform:
         return cls.generate(translation=vector)
@@ -79,10 +104,12 @@ class TransformLedger(OrderedDict, MutableMapping   [str, TransformRecord]):
     def __int__(self):
         super(TransformLedger, self).__init__()
 
-    def __getitem__(self, key: str|int) -> TransformRecord|tuple[str, TransformRecord]:
+    def __getitem__(self, key: str|int) -> tuple[str, TransformRecord]:
+        """ Use either an index or named key to access a record"""
         if isinstance(key, int):
             return list(super(TransformLedger, self).items())[key]
-        return super(TransformLedger, self).__getitem__(key)
+
+        return key, super(TransformLedger, self).__getitem__(key)
 
     def __setitem__(self, key: str|int, value: np.ndarray | Transform4x4 | TransformRecord):
         if isinstance(value, TransformRecord):
