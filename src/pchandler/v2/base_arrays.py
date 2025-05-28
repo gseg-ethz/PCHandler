@@ -1,23 +1,44 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from functools import cached_property
-from typing import Any, Optional, Generator
+from typing import Any, Optional, Generator, Mapping, Self, Union
 
 import numpy as np
+import numpy.typing as npt
 from numpydantic import NDArray, Shape
-from pydantic import BaseModel, ConfigDict, model_validator
+from numpydantic.dtype import Integer, Float, Bool
+from pydantic import BaseModel, ConfigDict, model_validator, field_validator, Field
 
-# DISCUSS -> Should we shift this to custom types? For now this is a rather independent module
-Array_T = NDArray[Shape['*, ...'], Any]         # Any array like object. E.g. image stacks (
-Array_NxM_T = NDArray[Shape['*, *'], Any]       # Intensity image, depth image
-Array_NxM_3_T = NDArray[Shape['*, *, 3'], Any]    # RGB or normal image
-Array_Nx2_T = NDArray[Shape['*, 2'], Any]       # Image coordinates or plane coordinates
-Array_Nx3_T = NDArray[Shape['*, 3'], Any]       # 3D Coordinates / Scalar Field triplets (RGB, normals)
-Array_3x3_T = NDArray[Shape['4, 4'], Any]       # Rotation Matrix
-Array_4x4_T = NDArray[Shape['4, 4'], Any]       # Affine Transformation
-Vector_N_T = NDArray[Shape['*'], Any]           # Scalar Fields
-Vector_2_T = NDArray[Shape['2'], Any]           # Image coordinate / translation vector
-Vector_3_T = NDArray[Shape['3'], Any]           # 3D coordinate / translation vector
+from .custom_types import IndexLike
+
+ArrayDtypes = (Integer, Float, Bool)
+
+def make_ndarray_type(*args: Optional[int|str], dtype = None):
+    """
+    Helper function to generate the numpydantic type for a ndarray.
+
+    Calling 'make_ndarray_type(None, 3, dtype=np.float32)' would return a numpydantic dtype corresponding to an array
+    of shape (N, 3) with dtype = np.float32 and would provide pydantic validation on this
+    """
+    if len(args) == 0:
+        shape_list = ['*', '...']
+    else:
+        shape_list: list = [str(x) if x is not None else "*" for x in args]
+
+    return NDArray[Shape[', '.join(shape_list)], dtype if dtype is not None else Any]
+
+# DECISION -> Should we shift this to custom types? For now this is a rather independent module
+Array_T = NDArray[Shape['*, ...'], ArrayDtypes]         # Any array like object. E.g. image stacks (
+Array_NxM_T = NDArray[Shape['*, *'], ArrayDtypes]       # Intensity image, depth image
+Array_NxM_3_T = NDArray[Shape['*, *, 3'], ArrayDtypes]  # RGB or normal image
+Array_Nx2_T = NDArray[Shape['*, 2'], ArrayDtypes]       # Image coordinates or plane coordinates
+Array_Nx3_T = NDArray[Shape['*, 3'], ArrayDtypes]       # 3D Coordinates / Scalar Field triplets (RGB, normals)
+Array_3x3_T = NDArray[Shape['4, 4'], ArrayDtypes]       # Rotation Matrix
+Array_4x4_T = NDArray[Shape['4, 4'], ArrayDtypes]       # Affine Transformation
+Vector_N_T = NDArray[Shape['*'], ArrayDtypes]           # Scalar Fields
+Vector_2_T = NDArray[Shape['2'], ArrayDtypes]           # Image coordinate / translation vector
+Vector_3_T = NDArray[Shape['3'], ArrayDtypes]           # 3D coordinate / translation vector
 
 
 # TODO define the scope -> Do we want an all functioning array class or just define the critical ones
@@ -28,7 +49,7 @@ Vector_3_T = NDArray[Shape['3'], Any]           # 3D coordinate / translation ve
 #  This will then define if Mixins to be included at base or not
 #  Gut feeling is to include default mixins but always return numpy array
 #   -> This is based on the idea that other 'subclassed' or container instances will be included in these funcs.
-class BaseArray(BaseModel):
+class BaseArray(ABC, BaseModel):
     """
     BaseArray is designed to be a subclassable, automatic validator for array based classes.
 
@@ -47,108 +68,281 @@ class BaseArray(BaseModel):
         validate_assignment=True,
         revalidate_instances="always",
         validate_default=True,
+        strict=True,
         frozen=False,
         extra='ignore')
     arr: Array_T
 
+    # TODO performance test the difference -> if any
+    @property
+    def __array_interface__(self) -> dict:
+        """ Gives access for all numpy functions to the root array object
+
+        All objects will be converted to numpy arrays when processed with numpy functions.
+        - __array__ will be deprecated in future -> more reason to use this
+        E.g. any function will use np.asarray(base_arraylike.arr.__array_interface__)
+        """
+        return self.arr.__array_interface__
+
+    def __array__(self) -> Array_T:
+        """This is a backup for __array_interface__"""
+        return self.arr
+
+    @cached_property
+    def T(self) -> npt.NDArray:
+        return self.arr.T
+
+    @property
+    def shape(self) -> tuple[int, ...]:
+        return self.arr.shape
+
+    @property
+    def dtype(self) -> npt.DTypeLike:
+        return self.arr.dtype
+
+    @property
+    def ndim(self) -> int:
+        return self.arr.ndim
+
+    @property
+    def base(self) -> npt.NDArray|None:
+        return self.arr.base
+
+    @property
+    def size(self) -> int:
+        return self.arr.size
+
+    def min(self, **kwargs) -> np.number | npt.NDArray:
+        return self.arr.min(**kwargs)
+
+    def max(self, **kwargs) -> np.number | npt.NDArray:
+        return self.arr.max(**kwargs)
+
+    # To better catch any attempts to coerce as strict seems to fail
+    @field_validator('arr', mode='before')
+    @classmethod
+    def validate_ndarray(cls, arr):
+        if not isinstance(arr, np.ndarray|type(cls)):
+            raise TypeError(f'Invalid array type: {type(arr)}')
+
+        return arr
+
+
     @model_validator(mode='after')
-    def freeze(self):
+    def freeze(self) -> Self:
         if self.model_config['frozen']:
             self.arr.setflags(write=False)
         return self
 
-    # DECISION -> Stick with __array_interface__ as __array__ will be deprecated
-    @property
-    def __array_interface__(self) -> dict:
-        """ Gives access for all numpy functions to the root array object """
-        return self.arr.__array_interface__
 
-    # TODO Test if __array_ufunc__ implementation is required
-
-    def __array_wrap__(self, out_arr, context=None, return_scalar=False):
-        """
-        Access to the returned object from numpy class methods / functions
-        e.g. c = np.add(a,b); __array_wrap__ gets the returned np.ndarray c
-        """
-        return super().__array_wrap__(self, out_arr, context, return_scalar)
-
-    def __array_finalize__(self, obj):
-        """
-        Finalise the creation process of a new instance (after __new__)
-        """
-        return super().__array_finalize__(obj)
-
-    # TODO discuss -> default is ALWAYS a copy to avoid references and views -> Particularly with global shift.
-    #  Views for point cloud data are of little benefit unless 'slicing'
-    #  There may be more benefit on image operations
-    def update_copy(self, array: np.array|BaseArray|None = None, *, deep: bool = False, **kwargs) -> BaseArray:
+    def update_copy(self,
+                    array: npt.NDArray|BaseArray|None = None, *,
+                    deep: bool = True,
+                    update: Mapping[str, Any] = None) -> Self:
         """
         This function is designed to be more efficient by not dumping the memory heavy array if it's to be updated in
         the new instance.
         E.g. if 'arr' is in the update dict {'arr': np.random.rand(10000, 3)}, don't dump the existing, just add this
         new value.
         """
-
-        update = kwargs.get('update', {})
+        update = update or {}
 
         if array is not None:
             update['arr'] = array.arr if isinstance(array, BaseArray) else array
 
-        # TODO check on cached properties. Should these be dumped on update?
         copied_model = self.model_copy(update=update, deep=deep)
-
         return copied_model.model_validate(copied_model, strict=True)
 
-    def copy(self, *, deep=True, **kwargs):
+    def copy(self, *, deep: bool = True, **kwargs) -> Self:
         """
         Produce a deep or shallow copy of the model.
         If no 'update' parameters passed then copy the whole model.
         """
-        return self.model_copy(deep=deep, **kwargs)
+        update = kwargs.get('update', {})
+        if not deep:
+            raise NotImplementedError(f'Shallow copy is not implemented on this class: {type(self)}')
+        return self.model_copy(deep=deep, update=update)
 
-    # DISCUSS This is disabled by default. All objects should be copied.
-    #  Should only be implemented on a class you know you want to work with views.
-    def view(self, cls: Optional[type] = None):
+    def view(self, cls: Optional[type] = None) -> Self:
+        # This is a placeholder for the ability to subclass an array to act like a view
         raise NotImplementedError
 
-    @cached_property
-    def T(self): return self.arr.T
 
-    @property
-    def shape(self): return self.arr.shape
-
-    @property
-    def dtype(self): return self.arr.dtype
-
-    @property
-    def ndim(self): return self.arr.ndim
-
-    @property
-    def base(self): return self.arr.base
-
-    @property
-    def size(self): return self.arr.size
-
-    def min(self): return self.arr.min()
-
-    def max(self): return self.arr.max()
-
-    def __len__(self):
+    def __len__(self) -> int:
         raise NotImplementedError('Length of an undefined array shape is not clear')
 
-    def __getitem__(self, item):
-        return self.update_copy(self.arr[*item])
+    def __getitem__(self, key: IndexLike) -> np.ndarray|Self:
+        if isinstance(key, slice):
+            key = [key]
 
-    def __setitem__(self, key, value):
+        if isinstance(key, int):
+            result = self.arr[key]
+        else:
+            result = self.arr[*key]
+        if isinstance(result, np.ndarray):
+            return self.update_copy(result)
+        return result
+
+    def __setitem__(self, key: IndexLike, value: npt.NDArray|BaseArray) -> None:
+        if isinstance(key, slice):
+            key = [key]
         if isinstance(value, BaseArray):
             self.arr[*key] = value.arr
         else:
             self.arr[*key] = value
 
-    def __delitem__(self, key):
-        np.delete(self.arr, self.create_mask(key))
 
-    # To Decide if slices should be possible for view generation
+class _SampleArray(BaseArray):
+    def create_mask(self, selection: IndexLike) -> Vector_N_T:
+        """Creates a boolean mask for the whole array
+
+        This ensures all new objects are a copy of an array and no views/references
+        """
+        if isinstance(selection, np.ndarray) and selection.dtype == np.bool_:
+            return selection
+
+        mask = np.zeros_like(self.arr, dtype=np.bool_)
+        if isinstance(selection, list):
+            mask[np.array(selection)] = True
+
+        elif isinstance(selection, np.ndarray):
+            mask[selection] = True
+
+        elif not isinstance(selection, (tuple, slice, int)):
+            raise TypeError(f"Unsupported selection type: {type(selection)}. Must be slice, list, or np.ndarray.")
+        else:
+            mask[selection] = True
+        return mask
+
+    def sample(self, index: IndexLike) -> Self:
+        """Return a sample of the array"""
+        mask = self.create_mask(index)
+        return self.update_copy( array=self.arr[mask] )
+
+    def reduce(self, index: IndexLike) -> None:
+        """Reduces the array to the points indexed"""
+        mask = self.create_mask(index)
+        self.arr = self.arr[mask]
+
+    def extract(self, index: IndexLike) -> Self:
+        """Returns the points indexed but also reduces the indexed array by these points"""
+        mask = self.create_mask(index)
+        extracted = self.sample(mask)
+        self.reduce(~mask)
+        return extracted
+
+
+class _FixedLengthArray(_SampleArray):
+    """
+    Array to support objects like Coordinate sets or vectors which have "len()" or number of items == rows
+    """
+    def __len__(self) -> int:
+        return self.arr.shape[0]
+
+    def __iter__(self) -> Generator[np.ndarray]:
+        """Function to allow iteration through vector items or rows of array"""
+        for i in self.arr:
+            yield i
+
+
+    def create_mask(self, *indices: IndexLike) -> Vector_N_T:
+        """Creates a boolean mask.
+
+        This ensures all new objects are a copy of an array and no views/references
+        """
+        mask = np.zeros(len(self), dtype=np.bool_)
+        mask[indices] = True
+        return mask
+
+    def sample(self):
+        raise NotImplementedError
+
+    def __add__(self, other):
+        return self.update_copy(self.arr + other)
+
+    def __radd__(self, other):
+        return self.update_copy(other + self.arr)
+
+    def __iadd__(self, other):
+        self.arr += other
+        return self
+
+    def __sub__(self, other):
+        return self.update_copy(self.arr - other)
+
+    def __rsub__(self, other):
+        return self.update_copy(other - self.arr)
+
+    def __isub__(self, other):
+        self.arr -= other
+        return self
+
+    def __mul__(self, other):
+        return self.update_copy(self.arr * other)
+
+    def __rmul__(self, other):
+        return self.update_copy(other * self.arr)
+
+    def __imul__(self, other):
+        self.arr *= other
+        return self
+
+    def __truediv__(self, other):
+        return self.update_copy(self.arr / other)
+
+    def __rtruediv__(self, other):
+        return self.update_copy(other / self.arr )
+
+    def __itruediv__(self, other):
+        self.arr /= other
+        return self
+
+    # TODO these functions need decorators/wrappers in coordinates to add transform to ledger (or call super)
+    def __matmul__(self, other):
+        return self.update_copy(self.arr @ other)
+
+    def __rmatmul__(self, other):
+        return self.update_copy(other @ self.arr)
+
+    def __imatmul__(self, other):
+        self.arr @= other
+        return self
+
+
+
+class BaseVector(_FixedLengthArray):
+    arr: Vector_N_T
+
+
+class _HomogeneousArray(_FixedLengthArray):
+    @property
+    def H(self) -> np.ndarray:
+        return np.column_stack((self.arr, np.ones(len(self), dtype=self.dtype)))
+
+
+class ArrayNx2(_HomogeneousArray):
+    arr: Array_Nx2_T
+
+
+class ArrayNx3(_HomogeneousArray):
+    arr: Array_Nx3_T
+
+
+class ReadOnlyArray(BaseArray):
+    model_config = ConfigDict(strict=True, frozen=True)
+
+
+class ReadOnlyVector(BaseVector):
+    model_config = ConfigDict(strict=True, frozen=True)
+
+
+
+class _ImageLike(_SampleArray, ABC):
+    arr: Array_NxM_T|Array_NxM_3_T
+    # Update implementation based on if you want to support slicing / views or not
+    def __getitem__(self, key: IndexLike) -> Any:
+        return self.arr[*key]
+
     def create_mask(self, *indices):
         if isinstance(indices, slice):
             mask = indices
@@ -157,66 +351,5 @@ class BaseArray(BaseModel):
             mask[*indices] = True
         return mask
 
-    def sample(self, *index, as_ndarray=False):
-        """Sample produces a copy of the sampled points"""
-        mask = self.create_mask(*index)
-        if as_ndarray:
-            return self.arr[mask].copy()
-        return self.updated_copy(array=self.arr[mask])
-
-    def reduce(self, *index):
-        """Reduces the array to the points indexed"""
-        self.arr = self.arr[self.create_mask(*index)]
-
-    def extract(self, index):
-        """Returns the points indexed but also reduces the indexed array by these points"""
-        mask = self.create_mask(*index)
-        extracted = self.sample(mask)
-        self.reduce(~mask)
-        return extracted
-
-# General Basis for any 2D array (although e.g. images)
-class Array2D(BaseArray):
-    arr: Array_NxM_T
-
-
-class _FixedLengthArray(BaseArray):
-    """
-    Array to support objects like Coordinate sets or vectors which have "len()" or number of items == rows
-    """
-    def __len__(self) -> int:
-        return self.arr.shape[0]
-
-    def __iter__(self) -> Generator[np.ndarray]:
-        for i in self.arr:
-            yield i
-
-#
-class BaseVector(_FixedLengthArray):
-    arr: Vector_N_T
-
-    @property
-    def norm(self):
-        return np.linalg.norm(self.arr)
-
-
-class _HomogeneousArray(BaseArray):
-    @property
-    def H(self) -> np.ndarray:
-        return np.column_stack((self.arr, np.ones(len(self), dtype=self.dtype)))
-
-
-class ArrayNx2(_FixedLengthArray, _HomogeneousArray):
-    arr: Array_Nx2_T
-
-
-class ArrayNx3(_FixedLengthArray, _HomogeneousArray):
-    arr: Array_Nx3_T
-
-# Example of creating a read only class
-# class ReadOnlyArray(BaseArray):
-#     model_config = ConfigDict(strict=True, frozen=True)
-#
-#
-# class ReadOnlyVector(BaseVector):
-#     model_config = ConfigDict(strict=True, frozen=True)
+    def view(self, cls: Optional[type] = None) -> Self:
+        return self.updated_copy(self.arr.view(cls=cls), deep=False)

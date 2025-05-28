@@ -11,13 +11,19 @@ from collections import OrderedDict
 
 
 import numpy    as np
+from numpy import typing as npt
 from pydantic   import BaseModel, model_validator, ValidationError, ConfigDict, validate_call, Field
 
+from custom_types import IndexLike
 from ..base_arrays import Array_4x4_T, BaseArray, BaseVector, Array_3x3_T, ArrayNx3, ArrayNx2
 
 
 
 class _TransformArray(BaseArray):
+    def create_mask(self, *args, **kwargs): raise NotImplementedError('')
+    def sample(self, *args, **kwargs): raise NotImplementedError
+    def extract(self, *args, **kwargs): raise NotImplementedError
+    def reduce(self, *args, **kwargs): raise NotImplementedError
     def __matmul__(self, other):
         # This is transforming the other object. Therefore use it's __rmatmul__ to enable adding the transform to ledger
         if isinstance(other, (ArrayNx3, ArrayNx2)):

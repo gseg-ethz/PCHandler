@@ -36,6 +36,8 @@ class BasePointCloud(CartesianCoordinates):
         pass
 
     def __setitem__(self, key, value):
+        # TODO raise error that you cannot change individual or selection of points in place and to use
+        #  sample/extract/reduce
         pass
 
     def sample(self, *index, sub_ok=True):

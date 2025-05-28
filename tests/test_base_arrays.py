@@ -1,22 +1,20 @@
-# noinspection PyPackageRequirements
 import pytest
 from abc import ABC, abstractmethod
 
 from typing import Any
 
-# noinspection PyPackageRequirements
 import numpy as np
-# noinspection PyPackageRequirements
 from numpydantic import NDArray, Shape
-# noinspection PyPackageRequirements
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError, ConfigDict
 
-from pchandler.v2.base_arrays import BaseArray, make_ndarray_type, NpMixinT
+from pchandler.v2.base_arrays import (
+    BaseArray, make_ndarray_type, _HomogeneousArray, _SampleArray, _ImageLike, _FixedLengthArray
+)
 
 
-@pytest.fixture
-def array():
-    return BaseArray(arr=np.random.rand(100,100))
+base_config_fields = ('arbitrary_types_allowed', 'validate_assignment', 'revalidate_instances', 'validate_default',
+                   'frozen', 'extra')
+
 
 class TestMakeNpydanticType:
     def test_shape_definitions(self):
@@ -47,7 +45,6 @@ class BaseTests(ABC):
         assert hasattr(self.cls, 'model_config')
         assert isinstance(self.cls.model_fields['arr'].annotation, NDArray)
         assert issubclass(self.cls, BaseModel)
-        assert issubclass(self.cls, NpMixinT)
 
     def test_class_level_config_defaults(self):
         # These should be defined but flexible on deciding the default values
@@ -59,44 +56,160 @@ class BaseTests(ABC):
         assert self.cls.model_config['arbitrary_types_allowed'] == True
         assert self.cls.model_config['revalidate_instances'] == 'always'
         assert self.cls.model_config['validate_assignment'] == True
+        assert self.cls.model_config['validate_default'] == True
 
     def test_has_methods(self):
-        for name in ('coerce', 'freeze', '__array_interface__', '__setitem__', '__getitem__',
-                     'shape', 'dtype', 'ndim', 'base', 'size', '__len__'):
+        for name in ('freeze', '__array_interface__', 'update_copy', 'copy', 'view', 'T', 'shape', 'dtype', 'ndim',
+                     'base', 'size', 'min', 'max','__len__', '__getitem__', '__setitem__'):
             assert hasattr(self.cls, name)
 
-    def test_array_ufunc(self):
-        pass
-
-    def test_array_signature(self):
-        pass
+    @abstractmethod
+    def test_initialisation(self): ...
 
     @abstractmethod
-    def test_initialisation(self):
-        raise NotImplementedError()
+    def test_properties(self): ...
 
     @abstractmethod
-    def test_np_object_methods(self):
-        pass
+    def test_methods(self): ...
 
     @abstractmethod
-    def test_np_class_methods(self):
-        pass
+    def test_numpy_funcs(self): ...
+    # Goal is to test that the object is treated like a numpy object
+
+    @abstractmethod
+    def test_other(self): ...
+
+    @abstractmethod
+    def test_view(self): ...
 
     @abstractmethod
     def test_np_operator_mixins(self):
-        pass
+        a = self.cls(arr=np.random.rand(100,100))
+        # Mixins not included by default
+        with pytest.raises(TypeError):
+            a += 1
+
+        # Subtract
+        with pytest.raises(TypeError):
+            a = a - 1.0
+
+        # Add
+        with pytest.raises(TypeError):
+            a = a + 2.0
+
+        # Divide
+        with pytest.raises(TypeError):
+            a = a / 0.5
+
+        # Multiply
+        with pytest.raises(TypeError):
+            a = a * 3
 
 
 class TestBaseArray(BaseTests):
     cls = BaseArray
+    def test_other(self):
+        assert True
+
+    def test_numpy_funcs(self):
+        a = self.cls(arr=np.ones((5,3)))
+        b = np.add(a, 1)
+        assert np.all(b == 2)
+
+        c = np.mean(a, axis=0)
+        assert np.all(c == 1.0)
+        assert c.shape == (3,)
+
+        assert isinstance(b, np.ndarray)
+
+        d = np.where(a == 1)
+
+        assert np.all(d)
+
 
     def test_initialisation(self):
+        a = np.random.rand(100, 100)
+        array = self.cls(arr=a)
+        assert isinstance(array, self.cls)
+
+        assert array is not a   # -> Passes
+        assert array.arr is a   # -> Passes
+
+    def test_view(self):
         a = self.cls(arr=np.random.rand(100, 100))
+
+        with pytest.raises(NotImplementedError):
+            a.view()
+
+
+    @pytest.mark.parametrize(
+        'input_values', ({'dict': 'Should fail'}, 'String is bad', {1, 2, 3}, True, 1.4, None, [1, 2, 3], (3,4,5)))
+    def test_incorrect_types(self, input_values):
+        with pytest.raises(Exception) as e:
+            self.cls(arr=input_values)
+
+        assert type(e.value) in (ValueError, TypeError, ValidationError)
+
+    def test_properties(self):
+        a = self.cls(arr=np.ones((100, 3)))
+        b = np.zeros_like(a).copy()
+        assert a.shape == b.shape
+        assert a.dtype == b.dtype
+        assert b.ndim == 2
+        assert a.shape == (100, 3)
+        assert np.all(b == 0)
+        assert a.size == 300
+
+        b = np.reshape(a, (3, 100)) # a view
+        assert a.shape == (100, 3)
+        assert b.base is not None
+        assert isinstance(a, self.cls)
+        assert isinstance(b, np.ndarray)
+
+        # Test the translation
+        assert b.shape == a.T.shape
         assert isinstance(a, self.cls)
 
-    class TestObjectMethods:
+        b = np.reshape(a, (5, 60))
+        assert a.shape != (5, 60)
+        assert b.shape == (5, 60)
+
+        assert np.sum(b) == 300 == np.sum(a)
+
+    def test_methods(self):
+        a = self.cls(arr=np.random.rand(10, 3))
+        assert np.all(a.__array__() == a.arr)
+        assert a.min() >= 0
+        assert a.max() <= 1
+
+    def test_np_operator_mixins(self):
+        super().test_np_operator_mixins()
+
+
+    class TestSubclassMethods:
         cls = BaseArray
+
+        def test_frozen(self):
+            class _FrozenArray(BaseArray):
+                model_config = ConfigDict(frozen=True)
+
+            a = _FrozenArray(arr=np.random.rand(100, 100))
+
+            with pytest.raises(ValidationError):
+                a.arr = np.zeros(3)
+
+            with pytest.raises(ValueError):
+                a.arr[0] = 3
+
+            # Ensure that the dict is not being
+            for field in base_config_fields:
+                assert field in a.model_config
+
+        def test_array_interface(self):
+            a = np.random.rand(100, 100)
+            array = self.cls(arr=a)
+            assert array.__array_interface__ == array.arr.__array_interface__
+            assert array.__array_interface__ == a.__array_interface__
 
         def test_numpy_properties(self):
             a = self.cls(arr=np.random.rand(100, 100, 100, 100))
@@ -116,105 +229,335 @@ class TestBaseArray(BaseTests):
             # Test getitem
             assert np.all(a[:, 0] == a.arr[:, 0])
 
+            b = a.copy()
+
             # Test setitem
             a[0, 0] = 13
             assert a[0,0] == 13
+            assert b[0,0] != 13
+
+            b[0:3] = a[0:3]
+            assert b[0, 0] == 13
+            assert np.allclose(b[0:3], a[0:3])
 
         def test_array_assignment(self):
-            a = self.cls(arr=np.random.rand(100,100))
+            a = np.random.rand(100,100)
+            array = self.cls(arr=a)
             assert a.shape == (100, 100)
 
             # Test set
-            a.arr = np.random.rand(10, 10).astype(np.float32)
+            b = np.random.rand(10, 10).astype(np.float32)
+            array.arr = b
 
-            assert a.shape == (10, 10)
-            assert a.dtype == np.float32
-            assert a.ndim == 2
-            assert a.base is None
-            assert a.size == 10**a.ndim
+            # Check the array has been updated
+            assert array.shape == (10, 10)
+            assert array.dtype == np.float32
+            assert array.ndim == 2
+            assert array.base is None
+            assert array.size == 10**array.ndim
 
-        def test_array_copy(self):
+            assert np.all(array.arr == b)
+
+        def test_copy(self):
             a = self.cls(arr=np.random.rand(100,100))
-            b = a.get_copy()
-            assert id(a.arr) != id(b.arr)
+            b = a.copy()
+
+            # Check that the object copied has no references to the original
+            assert a is not b
+            assert a.arr is not b.arr
             assert np.all(np.isclose(b, a))
-            assert id(a) != id(b)
+
+            with pytest.raises(NotImplementedError):
+                a.copy(deep=False)
+
+        def test_update_copy(self):
+            a = np.random.rand(100,100)
+            b = np.random.rand(10, 10)
+            c = np.random.rand(5,3)
+
+            array = self.cls(arr=a)
+            array_2 = array.update_copy(b)
+            array_3 = array.update_copy(update={'arr':c})
+
+            with pytest.raises(TypeError):
+                array_4 = array.update_copy(update={'arr':'asdasd'})
+
+            # Show the original object hasn't changed
+            assert array.shape == a.shape
+            assert np.allclose(array.arr, a)
+
+            # Show the underlying data has been changed with the new copy
+            assert array_2.shape != array.shape
+            assert array_3.shape != array_2.shape
+            assert array_3.shape != array.shape
+
+            # Updated copies are new objects
+            assert array is not array_2
+            assert array is not array_3
+            assert array_2 is not array_3
+
+            assert array is not a
+            assert array_2 is not b
+            assert array_3 is not c
+
+            # Show that the array data is what they should be. update creates a copy
+            assert array.arr is a
+            assert array_2.arr is b
+            assert array_3.arr is c
+
+        def test_min_max(self):
+            a = np.random.rand(100, 100)
+            array = self.cls(arr=a.copy())
+
+            assert np.min(a) == array.min()
+            assert np.max(a) == array.max()
 
 
-    def test_initialised_obj_not_a_view(self):
-        # DISCUSS should we always create a copy? Would be part of the validation function
-        a = np.ones((10,10))
-        obj1 = self.cls(arr=a)
-        obj2 = self.cls(arr=a)
+class TestSamplingArray(BaseTests):
+    cls = _SampleArray
 
-        assert id(obj1) != id(a)
-        assert id(obj1.arr) != id(a)
+    def test_initialisation(self):
+        a = self.cls(arr=np.random.rand(100, 4))
 
-        assert id(obj2) != id(a)
-        assert id(obj2.arr) != id(a)
-
-        assert id(obj1) != id(obj2)
-        assert id(obj1.arr) != id(obj2.arr)
-
-    @pytest.mark.parametrize('array', (([1, 2, 3]), (1, 2, 3)))
-    def test_coerce_to_array(self, array):
-        a = self.cls(arr=array) # type: ignore
-        assert a.dtype == np.int64
-        assert a.ndim == 1
-        assert a.shape == (3,)
-        assert np.all(np.isclose(a, np.array([1, 2, 3])))
-
-    @pytest.mark.parametrize('array', ({'dict': 'Should fail'}, 'String is bad', {1, 2, 3}, True, 1.3, None))
-    def test_incorrect_types(self, array):
-        with pytest.raises(TypeError):
-            self.cls(arr=array) # type: ignore
-
-    def test_np_class_methods(self):
-        a = self.cls(arr=np.ones((100, 3)))
-        b = np.zeros_like(a)
-        assert a.shape == b.shape
-        assert a.dtype == b.dtype
-        assert b.ndim == 2
-        assert a.shape == (100, 3)
-        assert np.all(b == 0)
-
-        b = np.reshape(a, (3, 100)) # a view
-        assert a.shape == (100, 3)
-        assert b.shape == a.T.shape
-        assert b.base is not None
+        assert isinstance(a.arr, np.ndarray)
         assert isinstance(a, self.cls)
-        assert isinstance(b, np.ndarray)
+        assert a.shape == (100, 4)
 
-        b = np.reshape(a, (5, 60))
-        assert a.shape != (5, 60)
-        assert b.shape == (5, 60)
+    def test_methods(self):
+        for name in ('create_mask', 'sample', 'reduce', 'extract'):
+            hasattr(self.cls, name)
 
-        assert np.sum(b) == 300 == np.sum(a)
+    def test_slice_extract_reduce_1d(self):
+
+        index_s = slice(0, 4, 1)
+        index_b = [True, True, True, True, False, False, False, False, False, False]
+        (index_np_b := np.zeros(10, dtype=np.bool_))[index_b] = True
+        index_np_i = np.array([0, 1, 2, 3])
+        a = np.random.rand(10,)
+
+        for index in (index_s, index_b, index_np_b, index_np_i):
+            b = self.cls(arr=a.copy())
+            mask = b.create_mask(index)
+            assert np.all(mask == np.array([True, True, True, True, False, False, False, False, False, False]))
+
+            assert mask.shape == a.shape == b.shape
+
+            sampled = b.sample(index)
+            assert np.all(sampled.arr == a[index])
+
+            assert sampled is not b
+            assert sampled.arr is not a
+            assert sampled.arr is not b
+
+            c = b.copy()
+            d = c.extract(index)
+
+            b.reduce(~mask)
+
+            # Extract should be close to the invert reduced
+            assert np.allclose(b, c)
+            assert np.allclose(sampled, d)
+            assert c.shape[0] == 6
+            assert b.shape[0] == 6
+            assert a.shape[0] == 10
+            assert d.shape[0] == 4
+            print('Finished')
+
+    def test_slice_extract_reduce_2d(self):
+        a = np.random.rand(2, 5)
+
+        index_s = slice(0, 3, 1), slice(0, 3, 1)
+        index_b = [[True, True, True, False, False],
+                   [True, True, True, False, False]]
+        (index_np_b := np.zeros((2, 5), dtype=np.bool_))[index_b] = True
+        index_np_i = np.array([0, 0, 0, 1, 1, 1]), np.array([0, 1, 2, 0, 1, 2])
+
+        b = self.cls(arr=a.copy())
+
+        for index in (index_s, index_b, index_np_b, index_np_i):
+            mask = b.create_mask(index)
+            assert np.all(mask == np.array([[True, True, True, False, False],
+                                            [True, True, True, False, False]]))
+
+        with pytest.raises(TypeError):
+            b.create_mask("asdasd")
+
+        with pytest.raises(ValidationError):
+            a = self.cls(arr=np.zeros((10,3), dtype=np.complex_))
+
+        assert mask.shape == a.shape == b.shape
+
+        for index in (index_s, index_b, index_np_b, index_np_i):
+            b = self.cls(arr=a.copy())
+
+            sampled = b.sample(index)
+
+            assert sampled is not b
+            assert sampled.arr is not a
+            assert sampled.arr is not b
+
+            c = b.copy()
+            d = c.extract(index)
+
+            b.reduce(~mask)
+
+            # Extract should be close to the invert reduced
+            assert np.allclose(b, c)
+            assert np.allclose(sampled, d)
+            assert c.shape[0] == 4  # Remainder after extract
+            assert b.shape[0] == 4  # Reduced
+            assert a.shape[0] == 2 # Original
+            assert a.size == 10 # Original
+            assert d.shape[0] == 6  # Sampled / Extract
+            print('Finished')
+
+
+    def test_numpy_funcs(self):
+        a = self.cls(arr=np.random.rand(100, 4))
+        assert np.mean(a) is not None
+
+    def test_properties(self):
+        assert self.cls(arr=np.random.rand(100, 4)).ndim == 2
 
     def test_np_operator_mixins(self):
-        a = self.cls(arr=np.ones((100, 3)))
+        a = self.cls(arr=np.random.rand(100, 4))
+        with pytest.raises(TypeError):
+            a += 1
 
-        # Subtract
-        a = a - 1.0
-        assert np.all(np.isclose(a, 0))
-        assert isinstance(a, (self.cls, np.ndarray))    # change after assignment
+    def test_view(self):
+        a = self.cls(arr=np.random.rand(100, 4))
+        assert a.base is None
 
-        # Add
-        a = a + 2.0
-        assert np.all(np.isclose(a, 2))
-        assert isinstance(a, (self.cls, np.ndarray))    # change after assignment
+    def test_other(self):
+        assert True
 
-        # Divide
-        a = a / 0.5
-        assert np.all(np.isclose(a, 4))
-        assert isinstance(a, (self.cls, np.ndarray))    # change after assignment
 
-        # Multiply
-        a = a * 3
-        assert np.all(np.isclose(a, 12))
-        assert isinstance(a, (self.cls, np.ndarray))    # change after assignment
+class TestFixedLengthArray(BaseTests):
+    cls = _FixedLengthArray
+    def test_properties(self):
+        pass
 
-    def test_np_object_methods(self):
+    def test_methods(self):
         a = self.cls(arr=np.random.rand(10, 3))
-        assert a.min() >= 0
-        assert a.max() <= 1
+        assert len(a) == 10
+
+        i = 0
+
+        for row in a:
+            assert np.allclose(row, a[i])
+            i += 1
+
+        assert i == 10
+
+
+
+    def test_numpy_funcs(self):
+        pass
+
+    def test_other(self):
+        pass
+
+    def test_view(self):
+        pass
+
+
+    def test_np_operator_mixins(self):
+        a = np.zeros((10,2))
+        b = self.cls(arr=a.copy())
+        c = b + 2
+        d = c - 1
+        e = d * 4
+        f = e / 2
+
+        assert np.allclose(c, 2)
+        assert np.allclose(d, 1)
+        assert np.allclose(e, 4)
+        assert np.allclose(f, 2)
+
+        for item in (c, d, e, f):
+            assert isinstance(item, self.cls)
+
+        b = self.cls(arr=a.copy())
+        c = 2 + b
+        d = 3 - c
+        e = 4 * d
+        f = 8 / e
+
+        assert np.allclose(c, 2)
+        assert np.allclose(d, 1)
+        assert np.allclose(e, 4)
+        assert np.allclose(f, 2)
+
+        for item in (c, d, e, f):
+            assert isinstance(item, self.cls)
+
+        c += 1
+        d -= 2
+        e *= 4
+        f /= 2
+
+        assert np.allclose(c, 3)
+        assert np.allclose(d, -1)
+        assert np.allclose(e, 16)
+        assert np.allclose(f, 1)
+
+        for item in (c, d, e, f):
+            assert isinstance(item, self.cls)
+
+
+    def test_initialisation(self):
+        a = self.cls(arr=np.random.rand(10, 3))
+        assert isinstance(a, self.cls)
+
+
+class TestHomogeneousArray(BaseTests):
+    cls = _HomogeneousArray
+
+    def test_initialisation(self):
+        a = _HomogeneousArray(arr=np.zeros((10,3)))
+        assert isinstance(a, _HomogeneousArray)
+        assert np.all(a.arr == np.zeros((10,3)))
+
+    def test_properties(self):
+        a = np.random.rand(10, 3)
+        b = self.cls(arr=a)
+        c = b.H
+        assert a.shape != c.shape
+        assert a.shape[0] == c.shape[0]
+        assert np.all(c[:,3] == 1)
+        assert c.shape[1] == 4
+
+    def test_view(self):
+        assert True
+
+    def test_methods(self):
+        a = np.random.rand(10, 3)
+        b = self.cls(arr=a)
+        c = b.H
+        assert isinstance(c, np.ndarray)
+        assert c.shape == (10,4)
+        assert np.all(b.arr == c[:, :3])
+
+    def test_numpy_funcs(self):
+        assert True
+
+    def test_np_operator_mixins(self):
+        super().test_np_operator_mixins()
+
+class TestBaseVector(BaseTests):
+    pass
+
+class TestArrayNx2(BaseTests):
+    pass
+
+class TestArrayNx3(BaseTests):
+    pass
+
+class TestReadOnlyArray(BaseTests):
+
+
+class TestReadOnlyVector(BaseTests):
+    pass
+
+class TestImageLike(BaseTests):
+    pass

@@ -55,9 +55,6 @@ class Abstract3dCoordinates(ABC, ArrayNx3):
     def __getitem__(self, key):
         return self.sample(*key)
 
-    def __setitem__(self, key, value):
-        self.arr[key] = value
-
     def __rmatmul__(self, other):
         temp = self.H.T if other.shape == (4, 4) else self.T
         # Todo add to the transformation ledger

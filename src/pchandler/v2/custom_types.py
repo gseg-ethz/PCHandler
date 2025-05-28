@@ -9,4 +9,4 @@ ScalarFieldDtypeConversion = tuple[Literal["dtype_conversion"], tuple[DTypeLike,
 ScalarFieldOperations = ScalarFieldNormalizeOp | ScalarFieldDtypeConversion
 
 
-IndexLike = Union[slice, NDArray[np.bool_], NDArray[np.int_], list[int]]
+IndexLike = Union[int, slice, NDArray[np.bool_], NDArray[np.int_], list[int], tuple[int, ...], tuple[slice, ...]]
