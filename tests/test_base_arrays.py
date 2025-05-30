@@ -8,7 +8,8 @@ from numpydantic import NDArray, Shape
 from pydantic import BaseModel, ValidationError, ConfigDict
 
 from pchandler.v2.base_arrays import (
-    BaseArray, make_ndarray_type, _HomogeneousArray, _SampleArray, _ImageLike, _FixedLengthArray, BaseVector
+    BaseArray, make_ndarray_type, _HomogeneousArray, _SampleArray, _ImageLike, _FixedLengthArray, BaseVector, ArrayNx2,
+    ArrayNx3, ReadOnlyArray, ReadOnlyVector
 )
 
 
@@ -85,31 +86,31 @@ class BaseTests(ABC):
     @abstractmethod
     def test_np_operator_mixins(self):
         a = self.cls(arr=np.random.rand(100,100))
-        # Mixins not included by default
-        with pytest.raises(TypeError):
-            a += 1
 
-        # Subtract
-        with pytest.raises(TypeError):
-            a = a - 1.0
+        with pytest.raises(TypeError): a += 1
+        with pytest.raises(TypeError): a = a - 1.0
+        with pytest.raises(TypeError): a = a + 2.0
+        with pytest.raises(TypeError): a = a / 0.5
+        with pytest.raises(TypeError): a = a * 3
 
-        # Add
-        with pytest.raises(TypeError):
-            a = a + 2.0
-
-        # Divide
-        with pytest.raises(TypeError):
-            a = a / 0.5
-
-        # Multiply
-        with pytest.raises(TypeError):
-            a = a * 3
+        b = a > 3; assert b.dtype == np.bool_
+        b = a < 3; assert b.dtype == np.bool_
+        b = a <= 3; assert b.dtype == np.bool_
+        b = a >= 3; assert b.dtype == np.bool_
+        b = a == 3; assert b.dtype == np.bool_
+        b = a != 3; assert b.dtype == np.bool_
+        b = 3 > a; assert b.dtype == np.bool_
+        b = 3 < a; assert b.dtype == np.bool_
+        b = 3 <= a; assert b.dtype == np.bool_
+        b = 3 >= a; assert b.dtype == np.bool_
+        b = 3 == a; assert b.dtype == np.bool_
+        b = 3 != a; assert b.dtype == np.bool_
 
 
 class TestBaseArray(BaseTests):
     cls = BaseArray
     def test_other(self):
-        assert True
+        pass
 
     def test_numpy_funcs(self):
         a = self.cls(arr=np.ones((5,3)))
@@ -119,17 +120,15 @@ class TestBaseArray(BaseTests):
         c = np.mean(a, axis=0)
         assert np.all(c == 1.0)
         assert c.shape == (3,)
-
         assert isinstance(b, np.ndarray)
-
         assert np.allclose(a, 1)
 
 
     def test_initialisation(self):
         a = np.random.rand(100, 100)
         array = self.cls(arr=a)
-        assert isinstance(array, self.cls)
 
+        assert isinstance(array, self.cls)
         assert array is not a   # -> Passes
         assert array.arr is a   # -> Passes
 
@@ -176,7 +175,7 @@ class TestBaseArray(BaseTests):
 
     def test_methods(self):
         a = self.cls(arr=np.random.rand(10, 3))
-        assert np.all(a.__array__() == a.arr)
+        assert np.all(a == a.arr)
         assert a.min() >= 0
         assert a.max() <= 1
 
@@ -193,11 +192,8 @@ class TestBaseArray(BaseTests):
 
             a = _FrozenArray(arr=np.random.rand(100, 100))
 
-            with pytest.raises(ValidationError):
-                a.arr = np.zeros(3)
-
-            with pytest.raises(ValueError):
-                a.arr[0] = 3
+            with pytest.raises(ValidationError): a.arr = np.zeros(3)
+            with pytest.raises(ValueError): a.arr[0] = 3
 
             # Ensure that the dict is not being
             for field in base_config_fields:
@@ -219,8 +215,7 @@ class TestBaseArray(BaseTests):
 
         def test_len(self):
             a = self.cls(arr=np.random.rand(100))
-            with pytest.raises(NotImplementedError):
-                len(a)
+            with pytest.raises(NotImplementedError): len(a)
 
         def test_get_set_item(self):
             a = self.cls(arr=np.random.rand(100,100))
@@ -265,8 +260,7 @@ class TestBaseArray(BaseTests):
             assert a.arr is not b.arr
             assert np.all(np.isclose(b, a))
 
-            with pytest.raises(NotImplementedError):
-                a.copy(deep=False)
+            with pytest.raises(NotImplementedError): a.copy(deep=False)
 
         def test_update_copy(self):
             a = np.random.rand(100,100)
@@ -277,8 +271,7 @@ class TestBaseArray(BaseTests):
             array_2 = array.update_copy(b)
             array_3 = array.update_copy(update={'arr':c})
 
-            with pytest.raises(TypeError):
-                array_4 = array.update_copy(update={'arr':'asdasd'})
+            with pytest.raises(TypeError): array_4 = array.update_copy(update={'arr':'asdasd'})
 
             # Show the original object hasn't changed
             assert array.shape == a.shape
@@ -377,8 +370,7 @@ class TestSamplingArray(BaseTests):
             assert np.all(mask == np.array([[True, True, True, False, False],
                                             [True, True, True, False, False]]))
 
-        with pytest.raises(TypeError):
-            b.create_mask("asdasd")
+        with pytest.raises(IndexError): b.create_mask("asdasd")
 
         with pytest.raises(ValidationError):
             a = self.cls(arr=np.zeros((10,3), dtype=np.complex128))
@@ -409,7 +401,6 @@ class TestSamplingArray(BaseTests):
             assert d.shape[0] == 6  # Sampled / Extract
             print('Finished')
 
-
     def test_numpy_funcs(self):
         a = self.cls(arr=np.random.rand(100, 4))
         assert np.mean(a) is not None
@@ -427,88 +418,132 @@ class TestSamplingArray(BaseTests):
         assert a.base is None
 
     def test_other(self):
-        assert True
+        pass
 
 
-class TestFixedLengthArray(BaseTests):
+class TestFixedLengthAndMixins(BaseTests):
     cls = _FixedLengthArray
-    def test_properties(self):
-        pass
-
-    def test_methods(self):
-        a = self.cls(arr=np.random.rand(10, 3))
-        assert len(a) == 10
-
-        i = 0
-
-        for row in a:
-            assert np.allclose(row, a[i])
-            i += 1
-
-        assert i == 10
-
-
-
-    def test_numpy_funcs(self):
-        pass
-
-    def test_other(self):
-        pass
-
-    def test_view(self):
-        pass
-
-
-    def test_np_operator_mixins(self):
-        a = np.zeros((10,2))
-        b = self.cls(arr=a.copy())
-        c = b + 2
-        d = c - 1
-        e = d * 4
-        f = e / 2
-
-        assert np.allclose(c, 2)
-        assert np.allclose(d, 1)
-        assert np.allclose(e, 4)
-        assert np.allclose(f, 2)
-
-        for item in (c, d, e, f):
-            assert isinstance(item, self.cls)
-
-        b = self.cls(arr=a.copy())
-        c = 2 + b
-        d = 3 - c
-        e = 4 * d
-        f = 8 / e
-
-        assert np.allclose(c, 2)
-        assert np.allclose(d, 1)
-        assert np.allclose(e, 4)
-        assert np.allclose(f, 2)
-
-        for item in (c, d, e, f):
-            assert isinstance(item, self.cls)
-
-        c += 1
-        d -= 2
-        e *= 4
-        f /= 2
-
-        assert np.allclose(c, 3)
-        assert np.allclose(d, -1)
-        assert np.allclose(e, 16)
-        assert np.allclose(f, 1)
-
-        for item in (c, d, e, f):
-            assert isinstance(item, self.cls)
-
 
     def test_initialisation(self):
         a = self.cls(arr=np.random.rand(10, 3))
         assert isinstance(a, self.cls)
 
+    def test_properties(self): pass
+    def test_numpy_funcs(self): pass
+    def test_other(self): pass
+    def test_view(self): pass
 
-class TestHomogeneousArray(BaseTests):
+    def test_methods(self):
+        # __len__
+        a = self.cls(arr=np.random.rand(10, 3))
+        assert len(a) == 10
+
+        # __iter__
+        i = 0
+        for row in a:
+            assert np.allclose(row, a[i])
+            i += 1
+        assert i == 10
+
+    def test_vector_mask(self):
+        a = np.random.rand(20, 3)
+        b = self.cls(arr=a.copy())
+
+        mask = b.create_mask([0, 1, 2])
+
+        assert np.sum(mask) == 3
+        assert np.all(mask[:3])
+        assert not np.all(mask[3:])
+        assert mask.shape == (20,)
+
+        mask = b.create_mask([[0, 1, 2], [0, 3, 4]])
+        assert np.sum(mask) == 5
+        assert np.all(mask[:5])
+        assert not np.all(mask[5:])
+        assert mask.shape == (20,)
+
+        with pytest.raises(IndexError):
+            b.create_mask((slice(0, 4, 1), slice(0, 8, 2)))
+
+        with pytest.raises(ValueError):
+            b.create_mask(np.ones_like(a, dtype=np.bool_))
+
+        # Still create mask from multi-dimension array as np supports it
+        mask = b.create_mask(np.array([[0, 4, 5, 6],[2, 3,4, 5]]))
+
+    def test_sample_reduce_extract(self):
+        a = np.random.rand(20, 3)
+        b = self.cls(arr=a.copy())
+
+        mask = b.create_mask([0, 2, 4, 6])
+        sampled = b.sample(mask)
+
+        assert sampled is not b
+        assert np.all(sampled.arr == b.arr[mask, :])
+        assert np.all(sampled.arr == b.arr[[0, 2, 4, 6], :])
+        assert sampled.shape == (4,3)
+
+        c = b.copy()
+        d = b.copy()
+
+        extract = b.extract(mask)
+        c.reduce(mask)
+        d.reduce(~mask)
+
+        assert np.all(extract.arr == sampled.arr)
+        assert np.all(d.arr == b.arr)
+        assert np.all(c.arr == sampled.arr)
+
+
+    def test_np_operator_mixins(self):
+        a = np.random.rand(10, 3)
+        f = self.cls(arr = a + 3)
+        g = self.cls(arr = np.full_like(a, 2))
+        b = self.cls(arr = a.copy())
+
+        # Left unary operators
+        c = b + 1; assert np.allclose(c, a+1); assert np.all(b != c); assert isinstance(c, self.cls)
+        c = b - 1; assert np.allclose(c, a-1); assert np.all(b != c); assert isinstance(c, self.cls)
+        c = b * 2; assert np.allclose(c, a*2); assert np.all(b != c); assert isinstance(c, self.cls)
+        c = b / 2; assert np.allclose(c, a/2); assert np.all(b != c); assert isinstance(c, self.cls)
+        c = f // 1; assert np.allclose(c, 3); assert isinstance(c, self.cls)
+        c = f % 1; assert np.allclose(c, a); assert isinstance(c, self.cls)
+        c = g ** 3; assert np.allclose(c, 8); assert isinstance(c, self.cls)
+
+        c = 1 + b; assert np.allclose(c, a+1); assert np.all(b != c); assert isinstance(c, self.cls)
+        c = 1 - b; assert np.allclose(c, 1-a); assert np.all(b != c); assert isinstance(c, self.cls)
+        c = 2 * b; assert np.allclose(c, 2*a); assert np.all(b != c); assert isinstance(c, self.cls)
+        c = 2 / b; assert np.allclose(c, 2/a); assert np.all(c > a); assert isinstance(c, self.cls)
+        c = 3.5 // g; assert np.allclose(c, 1); assert isinstance(c, self.cls)
+        c = 4 % f; assert np.allclose(c, 1-a); assert isinstance(c, self.cls)
+        c = 3 ** g; assert np.allclose(c, 9); assert isinstance(c, self.cls)
+
+        # In place operators
+        b += 1; assert np.allclose(b, a+1); assert isinstance(c, self.cls)
+        b -= 1; assert np.allclose(b, a); assert isinstance(c, self.cls)
+        b *= 3; assert np.allclose(b, a*3); assert isinstance(c, self.cls)
+        b /= 3; assert np.allclose(b, a); assert isinstance(c, self.cls)
+        b += 1
+        b %= 1; assert np.allclose(b, a); assert isinstance(c, self.cls)
+        b //= 1; assert np.allclose(b, np.zeros_like(a)); assert isinstance(c, self.cls)
+        b.arr = np.full_like(b.arr, 3)
+        b **= 3; assert np.allclose(b, 27); assert isinstance(c, self.cls)
+
+
+class TestBaseVector:
+    def test_initialisation(self):
+        with pytest.raises(ValidationError):
+            BaseVector(arr=np.random.rand(10, 3))
+
+        vec = BaseVector(arr=np.random.rand(10))
+
+        assert vec.size == 10
+        assert len(vec) == 10
+        assert np.sum(vec) < 10
+        assert vec.shape == (10,)
+
+
+class TestHomogeneousAndMixins(BaseTests):
     cls = _HomogeneousArray
 
     def test_initialisation(self):
@@ -526,7 +561,7 @@ class TestHomogeneousArray(BaseTests):
         assert c.shape[1] == 4
 
     def test_view(self):
-        assert True
+        pass
 
     def test_methods(self):
         a = np.random.rand(10, 3)
@@ -537,36 +572,52 @@ class TestHomogeneousArray(BaseTests):
         assert np.all(b.arr == c[:, :3])
 
     def test_numpy_funcs(self):
-        assert True
+        pass
 
     def test_np_operator_mixins(self):
-        super().test_np_operator_mixins()
+        pass
 
     def test_other(self):
         pass
 
-class TestBaseVector(BaseTests):
-    with pytest.raises(ValidationError):
-        vec = BaseVector(arr=np.random.rand(10, 3))
 
-    vec = BaseVector(arr=np.random.rand(10))
+class TestArrayNx2:
+    def test_initialisation(self):
+        with pytest.raises(ValidationError):
+            ArrayNx2(arr=np.random.rand(10, 3))
 
-    assert len(vec) == 10
-    assert np.sum(vec) < 10
+        array = ArrayNx2(arr=np.random.rand(10,2))
 
-    assert vec.shape == (10,)
+        assert array.size == 20
+        assert len(array) == 10
+        assert np.sum(array) < 20
+        assert array.shape == (10,2)
 
-class TestArrayNx2(BaseTests):
-    pass
 
-class TestArrayNx3(BaseTests):
-    pass
+class TestArrayNx3:
+    def test_initialisation(self):
+        with pytest.raises(ValidationError):
+            ArrayNx3(arr=np.random.rand(10, 2))
 
-class TestReadOnlyArray(BaseTests):
-    pass
+        array = ArrayNx3(arr=np.random.rand(10,3))
 
-class TestReadOnlyVector(BaseTests):
-    pass
+        assert array.size == 30
+        assert len(array) == 10
+        assert np.sum(array) < 30
+        assert array.shape == (10,3)
+
+class TestReadOnlyArray:
+    def test_initialisation(self):
+        array = ReadOnlyArray(arr=np.random.rand(10, 2))
+        with pytest.raises(ValidationError):
+            array.arr = np.random.randn(10, 2)
+
+class TestReadOnlyVector:
+    def test_initialisation(self):
+        array = ReadOnlyVector(arr=np.random.rand(10))
+
+        with pytest.raises(ValidationError):
+            array.arr = np.random.randn(10)
 
 class TestImageLike(BaseTests):
     pass

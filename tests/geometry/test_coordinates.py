@@ -8,7 +8,7 @@ from scipy.spatial.transform import Rotation
 
 from pchandler.v2.base_arrays import ArrayNx3
 from pchandler.v2.geometry.coordinates import (
-    CartesianCoordinates, Abstract3dCoordinates, SphericalCoordinates, rhv2xyz, xyz2rhv
+    CartesianCoordinates, Abstract3dCoordinates, SphericalCoordinates, rhv2xyz, xyz2rhv, AbstractCoordinates
 )
 from pchandler.v2.geometry.transforms import Transform
 
@@ -61,13 +61,13 @@ def cart_obj(large_xyz) -> CartesianCoordinates:
     return CartesianCoordinates(arr=large_xyz)
 
 
-
 class TestCartesianCoordinates:
     @pytest.mark.parametrize('array', (_small_xyz, _large_xyz, _known_xyz))
     def test_instantiation(self, array):
         a = CartesianCoordinates(arr=array)
         assert isinstance(a, CartesianCoordinates)
         assert isinstance(a, Abstract3dCoordinates)
+        assert isinstance(a, AbstractCoordinates)
         assert isinstance(a, ArrayNx3)
 
     def test_cached_properties(self, cart_obj):
@@ -86,16 +86,11 @@ class TestCartesianCoordinates:
 
         assert num_items_after == num_items_before
 
-    @pytest.mark.parametrize('attr', ('arr', 'cache_uuid', 'spherical_origin', 'transform_ledger', 'current_system', 'offloaded'))
+    @pytest.mark.parametrize('attr', ('arr', 'socs_origin', 'transform_ledger', 'is_at_socs'))
     def test_has_attributes(self, cart_obj, attr):
-        assert attr in cart_obj.__dict__
-        if attr == 'spherical_origin':
-            assert cart_obj.spherical_origin is None
-
-    @pytest.mark.parametrize('attr', ('cache_uuid', 'offloaded'))
-    def test_dumped_attributes(self, cart_obj, attr):
-        dumped = cart_obj.model_dump()
-        assert attr not in dumped
+        assert attr in cart_obj.__dict__.keys()
+        if attr == 'socs_origin':
+            assert np.allclose(cart_obj.socs_origin, np.zeros(3))
 
     @pytest.mark.parametrize('prop', ('xyz' ,'spher', 'x', 'y', 'z', 'yxz', 'rhv', 'r', 'hz', 'v'))
     def test_has_properties(self, cart_obj, prop):
@@ -110,15 +105,16 @@ class TestCartesianCoordinates:
         # Check xyz and arr are the same object
         assert id(cart_obj.arr) == id(cart_obj.xyz)
         assert np.all(cart_obj == cart_obj.arr)
-        assert np.all(cart_obj.x == cart_obj[:, 0])
-        assert np.all(cart_obj.y == cart_obj[:, 1])
-        assert np.all(cart_obj.z == cart_obj[:, 2])
+        with pytest.raises(IndexError):
+            assert np.all(cart_obj.x == cart_obj[:, 0])
+        assert np.all(cart_obj.x == cart_obj.arr[:, 0])
+        assert np.all(cart_obj.y == cart_obj.arr[:, 1])
+        assert np.all(cart_obj.z == cart_obj.arr[:, 2])
 
         assert np.any(cart_obj.yxz != cart_obj.arr)
-        assert np.all(cart_obj.yxz[:, 0] == cart_obj[:, 1])
-        assert np.all(cart_obj.yxz[:, 1] == cart_obj[:, 0])
-        assert np.all(cart_obj.yxz[:, 2] == cart_obj[:, 2])
-
+        assert np.all(cart_obj.yxz[:, 0] == cart_obj.arr[:, 1])
+        assert np.all(cart_obj.yxz[:, 1] == cart_obj.arr[:, 0])
+        assert np.all(cart_obj.yxz[:, 2] == cart_obj.arr[:, 2])
 
     def test_spherical_properties(self, cart_obj):
         assert id(cart_obj.arr) != id(cart_obj.spher)
@@ -130,6 +126,9 @@ class TestCartesianCoordinates:
     def test_conversion_functions(self, cart_obj):
         spherical = cart_obj.to_spherical()
         assert isinstance(spherical, SphericalCoordinates)
+        assert np.all(spherical.socs_origin == cart_obj.socs_origin)
+        assert spherical.transform_ledger == cart_obj.transform_ledger
+        assert spherical.is_at_socs == cart_obj.is_at_socs
 
         # check that the cart_obj cleans up the cached spherical coordinates
         # reasoning is that if a separate object is created, these are not needed
@@ -182,7 +181,7 @@ class TestConversions:
         def arrays_setup(fixed_xyz):
             xyz = CartesianCoordinates(arr=fixed_xyz)
             xyz_shift = copy.deepcopy(xyz)
-            xyz_shift.spherical_origin = np.ones(3)
+            xyz_shift.socs_origin = np.ones(3)
             rhv_shift = xyz_shift.to_spherical()
             xyz2_shift = rhv_shift.to_cartesian()
             return xyz, xyz_shift, rhv_shift, xyz2_shift
@@ -198,13 +197,13 @@ class TestConversions:
         def test_spherical_origin(self, known_xyz):
             xyz, xyz_shift, rhv_shift, xyz2_shift = self.arrays_setup(known_xyz)
             # Origins should be different
-            assert np.all(xyz.spherical_origin != xyz_shift.spherical_origin)
-            assert np.all(xyz.spherical_origin != rhv_shift.spherical_origin)
-            assert np.all(xyz.spherical_origin != xyz2_shift.spherical_origin)
+            assert np.all(xyz.socs_origin != xyz_shift.socs_origin)
+            assert np.all(xyz.socs_origin != rhv_shift.socs_origin)
+            assert np.all(xyz.socs_origin != xyz2_shift.socs_origin)
 
             # Origins should be maintained
-            assert np.all(xyz_shift.spherical_origin == rhv_shift.spherical_origin)
-            assert np.all(xyz_shift.spherical_origin == xyz2_shift.spherical_origin)
+            assert np.all(xyz_shift.socs_origin == rhv_shift.socs_origin)
+            assert np.all(xyz_shift.socs_origin == xyz2_shift.socs_origin)
 
         def test_spherical_coordinates(self, known_xyz, known_spher):
             xyz, xyz_shift, rhv_shift, xyz2_shift = self.arrays_setup(known_xyz)
@@ -216,27 +215,5 @@ class TestConversions:
 
 
 
-def test_rmatmul_override():
-    xyz = CartesianCoordinates(arr=np.random.rand(10,3))
-    rot = Rotation.from_euler(seq='xyz', angles=np.array([0, 1, 1])).as_matrix()
-    (hom:= np.eye(4))[:3, :3] = rot
-
-    hom_ = Transform(arr=hom)
-    xyz2 = hom @ xyz.H.T
-    assert isinstance(xyz2, np.ndarray)
-    abc = xyz.get_copy(update={'arr': np.random.rand(6, 3)})
-    xyz3 = hom_ @ xyz
-
-    xyz4 = xyz3.get_copy()
-    xyz4 += 2
-
-    assert isinstance(xyz3, type(xyz))
-    assert xyz.shape != hom.shape
-    assert xyz.shape != xyz2.shape
 
 
-def test_indexing():
-
-    xyz = CartesianCoordinates(arr=np.random.rand(10,3))
-    pt1 = xyz[0, :]
-    pt2 = xyz[1, :]

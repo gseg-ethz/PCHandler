@@ -9,14 +9,19 @@ import copy
 from typing import Optional, overload, MutableMapping
 from collections import OrderedDict
 
+from enum import IntEnum, auto
 
 import numpy    as np
-from numpy import typing as npt
-from pydantic import BaseModel, model_validator, ValidationError, ConfigDict, validate_call, Field, field_validator
+from pydantic import BaseModel, model_validator, ValidationError, ConfigDict, Field, field_validator
 
-from ..custom_types import IndexLike
-from ..base_arrays import Array_4x4_T, BaseArray, BaseVector, Array_3x3_T, ArrayNx3, ArrayNx2
+from ..base_arrays import Array_4x4_T, BaseArray, BaseVector, Array_3x3_T, _FixedLengthArray
 
+
+class TransformType(IntEnum):
+    TRANSLATE = auto()
+    ROTATE = auto()
+    SCALE = auto()
+    AFFINE = auto()
 
 
 class _TransformArray(BaseArray):
@@ -30,28 +35,28 @@ class _TransformArray(BaseArray):
     def always_copy(cls, arr):
         return copy.deepcopy(arr)
 
-    def __matmul__(self, other):
-        # This is transforming the other object. Therefore use it's __rmatmul__ to enable adding the transform to ledger
-        if isinstance(other, (ArrayNx3, ArrayNx2)):
+    def __matmul__(self, other: np.ndarray|BaseArray):
+        if isinstance(other, np.ndarray):
+            return self.get_copy(array=self.arr @ other)
+
+        elif isinstance(other, _FixedLengthArray) and other.ndim > 1:
             return other.__rmatmul__(self)
 
-        if isinstance(other, type(self)):
-            # DISCUSS do transforms need
-            return self.get_copy(array=self.__matmul__(other))
+        elif isinstance(other, type(_TransformArray)):
+            return self.get_copy(array=self.arr @ other.arr)
+        else:
+            raise TypeError(f"Unknown type for matmul: {type(other)}")
 
-        return self.__matmul__(other)
+    def __rmatmul__(self, other):
+        return other.__matmul__(self.arr)
 
-        # TODO these functions need decorators/wrappers in coordinates to add transform to ledger (or call super)
-        def __matmul__(self, other):
-            return self.update_copy(self.arr @ other)
-
-        def __rmatmul__(self, other):
-            return self.update_copy(other @ self.arr)
-
-        def __imatmul__(self, other):
+    def __imatmul__(self, other):
+        if isinstance(other, np.ndarray):
             self.arr @= other
-            return self
-
+        elif issubclass(type(other), _TransformArray):
+            self.arr @= other.arr
+        else:
+            raise TypeError(f"Incompatible type for imatmul with Transformation Array: {type(other)}")
 
 
 class _Transform3x3(_TransformArray):
@@ -134,7 +139,7 @@ class TransformLedger(OrderedDict, MutableMapping   [str, TransformRecord]):
 
         return key, super(TransformLedger, self).__getitem__(key)
 
-    def __setitem__(self, key: str|int, value: np.ndarray | Transform4x4 | TransformRecord):
+    def __setitem__(self, key: str|int, value: np.ndarray | _Transform4x4 | TransformRecord):
         if isinstance(value, TransformRecord):
             if isinstance(key, int):
                 key = list(super(TransformLedger, self).items())[key]

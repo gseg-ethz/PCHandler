@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import ABC
 from functools import cached_property
-from typing import Any, Optional, Generator, Mapping, Self, Union
+from typing import Any, Optional, Generator, Mapping, Self
 
 import numpy as np
 import numpy.typing as npt
@@ -70,8 +70,9 @@ class BaseArray(ABC, BaseModel):
         validate_default=True,
         strict=True,
         frozen=False,
-        extra='ignore')
-    arr: Array_T
+        extra='ignore',
+        populate_by_name=True)
+    arr: Array_T = Field(..., alias='data')
 
     # TODO performance test the difference -> if any
     @property
@@ -83,10 +84,6 @@ class BaseArray(ABC, BaseModel):
         E.g. any function will use np.asarray(base_arraylike.arr.__array_interface__)
         """
         return self.arr.__array_interface__
-
-    def __array__(self) -> Array_T:
-        """This is a backup for __array_interface__"""
-        return self.arr
 
     @cached_property
     def T(self) -> npt.NDArray:
@@ -118,10 +115,10 @@ class BaseArray(ABC, BaseModel):
     def max(self, **kwargs) -> np.number | npt.NDArray:
         return self.arr.max(**kwargs)
 
-    # To better catch any attempts to coerce as strict seems to fail
     @field_validator('arr', mode='before')
     @classmethod
-    def validate_ndarray(cls, arr):
+    def validate_ndarray(cls, arr: np.ndarray):
+
         if not isinstance(arr, np.ndarray|type(cls)):
             raise TypeError(f'Invalid array type: {type(arr)}')
 
@@ -133,6 +130,11 @@ class BaseArray(ABC, BaseModel):
             self.arr.setflags(write=False)
         return self
 
+    def model_dump(self, *args, **kwargs) -> dict:
+        kwargs = kwargs | {'exclude': {'spher'}}
+        return super().model_dump(*args, **kwargs)
+
+    # TODO need to change this process to dump and then build new. This ensures cached properties are not copied
     def update_copy(self,
                     array: npt.NDArray|BaseArray|None = None, *,
                     deep: bool = True,
@@ -172,7 +174,6 @@ class BaseArray(ABC, BaseModel):
         # This is a placeholder for the ability to subclass an array to act like a view
         raise NotImplementedError
 
-
     def __len__(self) -> int:
         raise NotImplementedError('Length of an undefined array shape is not clear')
 
@@ -196,27 +197,41 @@ class BaseArray(ABC, BaseModel):
         else:
             self.arr[*key] = value
 
+    def __lt__(self, other: Any) -> npt.NDArray[np.bool_]|bool: return self.arr < other
+    def __le__(self, other: Any) -> npt.NDArray[np.bool_]|bool: return self.arr <= other
+    def __eq__(self, other: Any) -> npt.NDArray[np.bool_]|bool: return self.arr == other
+    def __ne__(self, other: Any) -> npt.NDArray[np.bool_]|bool: return self.arr != other
+    def __ge__(self, other: Any) -> npt.NDArray[np.bool_]|bool: return self.arr >= other
+    def __gt__(self, other: Any) -> npt.NDArray[np.bool_]|bool: return self.arr > other
+
 
 class _SampleArray(BaseArray):
-    def create_mask(self, selection: IndexLike) -> Vector_N_T:
+    def create_mask(self, selection: IndexLike, as_vector=False) -> Vector_N_T:
         """Creates a boolean mask for the whole array
 
         This ensures all new objects are a copy of an array and no views/references
         """
         if isinstance(selection, np.ndarray) and selection.dtype == np.bool_:
-            return selection
+            selection = selection.squeeze()
+            if as_vector:
+                if selection.ndim > 1:
+                    raise ValueError(f'Selection mask must be a vector like')
+                return selection
 
-        mask = np.zeros_like(self.arr, dtype=np.bool_)
-        if isinstance(selection, list):
-            mask[np.array(selection)] = True
+            if selection.shape == self.shape:
+                return selection
+            else:
+                raise ValueError(f'Invalid selection mask shape: {selection.shape}')
 
-        elif isinstance(selection, np.ndarray):
-            mask[selection] = True
-
-        elif not isinstance(selection, (tuple, slice, int)):
-            raise TypeError(f"Unsupported selection type: {type(selection)}. Must be slice, list, or np.ndarray.")
+        if as_vector:
+            mask = np.zeros(len(self), dtype=np.bool_)
         else:
-            mask[selection] = True
+            mask = np.zeros_like(self.arr, dtype=np.bool_)
+
+        if isinstance(selection, list):
+            selection = np.array(selection)
+
+        mask[selection] = True
         return mask
 
     def sample(self, index: IndexLike) -> Self:
@@ -237,7 +252,54 @@ class _SampleArray(BaseArray):
         return extracted
 
 
-class _FixedLengthArray(_SampleArray):
+class _NumericMixins(BaseArray):
+    def __add__(self, other: Any) -> Self: return self.update_copy(self.arr + other)
+    def __sub__(self, other: Any) -> Self: return self.update_copy(self.arr - other)
+    def __mul__(self, other: Any) -> Self: return self.update_copy(self.arr * other)
+    def __truediv__(self, other: Any) -> Self: return self.update_copy(self.arr / other)
+    def __floordiv__(self, other: Any) -> Self: return self.update_copy(self.arr // other)
+    def __mod__(self, other: Any) -> Self: return self.update_copy(self.arr % other)
+    def __pow__(self, other: Any) -> Self: return self.update_copy(self.arr ** other)
+    def __radd__(self, other: Any) -> Self: return self.update_copy(other + self.arr)
+    def __rsub__(self, other: Any) -> Self: return self.update_copy(other - self.arr)
+    def __rmul__(self, other: Any) -> Self: return self.update_copy(other * self.arr)
+    def __rpow__(self, other: Any) -> Self: return self.update_copy(other ** self.arr)
+    def __rtruediv__(self, other: Any) -> Self: return self.update_copy(other / self.arr )
+    def __rfloordiv__(self, other: Any) -> Self: return self.update_copy(other // self.arr)
+    def __rmod__(self, other: Any) -> Self: return self.update_copy(other % self.arr)
+    def __divmod__(self, other: Any) -> Self: return self.update_copy(divmod(self.arr, other))
+    def __neg__(self, other: Any) -> Self: return self.update_copy(-self.arr)
+
+    def __iadd__(self, other: Any) -> Self:
+        self.arr = self.arr + other
+        return self
+
+    def __isub__(self, other: Any) -> Self:
+        self.arr = self.arr - other
+        return self
+
+    def __imul__(self, other: Any) -> Self:
+        self.arr = self.arr * other
+        return self
+
+    def __itruediv__(self, other: Any) -> Self:
+        self.arr = self.arr / other
+        return self
+
+    def __ifloordiv__(self, other: Any) -> Self:
+        self.arr = self.arr // other
+        return self
+
+    def __imod__(self, other: Any) -> Self:
+        self.arr = self.arr % other
+        return self
+
+    def __ipow__(self, other: Any) -> Self:
+        self.arr = self.arr ** other
+        return self
+
+
+class _FixedLengthArray(_SampleArray, _NumericMixins):
     """
     Array to support objects like Coordinate sets or vectors which have "len()" or number of items == rows
     """
@@ -245,43 +307,22 @@ class _FixedLengthArray(_SampleArray):
         return self.arr.shape[0]
 
     def __iter__(self) -> Generator[np.ndarray]:
-        """Function to allow iteration through vector items or rows of array"""
         for i in self.arr:
             yield i
 
-    def create_mask(self, selection: IndexLike) -> Vector_N_T:
-
-        if isinstance(selection, np.ndarray) and selection.dtype == np.bool_:
-            if selection.shape != (self.nbPoints,):
-                raise ValueError(f"Boolean mask must have shape ({self.nbPoints},), but got {selection.shape}")
-            return selection
-
-        mask = np.zeros(len(self), dtype=np.bool_)
-
-        if isinstance(selection, list):
-            mask[np.array(selection)] = True
-
-        elif isinstance(selection, np.ndarray):
-            mask[selection] = True
-
-        elif not isinstance(selection, (tuple, slice, int)):
-            raise TypeError(f"Unsupported selection type: {type(selection)}. Must be slice, list, or np.ndarray.")
-        else:
-            mask[selection] = True
-
-        if mask.ndim != 1:
-            raise ValueError(f'Input selection must correspond to a selection of rows in the array (1D).')
-
-        return mask
+    def create_mask(self, selection: IndexLike, **kwargs) -> Vector_N_T:
+        return super().create_mask(selection, as_vector=True)
 
     def sample(self, index: IndexLike) -> _FixedLengthArray:
         mask = self.create_mask(index)
-        return self.update_copy( array=self.arr[mask] if self.ndim == 1 else self.arr[mask, :] )
+        return self.update_copy(
+            array = self.arr[mask] if self.shape == mask.shape else self.arr[mask, :]
+        )
 
     def reduce(self, index: IndexLike) -> None:
         """Reduces the array to the points indexed"""
         mask = self.create_mask(index)
-        self.arr = self.arr[mask] if self.ndim == 1 else self.arr[mask, :]
+        self.arr = self.arr[mask] if self.shape == mask.shape else self.arr[mask, :]
 
     def extract(self, index: IndexLike) -> Self:
         """Returns the points indexed but also reduces the indexed array by these points"""
@@ -289,46 +330,6 @@ class _FixedLengthArray(_SampleArray):
         extracted = self.sample(mask)
         self.reduce(~mask)
         return extracted
-
-    def __add__(self, other):
-        return self.update_copy(self.arr + other)
-
-    def __radd__(self, other):
-        return self.update_copy(other + self.arr)
-
-    def __iadd__(self, other):
-        self.arr += other
-        return self
-
-    def __sub__(self, other):
-        return self.update_copy(self.arr - other)
-
-    def __rsub__(self, other):
-        return self.update_copy(other - self.arr)
-
-    def __isub__(self, other):
-        self.arr -= other
-        return self
-
-    def __mul__(self, other):
-        return self.update_copy(self.arr * other)
-
-    def __rmul__(self, other):
-        return self.update_copy(other * self.arr)
-
-    def __imul__(self, other):
-        self.arr *= other
-        return self
-
-    def __truediv__(self, other):
-        return self.update_copy(self.arr / other)
-
-    def __rtruediv__(self, other):
-        return self.update_copy(other / self.arr )
-
-    def __itruediv__(self, other):
-        self.arr /= other
-        return self
 
 
 class BaseVector(_FixedLengthArray):
@@ -358,10 +359,10 @@ class ReadOnlyVector(BaseVector):
 
 
 
-class _ImageLike(_SampleArray, ABC):
+class _ImageLike(_SampleArray, _NumericMixins, ABC):
     arr: Array_NxM_T|Array_NxM_3_T
     # Update implementation based on if you want to support slicing / views or not
-    def __getitem__(self, key: IndexLike) -> Any:
+    def __getitem__(self, *key: IndexLike) -> Any:
         return self.arr[*key]
 
     def create_mask(self, *indices):

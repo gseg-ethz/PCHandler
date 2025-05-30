@@ -1,36 +1,52 @@
-from typing import Optional, TypedDict, Unpack
+from __future__ import annotations
 
-from pydantic import Field
+from typing import Optional, TypedDict, Unpack, Self, Union
+
+from pydantic import Field, model_validator, ValidationError
 import numpy as np
 
-from .coordinates import CartesianCoordinates, TLSCoordinates
-from .scalar_fields_pydantic import ScalarFieldManager
+from .transforms import Transform
+from .coordinates import CartesianCoordinates
+from .optimal_shift import OSM_Manager
+from .scalar_fields_pydantic import ScalarFieldManager, ScalarField
 
 
+class PointCloudConfig(TypedDict):
+    scalar_fields: ScalarFieldManager|dict[str, ScalarField]
+    socs_origin: Union[np.ndarray, None]
+    is_at_socs: bool
+    project_transform: Union[np.ndarray, Transform, None]
 
-class ConfigPointCloud(TypedDict):
-    project_optimal_center: np.ndarray
-    optimal: bool
-    read_only: bool
-    transform_to_project_coords:
 
-
-class PointCloudFactory:
-    def __new__(cls, pcds: list[...], *args, **kwargs) -> BasePointCloud|TLSCloud|list[BasePointCloud]|list[TLSCloud]:
-
-class BasePointCloud(CartesianCoordinates):
+@OSM_Manager.register_point_cloud
+class PointCloudData(CartesianCoordinates):
+    optimal: bool = Field(default=False, exclude=True)
     sfm: Optional[ScalarFieldManager] = Field(default_factory=ScalarFieldManager)
 
-    def __new__(cls, arbitrary=False, force_unoptimised=False, project_transformation=False, *args, **kwargs):
-        # TODO logic for handling the different point cloud types based on parameters
-        if arbitrary:
-        """
+    @model_validator(mode='before')
+    @classmethod
+    def validate_init_params(cls, kwargs: Unpack[PointCloudConfig]) -> PointCloudData:
+        key = {'arr', 'xyz'} & set(kwargs.keys())
+        if len(key) != 1:
+            raise ValidationError(f"Invalid keyword arguments. Only accepts 'xyz' OR 'arr', not both.")
+        xyz = kwargs.pop(list(key)[0])
 
-        Parameters
-        ----------
-        args
-        kwargs
-        """
+        # Override the passed point cloud with any input kwargs
+        if isinstance(xyz, cls):
+            kwargs = xyz.model_dump() | kwargs
+
+        # Pass in the data with any set parameters
+        elif isinstance(xyz, np.ndarray):
+            kwargs = kwargs | {'arr': xyz}
+
+        else:
+            raise TypeError(f'Unsupported object type passed as xyz for PointCloudData: {type(xyz)}')
+
+        # Ensure is_at_socs if project_transform is set (assumed transform from project to socs)
+        if kwargs.get('project_transform', None) is not None:
+            kwargs['is_at_socs'] = True
+
+        return kwargs
 
     def __getitem__(self, item):
         pass
@@ -40,46 +56,37 @@ class BasePointCloud(CartesianCoordinates):
         #  sample/extract/reduce
         pass
 
-    def sample(self, *index, sub_ok=True):
-        self.get_copy(self.sample(*index), update={
-            'sfm': self.sfm[*index]
-        })
+    def sample(self, mask):
+        raise NotImplementedError
 
-    def reduce(self, *index):
-        pass
+    def reduce(self, mask):
+        raise NotImplementedError
 
-    def extract(self):
-        pass
+    def extract(self, mask):
+        raise NotImplementedError
 
     def merge(self):
-        pass
+        raise NotImplementedError
 
     def to_o3d(self):
-        pass
+        raise NotImplementedError
 
     @classmethod
     def from_o3d(self, o3d):
-        pass
+        raise NotImplementedError
 
     def to_py4dgeo(self):
-        pass
+        raise NotImplementedError
 
     @classmethod
     def from_py4dgeo(self, py4dgeo):
-        pass
+        raise NotImplementedError
 
     @property
-    def normals(self):
-        return self.sfm.normals
-
+    def normals(self): return self.sfm.normals
     @property
-    def rgb(self):
-        return self.sfm.rgb
-
+    def rgb(self): return self.sfm.rgb
     @property
-    def intensity(self):
-        return self.sfm.intensity
-
+    def intensity(self): return self.sfm.intensity
     @property
-    def reflectance(self):
-        return self.sfm.reflectance
+    def reflectance(self): return self.sfm.reflectance
