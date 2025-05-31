@@ -213,7 +213,3 @@ class TestConversions:
             assert np.allclose(xyz_shift.spher, xyz2_shift.spher)   # shifted objects still match
             assert np.any(xyz.spher != xyz_shift.spher)     # Different origins should yield diff results
 
-
-
-
-

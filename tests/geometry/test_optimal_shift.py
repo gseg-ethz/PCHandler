@@ -4,7 +4,7 @@ import pytest
 import numpy as np
 
 from pchandler.v2.geometry.optimal_shift import OSM_Manager
-from pchandler.v2.geometry.core_pydantic import PointCloudData
+from pchandler.v2.geometry.core import PointCloudData
 
 
 def test_register():

@@ -80,7 +80,8 @@ from plyfile import PlyData, PlyElement
 from yaml import warnings
 
 from .geometry.core import PointCloudData
-from .geometry.scalar_fields import ScalarField, ScalarFieldManager
+from .geometry.scalar_fields import ScalarField
+from .geometry.scalar_field_manager import ScalarFieldManager
 
 logger = logging.getLogger(__name__.split(".")[0])
 

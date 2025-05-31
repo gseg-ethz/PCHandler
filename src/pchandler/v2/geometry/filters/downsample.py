@@ -5,7 +5,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from ..core import PointCloudData
-from ..scalar_fields import ScalarFieldManager
+from ..scalar_field_manager import ScalarFieldManager
 from ...util import unique_rows_fast
 from .core import PointCloudFilter
 

@@ -3,8 +3,8 @@ import copy
 import numpy as np
 import pytest
 
-from pchandler.v2.geometry import PointCloudData
-from pchandler.v2.geometry.scalar_fields import ScalarFieldManager
+from pchandler.v2.geometry.core import PointCloudData
+from pchandler.v2.geometry.scalar_field_manager import ScalarFieldManager
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -105,7 +105,7 @@ class TestPointCloudData:
 
         def test_global_shifted(self, large_coordinates, rgb, normals, intensities, offset_large):
             xyz = large_coordinates
-            pcd = PointCloudData(xyz=xyz, color=rgb, normals=normals, scalar_fields={"intensity": intensities})
+            pcd = PointCloudData(xyz=xyz, rgb=rgb, normals=normals, intensity=intensities)
 
             self.check_global_shift_need(xyz, True)
             self.check_global_shift_applied(pcd)
@@ -223,14 +223,12 @@ class TestPointCloudData:
         def test_sf_input_as_vector(self, small_coordinates, rgb, normals, intensities):
             pcd = PointCloudData(xyz=small_coordinates, color=rgb, normals=normals, scalar_fields=intensities)
 
-            # TODO naming of field should be singular
             assert pcd.scalar_fields["scalar_fields"] is not None
             assert np.all(pcd.scalar_fields["scalar_fields"] == intensities)
             assert isinstance(pcd.scalar_fields, ScalarFieldManager)
             assert len(pcd.scalar_fields) == 1
 
-        def test_sf_input_as_tripled(self, small_coordinates, rgb, normals, intensities):
-            # TODO current functionality should throw an error for non 1D vectors
+        def test_sf_input_as_triplet(self, small_coordinates, rgb, normals, intensities):
             with pytest.raises(TypeError, ValueError, IndexError):
                 pcd = PointCloudData(xyz=small_coordinates, color=rgb, normals=normals, scalar_fields=rgb)
 
@@ -444,6 +442,7 @@ class TestPointCloudData:
         with pytest.raises(AttributeError):
             pcd.normals = np.random.rand(100, 3)
 
-        # TODO should this be so easily overwriteable - this can be overwritten
+        # TODO should this be so easily overwriteable? Should a setter function be defined to go with?
+        #  Habit says yes so it's more interoperable with other code E/g/ Pcd.xyz, Pcd.rgb, Pcd.intensity, Pcd.normals
         # with pytest.raises(AttributeError):
         #     pcd.scalar_fields['intensity'] = np.random.rand(100)

@@ -2,15 +2,17 @@ from __future__ import annotations
 
 from abc import ABC
 from functools import cached_property
-from typing import Any, Optional, Generator, Mapping, Self
+from typing import Any, Optional, Generator, Mapping, Self, Annotated
 
+# TODO there's a lot of importing of numpy or other common libraries - is there way to optimise this to __init__?
 import numpy as np
 import numpy.typing as npt
 from numpydantic import NDArray, Shape
-from numpydantic.dtype import Integer, Float, Bool
-from pydantic import BaseModel, ConfigDict, model_validator, field_validator, Field
+from numpydantic.dtype import Integer, Float, Bool, UInt8, Float32, UInt16
+from pydantic import BaseModel, ConfigDict, model_validator, field_validator, Field, BeforeValidator
 
 from .custom_types import IndexLike
+from .validators import extract_array
 
 ArrayDtypes = (Integer, Float, Bool)
 
@@ -28,27 +30,29 @@ def make_ndarray_type(*args: Optional[int|str], dtype = None):
 
     return NDArray[Shape[', '.join(shape_list)], dtype if dtype is not None else Any]
 
+ArrayValidator = BeforeValidator(extract_array)
+
+# TODO add detect transpose Validator for Nx3 arrays
+
 # DECISION -> Should we shift this to custom types? For now this is a rather independent module
-Array_T = NDArray[Shape['*, ...'], ArrayDtypes]         # Any array like object. E.g. image stacks (
-Array_NxM_T = NDArray[Shape['*, *'], ArrayDtypes]       # Intensity image, depth image
-Array_NxM_3_T = NDArray[Shape['*, *, 3'], ArrayDtypes]  # RGB or normal image
-Array_Nx2_T = NDArray[Shape['*, 2'], ArrayDtypes]       # Image coordinates or plane coordinates
-Array_Nx3_T = NDArray[Shape['*, 3'], ArrayDtypes]       # 3D Coordinates / Scalar Field triplets (RGB, normals)
-Array_3x3_T = NDArray[Shape['4, 4'], ArrayDtypes]       # Rotation Matrix
-Array_4x4_T = NDArray[Shape['4, 4'], ArrayDtypes]       # Affine Transformation
-Vector_N_T = NDArray[Shape['*'], ArrayDtypes]           # Scalar Fields
-Vector_2_T = NDArray[Shape['2'], ArrayDtypes]           # Image coordinate / translation vector
-Vector_3_T = NDArray[Shape['3'], ArrayDtypes]           # 3D coordinate / translation vector
+Array_T = Annotated[NDArray[Shape['*, ...'], ArrayDtypes], ArrayValidator]
+Array_NxM_T = Annotated[NDArray[Shape['*, *'], ArrayDtypes], ArrayValidator]       # Intensity image, depth image
+Array_NxM_3_T = Annotated[NDArray[Shape['*, *, 3'], ArrayDtypes], ArrayValidator]  # RGB or normal image
+Array_Nx2_T = Annotated[NDArray[Shape['*, 2'], ArrayDtypes], ArrayValidator]       # Image coordinates
+Array_Nx3_T = Annotated[NDArray[Shape['*, 3'], ArrayDtypes], ArrayValidator]       # 3D Coordinates / normals
+Array_Nx3_f4_T = Annotated[NDArray[Shape['*, 3'], Float32], ArrayValidator]        # Normals and optimised coords
+Array_Nx3_u1_T = Annotated[NDArray[Shape['*, 3'], UInt8], ArrayValidator]          # RGB
+Array_3x3_T = Annotated[NDArray[Shape['4, 4'], ArrayDtypes], ArrayValidator]       # Rotation Matrix
+Array_4x4_T = Annotated[NDArray[Shape['4, 4'], ArrayDtypes], ArrayValidator]       # Affine Transformation
+Vector_N_T = Annotated[NDArray[Shape['*'], ArrayDtypes], ArrayValidator]           # Scalar Fields
+Vector_N_u2_T = Annotated[NDArray[Shape['*'], UInt16], ArrayValidator]             # Intensity Values
+Vector_N_u1_T = Annotated[NDArray[Shape['*'], UInt8], ArrayValidator]              # Single RGB field
+Vector_N_f4_T = Annotated[NDArray[Shape['*'], Float32], ArrayValidator]            # Normal vector field
+Vector_N_b_T = Annotated[NDArray[Shape['*'], Bool], ArrayValidator]                # Mask or boolean vector
+Vector_2_T = Annotated[NDArray[Shape['2'], ArrayDtypes], ArrayValidator]           # Image coordinate / translation
+Vector_3_T = Annotated[NDArray[Shape['3'], ArrayDtypes], ArrayValidator]           # 3D coordinate / translation
 
 
-# TODO define the scope -> Do we want an all functioning array class or just define the critical ones
-#  Scalar Fields
-#  Coordinates
-#  Transformations
-#  Images (depth / RGB / stacks)
-#  This will then define if Mixins to be included at base or not
-#  Gut feeling is to include default mixins but always return numpy array
-#   -> This is based on the idea that other 'subclassed' or container instances will be included in these funcs.
 class BaseArray(ABC, BaseModel):
     """
     BaseArray is designed to be a subclassable, automatic validator for array based classes.
@@ -72,9 +76,8 @@ class BaseArray(ABC, BaseModel):
         frozen=False,
         extra='ignore',
         populate_by_name=True)
-    arr: Array_T = Field(..., alias='data')
+    arr: Array_T
 
-    # TODO performance test the difference -> if any
     @property
     def __array_interface__(self) -> dict:
         """ Gives access for all numpy functions to the root array object
@@ -335,6 +338,12 @@ class _FixedLengthArray(_SampleArray, _NumericMixins):
 class BaseVector(_FixedLengthArray):
     arr: Vector_N_T
 
+    @field_validator('arr', mode='before')
+    @classmethod
+    def squeeze_validator(cls, value):
+        if isinstance(value, np.ndarray):
+            return np.atleast_1d(value.squeeze())
+        return np.atleast_1d(value.arr.squeeze())
 
 class _HomogeneousArray(_FixedLengthArray):
     @property

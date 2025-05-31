@@ -3,7 +3,6 @@ from __future__ import annotations
 import warnings
 import uuid
 from abc import ABC, abstractmethod
-from enum import IntEnum, auto
 from functools import cached_property, wraps
 from typing import Optional, Annotated, Self
 
@@ -14,7 +13,6 @@ from pydantic import Field, model_validator, BeforeValidator, validate_call, Con
 from ..base_arrays import ArrayNx3, Array_Nx3_T, Array_4x4_T, Vector_3_T, BaseArray, ArrayNx2
 from ..validators import validate_spherical_angles, enforce_azimuths
 from .transforms import TransformRecord, TransformLedger, GlobalShift, _Transform3x3, _Transform4x4, Transform
-from .optimal_shift import OptimalShiftManager, OSM_Manager
 
 TransformT = _Transform4x4|_Transform3x3|Transform
 
@@ -23,31 +21,9 @@ TWO_PI = 2 * PI
 HALF_PI = 0.5 * PI
 
 
-def update_transformation_ledger(name: str):
-    def decorator(func):
-        @wraps(func)
-        def wrapper(instance: Abstract3dCoordinates, *args, **kwargs):
-            result = func(instance, *args, **kwargs)
-
-            result.transform_ledger[name] = TransformRecord(forward=args[0])
-        return wrapper
-    return decorator
 
 
 class AbstractCoordinates(BaseArray, ABC):
-    transform_ledger: TransformLedger[str, [Transform]] = Field(default_factory=TransformLedger)
-    uuid: str = Field(default_factory= lambda: str(uuid.uuid4()), exclude=True)
-
-    def __hash__(self) -> int:
-        return hash(self.uuid)
-
-    @field_validator('transform_ledger', mode='before')
-    @classmethod
-    def initialise_empty_ledger(cls, value: dict | TransformLedger):
-        if isinstance(value, dict):
-            return TransformLedger(**value)
-        return value
-
     def __getitem__(self, key):
         mask = self.create_mask(key)
         if mask.ndim == 2:
@@ -55,27 +31,12 @@ class AbstractCoordinates(BaseArray, ABC):
                              '\nInput selection must map to 1D mask')
         return self.sample(mask)
 
-    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __matmul__(self, transpose_matrix: TransformT | np.ndarray) -> Self | np.ndarray:
         raise NotImplementedError('Left matrix multiplication is not supported.\n'
                                   'For 3D coordinates use the formula: \n'
                                   '     y = Tx\n'
                                   'where x are coordinates and A the transformation. In python: \n'
                                   '     y = A @ x')
-
-    def __eq__(self, other: AbstractCoordinates|np.ndarray) -> bool:
-        if isinstance(other, AbstractCoordinates) and self.shape == other.shape:
-            if np.allclose(self.arr, other.arr) and self.uuid == other.uuid:
-                return True
-            return self.arr == other
-        else:
-            if isinstance(self, ArrayNx2):
-                return ArrayNx2.__eq__(self, other)
-            elif isinstance(self, ArrayNx3):
-                return ArrayNx3.__eq__(self, other)
-            else:
-                raise NotImplementedError(f'Equality function not implemented of object type {type(self)}.')
-
 
 class Abstract2dCoordinates(ArrayNx2, AbstractCoordinates):
     @property
@@ -131,7 +92,6 @@ class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates):
 
 class CartesianCoordinates(Abstract3dCoordinates):
     arr: Array_Nx3_T = Field(alias='xyz')
-
     @property
     def x(self) -> np.ndarray: return self.arr[:, 0]
     @property
@@ -159,8 +119,7 @@ class CartesianCoordinates(Abstract3dCoordinates):
     def rhv(self): return self.spher
 
     @property
-    def fov(self):
-        # TODO must implement this
+    def fov(self): # TODO must implement this
         raise NotImplementedError
 
     def to_spherical(self) -> SphericalCoordinates:
@@ -174,8 +133,8 @@ class CartesianCoordinates(Abstract3dCoordinates):
         delattr(spherical, 'xyz')
         return cartesian
 
+    # TODO must define on the transformation handling -> Incl. support for the scipy.spatial.transform.rotation
     def transform(self, affine=None, rotation=None, translation=None, scale=None):
-        # TODO must define on the transformation handling -> Incl. support for the scipy.spatial.transform.rotation
         affine = Transform.from_matrix(affine) if affine else np.eye(4)
 
         if rotation is not None:
@@ -193,28 +152,17 @@ class SphericalCoordinates(Abstract3dCoordinates):
     arr: Annotated[Array_Nx3_T, Field(alias='spher'), BeforeValidator(validate_spherical_angles)]
 
     @property
-    def fov(self):
-        raise NotImplementedError
-
+    def fov(self): raise NotImplementedError
     @property
-    def spher(self) -> np.ndarray:
-        return self.arr
-
+    def spher(self) -> np.ndarray: return self.arr
     @property
-    def rhv(self) -> np.ndarray:
-        return self.arr
-
+    def rhv(self) -> np.ndarray: return self.arr
     @property
-    def r(self) -> np.ndarray:
-        return self.rhv[:, 0]
-
+    def r(self) -> np.ndarray: return self.rhv[:, 0]
     @property
-    def hz(self) -> np.ndarray:
-        return self.rhv[:, 1]
-
+    def hz(self) -> np.ndarray: return self.rhv[:, 1]
     @property
-    def v(self) -> np.ndarray:
-        return self.rhv[:, 2]
+    def v(self) -> np.ndarray: return self.rhv[:, 2]
 
     @cached_property
     def xyz(self) -> np.ndarray:
@@ -223,16 +171,11 @@ class SphericalCoordinates(Abstract3dCoordinates):
         return rhv2xyz(self.arr, self.socs_origin)
 
     @property
-    def x(self) -> np.ndarray:
-        return self.xyz[:, 0]
-
+    def x(self) -> np.ndarray: return self.xyz[:, 0]
     @property
-    def y(self) -> np.ndarray:
-        return self.xyz[:, 1]
-
+    def y(self) -> np.ndarray: return self.xyz[:, 1]
     @property
-    def z(self) -> np.ndarray:
-        return self.xyz[:, 2]
+    def z(self) -> np.ndarray: return self.xyz[:, 2]
 
     def to_cartesian(self) -> CartesianCoordinates:
         cartesian = CartesianCoordinates(**self.model_dump(exclude={'arr'}) | {'arr': self.xyz})
