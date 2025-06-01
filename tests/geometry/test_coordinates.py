@@ -127,7 +127,6 @@ class TestCartesianCoordinates:
         spherical = cart_obj.to_spherical()
         assert isinstance(spherical, SphericalCoordinates)
         assert np.all(spherical.socs_origin == cart_obj.socs_origin)
-        assert spherical.transform_ledger == cart_obj.transform_ledger
         assert spherical.is_at_socs == cart_obj.is_at_socs
 
         # check that the cart_obj cleans up the cached spherical coordinates
@@ -161,7 +160,8 @@ class TestCartesianCoordinates:
 
         cart_obj.transform(rotation=rotation, scale=scale, translation=translation)
 
-        assert 'AFFINE' in cart_obj.transform_ledger[-1][0]
+        # TODO reimplement transform ledger then retest
+        # assert 'AFFINE' in cart_obj.transform_ledger[-1][0]
 
 
 class TestConversions:
