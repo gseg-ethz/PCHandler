@@ -106,7 +106,6 @@ class ScalarFieldManager(MutableMapping[str, type[ScalarField]]):
 
         if isinstance(key, str):
             return self._fields[key]
-        # TODO check partial dict if key not found
 
         return self.sample(key)
 
