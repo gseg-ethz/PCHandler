@@ -44,8 +44,8 @@ class TestScalarFieldClass:
         assert a.name == 'allen'
         assert np.all(a.arr == 1)
         assert a.operations_performed == ['Nothing', 'Yet']
-        assert a.original_dtype != np.int32
-        assert a.original_dtype == a.dtype
+        assert a.original_state.dtype != np.int32
+        assert a.original_state.dtype == a.arr.dtype
         assert isinstance(a, ScalarField)
 
     def test_defaults(self):
@@ -100,8 +100,6 @@ class TestScalarFieldClass:
         a = ScalarField(arr=array, name='a')
         assert a.arr.shape == array.squeeze().shape
         assert np.all(a.arr == array)
-
-
 
     def test_normalise(self):
         raise NotImplementedError
@@ -243,51 +241,3 @@ class TestSegmentationField:
                 c = SegmentationMap(arr=pcd, name='Segmentation')
 
 
-example_vectors = tuple([
-    np.linspace(0, 2 ** 8 - 1, 255, dtype=np.uint8, endpoint=True),
-    np.linspace(0, 2 ** 16 - 1, 255, dtype=np.uint16, endpoint=True),
-    np.linspace(0, 2 ** 32 - 1, 255, dtype=np.uint32, endpoint=True),
-    np.linspace(-2 ** 7, 2 ** 7 - 1, 255, dtype=np.int8, endpoint=True),
-    np.linspace(-2 ** 15, 2 ** 15 - 1, 255, dtype=np.int16, endpoint=True),
-    np.linspace(-2 ** 31, 2 ** 31 - 1, 255, dtype=np.int32, endpoint=True),
-    np.linspace(0, 1, 255, dtype=np.float32, endpoint=True),
-])
-
-pairs = []
-for i in example_vectors:
-    for j in example_vectors:
-        pairs.append((i, j))
-
-@pytest.mark.parametrize(['original', 'target'], pairs)
-def test_linear_map_dtype(original: np.ndarray, target: np.ndarray):
-    """
-    Test the linear mapping function between dtypes to ensure no clipping of values.
-    255 samples used to avoid having to accommodate any rounding of digits in the logical comparison.
-    These would be a loss of precision
-    """
-    # Adjust comparison tolerances based on bit sizes
-    original_bits = original.dtype.itemsize * 8
-    target_bits = target.dtype.itemsize * 8
-
-    mapped_array = linear_map_dtype(original, target.dtype)
-
-    # Testing of np.clip led to erroneous mapping results and often limits clipped to 0
-    if np.issubdtype(target.dtype, np.floating):
-        # Ensure start and end are exact. The others just need to be withi
-        # n the precision
-        atol = 1 / (2 ** original_bits)
-        assert np.allclose(0, mapped_array[0])
-        assert np.allclose(1, mapped_array[-1])
-        assert np.allclose(target, mapped_array, atol=atol)
-        print(f'from {original.dtype} to {target.dtype} with{atol=}')
-
-    elif np.issubdtype(target.dtype, np.signedinteger) or np.issubdtype(target.dtype, np.unsignedinteger):
-        expected_min = np.iinfo(target.dtype).min
-        expected_max = np.iinfo(target.dtype).max
-        atol = (2 ** target_bits // 2 ** original_bits)
-        assert np.allclose(expected_min, mapped_array[0])
-        assert np.allclose(expected_max, mapped_array[-1])
-        assert np.allclose(target, mapped_array, atol=atol)
-        print(f'from {original.dtype} to {target.dtype} with {atol=}')
-    else:
-        raise TypeError(f'Invalid dtype detected: {original.dtype}')

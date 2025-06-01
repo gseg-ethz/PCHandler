@@ -68,12 +68,12 @@ def rgb():
 
 @pytest.fixture(scope="function")
 def pcd(small_coordinates, rgb, normals, scalar_fields, intensities):
-    return PointCloudData(xyz=small_coordinates, color=rgb, normals=normals, scalar_fields=scalar_fields)
+    return PointCloudData(xyz=small_coordinates, rgb=rgb, normals=normals, scalar_fields=scalar_fields)
 
-
+# TODO need to define a common name for colours / intensities to get called
 @pytest.fixture(scope="function")
 def pcd_shifted(large_coordinates, rgb, normals, scalar_fields, intensities):
-    return PointCloudData(xyz=large_coordinates, color=rgb, normals=normals, scalar_fields=scalar_fields)
+    return PointCloudData(xyz=large_coordinates, rgb=rgb, normals=normals, scalar_fields=scalar_fields)
 
 
 class TestPointCloudData:

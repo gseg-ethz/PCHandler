@@ -12,9 +12,8 @@ from numpydantic.dtype import Integer, Float, Bool, UInt8, Float32, UInt16
 from pydantic import BaseModel, ConfigDict, model_validator, field_validator, Field, BeforeValidator
 
 from .custom_types import IndexLike
-from .validators import extract_array
+from .validators import extract_array, validate_transposed_vector, validate_Nx2_transposed, validate_Nx3_transposed
 
-ArrayDtypes = (Integer, Float, Bool)
 
 def make_ndarray_type(*args: Optional[int|str], dtype = None):
     """
@@ -30,25 +29,28 @@ def make_ndarray_type(*args: Optional[int|str], dtype = None):
 
     return NDArray[Shape[', '.join(shape_list)], dtype if dtype is not None else Any]
 
+ArrayDtypes = (Integer, Float, Bool)
+
 ArrayValidator = BeforeValidator(extract_array)
+TransposedVector = BeforeValidator(validate_transposed_vector)
+TransposedNx2 = BeforeValidator(validate_Nx2_transposed)
+TransposedNx3 = BeforeValidator(validate_Nx3_transposed)
 
-# TODO add detect transpose Validator for Nx3 arrays
-
-# DECISION -> Should we shift this to custom types? For now this is a rather independent module
+# DECIDE -> Should we shift this to custom types? For now this is a rather independent module
 Array_T = Annotated[NDArray[Shape['*, ...'], ArrayDtypes], ArrayValidator]
 Array_NxM_T = Annotated[NDArray[Shape['*, *'], ArrayDtypes], ArrayValidator]       # Intensity image, depth image
 Array_NxM_3_T = Annotated[NDArray[Shape['*, *, 3'], ArrayDtypes], ArrayValidator]  # RGB or normal image
-Array_Nx2_T = Annotated[NDArray[Shape['*, 2'], ArrayDtypes], ArrayValidator]       # Image coordinates
-Array_Nx3_T = Annotated[NDArray[Shape['*, 3'], ArrayDtypes], ArrayValidator]       # 3D Coordinates / normals
-Array_Nx3_f4_T = Annotated[NDArray[Shape['*, 3'], Float32], ArrayValidator]        # Normals and optimised coords
-Array_Nx3_u1_T = Annotated[NDArray[Shape['*, 3'], UInt8], ArrayValidator]          # RGB
+Array_Nx2_T = Annotated[NDArray[Shape['*, 2'], ArrayDtypes], TransposedNx2, ArrayValidator]       # Image coordinates
+Array_Nx3_T = Annotated[NDArray[Shape['*, 3'], ArrayDtypes], TransposedNx3, ArrayValidator]       # 3D Coordinates / normals
+Array_Nx3_f4_T = Annotated[NDArray[Shape['*, 3'], Float32],TransposedNx3,  ArrayValidator]        # Normals and optimised coords
+Array_Nx3_u1_T = Annotated[NDArray[Shape['*, 3'], UInt8], TransposedNx3, ArrayValidator]          # RGB
 Array_3x3_T = Annotated[NDArray[Shape['4, 4'], ArrayDtypes], ArrayValidator]       # Rotation Matrix
 Array_4x4_T = Annotated[NDArray[Shape['4, 4'], ArrayDtypes], ArrayValidator]       # Affine Transformation
-Vector_N_T = Annotated[NDArray[Shape['*'], ArrayDtypes], ArrayValidator]           # Scalar Fields
-Vector_N_u2_T = Annotated[NDArray[Shape['*'], UInt16], ArrayValidator]             # Intensity Values
-Vector_N_u1_T = Annotated[NDArray[Shape['*'], UInt8], ArrayValidator]              # Single RGB field
-Vector_N_f4_T = Annotated[NDArray[Shape['*'], Float32], ArrayValidator]            # Normal vector field
-Vector_N_b_T = Annotated[NDArray[Shape['*'], Bool], ArrayValidator]                # Mask or boolean vector
+Vector_N_T = Annotated[NDArray[Shape['*'], ArrayDtypes], TransposedVector, ArrayValidator]
+Vector_N_u2_T = Annotated[NDArray[Shape['*'], UInt16], TransposedVector, ArrayValidator]             # Intensity Values
+Vector_N_u1_T = Annotated[NDArray[Shape['*'], UInt8], TransposedVector, ArrayValidator]              # Single RGB field
+Vector_N_f4_T = Annotated[NDArray[Shape['*'], Float32], TransposedVector, ArrayValidator]            # Normal vector field
+Vector_N_b_T = Annotated[NDArray[Shape['*'], Bool], TransposedVector, ArrayValidator]                # Mask or boolean vector
 Vector_2_T = Annotated[NDArray[Shape['2'], ArrayDtypes], ArrayValidator]           # Image coordinate / translation
 Vector_3_T = Annotated[NDArray[Shape['3'], ArrayDtypes], ArrayValidator]           # 3D coordinate / translation
 
@@ -338,12 +340,6 @@ class _FixedLengthArray(_SampleArray, _NumericMixins):
 class BaseVector(_FixedLengthArray):
     arr: Vector_N_T
 
-    @field_validator('arr', mode='before')
-    @classmethod
-    def squeeze_validator(cls, value):
-        if isinstance(value, np.ndarray):
-            return np.atleast_1d(value.squeeze())
-        return np.atleast_1d(value.arr.squeeze())
 
 class _HomogeneousArray(_FixedLengthArray):
     @property
@@ -365,7 +361,6 @@ class ReadOnlyArray(BaseArray):
 
 class ReadOnlyVector(BaseVector):
     model_config = ConfigDict(strict=True, frozen=True)
-
 
 
 class _ImageLike(_SampleArray, _NumericMixins, ABC):

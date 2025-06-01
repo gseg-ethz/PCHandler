@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import weakref
-from typing import Iterator, MutableMapping, overload, Self, TYPE_CHECKING
+from collections import Counter
+from typing import Iterator, MutableMapping, overload, Self, TYPE_CHECKING, Iterable, NamedTuple
 
 import numpy as np
 from pydantic import validate_call
@@ -16,45 +17,83 @@ from .scalar_fields import (
     ScalarField, RGBFields, IntensityField, NormalFields, ScalarFieldTriplet, RGB_FIELD, NORMALS_FIELD, INTENSITY_FIELD,
     RGB_POTENTIAL_NAMES, NORMAL_POTENTIAL_NAMES, INTENSITY_POTENTIAL_NAMES, LowerStr, DEFAULT_CONFIG)
 
+class IndexPosition(NamedTuple):
+    start: int
+    end: int
+
 
 class ScalarFieldManager(MutableMapping[str, type[ScalarField]]):
     """
     Manages a collection of ScalarField objects, ensuring that all fields have the same
     number of data points. Also provides a mechanism to select subsets of the fields.
     """
-    def __init__(self, parent: PointCloudData|None, fields: dict[str, ScalarField]|None = None) -> None:
-        self._fields: dict[str, ScalarField] = fields or {}
+    def __init__(self,
+                 parent: PointCloudData|None,
+                 fields: dict[str, ScalarField]|None = None,
+                 partial_fields: dict[int: ScalarField]|None = None,
+                 merged_map: MutableMapping[int, tuple[int, int]]|None=None) -> None:
         self._parent: weakref.ReferenceType[PointCloudData] = weakref.ref(parent) if parent is not None else None
+        self._fields: dict[str, ScalarField] = fields or {}
+        self._partial_fields: dict[int, ScalarField] = partial_fields or {}
+        self._merged_map: MutableMapping[int, tuple[int, int]] = merged_map or {}
 
-    def keys(self) -> list[str]:                            return list(self._fields.keys())
-    def values(self) -> Iterator[ScalarField]:              return iter(self._fields.values())
-    def items(self) -> Iterator[tuple[str, ScalarField]]:   return iter(self._fields.items())
-    def __contains__(self, key: str) -> bool:               return key.lower() in self._fields
+    def keys(self) -> list[str]:
+        return list(self._fields.keys())
 
-    def __len__(self) -> int:                               return len(self._fields)
-    def __iter__(self) -> Iterator[str]:                    return iter(self._fields)
-    def __delitem__(self, key: str) -> None:                del self._fields[key]
+    def values(self) -> Iterator[ScalarField]:
+        return iter(self._fields.values())
 
-    @property
-    def rgb(self) -> RGBFields|None:                return self._fields.get(RGB_FIELD, None)
-    @property
-    def normals(self) -> NormalFields|None:         return self._fields.get(NORMALS_FIELD, None)
-    @property
-    def intensity(self) -> IntensityField|None:     return self._fields.get(INTENSITY_FIELD, None)
-    @property
-    def reflectance(self) -> IntensityField|None:   return self._fields.get(INTENSITY_FIELD, None)
+    def items(self) -> Iterator[tuple[str, ScalarField]]:
+        return iter(self._fields.items())
 
-    @property
-    def num_points(self) -> int:                            return len(self._parent())
-    @property
-    def shape(self) -> tuple[int, int]:                     return self.num_points, len(self)
+    def __contains__(self, key: str) -> bool:
+        return key.lower() in self._fields
 
-    def as_dict(self) -> dict[str, ScalarField]:            return self._fields
-    def add_field(self, sf_field: ScalarField) -> None:     self[sf_field.name.lower()] = sf_field
-    def remove_field(self, field_name: LowerStr) -> None:   del self[field_name.lower()]
+    def __len__(self) -> int:
+        return len(self._fields)
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._fields)
+
+    def __delitem__(self, key: str) -> None:
+        del self._fields[key]
+
+    def as_dict(self) -> dict[str, ScalarField]:
+        return self._fields
+
+    def add_field(self, sf_field: ScalarField) -> None:
+        self[sf_field.name.lower()] = sf_field
+
+    def remove_field(self, field_name: LowerStr) -> None:
+        del self[field_name.lower()]
+
     def create_field(self, name: str, data: Vector_N_T|Array_Nx3_T) -> None:
         sf = ScalarField(name=name, arr=data)
         self.add_field(sf)
+
+    @property
+    def shape(self) -> tuple[int, int]:
+        return self.num_points, len(self)
+
+    @property
+    def num_points(self) -> int:
+        return len(self._parent())
+
+    @property
+    def rgb(self) -> RGBFields|None:
+        return self._fields.get(RGB_FIELD, None)
+
+    @property
+    def normals(self) -> NormalFields|None:
+        return self._fields.get(NORMALS_FIELD, None)
+
+    @property
+    def intensity(self) -> IntensityField|None:
+        return self._fields.get(INTENSITY_FIELD, None)
+
+    @property
+    def reflectance(self) -> IntensityField|None:
+        return self._fields.get(INTENSITY_FIELD, None)
 
     @overload
     def __getitem__(self, key: str) -> ScalarField: ...
@@ -67,6 +106,7 @@ class ScalarFieldManager(MutableMapping[str, type[ScalarField]]):
 
         if isinstance(key, str):
             return self._fields[key]
+        # TODO check partial dict if key not found
 
         return self.sample(key)
 
@@ -75,9 +115,9 @@ class ScalarFieldManager(MutableMapping[str, type[ScalarField]]):
         if not isinstance(value, np.ndarray):
             value = value.arr
 
-        if name in RGB_POTENTIAL_NAMES:         return self._handle_rgb(name, value)
-        if name in NORMAL_POTENTIAL_NAMES:      return self._handle_normal(name, value)
-        if name in INTENSITY_POTENTIAL_NAMES:   return self._handle_intensity_reflectance(value)
+        if name in RGB_POTENTIAL_NAMES: return self._handle_rgb(name, value)
+        if name in NORMAL_POTENTIAL_NAMES: return self._handle_normal(name, value)
+        if name in INTENSITY_POTENTIAL_NAMES: return self._handle_intensity_reflectance(value)
 
         if self.num_points != value.shape[0]:
             raise ValueError(
@@ -177,42 +217,77 @@ class ScalarFieldManager(MutableMapping[str, type[ScalarField]]):
     #
     #     return self.merge(other)
 
+    @staticmethod
+    def generate_point_cloud_map(sfms: Iterable[Self]) -> dict[int, slice]:
+        indexes = [0]
+        for i, b in enumerate(sfms):
+            indexes.append(indexes[i] + b.num_points)
 
-    # TODO look at a method for dumping dicts and appending arrays
+        starting_indexes = tuple(indexes[:-1])
+        ending_indexes = tuple(indexes[1:])
+
+        index_map = {}
+        for i, value in enumerate(starting_indexes):
+            index_map[i] = slice(value, ending_indexes[i], None)
+        return index_map
+
+
+    # # TODO look at a method for dumping dicts and appending arrays
+    # # DISCUSS what is the goal of merge -? same points, same sfms? joining separate pcd with same keys?
+    # #  Do we extend the sfs if they're missing by initialising the other points
+    # # TODO look at merge flags
     # @classmethod
-    # def merge(cls, parent: object, sfms: Iterable[Self]) -> Self:
-    #     common_keys = set.intersection(*(set(sfm.keys()) for sfm in sfms))
-    #     if len(common_keys) == 0:
-    #         return ScalarFieldManager(parent=parent)
+    # def merge(cls, sfms: Iterable[Self]) -> Self:
+    #     # DISCUSS Idea to create a partial_fields dict to store all those not linked
     #
-    #     expected_length = sum([sfm.shape[1] for sfm in sfms])
-    #     new_sfm = ScalarFieldManager(parent=parent)
-    #     for common_key in common_keys:
+    #     sfm_key_sets = (set(sfm) for sfm in sfms)
+    #     all_keys = set.union(*sfm_key_sets)
+    #     keys_in_common = set.intersection(*sfm_key_sets)
+    #     partial_keys = list(set.difference(all_keys, keys_in_common))
+    #
+    #     partial_fields: dict[int: dict[str: ScalarField]] = {}
+    #     pcds_index_map = cls.generate_point_cloud_map(sfms)
+    #
+    #     if len(all_keys) == 0:
+    #         return ScalarFieldManager(parent=None, fields={})
+    #
+    #     new_sfm = ScalarFieldManager(parent=None)
+    #     for common_key in keys_in_common:
     #         sfs: list[ScalarField] = [sfm[common_key] for sfm in sfms]
-    #         if len(set([sf.name for sf in sfs])) != 1:
-    #             logger.warning(f"While merging scalar field {common_key} different names were encountered.")
-    #         name = sfs[0].name
     #
+    #         # DISCUSS Warn when there's a mismatch between keys and names.
+    #         #  Should not be the case if implement robustly...
+    #         sf_names: list[str] = [sf.name for sf in sfs]
+    #         if len(set(sf_names)) != 1:
+    #             logger.warning(f"While merging scalar field {common_key} different names were encountered.")
+    #
+    #         # Get the most occurring name
+    #         name = max((counted_names := Counter(sf_names)), key=counted_names.get)
+    #         # TODO ensures all the contents of the operations performed match between same named fields.
+    #         #  This is definitely worth ensuring to ensure same normalisation etc.
     #         if len(set(map(tuple, [sf.operations_performed for sf in sfs]))) != 1:
     #             logger.warning(
     #                 f"While merging scalar field {common_key} different list of previously performed "
     #                 f"operations were encountered. Merged scalar field will have an empty record!"
     #             )
-    #             operations_performed = []
+    #             partial_keys.append(common_key)
+    #             continue
     #         else:
     #             operations_performed = sfs[0].operations_performed
+    #         # TODO Most important is the coerced value is constant
     #         if len(set(sf.original_dtype for sf in sfs)) != 1:
     #             logger.warning(
     #                 f"While merging scalar field {common_key} different original dtypes were encountered. "
     #                 f"Merged scalar field will have an empty record!"
     #             )
-    #             original_dtype = None
+    #             partial_keys.append(common_key)
+    #             continue
     #         else:
     #             original_dtype = sfs[0].original_dtype
     #
+    #         # TODO join all the data into a single scalarfield and add it to the sfm
     #         data = np.concatenate([sf.data for sf in sfs])
-    #         sf = ScalarField(
-    #             name=name, arr=data, original_dtype=original_dtype, operations_performed=operations_performed
+    #         sf = ScalarField(name=name, arr=data, original_dtype=original_dtype, operations_performed=operations_performed
     #         )
     #         new_sfm.add_field(sf)
     #

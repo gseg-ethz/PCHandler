@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 import logging
 from typing import Optional, Annotated, TYPE_CHECKING, Any, NamedTuple
 
@@ -9,12 +10,10 @@ from pydantic import ConfigDict, StringConstraints, model_validator, field_valid
 
 from ..base_arrays import (
     BaseVector, Array_Nx3_T, Vector_N_u1_T, Vector_N_f4_T, Array_Nx3_u1_T, Array_Nx3_f4_T, Vector_N_T, Vector_N_u2_T,
-    Vector_N_b_T, BaseArray)
+    Vector_N_b_T, BaseArray, _FixedLengthArray)
 from ..validators import linear_map_dtype
 from ..custom_types import OriginalFieldState
 
-if TYPE_CHECKING:
-    from .core import PointCloudData
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -28,9 +27,12 @@ RGB_POTENTIAL_NAMES = ('r', 'g', 'b', 'rgb', 'bgr', 'red', 'green', 'blue', 'rgb
 NORMAL_POTENTIAL_NAMES = ('normal', 'normals', 'normal_fields')
 INTENSITY_POTENTIAL_NAMES = ('intensity', 'reflectance', 'intensities')
 
-# TODO mapping to create specific scalar field types based on dtype specified
-# TODO create validation / coercion functions to normalise data -> e.g. rgb, intensities
-# TODO - DECIDE what is the default intensity value to support
+# DECIDE on consistent names for rgb/colour and intensity/reflectance and supported names
+# DECIDE on default dtypes for classes -> e.g. intensities (int16? uint8?)
+# DECIDE on default normalisation strategy and which methods for automatic coercion
+#  e..g RGB from [0.0, 1.0] to [0, 255]
+# DECIDE when and where to apply normalisation by default. Helper functions must exist though (e.g. utils)
+
 
 LowerStr = Annotated[str, StringConstraints(strip_whitespace=True, to_lower=True),]
 
@@ -38,21 +40,19 @@ LowerStr = Annotated[str, StringConstraints(strip_whitespace=True, to_lower=True
 class NormaliseOptions(NamedTuple):
     target_dtype: DTypeLike
 
-class AbstractScalarField(ABC, _FixedLengthArray):
+
+class AbstractScalarField(_FixedLengthArray, ABC):
     name: LowerStr
     operations_performed: Optional[list[str]] = None
     original_state: OriginalFieldState|None = None
-    normalise_option: bool|tuple[float|int, float|int] = False
 
-
-    @classmethod
-    def get_npydantic_dtype(cls):
-        return cls.model_fields['arr'].annotation.__dict__['__args__'][1]
 
     @field_validator('arr', mode='before')
     @classmethod
     def coerce_to_target_type(cls, arr: np.ndarray) -> np.ndarray:
         target_types: DTypeLike = unpack_npydantic_dtype(cls)
+        # DISCUSS what would be the approach? If float, normalise [0,1] then linear_map_dtype?
+
         if arr.dtype in target_types:
             return arr
         else:
@@ -70,41 +70,31 @@ class AbstractScalarField(ABC, _FixedLengthArray):
             lower=arr.min(),
         )
 
-        normalise_flag = kwargs.get('normalise_option', False)
-        if not normalise_flag:
-            return kwargs
-
-        if normalise_flag is True:
-            cls.normalize_based_on_original_dtype(kwargs)
-            return kwargs
-
-        if (len(normalise_flag) == 2 and all(isinstance(item, (int, float)) for item in normalise_flag)):
-            kwargs['arr'] = cls.normalize( lower = min(normalise_flag), upper = max(normalise_flag) )
-            return kwargs
         return kwargs
 
 
-    # TODO fix this at the end
-    # def create_rollback(self) -> NDArray[np.generic]:
-    #     data = self.data.copy()
-    #     for operation, operation_parameters in self.operations_performed[::-1]:
-    #         match operation:
-    #             case "normalize":
-    #                 lower, upper = cast(tuple[float, float],operation_parameters)
-    #                 np.multiply(self.data, upper - lower, out=data)
-    #                 np.add(data, lower, out=data)
-    #             case "dtype_conversion":
-    #                 data = data.astype(cast(DTypeLike,operation_parameters[0]))
-    #             case _:
-    #                 return ValueError(f"Operation {operation} not supported.")
-    #     assert self.original_dtype is None or data.dtype == self.original_dtype
-    #
-    #     logger.debug(f"Converted scalar field `{self.name}` to original bounds and dtype.")
-    #     return data
+    # FIXME Reimplement once other decisions made
+    def create_rollback(self) -> NDArray[np.generic]:
+        data = self.data.copy()
+        for operation, operation_parameters in self.operations_performed[::-1]:
+            match operation:
+                case "normalize":
+                    lower, upper = cast(tuple[float, float],operation_parameters)
+                    np.multiply(self.data, upper - lower, out=data)
+                    np.add(data, lower, out=data)
+                case "dtype_conversion":
+                    data = data.astype(cast(DTypeLike,operation_parameters[0]))
+                case _:
+                    return ValueError(f"Operation {operation} not supported.")
+        assert self.original_dtype is None or data.dtype == self.original_dtype
 
+        logger.debug(f"Converted scalar field `{self.name}` to original bounds and dtype.")
+        return data
 
+class ScalarField(AbstractScalarField, BaseVector):
+    pass
 
-class ScalarFieldTriplet(ScalarField):
+class ScalarFieldTriplet(AbstractScalarField):
     arr: Array_Nx3_T
 
 
@@ -155,22 +145,38 @@ class NormalFields(ScalarFieldTriplet):
             value = np.zeros((size, 3), dtype=np.float32)
         return NormalFields(arr=value)
 
-
-# TODO create an indexlike scalarfield
+# DISCUSS should we have a mask/boolean type to use for the indices?
 class BooleanField(ScalarField):
     arr: Vector_N_b_T
 
 
-# TODO do we need to support more segments? > 255
+# DISCUSS should we support a segmentation
 class SegmentationMap(ScalarField):
-    arr: Vector_N_u1_T
+    arr: Vector_N_u1_T|Vector_N_u2_T
+
+@classmethod
+    def initialize(cls, pt_cloud_sizes: list[int]) -> NormalFields:
+        vector_length = sum(pt_cloud_sizes)
+        if len(pt_cloud_sizes) >= 2**8:
+            arr = np.zeros(vector_length, dtype=np.uint8)
+        elif len(pt_cloud_sizes) >= 2**16:
+            arr = np.zeros(vector_length, dtype=np.uint16)
+        else:
+            raise ValueError(f"Creating segmentation map for more than {2**16} point {len(pt_cloud_sizes)} not supported.")
+
+
+        if value is None:
+            value = np.zeros((size, 3), dtype=np.float32)
+        return NormalFields(arr=value)
+
+def get_npydantic_dtype(cls: type):
+    return cls.model_fields['arr'].annotation.__dict__['__args__'][1]
 
 
 def unpack_npydantic_dtype(cls: type[ScalarField]) -> tuple[DTypeLike, ...]:
     a = cls.model_fields['arr'].annotation.__dict__['__args__'][1]
     all_types = []
 
-    # To handle when multiple objects passed in
     try:
         for dt in a:
             if isinstance(dt, tuple):
@@ -178,6 +184,8 @@ def unpack_npydantic_dtype(cls: type[ScalarField]) -> tuple[DTypeLike, ...]:
                     all_types.append(dt_)
             else:
                 all_types.append(dt)
+
+    # TODO write tests for this and get the appropriate Exception to catch
     except Exception:
         all_types.append(a)
     return tuple(all_types)

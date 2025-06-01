@@ -11,7 +11,7 @@ import numpy.typing as npt
 from pydantic import Field, model_validator, BeforeValidator, validate_call, ConfigDict, field_validator
 
 from ..base_arrays import ArrayNx3, Array_Nx3_T, Array_4x4_T, Vector_3_T, BaseArray, ArrayNx2
-from ..validators import validate_spherical_angles, enforce_azimuths
+from ..validators import validate_spherical_angles, coerce_wrapped_azimuths
 from .transforms import TransformRecord, TransformLedger, GlobalShift, _Transform3x3, _Transform4x4, Transform
 
 TransformT = _Transform4x4|_Transform3x3|Transform
@@ -191,11 +191,11 @@ class SphericalCoordinates(Abstract3dCoordinates):
     # DISCUSS - Add methods to apply tilt and yaw rotations easily (e.g. for spherical image projection shifts?
     # def rotate(self, yaw=None, pitch=None):
     #     if yaw:
-    #         self.arr[:, 1] = enforce_azimuths(self.hz + yaw)
+    #         self.arr[:, 1] = coerce_azimuths(self.hz + yaw)
     #
     #     if pitch:
+    #         self.arr[np.logical_or(temp < 0, temp > PI), 1] = coerce_azimuths(self.hz + TWO_PI)
     #         self.arr[:, 2] = np.abs(temp := self.v - pitch)
-    #         self.arr[np.logical_or(temp < 0, temp > PI), 1] = enforce_azimuths(self.hz + TWO_PI)
 
 
 @validate_call(config=ConfigDict(arbitrary_types_allowed=True))

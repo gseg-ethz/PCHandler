@@ -1,4 +1,3 @@
-from typing import TYPE_CHECKING
 
 import logging
 import numpy as np
@@ -19,38 +18,32 @@ def validate_spherical_angles(array: np.ndarray) -> np.ndarray:
     return array
 
 def validate_radius(array: np.ndarray) -> np.ndarray:
-    if array.min() < 0:
+    if np.any(array < 0):
         raise ValueError("Radius must be positive")
     return array
 
 def validate_azimuthal_angles(array: np.ndarray) -> np.ndarray:
-    if -np.pi <= array.min() and array.max() <= np.pi:
+    if -PI <= array.min() and array.max() <= PI:
         return array
-
-    elif 0 <= array.min() and array.max() <= np.pi*2:
-        # TODO show warning
-        return array - np.pi
     else:
-        raise ValueError(f'The range of the azimuthal (horizontal) angles should be in [-pi, pi].'
-                         f'Instead the range of [{array.min()}, {array.max()}] was received.')
+        if 0 <= array.min() and array.max() <= PI * 2:
+            raise ValueError("Azimuthal angles must be between [-pi, +pi] not [0 and +2*pi]. Please convert.")
+        raise ValueError(f'Azimuthal angles should be in [-pi, +pi] not [{array.min()}, {array.max()}]')
 
 
 def validate_zenith_angles(array: np.ndarray) -> np.ndarray:
-    if 0 <= array.min() and array.max() <= np.pi:
+    if 0 <= array.min() and array.max() <= PI:
         return array
-
-    elif -np.pi/2 <= array.min() and array.max() <= np.pi/2:
-        # TODO show warning
-        return array - np.pi
-
     else:
-        raise ValueError(f'The range of the zenith (vertical) angles should be in [0, pi].'
-                         f'Instead the range of [{array.min()}, {array.max()}] was received.')
+        if -HALF_PI <= array.min() and array.max() <= HALF_PI:
+            raise ValueError("Detected angles in [-pi/2, +pi/2] but should be [0, +pi]")
+        raise ValueError(f'Zenith angles should be in [0, +pi] not [{array.min()}, {array.max()}]')
 
-def enforce_azimuths(array: np.ndarray) -> np.ndarray:
-    array[array < 0] += TWO_PI
-    array[array > TWO_PI] -= TWO_PI
+def coerce_wrapped_azimuths(array: np.ndarray) -> np.ndarray:
+    array[array <= -PI] += TWO_PI
+    array[array > PI] -= TWO_PI
     return array
+
 
 # TODO need to add some extra error handling / error or warning raises
 def linear_map_dtype(array: np.ndarray, target_dtype: DTypeLike) -> np.ndarray:
@@ -82,15 +75,20 @@ def linear_map_dtype(array: np.ndarray, target_dtype: DTypeLike) -> np.ndarray:
     mapped = np.floor(normalised * float(target_max - target_min) + target_min)
     return mapped.astype(target_dtype).flatten()
 
-def intensity_validator(values: np.ndarray) -> np.ndarray:
-    return linear_map_dtype(values, np.dtype('f4')).flatten()
 
-def extract_array(value: np.ndarray | tuple[np.ndarray | object] | object):
+def extract_array(value: np.ndarray | tuple[np.ndarray | object] | object | dict[str, np.ndarray]) -> np.ndarray:
     if isinstance(value, np.ndarray):
         return value
 
     if hasattr(value, 'arr'):
         return value.arr
+
+    if isinstance(value, dict):
+        value: np.ndarray|None = value.get('arr')
+        if value is None:
+            raise TypeError(f'Dict type must contain "arr".')
+        return value
+
 
     if isinstance(value, tuple):
         if len(value) != 1:
@@ -142,3 +140,25 @@ def normalise_to_dtype_limits(array: np.ndarray, name: str, original_state: Orig
     upper = np.iinfo(original_state.dtype).max
 
     return normalize_array(array=array, name=name, lower=lower, upper=upper, operations_performed=operations)
+
+# TODO Decision against supporting squeezing of arrays in case a single point is selected from the array
+def validate_transposed_vector(array: np.ndarray) -> np.ndarray:
+    return np.atleast_1d(array.squeeze())
+
+def validate_Nx3_transposed(array: np.ndarray) -> np.ndarray:
+    return validate_transposed(array, cols=3)
+
+def validate_Nx2_transposed(array: np.ndarray) -> np.ndarray:
+    return validate_transposed(array, cols=2)
+
+def validate_transposed(array: np.ndarray, cols: int) -> np.ndarray:
+    if array.ndim != 2:
+        raise ValueError(f"Input array must be 2-dimensional of Nx{cols} or {cols}xN shape. Received: {array.shape}")
+
+    if array.shape[1] == cols:
+        return array
+
+    if array.shape[0] == cols and array.shape[1] != cols:
+        return array.T
+    else:
+        raise ValueError(f"Array does not appear to be an Nx{cols} array nor it's transpose.")
