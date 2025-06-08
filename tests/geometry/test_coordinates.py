@@ -6,8 +6,8 @@ import sys
 import numpy as np
 from scipy.spatial.transform import Rotation
 
-from pchandler.v2.base_arrays import ArrayNx3
-from pchandler.v2.geometry.coordinates import (
+from src.pchandler.v2.base_arrays import ArrayNx3
+from src.pchandler.v2.geometry.coordinates import (
     CartesianCoordinates, Abstract3dCoordinates, SphericalCoordinates, rhv2xyz, xyz2rhv, AbstractCoordinates
 )
 from pchandler.v2.geometry.transforms import Transform
@@ -86,7 +86,7 @@ class TestCartesianCoordinates:
 
         assert num_items_after == num_items_before
 
-    @pytest.mark.parametrize('attr', ('arr', 'socs_origin', 'transform_ledger', 'is_at_socs'))
+    @pytest.mark.parametrize('attr', ('arr', 'socs_origin', 'is_at_socs'))
     def test_has_attributes(self, cart_obj, attr):
         assert attr in cart_obj.__dict__.keys()
         if attr == 'socs_origin':

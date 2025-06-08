@@ -2,9 +2,9 @@ import pytest
 
 import numpy as np
 
-from pchandler.v2.base_arrays import BaseArray
-from pchandler.v2.geometry.scalar_fields import ScalarField
-from pchandler.v2.validators import *
+from src.pchandler.v2.base_arrays import BaseArray
+from src.pchandler.v2.geometry.scalar_fields import ScalarField
+from src.pchandler.v2.validators import *
 
 
 def test_validate_radius():

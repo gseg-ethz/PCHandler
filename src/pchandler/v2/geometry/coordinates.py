@@ -145,7 +145,6 @@ class CartesianCoordinates(Abstract3dCoordinates):
             affine[[0, 1, 2], [0, 1, 2]] *= scale
 
         self.arr = (affine @ self.H.T).T[:, :3]
-        self.transform_ledger['AFFINE'] = TransformRecord(forward=affine)
 
 
 class SphericalCoordinates(Abstract3dCoordinates):

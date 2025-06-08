@@ -11,7 +11,7 @@ ScalarFieldOperations = ScalarFieldNormalizeOp | ScalarFieldDtypeConversion
 IndexLike = Union[int, slice, NDArray[np.bool_], NDArray[np.int_], list[int], tuple[int, ...], tuple[slice, ...]]
 
 
-class OriginalFieldState(NamedTuple):
+class DataRange(NamedTuple):
     dtype: DTypeLike
-    upper: np.ndarray|float|int
-    lower: np.ndarray|float|int
+    min: NDArray[np.number]|float|int|None
+    max: NDArray[np.number]|float|int|None

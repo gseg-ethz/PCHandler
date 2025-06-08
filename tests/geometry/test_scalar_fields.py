@@ -1,11 +1,9 @@
 import pytest
-from typing import get_args, get_origin
 
-import numpy as np
 from pydantic import BaseModel, ValidationError
 
-from pchandler.v2.geometry.scalar_fields import *
-from pchandler.v2.validators import linear_map_dtype
+from src.pchandler.v2.geometry.scalar_fields import *
+
 
 class TestGlobals:
     def test_fixed_key_names(self):
@@ -37,8 +35,7 @@ class TestScalarFieldClass:
         a = ScalarField(arr=np.ones(10).astype(np.float32),
                         name='Allen',
                         operations_performed=['Nothing', 'Yet'],
-                        original_dtype=np.int32,
-                        normalise_option=False
+                        original_state=DataRange(dtype=np.int32, lower=0, upper=1),
                         )
 
         assert a.name == 'allen'
@@ -51,29 +48,25 @@ class TestScalarFieldClass:
     def test_defaults(self):
         a = ScalarField(arr=np.ones(10), name='a')
         assert a.operations_performed is None
-        assert a.original_dtype == np.float64
-        assert a.normalise_option is False
+        assert a.original_state.dtype == np.float64
+        assert a.original_state.lower == 1
+        assert a.original_state.upper == 1
 
     ones = np.ones(10)
 
-    @pytest.mark.parametrize(['array', 'name', 'operations', 'dtype', 'normalise'], (
-        (ones, True, None, None, None),
-        (ones, {'sas'}, None, None, None),
-        (ones, 1234.123, None, None, None),
-        (np.ones((10,2)), 'sty', None, None, None),
-        (np.ones((10,4)), "steve", None, None, None),
-        (np.ones((10,3,3)), 'asd', None, None, None),
-        (ones, 'steve', True, None, None),
-        (ones, 'steve', {'a': 2}, None, None),
-        (ones, 'steve', ['True'], False, 'fas'),
-        (ones, 'steve', ['True'], False, [1, 2]),
-        (ones, 'steve', ['True'], False, ('asd', '123')),
-        (ones, 'steve', ['True'], False, (1, 2, 3))
+    @pytest.mark.parametrize(['array', 'name', 'operations', 'original_state'], (
+        (ones, True, None, None),
+        (ones, {'sas'}, None, None),
+        (ones, 1234.123, None, None),
+        (np.ones((10,2)), 'sty', None, None),
+        (np.ones((10,4)), "steve", None, None),
+        (np.ones((10,3,3)), 'asd', None, None),
+        (ones, 'steve', True, None),
+        (ones, 'steve', {'a': 2}, None)
     ))
-    def test_invalid_values(self, array, name, operations, dtype, normalise):
+    def test_invalid_values(self, array, name, operations, original_state):
         with pytest.raises(Exception) as e:
-            _ = ScalarField(arr=array, name=name, operations_performed=operations, original_dtype=dtype,
-                            normalise_option=normalise)
+            _ = ScalarField(arr=array, name=name, original_state=original_state, operations_performed=operations)
 
         assert type(e.value) in (ValidationError, ValueError, TypeError)
 
@@ -85,7 +78,7 @@ class TestScalarFieldClass:
 
     def test_init_from_self(self):
         b = ScalarField(arr=np.ones(10), name='test'),
-        c = ScalarField(arr=b, name='test')
+        c = ScalarField(arr=b, name='second')
         assert np.all(b == c)
         assert b.name != c.name
 

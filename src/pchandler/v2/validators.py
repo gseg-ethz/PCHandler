@@ -3,7 +3,7 @@ import logging
 import numpy as np
 from numpy.typing import DTypeLike
 
-from .custom_types import OriginalFieldState
+from .custom_types import DataRange
 
 PI = np.pi
 TWO_PI = 2 * PI
@@ -83,13 +83,6 @@ def extract_array(value: np.ndarray | tuple[np.ndarray | object] | object | dict
     if hasattr(value, 'arr'):
         return value.arr
 
-    if isinstance(value, dict):
-        value: np.ndarray|None = value.get('arr')
-        if value is None:
-            raise TypeError(f'Dict type must contain "arr".')
-        return value
-
-
     if isinstance(value, tuple):
         if len(value) != 1:
             raise TypeError(f'Value to unpack from a tuple > 1 is ambiguous: {value}')
@@ -127,7 +120,7 @@ def normalize_array(array: np.ndarray, name: str,
     logger.debug(f"Normalized scalar field `{name}` from (original) span [{lower}, {upper}] to [0, 1].")
     return array
 
-def normalise_to_dtype_limits(array: np.ndarray, name: str, original_state: OriginalFieldState, operations: list) -> np.ndarray:
+def normalise_to_dtype_limits(array: np.ndarray, name: str, original_state: DataRange, operations: list) -> np.ndarray:
     if array.dtype == original_state.dtype:
         logger.debug(f"Scalar field `{name}` hasn't changed. No operation performed.")
         return array

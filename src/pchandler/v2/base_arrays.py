@@ -8,7 +8,7 @@ from typing import Any, Optional, Generator, Mapping, Self, Annotated
 import numpy as np
 import numpy.typing as npt
 from numpydantic import NDArray, Shape
-from numpydantic.dtype import Integer, Float, Bool, UInt8, Float32, UInt16
+from numpydantic.dtype import Integer, Float, Bool, UInt8, Float32, UInt16, Int8, Int16, Int32
 from pydantic import BaseModel, ConfigDict, model_validator, field_validator, Field, BeforeValidator
 
 from .custom_types import IndexLike
@@ -42,15 +42,18 @@ Array_NxM_T = Annotated[NDArray[Shape['*, *'], ArrayDtypes], ArrayValidator]    
 Array_NxM_3_T = Annotated[NDArray[Shape['*, *, 3'], ArrayDtypes], ArrayValidator]  # RGB or normal image
 Array_Nx2_T = Annotated[NDArray[Shape['*, 2'], ArrayDtypes], TransposedNx2, ArrayValidator]       # Image coordinates
 Array_Nx3_T = Annotated[NDArray[Shape['*, 3'], ArrayDtypes], TransposedNx3, ArrayValidator]       # 3D Coordinates / normals
-Array_Nx3_f4_T = Annotated[NDArray[Shape['*, 3'], Float32],TransposedNx3,  ArrayValidator]        # Normals and optimised coords
-Array_Nx3_u1_T = Annotated[NDArray[Shape['*, 3'], UInt8], TransposedNx3, ArrayValidator]          # RGB
+Array_Nx3_float32_T = Annotated[NDArray[Shape['*, 3'], Float32],TransposedNx3,  ArrayValidator]        # Normals and optimised coords
+Array_Nx3_uint8_T = Annotated[NDArray[Shape['*, 3'], UInt8], TransposedNx3, ArrayValidator]          # RGB
 Array_3x3_T = Annotated[NDArray[Shape['4, 4'], ArrayDtypes], ArrayValidator]       # Rotation Matrix
 Array_4x4_T = Annotated[NDArray[Shape['4, 4'], ArrayDtypes], ArrayValidator]       # Affine Transformation
 Vector_N_T = Annotated[NDArray[Shape['*'], ArrayDtypes], TransposedVector, ArrayValidator]
-Vector_N_u2_T = Annotated[NDArray[Shape['*'], UInt16], TransposedVector, ArrayValidator]             # Intensity Values
-Vector_N_u1_T = Annotated[NDArray[Shape['*'], UInt8], TransposedVector, ArrayValidator]              # Single RGB field
-Vector_N_f4_T = Annotated[NDArray[Shape['*'], Float32], TransposedVector, ArrayValidator]            # Normal vector field
-Vector_N_b_T = Annotated[NDArray[Shape['*'], Bool], TransposedVector, ArrayValidator]                # Mask or boolean vector
+Vector_N_int32_T = Annotated[NDArray[Shape['*'], Int32], TransposedVector, ArrayValidator]
+Vector_N_int16_T = Annotated[NDArray[Shape['*'], Int16], TransposedVector, ArrayValidator]
+Vector_N_int8_T = Annotated[NDArray[Shape['*'], Int8], TransposedVector, ArrayValidator]
+Vector_N_uint16_T = Annotated[NDArray[Shape['*'], UInt16], TransposedVector, ArrayValidator]             # Intensity Values
+Vector_N_uint8_T = Annotated[NDArray[Shape['*'], UInt8], TransposedVector, ArrayValidator]              # Single RGB field
+Vector_N_float32_T = Annotated[NDArray[Shape['*'], Float32], TransposedVector, ArrayValidator]            # Normal vector field
+Vector_N_bool_T = Annotated[NDArray[Shape['*'], Bool], TransposedVector, ArrayValidator]                # Mask or boolean vector
 Vector_2_T = Annotated[NDArray[Shape['2'], ArrayDtypes], ArrayValidator]           # Image coordinate / translation
 Vector_3_T = Annotated[NDArray[Shape['3'], ArrayDtypes], ArrayValidator]           # 3D coordinate / translation
 

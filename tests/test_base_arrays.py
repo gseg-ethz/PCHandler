@@ -7,7 +7,7 @@ import numpy as np
 from numpydantic import NDArray, Shape
 from pydantic import BaseModel, ValidationError, ConfigDict
 
-from pchandler.v2.base_arrays import (
+from src.pchandler.v2.base_arrays import (
     BaseArray, make_ndarray_type, _HomogeneousArray, _SampleArray, _ImageLike, _FixedLengthArray, BaseVector, ArrayNx2,
     ArrayNx3, ReadOnlyArray, ReadOnlyVector
 )
@@ -534,6 +534,8 @@ class TestBaseVector:
     def test_initialisation(self):
         with pytest.raises(ValidationError):
             BaseVector(arr=np.random.rand(10, 3))
+        with pytest.raises(ValidationError):
+            BaseVector(arr=np.random.rand(10, 2))
 
         vec = BaseVector(arr=np.random.rand(10))
 

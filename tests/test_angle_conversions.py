@@ -4,7 +4,7 @@ import unittest
 
 import numpy as np
 
-from pchandler.v2.util import AngleUnit, convert_angles
+from src.pchandler.v2.util import AngleUnit, convert_angles
 
 
 class TestConvertAngle(unittest.TestCase):
