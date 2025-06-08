@@ -1,257 +1,212 @@
 from __future__ import annotations
 
-from enum import IntEnum
+import warnings
+from abc import ABC, abstractmethod
 from functools import cached_property
-from typing import Literal, Any
-
-from enum import IntEnum
+from typing import Optional, Annotated, Self
 
 import numpy as np
 import numpy.typing as npt
+from pydantic import Field, BeforeValidator, validate_call, ConfigDict
 
-from pchandler.util import bypass_immutable
-from pchandler.base_classes import DataArrayNx3
-from pchandler.geometry.validation import check_spherical_coordinates
-from pchandler.types import NumOrArray
+from ..base_arrays import ArrayNx3, Array_Nx3_T, BaseArray, ArrayNx2
+from ..base_types import  Array_4x4_T, Vector_3_T
+from ..validators import validate_spherical_angles
+from ..constants import PI, TWO_PI, HALF_PI
+from .transforms import TransformRecord, TransformLedger, GlobalShift, _Transform3x3, _Transform4x4, Transform
 
-
-def spher2cart_vec(rho: npt.ArrayLike, theta: npt.ArrayLike, phi: npt.ArrayLike) -> tuple[npt.ArrayLike, npt.ArrayLike, npt.ArrayLike]:
-    x: npt.ArrayLike = rho * np.sin(theta) * np.cos(phi)
-    y: npt.ArrayLike = rho * np.sin(theta) * np.sin(phi)
-    z: npt.ArrayLike = rho * np.cos(theta)
-    return x, y, z
-
-class CoordSysEnum(IntEnum):
-    CART = 0
-    SPHER = 1
-
-
-def spherical2cartesian(spherical: npt.NDArray) -> npt.NDArray:
-    xyz: npt.NDArray = np.zeros_like(spherical)
-    xyz[:, 0], xyz[:, 1], xyz[:, 2] = spher2cart_vec(spherical[:, 0], spherical[:, 1], spherical[:, 2])
-    return xyz
-
-
-def cartesian2spherical(xyz: np.ndarray) -> np.ndarray:
-    spherical: np.ndarray = np.zeros_like(xyz)
-    spherical[:, 0], spherical[:, 1], spherical[:, 2] = cart2spher_vec(xyz[:, 0], xyz[:, 1], xyz[:, 2])
-    return spherical
-
-def cart2spher_vec(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    xy_2: np.ndarray = x ** 2 + y ** 2
-    rho: np.ndarray = np.sqrt(xy_2 + z ** 2)            # [  0, inf] slope distance
-    theta: np.ndarray = np.arctan2(np.sqrt(xy_2), z)    # [  0, +pi] zenith angle
-    phi: np.ndarray = np.arctan2(y, x)                  # [-pi, +pi] horizonal angle
-    return rho, theta, phi
+TransformT = _Transform4x4|_Transform3x3|Transform
 
 
 
-# TODO Implement a Storage and View Structure design
-#  - separation of concerns
-#  - shallow call paths
-#  - coordinate system control
-#  - caching of the complimentary coordinates
-#  - cleanm descriptive code
-#  - no need to recompute coordinates if not required
-#  - mutability in place will depend on if the overarching array is provided as mutable
-#  - invalidate cache on mutation
-class CoordinateSet3D(DataArrayNx3):
-    coord_system: CoordSysEnum = CoordSysEnum.CART
+class AbstractCoordinates(BaseArray, ABC):
+    def __getitem__(self, key):
+        mask = self.create_mask(key)
+        return self.sample(mask)
 
-    def __init__(self,
-                 array,
-                 coord_system: Literal['cartesian']|Literal['spherical']|CoordSysEnum = CoordSysEnum.CART,
-                 **kwargs):
+    def __matmul__(self, transpose_matrix: TransformT | np.ndarray) -> Self | np.ndarray:
+        raise NotImplementedError('Left matrix multiplication is not supported.\n'
+                                  'For 3D coordinates use the formula: \n'
+                                  '     y = Tx\n'
+                                  'where x are coordinates and A the transformation. In python: \n'
+                                  '     y = A @ x')
 
-        super().__init__(array, **kwargs)
-        if coord_system not in CoordSysEnum:
-            raise ValueError("coord_system must be from 'CoordSysEnum'")
-
-        self.coord_system = CoordSysEnum[coord_system] if isinstance(coord_system, str) else coord_system
+class Abstract2dCoordinates(ArrayNx2, AbstractCoordinates):
+    @property
+    @abstractmethod
+    def row(self) -> np.ndarray: ...
 
     @property
-    def num_points(self) -> int:
-        return len(self)
+    @abstractmethod
+    def col(self) -> np.ndarray: ...
+
+
+class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates):
+    project_transformation: Optional[Array_4x4_T] = None
+    socs_origin: np.ndarray = Field(default_factory=lambda: np.zeros(3, dtype=np.float32))
+    is_at_socs: bool = False
+    is_optimised: bool = False
 
     @property
-    def _prop_names(self) -> frozenset[str]:
-        return frozenset([])
+    @abstractmethod
+    def xyz(self) -> np.ndarray: ...
 
-    def invalidate_cache(self):
-        for name in self._prop_names:
-            if name in self.__dict__:
-                del self.__dict__[name]
-
-    def _convert_to_system(self, target_system: CoordSysEnum):
-        if self.coord_system != target_system:
-
-            self.invalidate_cache()
-            self.coord_system = target_system
-
-            if self.coord_system == CoordSysEnum.CART:
-                self.arr = spherical2cartesian(self.arr)
-            else:
-                self.arr = cartesian2spherical(self.arr)
-
-    def validate(self, array: np.ndarray) -> np.ndarray:
-        if not np.issubdtype(array.dtype, np.floating):
-            raise TypeError(f"Expected floating point array. Received {array.dtype}.")
-
-        if self.coord_system == CoordSysEnum.SPHER:
-            check_spherical_coordinates(array)
-        return array
-
-
-class CartesianCoordinates(CoordinateSet3D):
     @property
-    def _prop_names(self) -> frozenset[str]:
-        return super()._prop_names | frozenset({'_xyz'})
+    @abstractmethod
+    def spher(self) -> np.ndarray: ...
+
+    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
+    def __rmatmul__(self, matrix: TransformT | np.ndarray) -> Self | np.ndarray:
+        if isinstance(matrix, TransformT):
+            matrix: np.ndarray = matrix.arr
+
+        if matrix.shape == (4, 4):
+            temp = (matrix @ self.H.T).T[:, :3]
+        #     TODO check my math and if this needs to be divided by the final row / column
+        elif matrix.shape == (3, 3):
+            temp = (matrix @ self.T).T
+        else:
+            return matrix @ self.arr
+
+        temp = self.update_copy(temp)
+        return temp
+
+    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
+    def __imatmul__(self, transpose_matrix: TransformT | np.ndarray) -> Self | np.ndarray:
+        raise NotImplementedError(
+            'In place matrix multiplication not supported due to ambiguity between left and right multiplication.\n\n'
+            'For 3D coordinates follow the right matrix multiplication formula of:'
+            '       y = Ax\n'
+            'where x are coordinates and A the transformation. In python:\n'
+            '       y = A @ x')
+
+
+class CartesianCoordinates(Abstract3dCoordinates):
+    arr: Array_Nx3_T = Field(alias='xyz')
+    @property
+    def x(self) -> np.ndarray: return self.arr[:, 0]
+    @property
+    def y(self) -> np.ndarray: return self.arr[:, 1]
+    @property
+    def z(self) -> np.ndarray: return self.arr[:, 2]
+    @property
+    def xyz(self) -> np.ndarray: return self.arr
+    @property
+    def yxz(self) -> np.ndarray: return self.xyz[:, [1, 0, 2]]
 
     @cached_property
-    def _xyz(self) -> np.ndarray:
-        return spherical2cartesian(self.arr)
-
-    @property
-    def xyz(self) -> np.ndarray:
-        return self._get_cartesian_data()
-
-    @xyz.setter
-    def xyz(self, xyz: np.ndarray) -> None:
-        if self.coord_system != CoordSysEnum.CART:
-            self._convert_to_system(CoordSysEnum.CART)
-        self.arr = xyz
-
-    @property
-    def x(self) -> NumOrArray:
-        return self.xyz[:, 0].view()
-
-    @x.setter
-    def x(self, x: NumOrArray) -> None:
-        if self.coord_system != CoordSysEnum.CART:
-            raise ValueError("Cannot set 'x' whilst coord system is SPHERICAL")
-        self.xyz[:, 0] = x
-
-    @property
-    def y(self) -> NumOrArray:
-        return self.xyz[:, 1].view()
-
-    @y.setter
-    def y(self, y: NumOrArray) -> None:
-        if self.coord_system != CoordSysEnum.CART:
-            raise ValueError("Cannot set 'y' whilst coord system is SPHERICAL")
-        self.xyz[:, 1] = y
-
-    @property
-    def z(self) -> NumOrArray:
-        return self.xyz[:, 2].view()
-
-    @z.setter
-    def z(self, z: NumOrArray) -> None:
-        if self.coord_system != CoordSysEnum.CART:
-            raise ValueError("Cannot set 'z' whilst coord system is SPHERICAL")
-        self.xyz[:, 2] = z
-
-    def _get_cartesian_data(self):
-        if self.coord_system == CoordSysEnum.SPHER:
-            return self._xyz
-        return self.arr.view()
-
-    @bypass_immutable
-    def to_spherical(self):
-        self._convert_to_system(CoordSysEnum.SPHER)
-
-
-class SphereCoordinates(CoordinateSet3D):
-    @property
-    def _prop_names(self) -> frozenset[str]:
-        return super()._prop_names | frozenset(['_spher'])
-
-    @property
     def spher(self) -> np.ndarray:
-        return self._get_spherical_data()
+        if not self.is_at_socs:
+            warnings.warn('Scan center of point cloud is ambiguous and results can not be guaranteed')
+        return xyz2rhv(self.arr, self.socs_origin)
 
-    @spher.setter
-    def spher(self, spher: np.ndarray) -> None:
-        if self.coord_system != CoordSysEnum.SPHER:
-            self._convert_to_system(CoordSysEnum.SPHER)
-        self.arr = spher
+    @property
+    def r(self): return self.spher[:, 0]
+    @property
+    def hz(self): return self.spher[:, 1]
+    @property
+    def v(self): return self.spher[:, 2]
+    @property
+    def rhv(self): return self.spher
 
+    @property
+    def fov(self): # TODO must implement this
+        raise NotImplementedError
+
+    def to_spherical(self) -> SphericalCoordinates:
+        spherical = SphericalCoordinates(**self.model_dump(exclude={'arr'}) | {'arr': self.spher})
+        delattr(self, 'spher')
+        return spherical
+
+    @classmethod
+    def from_spherical(cls, spherical: SphericalCoordinates):
+        cartesian = cls(**spherical.model_dump(exclude={'arr'}) | {'arr': spherical.xyz})
+        delattr(spherical, 'xyz')
+        return cartesian
+
+    # TODO must define on the transformation handling -> Incl. support for the scipy.spatial.transform.rotation
+    def transform(self, affine=None, rotation=None, translation=None, scale=None):
+        affine = Transform.from_matrix(affine) if affine else np.eye(4)
+
+        if rotation is not None:
+            affine[:3, :3] @= rotation
+        if translation is not None:
+            affine[:3, 3] += translation
+        if scale is not None:
+            affine[[0, 1, 2], [0, 1, 2]] *= scale
+
+        self.arr = (affine @ self.H.T).T[:, :3]
+
+
+class SphericalCoordinates(Abstract3dCoordinates):
+    arr: Annotated[Array_Nx3_T, Field(alias='spher'), BeforeValidator(validate_spherical_angles)]
+
+    @property
+    def fov(self): raise NotImplementedError
+    @property
+    def spher(self) -> np.ndarray: return self.arr
+    @property
+    def rhv(self) -> np.ndarray: return self.arr
+    @property
+    def r(self) -> np.ndarray: return self.rhv[:, 0]
+    @property
+    def hz(self) -> np.ndarray: return self.rhv[:, 1]
+    @property
+    def v(self) -> np.ndarray: return self.rhv[:, 2]
 
     @cached_property
-    def _spher(self) -> np.ndarray:
-        return cartesian2spherical(self.arr)
+    def xyz(self) -> np.ndarray:
+        if not self.is_at_socs:
+            warnings.warn('Spherical origin was not defined, so coordinates assumed to be at scan origin')
+        return rhv2xyz(self.arr, self.socs_origin)
 
     @property
-    def r(self):
-        return self.spher[:, 0].view()
-
-    @r.setter
-    def r(self, r: NumOrArray) -> None:
-        if self.coord_system != CoordSysEnum.SPHER:
-            raise ValueError("Cannot set 'r' whilst coord system is CARTESIAN")
-        self.spher[:, 0] = r
-
+    def x(self) -> np.ndarray: return self.xyz[:, 0]
     @property
-    def v(self):
-        return self.spher[:, 1].view()
-
-    @v.setter
-    def v(self, v: NumOrArray) -> None:
-        if self.coord_system != CoordSysEnum.SPHER:
-            raise ValueError("Cannot set 'v' whilst coord system is SPHERICAL")
-        self.spher[:, 1] = v
-
+    def y(self) -> np.ndarray: return self.xyz[:, 1]
     @property
-    def hz(self):
-        return self.spher[:, 2].view()
+    def z(self) -> np.ndarray: return self.xyz[:, 2]
 
-    @hz.setter
-    def hz(self, hz: NumOrArray) -> None:
-        if self.coord_system != CoordSysEnum.SPHER:
-            raise ValueError("Cannot set 'hz' whilst coord system is SPHERICAL")
-        self.spher[:, 2] = hz
+    def to_cartesian(self) -> CartesianCoordinates:
+        cartesian = CartesianCoordinates(**self.model_dump(exclude={'arr'}) | {'arr': self.xyz})
+        delattr(self, 'xyz')
+        return cartesian
 
-    @property
-    def rho(self):
-        return self.r
+    @classmethod
+    def from_cartesian(cls, cartesian: CartesianCoordinates):
+        spherical = cls(**cartesian.model_dump(exclude={'arr'}) | {'arr': cartesian.spher})
+        delattr(cartesian, 'spher')
+        return spherical
 
-    @rho.setter
-    def rho(self, rho: NumOrArray) -> None:
-        if self.coord_system != CoordSysEnum.SPHER:
-            raise ValueError("Cannot set 'rho' whilst coord system is SPHERICAL")
-        self.spher[:, 0] = rho
-
-    @property
-    def theta(self):
-        return self.v
-
-    @theta.setter
-    def theta(self, theta: NumOrArray) -> None:
-        if self.coord_system != CoordSysEnum.SPHER:
-            raise ValueError("Cannot set 'theta' whilst coord system is SPHERICAL")
-        self.spher[:, 1] = theta
-
-    @property
-    def phi(self):
-        return self.hz
-
-    @phi.setter
-    def phi(self, phi: NumOrArray) -> None:
-        if self.coord_system != CoordSysEnum.SPHER:
-            raise ValueError("Cannot set 'phi' whilst coord system is SPHERICAL")
-        self.spher[:, 2] = phi
-
-    def _get_spherical_data(self):
-        if self.coord_system == CoordSysEnum.CART:
-            return self._spher
-        return self.arr.view()
-
-    @bypass_immutable
-    def to_cartesian(self):
-        self._convert_to_system(CoordSysEnum.CART)
+    # DISCUSS - Add methods to apply tilt and yaw rotations easily (e.g. for spherical image projection shifts?
+    # def rotate(self, yaw=None, pitch=None):
+    #     if yaw:
+    #         self.arr[:, 1] = coerce_azimuths(self.hz + yaw)
+    #
+    #     if pitch:
+    #         self.arr[np.logical_or(temp < 0, temp > PI), 1] = coerce_azimuths(self.hz + TWO_PI)
+    #         self.arr[:, 2] = np.abs(temp := self.v - pitch)
 
 
-class GeneralCoordinates(CartesianCoordinates, SphereCoordinates):
-    @property
-    def _prop_names(self):
-        return super()._prop_names
+@validate_call(config=ConfigDict(arbitrary_types_allowed=True))
+def rhv2xyz(spher: npt.ArrayLike, origin_shift: Vector_3_T|None = None) -> np.ndarray:
+    xyz: np.ndarray = np.zeros_like(spher)
+    xyz[:, 0] = spher[:, 0] * np.sin(spher[:, 2]) * np.cos(spher[:, 1])
+    xyz[:, 1] = spher[:, 0] * np.sin(spher[:, 2]) * np.sin(spher[:, 1])
+    xyz[:, 2] = spher[:, 0] * np.cos(spher[:, 2])
+
+    return xyz if origin_shift is None else xyz - origin_shift
+
+@validate_call(config=ConfigDict(arbitrary_types_allowed=True))
+def xyz2rhv(cart: npt.ArrayLike, origin_shift: Vector_3_T = np.zeros(3)) -> np.ndarray:
+    spher: np.ndarray = np.zeros_like(cart)
+
+    # Apply the shift in place to avoid creating additional copies
+    dx, dy, dz = origin_shift
+
+    xy_2: npt.ArrayLike = (cart[:, 0] + dx)**2 + (cart[:, 1] + dy)**2
+    spher[:, 0] = np.sqrt(xy_2 + (cart[:, 2] + dz)**2)  # [  0, inf] slope distance
+    spher[:, 1] = np.arctan2((cart[:, 1] + dy), (cart[:, 0] + dx))  # [-pi, +pi] horizonal angle
+    spher[:, 2] = np.arctan2(np.sqrt(xy_2), cart[:, 2] + dz)  # [  0, +pi] zenith angle
+
+    return spher

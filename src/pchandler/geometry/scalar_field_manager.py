@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import logging
 import weakref
 from collections import Counter
 from collections.abc import KeysView, ValuesView, ItemsView
-from typing import Iterator, MutableMapping, overload, Self, TYPE_CHECKING, Iterable, NamedTuple
+from typing import Iterator, MutableMapping, overload, Self, TYPE_CHECKING, Iterable, NamedTuple, TypeVar, Union
 
 import numpy as np
 from pydantic import validate_call
@@ -11,32 +12,32 @@ from pydantic import validate_call
 if TYPE_CHECKING:
     from .core import PointCloudData
 
-from ..custom_types import IndexLike
-from ..base_arrays import (
-    Vector_N_T, Array_Nx3_T, Vector_N_uint8_T, Array_Nx3_uint8_T, Vector_N_float32_T, Array_Nx3_float32_T, Vector_N_uint16_T)
+from ..constants import RGB_POTENTIAL_NAMES, NORMAL_POTENTIAL_NAMES, DEFAULT_CONFIG
+from ..base_types import (IndexLike,  VectorT, Uint8VectorT, Array_Nx3_T, Uint8VectorT, Float32VectorT, Uint16VectorT,
+                          Array_Nx3_float32_T, Float32VectorT, Array_Nx3_uint8_T)
 from .scalar_fields import (
-    ScalarField, RGBFields, NormalFields, RGB_FIELD, NORMALS_FIELD,
-    RGB_POTENTIAL_NAMES, NORMAL_POTENTIAL_NAMES, INTENSITY_POTENTIAL_NAMES, LowerStr, DEFAULT_CONFIG)
+    ScalarField, RGBFields, NormalFields, RGB_FIELD, NORMALS_FIELD, LowerStr, SF_T)
+
+
+logger = logging.getLogger(__name__.split(".")[0])
+
+
 
 class IndexPosition(NamedTuple):
     start: int
     end: int
 
 
-class ScalarFieldManager(dict[str, type[ScalarField]]):
+class ScalarFieldManager(MutableMapping[str, SF_T]):
     """
     Manages a collection of ScalarField objects, ensuring that all fields have the same
     number of data points. Also provides a mechanism to select subsets of the fields.
     """
     def __init__(self,
                  parent: PointCloudData|None,
-                 fields: dict[str, ScalarField]|None = None,
-                 partial_fields: dict[int, ScalarField]|None = None,
-                 merged_map: MutableMapping[int, tuple[int, int]]|None=None) -> None:
+                 fields: dict[str, SF_T]|None = None) -> None:
         self._parent: weakref.ReferenceType[PointCloudData]|None = weakref.ref(parent) if parent is not None else None
-        self._fields: dict[str, ScalarField] = fields or {}
-        self._partial_fields: dict[int, ScalarField] = partial_fields or {}
-        self._merged_map: MutableMapping[int, tuple[int, int]] = merged_map or {}
+        self._fields: dict[str, SF_T] = fields or {}
 
 
     def __iter__(self) -> Iterator[str]:
@@ -51,10 +52,10 @@ class ScalarFieldManager(dict[str, type[ScalarField]]):
     def keys(self) -> list[str]:
         return list(self._fields.keys())
 
-    def values(self) -> ValuesView[ScalarField]:
+    def values(self) -> ValuesView[SF_T]:
         return self._fields.values()
 
-    def items(self) -> ItemsView[str, ScalarField]:
+    def items(self) -> ItemsView[str, SF_T]:
         return self._fields.items()
 
     @overload
@@ -64,32 +65,27 @@ class ScalarFieldManager(dict[str, type[ScalarField]]):
     def __getitem__(self, key: IndexLike) -> Self: ...
 
     @validate_call(config=DEFAULT_CONFIG)
-    def __getitem__(self, key: LowerStr|IndexLike) -> (ScalarField | dict[str, ScalarField]):
+    def __getitem__(self, key: LowerStr|IndexLike) -> (SF_T | dict[str, SF_T]):
 
         if isinstance(key, str):
             return self._fields[key]
-        # TODO check partial dict if key not found
 
         return self.sample(key)
 
     @validate_call(config=DEFAULT_CONFIG)
-    def __setitem__(self, name: LowerStr, value: ScalarField | Vector_N_T | Array_Nx3_T) -> None:
+    def __setitem__(self, name: LowerStr, value: SF_T) -> None:
         if not isinstance(value, np.ndarray):
             value = value.arr
 
         if name in RGB_POTENTIAL_NAMES: return self._handle_rgb(name, value)
         if name in NORMAL_POTENTIAL_NAMES: return self._handle_normal(name, value)
-        if name in INTENSITY_POTENTIAL_NAMES: return self._handle_intensity_reflectance(value)
 
         if self.num_points != value.shape[0]:
             raise ValueError(
                 f"Scalar field length does not equal #points: {self.num_points} != {value.shape[0]}" )
 
         if isinstance(value, np.ndarray):
-            if value.ndim == 2:
-                self._fields[name] = ScalarFieldTriplet(name=name, arr=value)
-            else:
-                self._fields[name] = ScalarField(name=name, arr=value)
+            self._fields[name] = ScalarField(name=name, arr=value)
 
         return None
 
@@ -106,7 +102,7 @@ class ScalarFieldManager(dict[str, type[ScalarField]]):
     def remove_field(self, field_name: LowerStr) -> None:
         del self[field_name.lower()]
 
-    def create_field(self, name: str, data: Vector_N_T|Array_Nx3_T) -> None:
+    def create_field(self, name: str, data: VectorT|Array_Nx3_T) -> None:
         sf = ScalarField(name=name, arr=data)
         self.add_field(sf)
 
@@ -127,7 +123,7 @@ class ScalarFieldManager(dict[str, type[ScalarField]]):
         return self._fields.get(NORMALS_FIELD, None)
 
     @validate_call(config=DEFAULT_CONFIG)
-    def _handle_rgb(self, name: LowerStr, value: Vector_N_uint8_T | Array_Nx3_uint8_T) -> None:
+    def _handle_rgb(self, name: LowerStr, value: Uint8VectorT | Array_Nx3_uint8_T) -> None:
         # Set the whole field
         if name in ('rgb', 'rgba', 'color', 'colour', 'colors', 'colours'):
             self._fields[RGB_FIELD] = RGBFields(arr=value[:, [0, 1, 2]])
@@ -153,7 +149,7 @@ class ScalarFieldManager(dict[str, type[ScalarField]]):
             raise KeyError(f'Unknown key made it into _handle_rgb : {name}')
 
     @validate_call(config=DEFAULT_CONFIG)
-    def _handle_normal(self, name: LowerStr, value: Vector_N_float32_T | Array_Nx3_float32_T) -> None:
+    def _handle_normal(self, name: LowerStr, value: Float32VectorT | Array_Nx3_float32_T) -> None:
         # Set the whole field
         if name == ('nxnynz', 'normals', 'normal'):
             self._fields[NORMALS_FIELD] = NormalFields(arr=value[:, [0, 1, 2]])
@@ -178,15 +174,11 @@ class ScalarFieldManager(dict[str, type[ScalarField]]):
         else:
             raise KeyError(f'Unknown key made it into normals : {name}')
 
-    @validate_call(config=DEFAULT_CONFIG)
-    def _handle_intensity_reflectance(self, value: Vector_N_uint16_T) -> None:
-        self._fields[INTENSITY_FIELD] = IntensityField(arr=value)
-
     def sample(self, mask: IndexLike) -> dict[str, ScalarField]:
         sample = {}
 
         for name, value in self.items():
-            if isinstance(value, ScalarFieldTriplet):
+            if isinstance(value, (RGBFields, NormalFields)):
                 sample[name] = value[mask, :]
 
             else:
@@ -213,7 +205,7 @@ class ScalarFieldManager(dict[str, type[ScalarField]]):
     #     return self.merge(other)
 
     @staticmethod
-    def generate_point_cloud_map(sfms: Iterable[Self]) -> dict[int, slice]:
+    def generate_point_cloud_map(sfms: Iterable[ScalarFieldManager]) -> dict[int, slice]:
         indexes = [0]
         for i, b in enumerate(sfms):
             indexes.append(indexes[i] + b.num_points)
@@ -227,10 +219,6 @@ class ScalarFieldManager(dict[str, type[ScalarField]]):
         return index_map
 
 
-    # TODO look at a method for dumping dicts and appending arrays
-    # DISCUSS what is the goal of merge -? same points, same sfms? joining separate pcd with same keys?
-    #  Do we extend the sfs if they're missing by initialising the other points
-    # TODO look at merge flags
     @classmethod
     def merge(cls, sfms: Iterable[Self]) -> Self:
         # DISCUSS Idea to create a partial_fields dict to store all those not linked
@@ -239,9 +227,6 @@ class ScalarFieldManager(dict[str, type[ScalarField]]):
         all_keys = set.union(*sfm_key_sets)
         keys_in_common = set.intersection(*sfm_key_sets)
         partial_keys = list(set.difference(all_keys, keys_in_common))
-
-        partial_fields: dict[int: dict[str: ScalarField]] = {}
-        pcds_index_map = cls.generate_point_cloud_map(sfms)
 
         if len(all_keys) == 0:
             return ScalarFieldManager(parent=None, fields={})

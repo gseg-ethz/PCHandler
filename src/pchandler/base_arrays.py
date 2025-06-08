@@ -2,17 +2,16 @@ from __future__ import annotations
 
 from abc import ABC
 from functools import cached_property
-from typing import Any, Optional, Generator, Mapping, Self, Annotated
+from typing import Any, Optional, Generator, Mapping, Self
 
-# TODO there's a lot of importing of numpy or other common libraries - is there way to optimise this to __init__?
 import numpy as np
 import numpy.typing as npt
 from numpydantic import NDArray, Shape
-from numpydantic.dtype import Integer, Float, Bool, UInt8, Float32, UInt16, Int8, Int16, Int32
-from pydantic import BaseModel, ConfigDict, model_validator, field_validator, Field, BeforeValidator
+from pydantic import BaseModel, ConfigDict, model_validator, field_validator
 
-from .custom_types import IndexLike
-from .validators import extract_array, validate_transposed_vector, validate_Nx2_transposed, validate_Nx3_transposed
+
+from .base_types import ArrayT, VectorT, Array_NxM_T, Array_Nx3_T, Array_Nx2_T, Array_NxM_3_T
+from .base_types import IndexLike
 
 
 def make_ndarray_type(*args: Optional[int|str], dtype = None):
@@ -29,33 +28,6 @@ def make_ndarray_type(*args: Optional[int|str], dtype = None):
 
     return NDArray[Shape[', '.join(shape_list)], dtype if dtype is not None else Any]
 
-ArrayDtypes = (Integer, Float, Bool)
-
-ArrayValidator = BeforeValidator(extract_array)
-TransposedVector = BeforeValidator(validate_transposed_vector)
-TransposedNx2 = BeforeValidator(validate_Nx2_transposed)
-TransposedNx3 = BeforeValidator(validate_Nx3_transposed)
-
-# DECIDE -> Should we shift this to custom types? For now this is a rather independent module
-Array_T = Annotated[NDArray[Shape['*, ...'], ArrayDtypes], ArrayValidator]
-Array_NxM_T = Annotated[NDArray[Shape['*, *'], ArrayDtypes], ArrayValidator]       # Intensity image, depth image
-Array_NxM_3_T = Annotated[NDArray[Shape['*, *, 3'], ArrayDtypes], ArrayValidator]  # RGB or normal image
-Array_Nx2_T = Annotated[NDArray[Shape['*, 2'], ArrayDtypes], TransposedNx2, ArrayValidator]       # Image coordinates
-Array_Nx3_T = Annotated[NDArray[Shape['*, 3'], ArrayDtypes], TransposedNx3, ArrayValidator]       # 3D Coordinates / normals
-Array_Nx3_float32_T = Annotated[NDArray[Shape['*, 3'], Float32],TransposedNx3,  ArrayValidator]        # Normals and optimised coords
-Array_Nx3_uint8_T = Annotated[NDArray[Shape['*, 3'], UInt8], TransposedNx3, ArrayValidator]          # RGB
-Array_3x3_T = Annotated[NDArray[Shape['4, 4'], ArrayDtypes], ArrayValidator]       # Rotation Matrix
-Array_4x4_T = Annotated[NDArray[Shape['4, 4'], ArrayDtypes], ArrayValidator]       # Affine Transformation
-Vector_N_T = Annotated[NDArray[Shape['*'], ArrayDtypes], TransposedVector, ArrayValidator]
-Vector_N_int32_T = Annotated[NDArray[Shape['*'], Int32], TransposedVector, ArrayValidator]
-Vector_N_int16_T = Annotated[NDArray[Shape['*'], Int16], TransposedVector, ArrayValidator]
-Vector_N_int8_T = Annotated[NDArray[Shape['*'], Int8], TransposedVector, ArrayValidator]
-Vector_N_uint16_T = Annotated[NDArray[Shape['*'], UInt16], TransposedVector, ArrayValidator]             # Intensity Values
-Vector_N_uint8_T = Annotated[NDArray[Shape['*'], UInt8], TransposedVector, ArrayValidator]              # Single RGB field
-Vector_N_float32_T = Annotated[NDArray[Shape['*'], Float32], TransposedVector, ArrayValidator]            # Normal vector field
-Vector_N_bool_T = Annotated[NDArray[Shape['*'], Bool], TransposedVector, ArrayValidator]                # Mask or boolean vector
-Vector_2_T = Annotated[NDArray[Shape['2'], ArrayDtypes], ArrayValidator]           # Image coordinate / translation
-Vector_3_T = Annotated[NDArray[Shape['3'], ArrayDtypes], ArrayValidator]           # 3D coordinate / translation
 
 
 class BaseArray(ABC, BaseModel):
@@ -81,7 +53,7 @@ class BaseArray(ABC, BaseModel):
         frozen=False,
         extra='ignore',
         populate_by_name=True)
-    arr: Array_T
+    arr: ArrayT
 
     @property
     def __array_interface__(self) -> dict:
@@ -213,8 +185,8 @@ class BaseArray(ABC, BaseModel):
     def __gt__(self, other: Any) -> npt.NDArray[np.bool_]|bool: return self.arr > other
 
 
-class _SampleArray(BaseArray):
-    def create_mask(self, selection: IndexLike, as_vector=False) -> Vector_N_T:
+class SampleArray(BaseArray):
+    def create_mask(self, selection: IndexLike, as_vector=False) -> NDArray[np.bool_]|NDArray[np.int_]:
         """Creates a boolean mask for the whole array
 
         This ensures all new objects are a copy of an array and no views/references
@@ -307,7 +279,7 @@ class _NumericMixins(BaseArray):
         return self
 
 
-class _FixedLengthArray(_SampleArray, _NumericMixins):
+class FixedLengthArray(SampleArray, _NumericMixins):
     """
     Array to support objects like Coordinate sets or vectors which have "len()" or number of items == rows
     """
@@ -318,10 +290,10 @@ class _FixedLengthArray(_SampleArray, _NumericMixins):
         for i in self.arr:
             yield i
 
-    def create_mask(self, selection: IndexLike, **kwargs) -> Vector_N_T:
+    def create_mask(self, selection: IndexLike, **kwargs) -> NDArray[np.bool_]|NDArray[np.int_]:
         return super().create_mask(selection, as_vector=True)
 
-    def sample(self, index: IndexLike) -> _FixedLengthArray:
+    def sample(self, index: IndexLike) -> FixedLengthArray:
         mask = self.create_mask(index)
         return self.update_copy(
             array = self.arr[mask] if self.shape == mask.shape else self.arr[mask, :]
@@ -334,27 +306,27 @@ class _FixedLengthArray(_SampleArray, _NumericMixins):
 
     def extract(self, index: IndexLike) -> Self:
         """Returns the points indexed but also reduces the indexed array by these points"""
-        mask = self.create_mask(index)
+        mask: np.ndarray[np.bool_]| np.ndarray[np.integer] = self.create_mask(index)
         extracted = self.sample(mask)
         self.reduce(~mask)
         return extracted
 
 
-class BaseVector(_FixedLengthArray):
-    arr: Vector_N_T
+class BaseVector(FixedLengthArray):
+    arr: VectorT
 
 
-class _HomogeneousArray(_FixedLengthArray):
+class HomoegeneousArray(FixedLengthArray):
     @property
     def H(self) -> np.ndarray:
         return np.column_stack((self.arr, np.ones(len(self), dtype=self.dtype)))
 
 
-class ArrayNx2(_HomogeneousArray):
+class ArrayNx2(HomoegeneousArray):
     arr: Array_Nx2_T
 
 
-class ArrayNx3(_HomogeneousArray):
+class ArrayNx3(HomoegeneousArray):
     arr: Array_Nx3_T
 
 
@@ -366,7 +338,7 @@ class ReadOnlyVector(BaseVector):
     model_config = ConfigDict(strict=True, frozen=True)
 
 
-class _ImageLike(_SampleArray, _NumericMixins, ABC):
+class _ImageLike(SampleArray, _NumericMixins, ABC):
     arr: Array_NxM_T|Array_NxM_3_T
     # Update implementation based on if you want to support slicing / views or not
     def __getitem__(self, *key: IndexLike) -> Any:

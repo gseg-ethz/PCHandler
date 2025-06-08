@@ -5,7 +5,7 @@ import numpy as np
 from pydantic import BaseModel, Field, ConfigDict, ValidationError, computed_field
 
 
-from src.pchandler.v2.base_arrays import BaseArray
+from src.pchandler.base_arrays import BaseArray
 
 class TestPydantic:
     def test_initialisation_of_multiple_instances(self):
@@ -106,7 +106,7 @@ class TestPydantic:
 
         b = B(num=2)
 
-        with pytest.raises(AttributeError):
+        with pytest.raises(ValidationError):
             b.num = 1
 
     def test_cached_properties_excluded(self):

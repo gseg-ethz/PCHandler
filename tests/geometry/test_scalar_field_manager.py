@@ -1,4 +1,4 @@
-from src.pchandler.v2.geometry import BaseArray
+from src.pchandler.geometry import BaseArray
 
 
 def test_sfm():

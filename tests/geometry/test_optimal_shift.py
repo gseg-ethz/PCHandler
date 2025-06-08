@@ -3,8 +3,8 @@ import weakref
 import pytest
 import numpy as np
 
-from src.pchandler.v2.geometry.optimal_shift import OSM_Manager
-from src.pchandler.v2.geometry.core import PointCloudData
+from src.pchandler.geometry.optimal_shift import OSM_Manager
+from src.pchandler.geometry.core import PointCloudData
 
 
 def test_register():
@@ -14,9 +14,9 @@ def test_register():
 
 def test_weakref_list():
     pcd_list = list()
-    pcd_list.append(PointCloudData(xyz=np.random.rand(100, 3) * 100, optimal=True))
-    pcd_list.append(PointCloudData(xyz=np.random.rand(100, 3) * 200, optimal=True))
-    pcd_list.append(PointCloudData(xyz=np.random.rand(100, 3) * 400, optimal=True))
+    pcd_list.append(PointCloudData(arr=np.random.rand(100, 3) * 100, optimal=True))
+    pcd_list.append(PointCloudData(arr=np.random.rand(100, 3) * 200, optimal=True))
+    pcd_list.append(PointCloudData(arr=np.random.rand(100, 3) * 400, optimal=True))
 
     assert len(OSM_Manager.point_clouds) == 3
 

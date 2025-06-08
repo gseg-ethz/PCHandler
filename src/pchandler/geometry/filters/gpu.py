@@ -1,5 +1,5 @@
 # """
-# GPU module for pchandler.geometry.
+# GPU module for pchandler.geometry.fitlers
 #
 # Provides functions that use GPU acceleration (via cudf and cuspatial) to filter point clouds.
 # """
@@ -7,9 +7,15 @@
 # import gc
 # import logging
 #
-# # import cudf
-# # import cuspatial
-# import geopandas as gpd
+# try:
+#     import cudf
+#     import cuspatial
+#     import geopandas as gpd
+# except RuntimeError:
+#     pass
+# except ImportError:
+#     raise ImportError("pchandler.geometry.filters.gpu requires the ‘cuda11’ or ‘cuda12’ extra (`pip install pchandler[cuda11]`).")
+#
 # from numpy.typing import NDArray
 # from shapely.geometry import Polygon
 #

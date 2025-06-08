@@ -2,19 +2,13 @@ import pytest
 
 from pydantic import BaseModel, ValidationError
 
-from src.pchandler.v2.geometry.scalar_fields import *
+from src.pchandler.geometry.scalar_fields import *
 
 
 class TestGlobals:
     def test_fixed_key_names(self):
         assert RGB_FIELD == 'rgb'
         assert NORMALS_FIELD == 'normals'
-        assert INTENSITY_FIELD == 'intensity'
-
-    def test_potential_fixed_names(self):
-        assert isinstance(RGB_POTENTIAL_NAMES, tuple)
-        assert isinstance(NORMAL_POTENTIAL_NAMES, tuple)
-        assert isinstance(INTENSITY_POTENTIAL_NAMES, tuple)
 
     def test_lower_str_annotation(self):
         class A(BaseModel):

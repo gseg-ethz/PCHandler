@@ -1,13 +1,14 @@
 import logging
 from typing import Tuple
 
+import alphashape
 import numpy as np
 from numpy.typing import NDArray
 from shapely import contains_xy
-from shapely.affinity import translate
-from shapely.geometry import Polygon
+from shapely.affinity import scale, translate
+from shapely.geometry import MultiPolygon, Polygon
 
-from pchandler.core import PointCloudData
+from ..core import PointCloudData
 from .core import PointCloudFilter
 
 logger = logging.getLogger(__name__.split(".")[0])

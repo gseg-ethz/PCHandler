@@ -80,7 +80,8 @@ else:
 
 import numpy as np
 
-from pchandler.util import EPS, AngleUnit, convert_angles
+from .constants import EPS
+from .util import AngleUnit, convert_angles
 
 logger = logging.getLogger(__name__.split(".")[0])
 

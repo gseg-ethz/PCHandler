@@ -3,8 +3,8 @@ import copy
 import numpy as np
 import pytest
 
-from src.pchandler.v2.geometry.core import PointCloudData
-from src.pchandler.v2.geometry.scalar_field_manager import ScalarFieldManager
+from src.pchandler.geometry.core import PointCloudData
+from src.pchandler.geometry.scalar_field_manager import ScalarFieldManager
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -65,12 +65,10 @@ def scalar_fields(intensities) -> dict:
 def rgb():
     return np.random.randint(0, 255, (100, 3), dtype=np.uint8)
 
-
 @pytest.fixture(scope="function")
 def pcd(small_coordinates, rgb, normals, scalar_fields, intensities):
     return PointCloudData(xyz=small_coordinates, rgb=rgb, normals=normals, scalar_fields=scalar_fields)
 
-# TODO need to define a common name for colours / intensities to get called
 @pytest.fixture(scope="function")
 def pcd_shifted(large_coordinates, rgb, normals, scalar_fields, intensities):
     return PointCloudData(xyz=large_coordinates, rgb=rgb, normals=normals, scalar_fields=scalar_fields)

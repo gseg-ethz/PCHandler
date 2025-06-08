@@ -1,20 +1,18 @@
 import copy
 
 import pytest
-import sys
 
 import numpy as np
 from scipy.spatial.transform import Rotation
+from pydantic import ValidationError
 
-from src.pchandler.v2.base_arrays import ArrayNx3
-from src.pchandler.v2.geometry.coordinates import (
+from pchandler.base_arrays import ArrayNx3
+from pchandler.geometry.coordinates import (
     CartesianCoordinates, Abstract3dCoordinates, SphericalCoordinates, rhv2xyz, xyz2rhv, AbstractCoordinates
 )
-from pchandler.v2.geometry.transforms import Transform
+from pchandler.geometry.transforms import Transform
+from pchandler.constants import PI,HALF_PI, TWO_PI
 
-PI = np.pi
-PI_2 = np.pi * 2
-HALF_PI = np.pi * 0.5
 
 _known_spher = np.array([
     [1, 0, HALF_PI],
@@ -137,6 +135,8 @@ class TestCartesianCoordinates:
         assert id(spherical) != id(cart_obj.spher)
 
         spherical2 = cart_obj.to_spherical()
+        cart2 = CartesianCoordinates.from_spherical(spherical2)
+        assert np.allclose(cart_obj.xyz, cart2.xyz)
 
         # Check that all objects are different
         assert id(spherical2) != id(spherical) != id(cart_obj.spher)
@@ -162,6 +162,85 @@ class TestCartesianCoordinates:
 
         # TODO reimplement transform ledger then retest
         # assert 'AFFINE' in cart_obj.transform_ledger[-1][0]
+
+    def test_left_matrix_multiplication(self, cart_obj):
+        rand_3x3 = np.random.rand(3,3)
+        with pytest.raises(NotImplementedError):
+            cart_obj @ rand_3x3
+
+    def test_right_matrix_multiplication(self, cart_obj):
+        rand_3x3 = np.random.rand(3,3)
+        b = rand_3x3 @ cart_obj.T
+        assert np.any(b.T != cart_obj)
+        assert b.T.shape == cart_obj.shape
+
+        arr = cart_obj.__rmatmul__(rand_3x3)
+        assert isinstance(arr, type(cart_obj))
+        assert arr.shape == cart_obj.shape
+
+        same_shape_array = np.ones_like(cart_obj.arr)
+        b = cart_obj.__rmatmul__(same_shape_array.T)
+        assert isinstance(b, np.ndarray)
+        assert b.shape != cart_obj.shape
+
+    def test_inplace_matrix_multiplication(self, cart_obj):
+        rand_3x3 = np.random.rand(3,3)
+        with pytest.raises(NotImplementedError):
+            cart_obj @= rand_3x3
+
+    def test_homogeneous_matrix_multiplication(self, cart_obj):
+        rand_4x4 = np.random.rand(4,4)
+        # Will not work with numpy arrays due to left matrix multiplication approach
+        with pytest.raises(ValueError):
+            rand_4x4 @ cart_obj
+
+        b = rand_4x4 @ cart_obj.H.T
+        assert np.any(b.T[:, :3] != cart_obj)
+        assert b.T.shape != cart_obj.shape
+
+        transform = Transform(arr=rand_4x4)
+        # c is automatically transformed into a Nx3 array
+        c = transform @ cart_obj
+        assert c.shape == cart_obj.shape
+        assert np.allclose(b.T[:, :3], c)
+
+    def test_get_item(self, cart_obj):
+        a = cart_obj[0:10]
+        assert isinstance(a, CartesianCoordinates)
+
+        assert len(a) == 10
+        assert a.shape == (10, 3)
+        assert np.all(a.arr[0:10, :] == cart_obj.arr[0:10, :])
+
+        with pytest.raises(IndexError):
+            c = cart_obj[0:10, :2]
+
+        with pytest.raises(ValueError):
+            mask = np.ones((10, 3), dtype=np.bool_)
+            c = cart_obj[mask]
+
+    def test_fov(self, cart_obj):
+        values = cart_obj.fov
+
+
+class TestSphericalCoordinates:
+    def test_instantiation(self, known_spher, known_xyz):
+        spherical = SphericalCoordinates(arr=known_spher)
+
+        assert isinstance(spherical, SphericalCoordinates)
+        assert np.all(spherical.spher == known_spher)
+
+        with pytest.raises(ValidationError):
+            SphericalCoordinates(arr=known_xyz)
+
+    def test_from_cartesian(self, known_spher, known_xyz):
+        cart_obj = CartesianCoordinates(arr=known_xyz)
+        spher_obj = SphericalCoordinates.from_cartesian(cart_obj)
+        assert np.allclose(spher_obj.arr, known_spher)
+
+    def test_fov(self, known_spher):
+        spherical = SphericalCoordinates(arr=known_spher)
+        values = spherical.fov
 
 
 class TestConversions:

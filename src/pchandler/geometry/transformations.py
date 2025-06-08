@@ -1,1 +1,0 @@
-# TODO look at "Automating Audit Trails: Keeping an eye on changes with __get__ and __set__

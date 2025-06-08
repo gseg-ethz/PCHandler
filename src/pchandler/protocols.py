@@ -11,7 +11,7 @@ class CoordinateSet(Protocol):
     def __array__(self) -> np.ndarray: ...
 
 
-class CartesianCoordProtocol(CoordinateSet, Protocol):
+class CartesianCoordProtocol(Protocol):
     @property
     def xyz(self) -> np.ndarray: ...
 
@@ -24,6 +24,9 @@ class CartesianCoordProtocol(CoordinateSet, Protocol):
     @property
     def z(self): ...
 
+    @property
+    def spher(self): ...
+
     def to_spherical(self) -> SphericalCoordProtocol: ...
 
     @classmethod
@@ -31,7 +34,7 @@ class CartesianCoordProtocol(CoordinateSet, Protocol):
 
 
 
-class SphericalCoordProtocol(CoordinateSet, Protocol):
+class SphericalCoordProtocol(Protocol):
     @property
     def spher(self) -> np.ndarray: ...
 

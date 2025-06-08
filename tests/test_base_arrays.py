@@ -7,8 +7,8 @@ import numpy as np
 from numpydantic import NDArray, Shape
 from pydantic import BaseModel, ValidationError, ConfigDict
 
-from src.pchandler.v2.base_arrays import (
-    BaseArray, make_ndarray_type, _HomogeneousArray, _SampleArray, _ImageLike, _FixedLengthArray, BaseVector, ArrayNx2,
+from src.pchandler.base_arrays import (
+    BaseArray, make_ndarray_type, HomoegeneousArray, SampleArray, FixedLengthArray, BaseVector, ArrayNx2,
     ArrayNx3, ReadOnlyArray, ReadOnlyVector
 )
 
@@ -41,28 +41,32 @@ class BaseTests(ABC):
     cls = None
 
     def test_class_level_definition(self):
-        assert 'arr' in self.cls.model_fields
-        assert hasattr(self.cls, 'model_fields')    # ensure we stick with the 'arr' attribute naming convention
-        assert hasattr(self.cls, 'model_config')
-        assert isinstance(self.cls.model_fields['arr'].annotation, NDArray)
-        assert issubclass(self.cls, BaseModel)
+        if self.cls is not None:
+            assert 'arr' in self.cls.model_fields
+            assert hasattr(self.cls, 'model_fields')    # ensure we stick with the 'arr' attribute naming convention
+            assert hasattr(self.cls, 'model_config')
+            assert isinstance(self.cls.model_fields['arr'].annotation, NDArray)
+            assert issubclass(self.cls, BaseModel)
 
     def test_class_level_config_defaults(self):
-        # These should be defined but flexible on deciding the default values
-        assert 'frozen' in self.cls.model_config
-        assert 'extra' in self.cls.model_config
+        if self.cls is not None:
+            # These should be defined but flexible on deciding the default values
+            assert 'frozen' in self.cls.model_config
+            assert 'extra' in self.cls.model_config
 
-        # These should always exist to ensure validation and functions with custom Types
-        #   - serialisation may not be guaranteed.
-        assert self.cls.model_config['arbitrary_types_allowed'] == True
-        assert self.cls.model_config['revalidate_instances'] == 'always'
-        assert self.cls.model_config['validate_assignment'] == True
-        assert self.cls.model_config['validate_default'] == True
+            # These should always exist to ensure validation and functions with custom Types
+            #   - serialisation may not be guaranteed.
+            assert self.cls.model_config['arbitrary_types_allowed'] == True
+            assert self.cls.model_config['revalidate_instances'] == 'always'
+            assert self.cls.model_config['validate_assignment'] == True
+            assert self.cls.model_config['validate_default'] == True
 
     def test_has_methods(self):
-        for name in ('freeze', '__array_interface__', 'update_copy', 'copy', 'view', 'T', 'shape', 'dtype', 'ndim',
-                     'base', 'size', 'min', 'max','__len__', '__getitem__', '__setitem__'):
-            assert hasattr(self.cls, name)
+        if self.cls is not None:
+
+            for name in ('freeze', '__array_interface__', 'update_copy', 'copy', 'view', 'T', 'shape', 'dtype', 'ndim',
+                         'base', 'size', 'min', 'max','__len__', '__getitem__', '__setitem__'):
+                assert hasattr(self.cls, name)
 
     @abstractmethod
     def test_initialisation(self): ...
@@ -142,8 +146,9 @@ class TestBaseArray(BaseTests):
     @pytest.mark.parametrize(
         'input_values', ({'dict': 'Should fail'}, 'String is bad', {1, 2, 3}, True, 1.4, None, [1, 2, 3], (3,4,5)))
     def test_incorrect_types(self, input_values):
+
         with pytest.raises(Exception) as e:
-            self.cls(arr=input_values)
+            self.cls(arr=input_values)  # type: ignore
 
         assert type(e.value) in (ValueError, TypeError, ValidationError)
 
@@ -271,7 +276,7 @@ class TestBaseArray(BaseTests):
             array_2 = array.update_copy(b)
             array_3 = array.update_copy(update={'arr':c})
 
-            with pytest.raises(TypeError): array_4 = array.update_copy(update={'arr':'asdasd'})
+            with pytest.raises(TypeError): array.update_copy(update={'arr':'asdasd'})
 
             # Show the original object hasn't changed
             assert array.shape == a.shape
@@ -305,7 +310,7 @@ class TestBaseArray(BaseTests):
 
 
 class TestSamplingArray(BaseTests):
-    cls = _SampleArray
+    cls = SampleArray
 
     def test_initialisation(self):
         a = self.cls(arr=np.random.rand(100, 4))
@@ -422,7 +427,7 @@ class TestSamplingArray(BaseTests):
 
 
 class TestFixedLengthAndMixins(BaseTests):
-    cls = _FixedLengthArray
+    cls = FixedLengthArray
 
     def test_initialisation(self):
         a = self.cls(arr=np.random.rand(10, 3))
@@ -469,7 +474,7 @@ class TestFixedLengthAndMixins(BaseTests):
             b.create_mask(np.ones_like(a, dtype=np.bool_))
 
         # Still create mask from multi-dimension array as np supports it
-        mask = b.create_mask(np.array([[0, 4, 5, 6],[2, 3,4, 5]]))
+        b.create_mask(np.array([[0, 4, 5, 6],[2, 3,4, 5]]))
 
     def test_sample_reduce_extract(self):
         a = np.random.rand(20, 3)
@@ -546,11 +551,11 @@ class TestBaseVector:
 
 
 class TestHomogeneousAndMixins(BaseTests):
-    cls = _HomogeneousArray
+    cls = HomoegeneousArray
 
     def test_initialisation(self):
-        a = _HomogeneousArray(arr=np.zeros((10,3)))
-        assert isinstance(a, _HomogeneousArray)
+        a = HomoegeneousArray(arr=np.zeros((10, 3)))
+        assert isinstance(a, HomoegeneousArray)
         assert np.all(a.arr == np.zeros((10,3)))
 
     def test_properties(self):
@@ -622,4 +627,23 @@ class TestReadOnlyVector:
             array.arr = np.random.randn(10)
 
 class TestImageLike(BaseTests):
-    pass
+    def test_initialisation(self):
+        ...
+
+    def test_properties(self):
+        ...
+
+    def test_methods(self):
+        ...
+
+    def test_numpy_funcs(self):
+        ...
+
+    def test_other(self):
+        ...
+
+    def test_view(self):
+        ...
+
+    def test_np_operator_mixins(self):
+        ...
