@@ -2,22 +2,21 @@ from __future__ import annotations
 
 import uuid
 from functools import wraps
-from typing import Optional, TypedDict, Unpack, Self, Union, Any
+from typing import Optional, TypedDict, Unpack, Self, Union, Any, Callable
 
 from pydantic import Field, model_validator, ValidationError, field_validator
 import numpy as np
 
 from .transforms import Transform, TransformLedger, TransformRecord
 from .coordinates import CartesianCoordinates
+from ..constants import RGB_FIELD, NORMALS_FIELD
 from .optimal_shift import OSM_Manager
 from .scalar_field_manager import ScalarFieldManager
-from .scalar_fields import (
-    ScalarField, RGBFields, NormalFields,
-    RGB_FIELD, NORMALS_FIELD)
+from .scalar_fields import ScalarField, RGBFields, NormalFields
 
 
-def update_transformation_ledger(name: str):
-    def decorator(func):
+def update_transformation_ledger(name: str) -> Callable:
+    def decorator(func: Callable) -> Callable:
         @wraps(func)
         def wrapper(instance: PointCloudData, *args, **kwargs):
             result = func(instance, *args, **kwargs)
@@ -34,9 +33,11 @@ class PointCloudConfig(TypedDict):
     project_transform: Union[np.ndarray, Transform, None]
     rgb: Union[np.ndarray, RGBFields]
     normals: Union[np.ndarray, NormalFields]
+    intensity: Union[np.ndarray, ScalarField]
+    reflectance: Union[np.ndarray, ScalarField]
 
 
-@OSM_Manager.register_point_cloud
+# @OSM_Manager.register_point_cloud
 class PointCloudData(CartesianCoordinates):
     transform_ledger: TransformLedger[str, [Transform]] = Field(default_factory=TransformLedger)
     optimal: bool = Field(default=False, exclude=True)
@@ -63,7 +64,6 @@ class PointCloudData(CartesianCoordinates):
                     size = normals.shape[0],
                     value = normals
                 ))
-
 
         kwargs['sfm'] = ScalarFieldManager(None, fields=sfm)
         return kwargs

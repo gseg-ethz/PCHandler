@@ -35,10 +35,17 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
     """
     def __init__(self,
                  parent: PointCloudData|None,
-                 fields: dict[str, SF_T]|None = None) -> None:
+                 fields: dict[str, SF_T]|Self|None = None) -> None:
         self._parent: weakref.ReferenceType[PointCloudData]|None = weakref.ref(parent) if parent is not None else None
-        self._fields: dict[str, SF_T] = fields or {}
 
+        if isinstance(fields, dict):
+            self._fields: dict[str, SF_T] = fields
+        elif fields is None:
+            self._fields = {}
+        elif isinstance(self._fields, type(fields)):
+            self._fields = fields._fields
+        else:
+            raise TypeError(f"Unknown fields type: {type(fields)}")
 
     def __iter__(self) -> Iterator[str]:
         return iter(self._fields)
@@ -117,6 +124,14 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
     @property
     def rgb(self) -> RGBFields|None:
         return self._fields.get(RGB_FIELD, None)
+
+    @property
+    def intensity(self):
+        return self._fields.get('intensity', None)
+
+    @property
+    def reflectance(self):
+        return self._fields.get('reflectance', None)
 
     @property
     def normals(self) -> NormalFields|None:
@@ -255,7 +270,7 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
             else:
                 operations_performed = sfs[0].operations_performed
             # TODO Most important is the coerced value is constant
-            if len(set(sf.original_dtype for sf in sfs)) != 1:
+            if len(set(sf.origin_dtype for sf in sfs)) != 1:
                 logger.warning(
                     f"While merging scalar field {common_key} different original dtypes were encountered. "
                     f"Merged scalar field will have an empty record!"
@@ -263,12 +278,11 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
                 partial_keys.append(common_key)
                 continue
             else:
-                original_dtype = sfs[0].original_dtype
+                original_dtype = sfs[0].origin_dtype
 
-            # TODO join all the data into a single scalarfield and add it to the sfm
-            data = np.concatenate([sf.data for sf in sfs])
-            sf = ScalarField(name=name, arr=data, original_dtype=original_dtype, operations_performed=operations_performed
-            )
+            data = np.concatenate([sf.arr for sf in sfs])
+            sf = ScalarField(name=name, arr=data, origin_dtype=original_dtype, operations_performed=operations_performed
+                             )
             new_sfm.add_field(sf)
 
 

@@ -9,8 +9,8 @@ from pydantic import StringConstraints, model_validator, Field
 
 from ..base_arrays import BaseVector
 from ..base_types import (Uint8VectorT, Float32VectorT, Array_Nx3_uint8_T, Array_Nx3_float32_T, VectorT,
-                          Uint16VectorT, Int16VectorT, Int32VectorT)
-from ..validators import linear_map_dtype, extract_array
+                          Uint16VectorT, Int16VectorT, Int32VectorT, Int8VectorT)
+from ..validators import linear_map_dtype, extract_array, normalize_array
 from ..constants import RGB_FIELD, NORMALS_FIELD
 
 
@@ -26,60 +26,42 @@ class DtypeState(NamedTuple):
     lower: NDArray[np.number]|float|int|None
     upper: NDArray[np.number]|float|int|None
 
+    @classmethod
+    def generate(cls, array: np.ndarray):
+        return DtypeState(
+            dtype=array.dtype,
+            lower=array.min(),
+            upper=array.max()
+        )
+
 class ScalarField(BaseVector):
     name: LowerStr
-    operations_performed: list[DtypeState] = Field(default_factory=list)
-    original_dtype: DtypeState|None = None
+    origin_dtype: DtypeState | None = None
 
     @model_validator(mode='before')
     @classmethod
     def initialise_dtype(cls, kwargs: Any) -> dict[str, Any]:
-
-        original_dtype = cls._get_original_dtype(kwargs)
-
-        operations = kwargs.get('operations_performed', [])
-        if len(operations) == 0:
-            operations.append(original_dtype)
-
-        kwargs['operations_performed'] = operations
-
-        return kwargs
-
-    @staticmethod
-    def _get_original_dtype(kwargs: dict) -> DtypeState:
         arr = kwargs.get('arr')
         arr = extract_array(arr)
 
         original = kwargs.get('original_dtype', None)
 
         if original is None:
-            original = DtypeState(
-                dtype=arr.dtype,
-                lower=arr.min(),
-                upper=arr.max()
-            )
+            original = DtypeState.generate(arr)
 
-        return original
+        kwargs['original_dtype'] = original
+        return kwargs
 
+    def get_original_data(self):
+        current_dtype_state = DtypeState.generate(self.arr)
+        if current_dtype_state == self.origin_dtype:
+            logger.info('No changes to the data as no prior conversions made')
+            return self.arr
 
-    # # FIXME Reimplement once other decisions made
-    # def rollback_data_type(self):
-    #     data = self.arr.copy()
-    #     for operation, op_parameters in self.operations_performed[::-1]:
-    #         match operation:
-    #
-    #             case "normalize":
-    #                 np.multiply(self.arr, upper - lower, out=data)
-    #                 np.add(data, lower, out=data)
-    #             case "dtype_conversion":
-    #                 data = data.astype(dt)
-    #             case _:
-    #                 return ValueError(f"Operation {operation} not supported.")
-    #     assert data.dtype == self.original_range.dtype
-    #
-    #     logger.debug(f"Converted scalar field `{self.name}` to original bounds and dtype.")
-    #     return data
-
+        data = self.arr.copy().astype(np.float64)
+        data = normalize_array(data, 0.0, 1.0)
+        data = normalize_array(data, self.origin_dtype.lower, self.origin_dtype.upper).astype(self.origin_dtype.dtype)
+        return data
 
 
 class ScalarFieldUInt8(ScalarField):
@@ -89,7 +71,7 @@ class ScalarFieldUInt16(ScalarField):
     arr: Uint16VectorT
 
 class ScalarFieldInt8(ScalarField):
-    arr: Uint8VectorT
+    arr: Int8VectorT
 
 class ScalarFieldInt16(ScalarField):
     arr: Int16VectorT
@@ -105,7 +87,7 @@ class ScalarFieldBool(ScalarField):
 
 
 class RGBFields(ScalarField):
-    arr: Array_Nx3_uint8_T|Array_Nx3_float32_T
+    arr: Array_Nx3_uint8_T
     name: LowerStr = RGB_FIELD
     @property
     def rgb(self) -> Array_Nx3_uint8_T: return self.arr
@@ -122,11 +104,9 @@ class RGBFields(ScalarField):
             value = np.zeros((size, 3), dtype=np.uint8)
         return RGBFields(arr=value)
 
-    def to_float(self, lower: float = 0.0, upper: float = 1.0):
-        raise NotImplementedError("Use the dtype normalising funcs here")
+    def values_as_float(self, lower: float = 0.0, upper: float = 1.0):
+        return normalize_array(self.arr.astype(np.float32, copy=True), lower, upper)
 
-    def to_uint8(self, lower: int = 0, upper: int = 255):
-        raise NotImplementedError("Use the normalising functions")
 
 
 class NormalFields(ScalarField):
@@ -166,20 +146,3 @@ class SegmentationMap(ScalarField):
 
         return SegmentationMap(arr=arr, name=name)
 
-
-def unpack_npydantic_dtype(cls: type[ScalarField]) -> tuple[DTypeLike, ...]:
-    a = cls.model_fields['arr'].annotation.__dict__['__args__'][1]
-    all_types = []
-
-    try:
-        for dt in a:
-            if isinstance(dt, tuple):
-                for dt_ in dt:
-                    all_types.append(dt_)
-            else:
-                all_types.append(dt)
-
-    # TODO write tests for this and get the appropriate Exception to catch
-    except Exception as e:
-        all_types.append(a)
-    return tuple(all_types)

@@ -354,3 +354,21 @@ class _ImageLike(SampleArray, _NumericMixins, ABC):
 
     def view(self, cls: Optional[type] = None) -> Self:
         return self.updated_copy(self.arr.view(cls=cls), deep=False)
+
+
+def unpack_npydantic_dtype(cls: type[BaseArray]) -> tuple[npt.DTypeLike, ...]:
+    a = cls.model_fields['arr'].annotation.__dict__['__args__'][1]
+    all_types = []
+
+    try:
+        for dt in a:
+            if isinstance(dt, tuple):
+                for dt_ in dt:
+                    all_types.append(dt_)
+            else:
+                all_types.append(dt)
+
+    # TODO write tests for this and get the appropriate Exception to catch
+    except Exception as e:
+        all_types.append(a)
+    return tuple(all_types)

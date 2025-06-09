@@ -327,8 +327,8 @@ def save_ply(
         assert len(pcd.scalar_fields[sf]) == nb_points
         sf_label = pcd.scalar_fields[sf].name
         sf_label = sf_label if sf_label.startswith("scalar_") else f"scalar_{sf_label}"
-        if convert_scalar_fields_to_original_dtype_and_bounds and pcd.scalar_fields[sf].original_dtype is not None:
-            dtype_list.append((sf_label, pcd.scalar_fields[sf].original_dtype.str))
+        if convert_scalar_fields_to_original_dtype_and_bounds and pcd.scalar_fields[sf].origin_dtype is not None:
+            dtype_list.append((sf_label, pcd.scalar_fields[sf].origin_dtype.str))
         else:
             dtype_list.append((sf_label, pcd.scalar_fields[sf].data.dtype.str))
 

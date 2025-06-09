@@ -156,8 +156,6 @@ def normalize_array(array: np.ndarray,
     original_dtype = array.dtype
     array = array.astype(np.float64)
 
-    clip = lower is not None or upper is not None
-
     lower = array.min(axis=0) if lower is None else lower
     upper = array.max(axis=0) if upper is None else upper
 
@@ -168,8 +166,6 @@ def normalize_array(array: np.ndarray,
         raise ValueError("lower must be less than upper")
 
     np.divide(array-lower, upper-lower, out=array)
-    if clip:
-        np.clip(array, a_min=lower, a_max=upper, out=array)
 
     return array.astype(original_dtype)
 
