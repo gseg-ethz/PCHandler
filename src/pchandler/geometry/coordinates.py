@@ -82,7 +82,7 @@ class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates):
 
 
 class CartesianCoordinates(Abstract3dCoordinates):
-    arr: Array_Nx3_T = Field(alias='xyz')
+    arr: Array_Nx3_T
     @property
     def x(self) -> np.ndarray: return self.arr[:, 0]
     @property
@@ -96,8 +96,9 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
     @cached_property
     def spher(self) -> np.ndarray:
-        if not self.is_at_socs:
+        if self.socs_origin is None:
             warnings.warn('Scan center of point cloud is ambiguous and results can not be guaranteed')
+            return xyz2rhv(self.arr, np.zeros(3, dtype=np.float32))
         return xyz2rhv(self.arr, self.socs_origin)
 
     @property
@@ -139,7 +140,7 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
 
 class SphericalCoordinates(Abstract3dCoordinates):
-    arr: Annotated[Array_Nx3_T, Field(alias='spher'), BeforeValidator(validate_spherical_angles)]
+    arr: Annotated[Array_Nx3_T, Field(validation_alias='spher'), BeforeValidator(validate_spherical_angles)]
 
     @property
     def fov(self): raise NotImplementedError
@@ -156,8 +157,9 @@ class SphericalCoordinates(Abstract3dCoordinates):
 
     @cached_property
     def xyz(self) -> np.ndarray:
-        if not self.is_at_socs:
+        if self.socs_origin is None:
             warnings.warn('Spherical origin was not defined, so coordinates assumed to be at scan origin')
+            return rhv2xyz(self.arr, np.zeros(3, dtype=np.float32))
         return rhv2xyz(self.arr, self.socs_origin)
 
     @property

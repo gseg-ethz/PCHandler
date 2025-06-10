@@ -276,7 +276,8 @@ class TestBaseArray(BaseTests):
             array_2 = array.update_copy(b)
             array_3 = array.update_copy(update={'arr':c})
 
-            with pytest.raises(TypeError): array.update_copy(update={'arr':'asdasd'})
+            with pytest.raises(TypeError):
+                array.update_copy(update={'arr':'asdasd'})
 
             # Show the original object hasn't changed
             assert array.shape == a.shape

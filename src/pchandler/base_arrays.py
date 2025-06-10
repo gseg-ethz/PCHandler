@@ -65,7 +65,7 @@ class BaseArray(ABC, BaseModel):
         """
         return self.arr.__array_interface__
 
-    @cached_property
+    @property
     def T(self) -> npt.NDArray:
         return self.arr.T
 
@@ -111,7 +111,12 @@ class BaseArray(ABC, BaseModel):
         return self
 
     def model_dump(self, *args, **kwargs) -> dict:
-        kwargs = kwargs | {'exclude': {'spher'}}
+        """
+        Dumps the model as a serialised dict object
+        """
+        exclude: set = kwargs.get('exclude', set())
+        exclude.add('spher')
+        kwargs['exclude'] = exclude
         return super().model_dump(*args, **kwargs)
 
     # TODO need to change this process to dump and then build new. This ensures cached properties are not copied
@@ -140,18 +145,14 @@ class BaseArray(ABC, BaseModel):
             raise NotImplementedError(f'Shallow copy is not implemented on this class: {type(self)}')
 
         update = kwargs.get('update', {})
+        update |= self.model_dump(exclude=set(update.keys()))
 
-        result = self.model_copy(deep=deep, update=update)
-
-        # Delete excluded fields on the copy
-        for name, field_info in result.model_fields.items():
-            if field_info.exclude:
-                delattr(result, name)
+        result = type(self)(**update)
 
         return result.model_validate(result, strict=True)
 
     def view(self, cls: Optional[type] = None) -> Self:
-        # This is a placeholder for the ability to subclass an array to act like a view
+        # This is a placeholder for the ability of a subclass to act like a view
         raise NotImplementedError
 
     def __len__(self) -> int:
@@ -161,10 +162,8 @@ class BaseArray(ABC, BaseModel):
         if isinstance(key, slice):
             key = [key]
 
-        if isinstance(key, int):
-            result = self.arr[key]
-        else:
-            result = self.arr[*key]
+        result = self.arr[key]
+
         if isinstance(result, np.ndarray):
             return self.update_copy(result)
         return result
@@ -196,6 +195,9 @@ class SampleArray(BaseArray):
             if as_vector:
                 if selection.ndim > 1:
                     raise ValueError(f'Selection mask must be a vector like')
+                if selection.shape[0] != len(self):
+                    raise ValueError(f"Boolean mask does not have the same number of points "
+                                     f"{selection.size} != {len(self)}")
                 return selection
 
             if selection.shape == self.shape:

@@ -13,8 +13,8 @@ if TYPE_CHECKING:
     from .core import PointCloudData
 
 from ..constants import RGB_POTENTIAL_NAMES, NORMAL_POTENTIAL_NAMES, DEFAULT_CONFIG
-from ..base_types import (IndexLike,  VectorT, Uint8VectorT, Array_Nx3_T, Uint8VectorT, Float32VectorT, Uint16VectorT,
-                          Array_Nx3_float32_T, Float32VectorT, Array_Nx3_uint8_T)
+from ..base_types import (IndexLike, VectorT, Array_Nx3_T, VectorT_Uint8,
+                          Array_Nx3_float32_T, VectorT_Float32, Array_Nx3_uint8_T)
 from .scalar_fields import (
     ScalarField, RGBFields, NormalFields, RGB_FIELD, NORMALS_FIELD, LowerStr, SF_T)
 
@@ -34,36 +34,48 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
     number of data points. Also provides a mechanism to select subsets of the fields.
     """
     def __init__(self,
-                 parent: PointCloudData|None,
-                 fields: dict[str, SF_T]|Self|None = None) -> None:
+                 parent: PointCloudData|None = None,
+                 fields: dict[str, SF_T] | Self | None = None
+                ) -> None:
         self._parent: weakref.ReferenceType[PointCloudData]|None = weakref.ref(parent) if parent is not None else None
 
         if isinstance(fields, dict):
-            self._fields: dict[str, SF_T] = fields
+            for key, value in fields.items():
+                if isinstance(value, np.ndarray):
+                    value = ScalarField(value, name=key)
+
+                elif isinstance(value, ScalarField):
+                    value.name = key
+                else:
+                    raise TypeError(f'Type of input field is not of numpy array or ScalarField but {type(value)}')
+
+                fields[key] = value
+
+            self.fields: dict[str, SF_T] = fields
         elif fields is None:
-            self._fields = {}
-        elif isinstance(self._fields, type(fields)):
-            self._fields = fields._fields
+            self.fields = {}
+        elif isinstance(fields, type(self)):
+            self.fields = fields.fields
         else:
             raise TypeError(f"Unknown fields type: {type(fields)}")
 
     def __iter__(self) -> Iterator[str]:
-        return iter(self._fields)
+        return iter(self.fields)
 
     def __contains__(self, key: str) -> bool:
-        return key.lower() in self._fields
+        return key.lower() in self.fields
 
     def __len__(self) -> int:
-        return len(self._fields)
+        return len(self.fields)
 
     def keys(self) -> list[str]:
-        return list(self._fields.keys())
+        return list(self.fields.keys())
 
     def values(self) -> ValuesView[SF_T]:
-        return self._fields.values()
+        return self.fields.values()
 
     def items(self) -> ItemsView[str, SF_T]:
-        return self._fields.items()
+        return self.fields.items()
 
     @overload
     def __getitem__(self, key: str) -> ScalarField: ...
@@ -75,7 +87,7 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
     def __getitem__(self, key: LowerStr|IndexLike) -> (SF_T | dict[str, SF_T]):
 
         if isinstance(key, str):
-            return self._fields[key]
+            return self.fields[key]
 
         return self.sample(key)
 
@@ -92,25 +104,21 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
                 f"Scalar field length does not equal #points: {self.num_points} != {value.shape[0]}" )
 
         if isinstance(value, np.ndarray):
-            self._fields[name] = ScalarField(name=name, arr=value)
+            self.fields[name] = ScalarField(data=value, name=name)
 
         return None
 
-
     def __delitem__(self, key: str) -> None:
-        del self._fields[key]
-
-    def as_dict(self) -> dict[str, ScalarField]:
-        return self._fields
+        del self.fields[key]
 
     def add_field(self, sf_field: ScalarField) -> None:
-        self[sf_field.name.lower()] = sf_field
+        self.fields[sf_field.name.lower()] = sf_field
 
     def remove_field(self, field_name: LowerStr) -> None:
-        del self[field_name.lower()]
+        del self.fields[field_name.lower()]
 
     def create_field(self, name: str, data: VectorT|Array_Nx3_T) -> None:
-        sf = ScalarField(name=name, arr=data)
+        sf = ScalarField(data=data, name=name)
         self.add_field(sf)
 
     @property
@@ -123,33 +131,33 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
 
     @property
     def rgb(self) -> RGBFields|None:
-        return self._fields.get(RGB_FIELD, None)
+        return self.fields.get(RGB_FIELD, None)
 
     @property
     def intensity(self):
-        return self._fields.get('intensity', None)
+        return self.fields.get('intensity', None)
 
     @property
     def reflectance(self):
-        return self._fields.get('reflectance', None)
+        return self.fields.get('reflectance', None)
 
     @property
     def normals(self) -> NormalFields|None:
-        return self._fields.get(NORMALS_FIELD, None)
+        return self.fields.get(NORMALS_FIELD, None)
 
     @validate_call(config=DEFAULT_CONFIG)
-    def _handle_rgb(self, name: LowerStr, value: Uint8VectorT | Array_Nx3_uint8_T) -> None:
+    def _handle_rgb(self, name: LowerStr, value: VectorT_Uint8 | Array_Nx3_uint8_T) -> None:
         # Set the whole field
         if name in ('rgb', 'rgba', 'color', 'colour', 'colors', 'colours'):
-            self._fields[RGB_FIELD] = RGBFields(arr=value[:, [0, 1, 2]])
+            self.fields[RGB_FIELD] = RGBFields(arr=value[:, [0, 1, 2]])
             return
 
         elif name in ('bgr', 'bgra'):
-            self._fields[RGB_FIELD] = RGBFields(arr=value[[2, 1, 0], :])
+            self.fields[RGB_FIELD] = RGBFields(arr=value[[2, 1, 0], :])
             return
 
         if self.rgb is None:
-            self._fields[RGB_FIELD] = RGBFields.initialize(self.num_points)
+            self.fields[RGB_FIELD] = RGBFields.initialize(self.num_points)
 
         if name in ('r', 'red'):
             self.rgb.arr[:, 0] = value
@@ -164,18 +172,18 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
             raise KeyError(f'Unknown key made it into _handle_rgb : {name}')
 
     @validate_call(config=DEFAULT_CONFIG)
-    def _handle_normal(self, name: LowerStr, value: Float32VectorT | Array_Nx3_float32_T) -> None:
+    def _handle_normal(self, name: LowerStr, value: VectorT_Float32 | Array_Nx3_float32_T) -> None:
         # Set the whole field
         if name == ('nxnynz', 'normals', 'normal'):
-            self._fields[NORMALS_FIELD] = NormalFields(arr=value[:, [0, 1, 2]])
+            self.fields[NORMALS_FIELD] = NormalFields(arr=value[:, [0, 1, 2]])
             return
 
         elif name == 'nznynx':
-            self._fields[NORMALS_FIELD] = NormalFields(arr=value[[2, 1, 0], :])
+            self.fields[NORMALS_FIELD] = NormalFields(arr=value[[2, 1, 0], :])
             return
 
         if self.normals is None:
-            self._fields[NORMALS_FIELD] = NormalFields.initialize(self.num_points)
+            self.fields[NORMALS_FIELD] = NormalFields.initialize(self.num_points)
 
         if name in ('nx', 'normal_x'):
             self.normals.arr[:, 0] = value
@@ -211,7 +219,7 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
     def reduce(self, mask: IndexLike) -> None:
 
         for name, value in self.items():
-            self._fields[name] = value[mask]
+            self.fields[name] = value[mask]
 
     # def __and__(self, other: ScalarFieldManager) -> ScalarFieldManager:
     #     if not isinstance(other, ScalarFieldManager):
@@ -281,8 +289,9 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
                 original_dtype = sfs[0].origin_dtype
 
             data = np.concatenate([sf.arr for sf in sfs])
-            sf = ScalarField(name=name, arr=data, origin_dtype=original_dtype, operations_performed=operations_performed
-                             )
+            sf = ScalarField(data=data, name=name,
+                             origin_dtype=original_dtype,
+                             operations_performed=operations_performed)
             new_sfm.add_field(sf)
 
 

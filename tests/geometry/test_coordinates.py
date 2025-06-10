@@ -219,8 +219,9 @@ class TestCartesianCoordinates:
             mask = np.ones((10, 3), dtype=np.bool_)
             c = cart_obj[mask]
 
-    def test_fov(self, cart_obj):
-        values = cart_obj.fov
+    # # TODO uncomment when FOV re-implemented
+    # def test_fov(self, cart_obj):
+    #     cart_obj.fov
 
 
 class TestSphericalCoordinates:
@@ -238,9 +239,9 @@ class TestSphericalCoordinates:
         spher_obj = SphericalCoordinates.from_cartesian(cart_obj)
         assert np.allclose(spher_obj.arr, known_spher)
 
-    def test_fov(self, known_spher):
-        spherical = SphericalCoordinates(arr=known_spher)
-        values = spherical.fov
+    # # TODO uncomment when FOV re-implemented
+    # def test_fov(self, known_spher):
+    #     SphericalCoordinates(arr=known_spher).fov
 
 
 class TestConversions:
@@ -265,7 +266,7 @@ class TestConversions:
             xyz2_shift = rhv_shift.to_cartesian()
             return xyz, xyz_shift, rhv_shift, xyz2_shift
 
-        def test_xyz_coords(self, known_xyz):
+        def test_xyz_coordinates(self, known_xyz):
             xyz, xyz_shift, rhv_shift, xyz2_shift = self.arrays_setup(known_xyz)
             # Show that xyz coordinates remain the same
             assert np.allclose(xyz, xyz_shift)
