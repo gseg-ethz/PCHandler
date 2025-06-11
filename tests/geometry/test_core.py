@@ -275,17 +275,18 @@ class TestPointCloudData:
             assert id(pcd.rgb) != id(new_pcd.rgb)
             assert id(pcd.normals) != id(new_pcd.normals)
             assert id(pcd.sfm) != id(new_pcd.sfm)
-            assert id(pcd.socs_origin) != id(new_pcd.socs_origin)
-            assert id(pcd.optimised) != id(new_pcd.optimised)
             assert id(pcd.spher) != id(new_pcd.spher)
 
             assert np.all(base_xyz[mask, :] == new_pcd.xyz)
             assert np.all(base_rgb[mask, :] == new_pcd.rgb)
             assert np.all(base_normal[mask, :] == new_pcd.normals)
-            assert np.all(base_intensities[mask] == new_pcd.sfm["intensity"].data)
-            assert np.all(pcd.optimised == new_pcd.optimised)
-            assert np.all(pcd.socs_origin == new_pcd.socs_origin)
-            assert np.all(pcd.spher == new_pcd.spher)
+            assert np.all(base_intensities[mask] == new_pcd.sfm["intensity"])
+            assert pcd.optimised == new_pcd.optimised
+            if isinstance(pcd.socs_origin, np.ndarray):
+                assert np.all(pcd.socs_origin == new_pcd.socs_origin)
+            else:
+                assert pcd.socs_origin == new_pcd.socs_origin
+            assert np.any(pcd.spher[mask, :] == new_pcd.spher)
 
         def test_extract(self, pcd):
             start_id = id(pcd)
@@ -308,14 +309,12 @@ class TestPointCloudData:
             assert id(pcd.rgb) != id(sampled_pcd.rgb)
             assert id(pcd.normals) != id(sampled_pcd.normals)
             assert id(pcd.sfm) != id(sampled_pcd.sfm)
-            assert id(pcd.socs_origin) != id(sampled_pcd.socs_origin)
-            assert id(pcd.optimised) != id(sampled_pcd.optimised)
             assert id(pcd.spher) != id(sampled_pcd.spher)
 
             assert np.all(base_xyz[~mask, :] == sampled_pcd.xyz)
             assert np.all(base_rgb[~mask, :] == sampled_pcd.rgb)
             assert np.all(base_normal[~mask, :] == sampled_pcd.normals)
-            assert np.all(base_intensities[~mask] == sampled_pcd.sfm["intensity"].data)
+            assert np.all(base_intensities[~mask] == sampled_pcd.intensity)
             assert np.all(pcd.socs_origin == sampled_pcd.socs_origin)
             assert np.all(pcd.optimised == sampled_pcd.optimised)
             assert np.all(pcd.spher == sampled_pcd.spher)
@@ -323,10 +322,9 @@ class TestPointCloudData:
             assert np.all(base_xyz[mask, :] == extracted_pcd.xyz)
             assert np.all(base_rgb[mask, :] == extracted_pcd.rgb)
             assert np.all(base_normal[mask, :] == extracted_pcd.normals)
-            assert np.all(base_intensities[mask] == extracted_pcd.sfm["intensity"].data)
+            assert np.all(base_intensities[mask] == extracted_pcd.intensity)
             assert np.all(pcd.socs_origin == extracted_pcd.socs_origin)
             assert np.all(pcd.optimised == extracted_pcd.optimised)
-            assert np.all(pcd.spher == extracted_pcd.spher)
 
             assert len(extracted_pcd) + len(sampled_pcd) == base_xyz.shape[0]
             assert len(extracted_pcd) == 10

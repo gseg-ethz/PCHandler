@@ -32,20 +32,20 @@ def update_transformation_ledger(name: str) -> Callable:
 @OSM_Manager.register_point_cloud
 class PointCloudData(CartesianCoordinates):
     transform_ledger: TransformLedger[str, [Transform]] = Field(default_factory=TransformLedger)
-    optimised: bool = Field(default=False, exclude=True)
-    socs_origin: np.ndarray | None
     sfm: ScalarFieldManager|dict[str, ScalarField]|None = Field(default=None, alias='scalar_fields')
 
-    def __init__(self, *args,
-                 xyz: np.ndarray | CartesianCoordinates = None,
-                 rgb: npt.NDArray[Any, np.uint8]|RGBFields = None,
-                 normals: npt.NDArray[Any, np.float32]|NormalFields = None,
-                 intensity: npt.NDArray|ScalarField = None,
-                 reflectance: npt.NDArray|ScalarField = None,
-                 optimised: bool = False,
-                 socs_origin: np.ndarray|None = None,
-                 scalar_fields: dict|None = None,
-                 **kwargs):
+    def __init__(
+            self,
+            *args,
+            xyz: np.ndarray | CartesianCoordinates = None,
+            rgb: npt.NDArray[Any, np.uint8]|RGBFields = None,
+            normals: npt.NDArray[Any, np.float32]|NormalFields = None,
+            intensity: npt.NDArray|ScalarField = None,
+            reflectance: npt.NDArray|ScalarField = None,
+            optimised: bool = False,
+            socs_origin: np.ndarray|None = None,
+            scalar_fields: dict|None = None,
+            **kwargs):
 
         if scalar_fields is None:
             scalar_fields = {}
@@ -87,7 +87,6 @@ class PointCloudData(CartesianCoordinates):
 
         super(CartesianCoordinates, self).__init__(**kwargs)
 
-
     @model_validator(mode='before')
     @classmethod
     def validate_initial_coordinates(cls, kwargs ) -> dict[str, Any]:
@@ -105,8 +104,9 @@ class PointCloudData(CartesianCoordinates):
             raise TypeError(f'Unsupported object type passed as xyz for PointCloudData: {type(xyz)}')
 
         # Ensure is_at_socs if project_transform is set (assumed transform from project to socs)
-        if kwargs.get('project_transform', None) is not None:
-            kwargs['is_at_socs'] = True
+        # TODO reimpliment when base is done
+        # if kwargs.get('project_transform', None) is not None:
+        #     kwargs['is_at_socs'] = True
         return kwargs
 
 
@@ -118,7 +118,7 @@ class PointCloudData(CartesianCoordinates):
         return value
 
     @model_validator(mode='after')
-    def validate_model(self) -> None:
+    def validate_model(self) -> Self:
         """Revalidate model to ensure that the weakref points to the correct object"""
         if isinstance(self.sfm, ScalarFieldManager):
             self.sfm.parent = self
@@ -128,6 +128,8 @@ class PointCloudData(CartesianCoordinates):
 
         elif self.sfm is None:
             self.sfm = ScalarFieldManager(parent=self)
+
+        return self
 
     @property
     def normals(self):
@@ -163,6 +165,20 @@ class PointCloudData(CartesianCoordinates):
             else:
                 raise NotImplementedError(f'Equality function not implemented of object type {type(self)}.')
 
+    def copy(self, *, deep: bool = True, **kwargs) -> Self:
+        """
+        Produce a deep or shallow copy of the model. Updates the model also if parameter is parsed.
+        """
+        if not deep:
+            raise NotImplementedError(f'Shallow copy is not implemented on this class: {type(self)}')
+
+        update = kwargs.get('update', {})
+        update |= self.model_dump(exclude=set(update.keys()))
+
+        result = type(self)(**update)
+
+        return result.model_validate(result, strict=True)
+
     def sample(self, mask):
         mask = self.create_mask(mask)
         return self.update_copy(self.arr[mask, :], update={'sfm': self.sfm.sample(mask)})
@@ -173,7 +189,6 @@ class PointCloudData(CartesianCoordinates):
 
     def extract(self, mask):
         extracted = super().extract(mask)
-        extracted.sfm._fields = self.sfm.extract(mask)
         return extracted
 
     def merge(self):

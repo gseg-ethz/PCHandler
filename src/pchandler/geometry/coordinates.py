@@ -43,9 +43,8 @@ class Abstract2dCoordinates(ArrayNx2, AbstractCoordinates):
 
 class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates):
     project_transformation: Optional[Array_4x4_T] = None
-    socs_origin: np.ndarray = Field(default_factory=lambda: np.zeros(3, dtype=np.float32))
-    is_at_socs: bool = False
-    is_optimised: bool = False
+    socs_origin: np.ndarray | None = None
+    optimised: bool = Field(default=False, exclude=True)
 
     @property
     @abstractmethod

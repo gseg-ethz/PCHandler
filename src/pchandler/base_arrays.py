@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from abc import ABC
 from functools import cached_property
 from typing import Any, Optional, Generator, Mapping, Self
@@ -117,7 +118,7 @@ class BaseArray(ABC, BaseModel):
         exclude: set = kwargs.get('exclude', set())
         exclude.add('spher')
         kwargs['exclude'] = exclude
-        return super().model_dump(*args, **kwargs)
+        return copy.deepcopy(super().model_dump(*args, **kwargs))
 
     # TODO need to change this process to dump and then build new. This ensures cached properties are not copied
     def update_copy(self,

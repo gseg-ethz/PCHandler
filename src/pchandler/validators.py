@@ -121,28 +121,31 @@ def linear_map_dtype(array: np.ndarray, target_dtype: DTypeLike) -> np.ndarray:
 
 def extract_array(value: np.ndarray | tuple[np.ndarray | object] | object | dict[str, np.ndarray]) -> np.ndarray:
     if isinstance(value, np.ndarray):
-        return value
+        pass
 
-    if hasattr(value, 'arr'):
-        return value.arr
+    elif hasattr(value, 'arr'):
+        value: np.ndarray = value.arr
 
-    if isinstance(value, tuple):
+    elif isinstance(value, tuple):
         if len(value) != 1:
             raise TypeError(f'Value to unpack from a tuple > 1 is ambiguous: {value}')
 
         if isinstance(value[0], np.ndarray):
-            return value[0]
+            value: np.ndarray = value[0]
         elif hasattr(value[0], 'arr'):
-            return value[0].arr
+            value: np.ndarray = value[0].arr
         else:
             raise TypeError(f'Input value is an unsupported type: {type(value[0])} ')
+
     elif isinstance(value, dict):
         if 'arr' in value:
-            return value['arr']
+            value: np.ndarray = value['arr']
         else:
             raise TypeError(f"'arr' is not in the passed dictionary.")
     else:
         raise TypeError(f'Input value is an unsupported type: {type(value)} ')
+
+    return value.copy()
 
 def normalize_array(array: np.ndarray,
                     lower: float|np.ndarray|None = None,

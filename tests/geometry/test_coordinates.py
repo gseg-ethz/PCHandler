@@ -84,11 +84,12 @@ class TestCartesianCoordinates:
 
         assert num_items_after == num_items_before
 
-    @pytest.mark.parametrize('attr', ('arr', 'socs_origin', 'is_at_socs'))
+    @pytest.mark.parametrize('attr', ('arr', 'socs_origin'))
     def test_has_attributes(self, cart_obj, attr):
         assert attr in cart_obj.__dict__.keys()
         if attr == 'socs_origin':
-            assert np.allclose(cart_obj.socs_origin, np.zeros(3))
+            if cart_obj.socs_origin is not None:
+                assert np.allclose(cart_obj.socs_origin, np.zeros(3))
 
     @pytest.mark.parametrize('prop', ('xyz' ,'spher', 'x', 'y', 'z', 'yxz', 'rhv', 'r', 'hz', 'v'))
     def test_has_properties(self, cart_obj, prop):
@@ -125,7 +126,6 @@ class TestCartesianCoordinates:
         spherical = cart_obj.to_spherical()
         assert isinstance(spherical, SphericalCoordinates)
         assert np.all(spherical.socs_origin == cart_obj.socs_origin)
-        assert spherical.is_at_socs == cart_obj.is_at_socs
 
         # check that the cart_obj cleans up the cached spherical coordinates
         # reasoning is that if a separate object is created, these are not needed
