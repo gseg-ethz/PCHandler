@@ -78,8 +78,7 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
     @overload
     def __getitem__(self, key: IndexLike) -> Self: ...
 
-    @validate_call(config=DEFAULT_CONFIG)
-    def __getitem__(self, key: LowerStr|IndexLike) -> (SF_T | dict[str, SF_T]):
+    def __getitem__(self, key: LowerStr|IndexLike) -> (SF_T | dict[str, SF_T] | ScalarFieldManager):
 
         if isinstance(key, str):
             return self.fields[key]
@@ -94,9 +93,13 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
         if name in RGB_POTENTIAL_NAMES: return self._handle_rgb(name, value)
         if name in NORMAL_POTENTIAL_NAMES: return self._handle_normal(name, value)
 
-        if self.num_points != value.shape[0]:
-            raise ValueError(
-                f"Scalar field length does not equal #points: {self.num_points} != {value.shape[0]}" )
+        if self._parent is not None:
+            if self.num_points != value.shape[0]:
+                raise ValueError(
+                    f"Scalar field length does not equal #points: {self.num_points} != {value.shape[0]}" )
+        else:
+            logger.warning('No parent object to compare length of scalar fields to corresponding coordinate set')
+
 
         if isinstance(value, np.ndarray):
             self.fields[name] = ScalarField(value, name=name)
@@ -107,7 +110,7 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
         del self.fields[key]
 
     def add_field(self, sf_field: ScalarField) -> None:
-        self.fields[sf_field.name.lower()] = sf_field
+        self[sf_field.name.lower()] = sf_field
 
     def remove_field(self, field_name: LowerStr) -> None:
         del self.fields[field_name.lower()]
@@ -159,12 +162,8 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
     @validate_call(config=DEFAULT_CONFIG)
     def _handle_rgb(self, name: LowerStr, value: VectorT_Uint8 | Array_Nx3_uint8_T) -> None:
         # Set the whole field
-        if name in ('rgb', 'rgba', 'color', 'colour', 'colors', 'colours'):
+        if name in ('rgb', 'color', 'colour', 'colors', 'colours'):
             self.fields[RGB_FIELD] = RGBFields(arr=value[:, [0, 1, 2]])
-            return
-
-        elif name in ('bgr', 'bgra'):
-            self.fields[RGB_FIELD] = RGBFields(arr=value[[2, 1, 0], :])
             return
 
         if self.rgb is None:
@@ -185,12 +184,8 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
     @validate_call(config=DEFAULT_CONFIG)
     def _handle_normal(self, name: LowerStr, value: VectorT_Float32 | Array_Nx3_float32_T) -> None:
         # Set the whole field
-        if name == ('nxnynz', 'normals', 'normal'):
+        if name in ('nxnynz', 'normals', 'normal'):
             self.fields[NORMALS_FIELD] = NormalFields(arr=value[:, [0, 1, 2]])
-            return
-
-        elif name == 'nznynx':
-            self.fields[NORMALS_FIELD] = NormalFields(arr=value[[2, 1, 0], :])
             return
 
         if self.normals is None:
@@ -208,8 +203,8 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
         else:
             raise KeyError(f'Unknown key made it into normals : {name}')
 
-    def sample(self, mask: IndexLike) -> dict[str, ScalarField]:
-        sample = {}
+    def sample(self, mask: IndexLike) -> ScalarFieldManager:
+        sample = type(self)(fields={})
 
         for name, value in self.items():
             mask = value.create_mask(mask)
@@ -217,9 +212,10 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
 
         return sample
 
-    def extract(self, mask: IndexLike) -> dict[str, ScalarField]:
+    def extract(self, mask: IndexLike) -> ScalarFieldManager:
+        mask = self.create_mask(mask)
         sample = self.sample(mask)
-        self.reduce(mask)
+        self.reduce(~mask)
         return sample
 
     def reduce(self, mask: IndexLike) -> None:

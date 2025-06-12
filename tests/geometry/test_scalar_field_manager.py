@@ -1,7 +1,9 @@
+import copy
+from weakref import ReferenceType
+
 import pytest
 import numpy as np
 
-from weakref import ReferenceType
 
 from pchandler.geometry.scalar_fields import ScalarField, RGBFields, NormalFields
 from pchandler.geometry.scalar_field_manager import ScalarFieldManager
@@ -43,6 +45,7 @@ def empty_sfm(pcd) -> ScalarFieldManager:
         parent=pcd,
         fields={}
     )
+
 @pytest.fixture(scope="function", autouse=True)
 def base_sfm(rgb_field, normals_field, scalar_field, intensity_field, reflectance_field, pcd) -> ScalarFieldManager:
     return ScalarFieldManager(
@@ -181,8 +184,6 @@ class TestSfmDunderMethods:
         assert base_sfm.rgb is None
         assert len(base_sfm) == 3
 
-    def test_or_symbol_merge(self):
-        raise NotImplementedError('')
 
 class TestMutableMappingMethods:
     def test_keys(self, base_sfm):
@@ -204,6 +205,7 @@ class TestMutableMappingMethods:
             k, v = item
             assert k == base_sfm.keys()[i]
             assert np.all(v == list(base_sfm.values())[i])
+
 
 class TestNamedFieldPropertyGetters:
     def test_rgb_getter(self, base_sfm):
@@ -257,12 +259,12 @@ class TestNamedFieldPropertyGetters:
 
 
 class TestShapeHelpers:
-    # DISCUSS should the RGB equate to multiple fields and be reflected in the shape?
     def test_shape(self, base_sfm):
         assert base_sfm.shape == (N, len(base_sfm))
 
     def test_num_points(self, base_sfm):
         assert base_sfm.num_points == N
+
 
 class TestAdditionalFieldMethods:
     def test_add_field(self, base_sfm, scalar_field):
@@ -286,22 +288,107 @@ class TestAdditionalFieldMethods:
         assert 'rgb' not in base_sfm
         assert base_sfm.rgb is None
 
-class TestNamedFieldHandlers:
-    def test_handle_rgb(self):
-        raise NotImplementedError('')
 
-    def test_handle_normals(self):
-        raise NotImplementedError('')
+class TestNamedFieldHandlers:
+    def test_handle_rgb(self, base_sfm):
+        r = ScalarField(np.random.randint(0, 255, N, dtype=np.uint8), name='r')
+        red = ScalarField(np.random.randint(0, 255, N, dtype=np.uint8), name='red')
+        green = ScalarField(np.random.randint(0, 255, N, dtype=np.uint8), name='green')
+        g = ScalarField(np.random.randint(0, 255, N, dtype=np.uint8), name='g')
+        blue = ScalarField(np.random.randint(0, 255, N, dtype=np.uint8), name='blue')
+        b = ScalarField(np.random.randint(0, 255, N, dtype=np.uint8), name='b')
+        color = RGBFields(np.random.randint(0, 255, (N,3), dtype=np.uint8), name='color')
+        colour = RGBFields(np.random.randint(0, 255, (N,3), dtype=np.uint8), name='colour')
+        colors = RGBFields(np.random.randint(0, 255, (N,3), dtype=np.uint8), name='colors')
+        colours = RGBFields(np.random.randint(0, 255, (N,3), dtype=np.uint8), name='colours')
+
+        order = ('r', 'g', 'b')
+
+        for i, sf in enumerate((r, g, b)):
+            base_sfm.add_field(sf)
+            assert hasattr(base_sfm, 'rgb')
+            assert not hasattr(base_sfm, sf.name)
+            assert sf.name not in base_sfm
+            assert np.all(getattr(base_sfm.rgb, order[i]) == sf)
+
+        for i, sf in enumerate((red, green, blue)):
+            base_sfm.add_field(sf)
+            assert not hasattr(base_sfm, sf.name)
+            assert sf.name not in base_sfm
+            assert np.all(getattr(base_sfm.rgb, order[i]) == sf)
+
+        for sf in (color, colors, colour, colours):
+            base_sfm.add_field(sf)
+            assert np.all(sf == base_sfm.rgb)
+
+
+    def test_handle_normals(self, base_sfm):
+        nx = ScalarField(np.random.rand(N).astype(np.float32), name='nx')
+        ny = ScalarField(np.random.rand(N).astype(np.float32), name='ny')
+        nz = ScalarField(np.random.rand(N).astype(np.float32), name='nz')
+        nxnynz = NormalFields(np.random.rand(N, 3).astype(np.float32), name='nxnynz')
+        normal = NormalFields(np.random.rand(N, 3).astype(np.float32), name='normal')
+
+        order = ('nx', 'ny', 'nz')
+
+        for i, sf in enumerate((nx, ny, nz)):
+            base_sfm.add_field(sf)
+            assert hasattr(base_sfm, 'normals')
+            assert not hasattr(base_sfm, sf.name)
+            assert sf.name not in base_sfm
+            assert np.all(getattr(base_sfm.normals, order[i]) == sf)
+
+        for sf in (nxnynz, normal):
+            base_sfm.add_field(sf)
+            assert np.all(sf == base_sfm.normals)
+
 
 class TestSampleExtractReduce:
     def test_sample(self, base_sfm):
+        index = slice(0, 10, 1)
+        sample = base_sfm.sample(index)
+
+        assert len(sample.rgb) == 10
+        assert len(sample) == len(base_sfm)
+        assert np.all(sample.rgb == base_sfm.rgb[index])
+        assert np.all(sample.normals == base_sfm.normals[index])
+
+    def test_reduce(self, base_sfm):
+        index = slice(0, 10, 1)
+        original = copy.deepcopy(base_sfm)
+
+        base_sfm.reduce(index)
+
+        assert len(base_sfm.rgb) == 10
+        assert len(base_sfm) == 5
+
+        sample = original.sample(index)
+
+        assert np.all(base_sfm.rgb == sample.rgb)
+        assert np.all(base_sfm.normals == sample.normals)
+        assert np.all(base_sfm.intensity == sample.intensity)
+
+        assert id(base_sfm.rgb) != id(sample.rgb)
+        assert id(base_sfm.normals) != id(sample.normals)
+        assert id(base_sfm.intensity) != id(sample.intensity)
+
+
+    def test_extract(self, base_sfm):
+        index = slice(0, 10, 1)
+        original = copy.deepcopy(base_sfm)
+
+        extracted = base_sfm.extract(index)
+
+        sample = original.sample(index)
+
+        assert len(sample) == len(extracted)
+        assert len(sample) == len(original)
+        assert len(base_sfm.rgb) == len(original.rgb) - len(extracted.rgb)
+        assert np.all(sample.rgb == extracted.rgb)
+
+        #compare
         raise NotImplementedError('')
 
-    def test_reduce(self):
-        raise NotImplementedError('')
-
-    def test_extract(self):
-        raise NotImplementedError('')
 
 class TestMerge:
     def test_generate_point_cloud_indexes(self):

@@ -18,26 +18,6 @@ logger = logging.getLogger(__name__.split(".")[0])
 
 LowerStr = Annotated[str, StringConstraints(strip_whitespace=True, to_lower=True),]
 
-
-class DtypeState(NamedTuple):
-    dtype: DTypeLike
-    lower: NDArray[np.number]|float|int|None
-    upper: NDArray[np.number]|float|int|None
-
-    @classmethod
-    def generate(cls, array: np.ndarray):
-        return DtypeState(
-            dtype=array.dtype,
-            lower=array.min(),
-            upper=array.max()
-        )
-
-    @staticmethod
-    def validate(obj: DtypeState):
-        if obj is not None and obj.lower >= obj.upper:
-            raise ValueError(f"lower must be less than upper. {obj=}")
-
-
 def linear_map_dtype(array: np.ndarray, target_dtype: DTypeLike) -> np.ndarray:
 
     def get_dtype_min_max(dt: np.dtype) -> tuple[float, float]:
@@ -70,9 +50,7 @@ def linear_map_dtype(array: np.ndarray, target_dtype: DTypeLike) -> np.ndarray:
     mapped = np.floor(array * float(target_max - target_min) + target_min)
     return mapped.astype(target_dtype).flatten()
 
-
-def normalize_array(array: np.ndarray,
-                    target_state: DtypeState = None) -> np.ndarray:
+def normalize_array(array: np.ndarray, target_state: DtypeState = None) -> np.ndarray:
     """
     General normalisation function.Normalise array by default to the bounds [0, 1] alternatively a custom range as defined by lower and upper.
 
@@ -124,6 +102,24 @@ def normalise_self(array: np.ndarray) -> np.ndarray:
 
     return normalize_array(array=array, target_state=target_state)
 
+
+class DtypeState(NamedTuple):
+    dtype: DTypeLike
+    lower: NDArray[np.number]|float|int|None
+    upper: NDArray[np.number]|float|int|None
+
+    @classmethod
+    def generate(cls, array: np.ndarray):
+        return DtypeState(
+            dtype=array.dtype,
+            lower=array.min(),
+            upper=array.max()
+        )
+
+    @staticmethod
+    def validate(obj: DtypeState):
+        if obj is not None and obj.lower >= obj.upper:
+            raise ValueError(f"lower must be less than upper. {obj=}")
 
 
 class ScalarField(BaseVector):
@@ -224,11 +220,11 @@ class NormalFields(ScalarField):
         super().__init__(arr, name, **kwargs)
 
     @property
-    def x(self) -> VectorT_Float32: return self.arr[:, 0]
+    def nx(self) -> VectorT_Float32: return self.arr[:, 0]
     @property
-    def y(self) -> VectorT_Float32: return self.arr[:, 1]
+    def ny(self) -> VectorT_Float32: return self.arr[:, 1]
     @property
-    def z(self) -> VectorT_Float32: return self.arr[:, 2]
+    def nz(self) -> VectorT_Float32: return self.arr[:, 2]
 
     @classmethod
     def initialize(cls, size: int, value: Array_Nx3_float32_T | None=None) -> NormalFields:

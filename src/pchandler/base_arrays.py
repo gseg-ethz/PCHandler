@@ -120,7 +120,6 @@ class BaseArray(ABC, BaseModel):
         kwargs['exclude'] = exclude
         return copy.deepcopy(super().model_dump(*args, **kwargs))
 
-    # TODO need to change this process to dump and then build new. This ensures cached properties are not copied
     def update_copy(self,
                     array: npt.NDArray|BaseArray|None = None, *,
                     deep: bool = True,
@@ -148,9 +147,7 @@ class BaseArray(ABC, BaseModel):
         update = kwargs.get('update', {})
         update |= self.model_dump(exclude=set(update.keys()))
 
-        result = type(self)(**update)
-
-        return result.model_validate(result, strict=True)
+        return type(self)(**update)
 
     def view(self, cls: Optional[type] = None) -> Self:
         # This is a placeholder for the ability of a subclass to act like a view
@@ -359,19 +356,3 @@ class _ImageLike(SampleArray, _NumericMixins, ABC):
         return self.updated_copy(self.arr.view(cls=cls), deep=False)
 
 
-def unpack_npydantic_dtype(cls: type[BaseArray]) -> tuple[npt.DTypeLike, ...]:
-    a = cls.model_fields['arr'].annotation.__dict__['__args__'][1]
-    all_types = []
-
-    try:
-        for dt in a:
-            if isinstance(dt, tuple):
-                for dt_ in dt:
-                    all_types.append(dt_)
-            else:
-                all_types.append(dt)
-
-    # TODO write tests for this and get the appropriate Exception to catch
-    except Exception as e:
-        all_types.append(a)
-    return tuple(all_types)

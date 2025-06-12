@@ -167,17 +167,6 @@ class PointCloudData(CartesianCoordinates):
         raise IndexError(f'Setting items in PointCloudData is not supported. Consider using the update_copy or '
                          f'dump data to a dict and reinstantiate.')
 
-    def __eq__(self, other: PointCloudData|np.ndarray) -> bool:
-        if isinstance(other, PointCloudData) and self.shape == other.shape:
-            if np.allclose(self.arr, other.arr) and self.uuid == other.uuid:
-                return True
-            return np.allclose(self.arr, other.arr)
-        else:
-            if isinstance(self, CartesianCoordinates):
-                return CartesianCoordinates.__eq__(self, other)
-            else:
-                raise NotImplementedError(f'Equality function not implemented of object type {type(self)}.')
-
     def copy(self, *, deep: bool = True, **kwargs) -> Self:
         """
         Produce a deep or shallow copy of the model. Updates the model also if parameter is parsed.
@@ -188,9 +177,7 @@ class PointCloudData(CartesianCoordinates):
         update = kwargs.get('update', {})
         update |= self.model_dump(exclude=set(update.keys()))
 
-        result = type(self)(update.pop('arr'), **update)
-
-        return result.model_validate(result, strict=True)
+        return type(self)(update.pop('arr'), **update)
 
     def sample(self, mask):
         mask = self.create_mask(mask)
