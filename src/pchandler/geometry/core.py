@@ -131,15 +131,34 @@ class PointCloudData(CartesianCoordinates):
     @property
     def normals(self):
         return self.scalar_fields.normals
+
+    @normals.setter
+    def normals(self, value: np.ndarray|NormalFields):
+        self.scalar_fields.normals = value
+
     @property
     def rgb(self):
         return self.scalar_fields.rgb
+
+    @rgb.setter
+    def rgb(self, value: np.ndarray|RGBFields):
+        self.scalar_fields.rgb = value
+
     @property
     def intensity(self):
         return self.scalar_fields.intensity
+
+    @intensity.setter
+    def intensity(self, value: np.ndarray|ScalarField):
+        self.scalar_fields.intensity = value
+
     @property
     def reflectance(self):
         return self.scalar_fields.reflectance
+
+    @reflectance.setter
+    def reflectance(self, value: np.ndarray|ScalarField):
+        self.scalar_fields.reflectance = value
 
     def __getitem__(self, item):
         return self.sample(self.create_mask(item))

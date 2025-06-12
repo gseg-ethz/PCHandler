@@ -128,17 +128,33 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
     def rgb(self) -> RGBFields|None:
         return self.fields.get(RGB_FIELD, None)
 
+    @rgb.setter
+    def rgb(self, value: np.ndarray|RGBFields):
+        self.add_field(RGBFields(value))
+
     @property
     def intensity(self):
         return self.fields.get('intensity', None)
+
+    @intensity.setter
+    def intensity(self, value: np.ndarray|ScalarField):
+        self.add_field(ScalarField(value, name='intensity'))
 
     @property
     def reflectance(self):
         return self.fields.get('reflectance', None)
 
+    @reflectance.setter
+    def reflectance(self, value: np.ndarray|ScalarField):
+        self.add_field(ScalarField(value, name='reflectance'))
+
     @property
     def normals(self) -> NormalFields|None:
         return self.fields.get(NORMALS_FIELD, None)
+
+    @normals.setter
+    def normals(self, value: np.ndarray|ScalarField):
+        self.add_field(NormalFields(value))
 
     @validate_call(config=DEFAULT_CONFIG)
     def _handle_rgb(self, name: LowerStr, value: VectorT_Uint8 | Array_Nx3_uint8_T) -> None:
@@ -209,21 +225,6 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
     def reduce(self, mask: IndexLike) -> None:
         for name, value in self.items():
             self.fields[name] = value[mask]
-
-    # TODO pull out, maybe nice to have in future if requested
-    @staticmethod
-    def generate_point_cloud_map(sfms: Iterable[ScalarFieldManager]) -> dict[int, slice]:
-        indexes = [0]
-        for i, b in enumerate(sfms):
-            indexes.append(indexes[i] + b.num_points)
-
-        starting_indexes = tuple(indexes[:-1])
-        ending_indexes = tuple(indexes[1:])
-
-        index_map = {}
-        for i, value in enumerate(starting_indexes):
-            index_map[i] = slice(value, ending_indexes[i], None)
-        return index_map
 
 
     @classmethod

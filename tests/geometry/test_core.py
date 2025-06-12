@@ -3,40 +3,50 @@ import copy
 import numpy as np
 import pytest
 
-from pchandler.geometry.scalar_fields import RGBFields
+from pchandler.geometry.scalar_fields import RGBFields, NormalFields, ScalarField
 from pchandler.geometry.core import PointCloudData
-from pchandler.geometry.scalar_fields import ScalarField
 from pchandler.geometry.scalar_field_manager import ScalarFieldManager
 
 
+N = 100
+
 def random_coordinates(scale: float, offset: float) -> np.ndarray:
-    xyz_base = np.random.randn(100, 3)
+    xyz_base = np.random.randn(N, 3)
     return xyz_base * scale + offset
 
-@pytest.fixture(scope='session', autouse=True)
+@pytest.fixture(scope='function', autouse=True)
 def xyz_() -> np.ndarray:
     return random_coordinates(0, 0)
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="function", autouse=True)
 def normals_() -> np.ndarray:
-    return np.random.rand(100, 3).astype(np.float32)
+    return np.random.rand(N, 3).astype(np.float32)
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="function", autouse=True)
 def intensities_() -> np.ndarray:
-    return np.random.rand(100).astype(np.float32)
+    return np.random.rand(N)
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="function", autouse=True)
+def reflectances_() -> np.ndarray:
+    return np.random.rand(N)
+
+@pytest.fixture(scope="function", autouse=True)
 def rgb_():
-    return np.random.randint(0, 255, (100, 3), dtype=np.uint8)
+    return np.random.randint(0, 255, (N, 3), dtype=np.uint8)
 
-@pytest.fixture(scope='session', autouse=True)
+@pytest.fixture(scope='function', autouse=True)
 def sfs_():
-    array = np.random.rand(100)
+    array = np.random.rand(N)
     return {'test': array}
 
 @pytest.fixture(scope="function")
-def pcd(rgb_, normals_, intensities_) -> PointCloudData:
-    return PointCloudData(xyz=random_coordinates(0, 0), rgb=rgb_, normals=normals_, intensity=intensities_)
+def pcd(rgb_, normals_, intensities_, reflectances_) -> PointCloudData:
+    return PointCloudData(
+        xyz=random_coordinates(0, 0),
+        rgb=rgb_,
+        normals=normals_,
+        intensity=intensities_,
+        reflectance=reflectances_)
 
 
 class TestPointCloudData:
@@ -104,7 +114,7 @@ class TestPointCloudData:
             assert np.all(pcd.scalar_fields['test'] == sfs_['test'])
             assert isinstance(pcd.scalar_fields['test'], ScalarField)
 
-            test_array = np.random.rand(100)
+            test_array = np.random.rand(N)
             pcd = PointCloudData(xyz_, scalar_fields={'test': ScalarField(test_array, name='test2')})
             assert 'test' in pcd.scalar_fields
             assert np.all(pcd.scalar_fields['test'] == test_array)
@@ -119,17 +129,17 @@ class TestPointCloudData:
 
             # Too many columns
             with pytest.raises(ValueError):
-                data = np.random.rand(100, 4).astype(np.float32)
+                data = np.random.rand(N, 4).astype(np.float32)
                 PointCloudData(data, rgb=rgb_, normals=normals_, scalar_fields=sfs_)
 
             # Too many dimensions
             with pytest.raises(ValueError):
-                data = np.random.rand(100, 4, 3).astype(np.float32)
+                data = np.random.rand(N, 4, 3).astype(np.float32)
                 PointCloudData(data, rgb=rgb_, normals=normals_, scalar_fields=sfs_)
 
             # Too fed dimensions
             with pytest.raises(ValueError):
-                data = np.random.rand(100, 2).astype(np.float32)
+                data = np.random.rand(N, 2).astype(np.float32)
                 PointCloudData(data, rgb=rgb_, normals=normals_, scalar_fields=sfs_)
 
         def test_rgb(self, xyz_, normals_, sfs_):
@@ -142,7 +152,19 @@ class TestPointCloudData:
             # normals non_array
             with pytest.raises(Exception) as e:
                 PointCloudData(xyz=xyz_, rgb=rgb_, normals=1, scalar_fields=sfs_)
-                assert type(e.value) in (ValueError, TypeError, AttributeError)
+            assert type(e.value) in (ValueError, TypeError, AttributeError)
+
+        def test_intensity(self, xyz_, rgb_, normals_, reflectance_, sfs_):
+            # normals non_array
+            with pytest.raises(Exception) as e:
+                PointCloudData(xyz=xyz_, rgb=rgb_, normals=normals_, reflectance=reflectance_, intensity=1, scalar_fields=sfs_)
+            assert type(e.value) in (ValueError, TypeError, AttributeError)
+
+        def test_reflectance(self, xyz_, rgb_, normals_, intensity_, reflectance_, sfs_):
+            # normals non_array
+            with pytest.raises(Exception) as e:
+                PointCloudData(xyz=xyz_, rgb=rgb_, normals=normals_, reflectance=1, intensity=intensity_, scalar_fields=sfs_)
+            assert type(e.value) in (ValueError, TypeError, AttributeError)
 
         def test_socs_origin(self, xyz_, rgb_, normals_, sfs_):
             # spherical_coordinates_origin
@@ -150,13 +172,61 @@ class TestPointCloudData:
                 PointCloudData(
                     xyz=xyz_, rgb=rgb_, normals=normals_, scalar_fields=sfs_, socs_origin="NotAnOrigin",
                 )
-                assert type(e.value) in (ValueError, TypeError, AttributeError)
+            assert type(e.value) in (ValueError, TypeError, AttributeError)
 
     class TestProperties:
-        def test_rgb(self, pcd):
+        def test_rgb_getter(self, pcd):
             assert isinstance(pcd.rgb, RGBFields)
             assert pcd.rgb.shape[1] == 3
             assert pcd.rgb.dtype == np.uint8
+
+        def test_normals_getter(self, pcd):
+            assert isinstance(pcd.normals, NormalFields)
+            assert pcd.normals.shape[1] == 3
+            assert pcd.normals.dtype == np.float32
+
+        def test_intensity_getter(self, pcd):
+            assert isinstance(pcd.intensity, ScalarField)
+            assert pcd.intensity.ndim == 1
+            assert pcd.intensity.dtype == np.float64
+
+        def test_reflectance_getter(self, pcd):
+            assert isinstance(pcd.reflectance, ScalarField)
+            assert pcd.reflectance.ndim == 1
+            assert pcd.reflectance.dtype == np.float64
+
+        def test_rgb_setter(self, pcd):
+            new_data = np.random.randint(0, 255, (N, 3), dtype=np.uint8)
+            pcd.rgb = new_data
+            assert isinstance(pcd.rgb, RGBFields)
+            assert pcd.rgb.shape[1] == 3
+            assert pcd.rgb.dtype == np.uint8
+            assert np.all(pcd.rgb == new_data)
+
+        def test_normals_setter(self, pcd):
+            new_data = np.random.rand(N, 3).astype(np.float32)
+            pcd.normals = new_data
+            assert isinstance(pcd.normals, NormalFields)
+            assert pcd.normals.shape[1] == 3
+            assert pcd.normals.dtype == np.float32
+            assert np.all(pcd.normals == new_data)
+
+        def test_intensity_setter(self, pcd):
+            new_data = np.random.rand(N)
+            pcd.intensity = new_data
+            assert isinstance(pcd.intensity, ScalarField)
+            assert pcd.intensity.ndim == 1
+            assert pcd.intensity.dtype == np.float64
+            assert np.all(pcd.intensity == new_data)
+
+        def test_reflectance_setter(self, pcd):
+            new_data = np.random.rand(N)
+            pcd.reflectance = new_data
+            assert isinstance(pcd.reflectance, ScalarField)
+            assert pcd.reflectance.ndim == 1
+            assert pcd.reflectance.dtype == np.float64
+            assert np.all(pcd.reflectance == new_data)
+
 
         def test_sf_input_as_scalar_fields(self, xyz_, rgb_, normals_, intensities_):
             scalar_fields = ScalarFieldManager()
@@ -357,15 +427,15 @@ class TestPointCloudData:
         pcd = PointCloudData(xyz=xyz_, rgb=rgb_, normals=normals_, scalar_fields={"intensity": intensities_})
 
         with pytest.raises(AttributeError):
-            pcd.xyz = np.random.rand(100, 3)
+            pcd.xyz = np.random.rand(N, 3)
 
         with pytest.raises(AttributeError):
-            pcd.rgb = np.random.randint(0, 255, (100, 3), dtype=np.uint8)
+            pcd.rgb = np.random.randint(0, 255, (N, 3), dtype=np.uint8)
 
         with pytest.raises(AttributeError):
-            pcd.normals = np.random.rand(100, 3)
+            pcd.normals = np.random.rand(N, 3)
 
         # TODO should this be so easily overwriteable? Should a setter function be defined to go with?
         #  Habit says yes so it's more interoperable with other code E/g/ Pcd.xyz, Pcd.rgb, Pcd.intensity, Pcd.normals
         # with pytest.raises(AttributeError):
-        #     pcd.scalar_fields['intensity'] = np.random.rand(100)
+        #     pcd.scalar_fields['intensity'] = np.random.rand(N)

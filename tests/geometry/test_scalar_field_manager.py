@@ -38,6 +38,12 @@ def pcd() -> PointCloudData:
     return PointCloudData(np.random.rand(N,3))
 
 @pytest.fixture(scope="function", autouse=True)
+def empty_sfm(pcd) -> ScalarFieldManager:
+    return ScalarFieldManager(
+        parent=pcd,
+        fields={}
+    )
+@pytest.fixture(scope="function", autouse=True)
 def base_sfm(rgb_field, normals_field, scalar_field, intensity_field, reflectance_field, pcd) -> ScalarFieldManager:
     return ScalarFieldManager(
         parent=pcd,
@@ -200,25 +206,55 @@ class TestMutableMappingMethods:
             assert np.all(v == list(base_sfm.values())[i])
 
 class TestNamedFieldPropertyGetters:
-    def test_rgb(self, base_sfm):
+    def test_rgb_getter(self, base_sfm):
         assert hasattr(base_sfm, 'rgb')
         assert np.all(base_sfm.rgb == base_sfm['rgb'])
         assert base_sfm.rgb.dtype == np.uint8
 
-    def test_normals(self, base_sfm):
+    def test_normals_getter(self, base_sfm):
         assert hasattr(base_sfm, 'normals')
         assert np.all(base_sfm.normals == base_sfm['normals'])
         assert base_sfm.normals.dtype == np.float32
 
-    def test_intensity(self, base_sfm):
+    def test_intensity_getter(self, base_sfm):
         assert hasattr(base_sfm, 'intensity')
         assert np.all(base_sfm.intensity == base_sfm['intensity'])
         assert base_sfm.intensity.dtype == np.float64
 
-    def test_reflectance(self, base_sfm):
+    def test_reflectance_getter(self, base_sfm):
         assert hasattr(base_sfm, 'reflectance')
         assert np.all(base_sfm.reflectance == base_sfm['reflectance'])
         assert base_sfm.reflectance.dtype == np.float64
+
+    def test_rgb_setter(self, empty_sfm):
+        array = np.random.randint(0, 255, (N,3), dtype=np.uint8)
+        empty_sfm.rgb = array
+        assert hasattr(empty_sfm, 'rgb')
+        assert np.all(empty_sfm.rgb == array)
+        assert empty_sfm.rgb.dtype == np.uint8
+
+    def test_normals_setter(self, empty_sfm):
+        array = np.random.rand(N,3).astype(np.float32)
+        empty_sfm.normals = array
+        assert hasattr(empty_sfm, 'normals')
+        assert np.all(empty_sfm.normals == array)
+        assert empty_sfm.normals.dtype == np.float32
+
+    def test_intensity_setter(self, empty_sfm):
+        array = np.random.rand(N)
+        empty_sfm.intensity = array
+        assert hasattr(empty_sfm, 'intensity')
+        assert np.all(empty_sfm.intensity == array)
+        assert empty_sfm.intensity.dtype == np.float64
+
+    def test_reflectance_setter(self, empty_sfm):
+        array = np.random.rand(N)
+        empty_sfm.reflectance = array
+
+        assert hasattr(empty_sfm, 'reflectance')
+        assert np.all(empty_sfm.reflectance == array)
+        assert empty_sfm.reflectance.dtype == np.float64
+
 
 class TestShapeHelpers:
     # DISCUSS should the RGB equate to multiple fields and be reflected in the shape?
