@@ -13,30 +13,30 @@ def random_coordinates(scale: float, offset: float) -> np.ndarray:
     xyz_base = np.random.randn(100, 3)
     return xyz_base * scale + offset
 
-@pytest.fixture(scope='session', autouse=True)
+@pytest.fixture(scope='function', autouse=True)
 def xyz_() -> np.ndarray:
-    return random_coordinates(0, 0)
+    return random_coordinates(10, 0)
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="function", autouse=True)
 def normals_() -> np.ndarray:
     return np.random.rand(100, 3).astype(np.float32)
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="function", autouse=True)
 def intensities_() -> np.ndarray:
     return np.random.rand(100).astype(np.float32)
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="function", autouse=True)
 def rgb_():
     return np.random.randint(0, 255, (100, 3), dtype=np.uint8)
 
-@pytest.fixture(scope='session', autouse=True)
+@pytest.fixture(scope='function', autouse=True)
 def sfs_():
     array = np.random.rand(100)
     return {'test': array}
 
 @pytest.fixture(scope="function")
-def pcd(rgb_, normals_, intensities_) -> PointCloudData:
-    return PointCloudData(xyz=random_coordinates(0, 0), rgb=rgb_, normals=normals_, intensity=intensities_)
+def pcd(xyz_, rgb_, normals_, intensities_) -> PointCloudData:
+    return PointCloudData(xyz_, rgb=rgb_, normals=normals_, intensity=intensities_)
 
 
 class TestPointCloudData:

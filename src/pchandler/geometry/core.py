@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import copy
 from functools import wraps
-from typing import Optional, Self, Any, Callable
+from typing import Optional, Self, Any, Callable, Mapping
 
 from pydantic import Field, model_validator, field_validator
 import numpy as np
@@ -30,9 +31,8 @@ def update_transformation_ledger(name: str) -> Callable:
 class PointCloudData(CartesianCoordinates):
     arr: Array_Nx3_T = Field(alias='xyz')
     transform_ledger: TransformLedger[str, [Transform]] = Field(default_factory=TransformLedger)
-    scalar_fields: ScalarFieldManager | dict[str, ScalarField] | None = Field(default=None, alias='scalar_fields')
+    scalar_fields: ScalarFieldManager | dict[str, ScalarField] = Field(default_factory=ScalarFieldManager)
 
-    # TODO only have the args and kwargs necessary. No open *args, **kwargs no
     def __init__(
             self,
             xyz: np.ndarray | CartesianCoordinates = None,
@@ -45,10 +45,10 @@ class PointCloudData(CartesianCoordinates):
             socs_origin: Optional[np.ndarray] = None,
             scalar_fields: Optional[ScalarFieldManager|dict] = None,
             project_transformation: Optional[Array_4x4_T] = None,
-            transform_ledger: Optional[TransformLedger] = None,
-            **kwargs
+            transform_ledger: Optional[TransformLedger] = None
             ):
 
+        kwargs = {}
 
         if scalar_fields is None:
             scalar_fields = {}
@@ -75,36 +75,22 @@ class PointCloudData(CartesianCoordinates):
         #     kwargs['transform_ledger'] = TransformLedger()
 
         if xyz is not None:
-            kwargs['arr'] = extract_array(xyz)
+            kwargs['xyz'] = extract_array(xyz)
 
         kwargs['scalar_fields'] = scalar_fields
+        # TODO update logic inline with the global optimisation
         kwargs['optimised'] = optimised
         kwargs['socs_origin'] = socs_origin
         kwargs['project_transformation'] = project_transformation
-        kwargs['transform_ledger'] =  TransformLedger()     # FIXME
+        # TODO update logic once global shift and corresponding transforms supported
+        kwargs['transform_ledger'] = transform_ledger if transform_ledger is not None else TransformLedger()
 
-        super(CartesianCoordinates, self).__init__(**kwargs)
-
-    # @model_validator(mode='before')
-    # @classmethod
-    # def validate_initial_coordinates(cls, kwargs ) -> dict[str, Any]:
-    #     key = {'arr', 'xyz'} & set(kwargs.keys())
-    #     if len(key) != 1:
-    #         raise ValidationError(f"Invalid keyword arguments. Only accepts 'xyz' OR 'arr', not both.")
-    #     xyz = kwargs.pop(list(key)[0])
-    #
-    #     # Override the passed point cloud with any input kwargs
-    #     if isinstance(xyz, cls):
-    #         kwargs = xyz.model_dump() | kwargs
-    #     elif isinstance(xyz, np.ndarray):
-    #         kwargs = kwargs | {'arr': xyz}
-    #     else:
-    #         raise TypeError(f'Unsupported object type passed as xyz for PointCloudData: {type(xyz)}')
-
-        # TODO Resolve this with the global shift logic once the base is done
         # if kwargs.get('project_transform', None) is not None:
         #     kwargs['is_at_socs'] = True
         # return kwargs
+
+        super().__init__(**kwargs)
+
 
     # TODO Also reimplement this
     @field_validator('transform_ledger', mode='before')
@@ -115,7 +101,7 @@ class PointCloudData(CartesianCoordinates):
         return value
 
     @model_validator(mode='after')
-    def validate_model(self) -> Self:
+    def update_parent_weakref(self) -> Self:
         """Revalidate model to ensure that the weakref points to the correct object"""
         if isinstance(self.scalar_fields, ScalarFieldManager):
             self.scalar_fields.parent = self
@@ -148,30 +134,37 @@ class PointCloudData(CartesianCoordinates):
         raise IndexError(f'Setting items in PointCloudData is not supported. Consider using the update_copy or '
                          f'dump data to a dict and reinstantiate.')
 
-    def __eq__(self, other: PointCloudData|np.ndarray) -> bool:
-        if isinstance(other, PointCloudData) and self.shape == other.shape:
-            if np.allclose(self.arr, other.arr) and self.uuid == other.uuid:
-                return True
-            return np.allclose(self.arr, other.arr)
-        else:
-            if isinstance(self, CartesianCoordinates):
-                return CartesianCoordinates.__eq__(self, other)
-            else:
-                raise NotImplementedError(f'Equality function not implemented of object type {type(self)}.')
+    def update_copy(self,
+                    array: npt.NDArray|Self|None = None, *,
+                    deep: bool = True,
+                    update: Mapping[str, Any] = None) -> Self:
+        """
+        This function is designed to be more efficient by not dumping the memory heavy array if it's to be updated in
+        the new instance.
+        E.g. if 'arr' is in the update dict {'arr': np.random.rand(10000, 3)}, don't dump the existing, just add this
+        new value.
+        """
+        update = update or {}
 
-    def copy(self, *, deep: bool = True, **kwargs) -> Self:
+        if array is not None:
+            update['xyz'] = array.arr if isinstance(array, PointCloudData) else array
+
+        return self.copy(deep=deep, update=update)
+
+    # TODO explicitly state the
+    def copy(self, *, deep: bool = True, update: dict = None) -> Self:
         """
         Produce a deep or shallow copy of the model. Updates the model also if parameter is parsed.
         """
         if not deep:
             raise NotImplementedError(f'Shallow copy is not implemented on this class: {type(self)}')
 
-        update = kwargs.get('update', {})
-        update |= self.model_dump(exclude=set(update.keys()))
-
-        result = type(self)(update.pop('arr'), **update)
-
-        return result.model_validate(result, strict=True)
+        if update is None:
+            update = self.model_dump()
+        else:
+            update |= self.model_dump(exclude=(set(update.keys()) | {'arr'}))
+        update = copy.deepcopy(update)
+        return type(self)(update.pop('xyz'), **update)
 
     def sample(self, mask):
         mask = self.create_mask(mask)
