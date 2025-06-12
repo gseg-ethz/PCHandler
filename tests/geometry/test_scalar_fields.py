@@ -33,6 +33,10 @@ class TestDtypeState:
         assert state.lower == 3
         assert state.upper == 5
 
+    def test_validate(self):
+        with pytest.raises(ValueError):
+            a = DtypeState(np.uint8, 10, 5)
+            DtypeState.validate(a)
 
 class TestScalarFieldClass:
     def test_keyword_init(self):
@@ -101,26 +105,24 @@ class TestScalarFieldClass:
 
         assert type(e.value) in (ValueError, TypeError, ValidationError)
 
-    def test_normalise(self):
-        raise NotImplementedError
-
-    def test_normalise_dtype(self):
-        kwargs = {'arr': np.arange(255).astype(np.int16),
-                  'name': 'steve',}
-        a = ScalarField.normalize_based_on_original_dtype(kwargs)
-        assert np.any(a != kwargs['arr'])
-        assert np.allclose(a.min(), np.iinfo(np.int16).min)
-        assert np.allclose(a.max(), np.iinfo(np.int16).max)
-        raise NotImplementedError
-
-    def test_coerce_to_target_type(self):
-        raise NotImplementedError
 
     def test_get_original_data(self):
-        raise NotImplementedError
+        a = np.random.randint(-1000, 1000, 2000, dtype=np.int16)
+        b = normalize_array(a)
+        b = linear_map_dtype(b, np.uint8)
+        field = ScalarField(b, name='converted', origin_dtype=DtypeState(a.dtype, a.min(), a.max()))
 
-    def test_create_rollback(self):
-        raise NotImplementedError
+        c = field.get_original_data()
+
+        atol = np.ceil((a.max() - a.min()) / 2**8)
+        assert np.allclose(a, c, atol=atol)
+
+        d = np.random.randint(0, 233, 2000, dtype=np.uint8)
+        dtype_state = DtypeState.generate(d)
+        sf = ScalarField(d, name='converted', origin_dtype=dtype_state)
+        e = sf.get_original_data()
+        assert np.all(d == e)
+        assert isinstance(e, np.ndarray)
 
 class TestTypeDefinedScalarFields:
     def test_uint8_valid(self):
@@ -262,18 +264,27 @@ class TestRgbField:
         assert np.uint8 == rgb2.dtype
         assert np.all(rgb2 == data)
 
-    def test_values_as_float_method(self):
-        data: np.ndarray = np.random.randint(0, 255, (100,3), dtype=np.uint8)
-        rgb1 = RGBFields(data)
-        floats = rgb1.values_as_float()
+    def test_get_normalized(self):
+        # Test the default normalisation
+        data: np.ndarray = np.random.randint(0, 255, (100000,3), dtype=np.uint8)
+        rgb = RGBFields(data)
+        floats = rgb.get_normalized()
         assert floats.min() == 0
         assert floats.max() == 1
         assert floats.dtype == np.float32
 
-
-        floats = rgb1.values_as_float(lower=-1.0, upper=2.0)
+        # Test a different number range
+        floats = rgb.get_normalized(lower=-1.0, upper=2.0)
         assert floats.min() == -1.0
         assert floats.max() == 2.0
+        assert floats.dtype == np.float32
+
+        # Test a different range(not full uint8)
+        data: np.ndarray = np.random.randint(13, 147, (100000, 3), dtype=np.uint8)
+        rgb = RGBFields(data)
+        floats = rgb.get_normalized()
+        assert floats.min() == 0
+        assert floats.max() == 1
         assert floats.dtype == np.float32
 
 
@@ -355,9 +366,9 @@ class TestSegmentationField:
         b = np.random.randint(0, 100, (100, 5), dtype=np.uint8)
 
         with pytest.raises(ValueError):
-            c = SegmentationMap(arr=a, name='Segmentation')
+            SegmentationMap(arr=a, name='Segmentation')
         with pytest.raises(ValueError):
-            d = SegmentationMap(arr=b, name='Segmentation')
+            SegmentationMap(arr=b, name='Segmentation')
 
     @pytest.mark.parametrize('array', (np.random.randint(0, 2**14, 100, dtype=np.int16),
                                        np.random.randint(0, 100, 100, dtype=np.uint32),
@@ -366,10 +377,8 @@ class TestSegmentationField:
     def test_dtypes(self, array):
         with pytest.raises(Exception) as e:
             SegmentationMap(array, name='Segmentation')
-
             assert type(e.value) in (ValueError, TypeError, ValidationError)
 
-    # TODO fix this
     def test_initialize_method(self):
         sizes_small = [10 for _ in range(120)]
         sizes_large = [100 for _ in range(259)]
@@ -381,7 +390,7 @@ class TestSegmentationField:
         assert np.all(np.zeros(result.size) == result)
 
         result2 = SegmentationMap.initialize('largs', sizes_large)
-        assert result2.size == sum(sizes_small)
+        assert result2.size == sum(sizes_large)
         assert result2.dtype == np.uint16
         assert np.all(np.zeros(result2.size) == result2)
 
@@ -390,3 +399,80 @@ class TestSegmentationField:
         with pytest.raises(ValueError):
             SegmentationMap.initialize('fail', sizes_too_large)
 
+
+
+
+example_vectors = tuple([
+    np.linspace(0, 2 ** 8 - 1, 255, dtype=np.uint8, endpoint=True),
+    np.linspace(0, 2 ** 16 - 1, 255, dtype=np.uint16, endpoint=True),
+    np.linspace(0, 2 ** 32 - 1, 255, dtype=np.uint32, endpoint=True),
+    np.linspace(-2 ** 7, 2 ** 7 - 1, 255, dtype=np.int8, endpoint=True),
+    np.linspace(-2 ** 15, 2 ** 15 - 1, 255, dtype=np.int16, endpoint=True),
+    np.linspace(-2 ** 31, 2 ** 31 - 1, 255, dtype=np.int32, endpoint=True),
+    np.linspace(0, 1, 255, dtype=np.float32, endpoint=True),
+])
+
+pairs = []
+for i in example_vectors:
+    for j in example_vectors:
+        pairs.append((i, j))
+
+@pytest.mark.parametrize(['original', 'target'], pairs)
+def test_linear_map_dtype(original: np.ndarray, target: np.ndarray):
+    """
+    Test the linear mapping function between dtypes to ensure no clipping of values.
+    255 samples used to avoid having to accommodate any rounding of digits in the logical comparison.
+    These would be a loss of precision
+    """
+    # Adjust comparison tolerances based on bit sizes
+    original_bits = original.dtype.itemsize * 8
+    target_bits = target.dtype.itemsize * 8
+
+    # Ensure that the manually written min/max values match the iinfo
+    if np.issubdtype(original.dtype, np.integer):
+        assert np.iinfo(original.dtype).min == original.min()
+        assert np.iinfo(original.dtype).max == original.max()
+
+    mapped_array = linear_map_dtype(original, target.dtype)
+
+    # Testing of np.clip led to erroneous mapping results and often limits clipped to 0
+    if np.issubdtype(target.dtype, np.floating):
+        # Ensure start and end are exact. The others just need to be within the precision
+        atol = 1 / (2 ** original_bits)
+        expected_min, expected_max = 0, 1
+
+    else:
+        atol = (2 ** target_bits // 2 ** original_bits)
+        expected_min, expected_max = np.iinfo(target.dtype).min, np.iinfo(target.dtype).max
+
+    assert np.allclose(expected_min, mapped_array[0])
+    assert np.allclose(expected_max, mapped_array[-1])
+    assert np.allclose(target, mapped_array, atol=atol)
+    # print(f'From {original.dtype} to {target.dtype} with {atol=}')
+
+def test_invalid_linear_map_dtype():
+    array = np.ones(14, dtype=np.complex64)
+    array2 = np.ones(14, dtype=np.uint8)
+    with pytest.raises(TypeError):
+        linear_map_dtype(array, np.uint8)
+
+    with pytest.raises(TypeError):
+        linear_map_dtype(array2, np.complex64)
+
+def test_normalise_self_valid():
+    array = np.random.randint(13, 144, 1000, np.uint8)
+    normalised = normalise_self(array)
+
+    assert not np.allclose(array, normalised)
+    assert normalised.min() == 0
+    assert normalised.max() == 255
+
+def test_normalise_self_invalid():
+    array = np.random.rand(1000) * 244 - 50
+
+    normalised = normalise_self(array)
+    assert not np.allclose(array, normalised)
+    assert normalised.min() == 0
+    assert normalised.max() == 1
+    assert normalised.min() != array.min()
+    assert normalised.max() != array.max()

@@ -1,23 +1,21 @@
 from __future__ import annotations
 
-import uuid
 from functools import wraps
-from typing import Optional, TypedDict, Unpack, Self, Union, Any, Callable
+from typing import Optional, Self, Any, Callable
 
-from pydantic import Field, model_validator, ValidationError, field_validator
-from pydantic.dataclasses import dataclass
+from pydantic import Field, model_validator, field_validator
 import numpy as np
 import numpy.typing as npt
 
 from .transforms import Transform, TransformLedger, TransformRecord
 from .coordinates import CartesianCoordinates
-from ..constants import RGB_FIELD, NORMALS_FIELD
+from ..base_types import Array_Nx3_T, Array_4x4_T
 from .optimal_shift import OSM_Manager
 from .scalar_field_manager import ScalarFieldManager
 from .scalar_fields import ScalarField, RGBFields, NormalFields
 from ..validators import extract_array
 
-
+# TODO decide on this artifact
 def update_transformation_ledger(name: str) -> Callable:
     def decorator(func: Callable) -> Callable:
         @wraps(func)
@@ -29,28 +27,33 @@ def update_transformation_ledger(name: str) -> Callable:
     return decorator
 
 
-@OSM_Manager.register_point_cloud
 class PointCloudData(CartesianCoordinates):
+    arr: Array_Nx3_T = Field(alias='xyz')
     transform_ledger: TransformLedger[str, [Transform]] = Field(default_factory=TransformLedger)
-    sfm: ScalarFieldManager|dict[str, ScalarField]|None = Field(default=None, alias='scalar_fields')
+    scalar_fields: ScalarFieldManager | dict[str, ScalarField] | None = Field(default=None, alias='scalar_fields')
 
+    # TODO only have the args and kwargs necessary. No open *args, **kwargs no
     def __init__(
             self,
-            *args,
             xyz: np.ndarray | CartesianCoordinates = None,
-            rgb: npt.NDArray[Any, np.uint8]|RGBFields = None,
-            normals: npt.NDArray[Any, np.float32]|NormalFields = None,
-            intensity: npt.NDArray|ScalarField = None,
-            reflectance: npt.NDArray|ScalarField = None,
+            *,
+            rgb: Optional[npt.NDArray[Any, np.uint8]|RGBFields] = None,
+            normals: Optional[npt.NDArray[Any, np.float32]|NormalFields] = None,
+            intensity: Optional[npt.NDArray|ScalarField] = None,
+            reflectance: Optional[npt.NDArray|ScalarField] = None,
             optimised: bool = False,
-            socs_origin: np.ndarray|None = None,
-            scalar_fields: dict|None = None,
-            **kwargs):
+            socs_origin: Optional[np.ndarray] = None,
+            scalar_fields: Optional[ScalarFieldManager|dict] = None,
+            project_transformation: Optional[Array_4x4_T] = None,
+            transform_ledger: Optional[TransformLedger] = None,
+            **kwargs
+            ):
+
 
         if scalar_fields is None:
             scalar_fields = {}
 
-        sfm = ScalarFieldManager(None, fields={**scalar_fields, **kwargs.pop('sfm', {})})
+        scalar_fields = ScalarFieldManager(None, fields=scalar_fields)
 
         if isinstance(rgb, np.ndarray):
             rgb = RGBFields(rgb)
@@ -66,50 +69,44 @@ class PointCloudData(CartesianCoordinates):
 
         for field in (rgb, normals, intensity, reflectance):
             if field is not None:
-                sfm.add_field(field)
+                scalar_fields.add_field(field)
+        #
+        # if transform_ledger is not None:
+        #     kwargs['transform_ledger'] = TransformLedger()
 
         if xyz is not None:
             kwargs['arr'] = extract_array(xyz)
-        elif len(args) == 1:
-            kwargs['arr'] = extract_array(args[0])
-        elif 'arr' in kwargs or 'xyz' in kwargs:
-            pass
-        else:
-            raise ValueError('No coordinates were passed into PointCloudData as either the first positional argument '
-                             'or as the keyword argument "xyz"')
 
-        if not kwargs.get('transform_ledger', False):
-            kwargs['transform_ledger'] = TransformLedger()
-
-        kwargs['sfm'] = sfm
+        kwargs['scalar_fields'] = scalar_fields
         kwargs['optimised'] = optimised
         kwargs['socs_origin'] = socs_origin
+        kwargs['project_transformation'] = project_transformation
+        kwargs['transform_ledger'] =  TransformLedger()     # FIXME
 
         super(CartesianCoordinates, self).__init__(**kwargs)
 
-    @model_validator(mode='before')
-    @classmethod
-    def validate_initial_coordinates(cls, kwargs ) -> dict[str, Any]:
-        key = {'arr', 'xyz'} & set(kwargs.keys())
-        if len(key) != 1:
-            raise ValidationError(f"Invalid keyword arguments. Only accepts 'xyz' OR 'arr', not both.")
-        xyz = kwargs.pop(list(key)[0])
+    # @model_validator(mode='before')
+    # @classmethod
+    # def validate_initial_coordinates(cls, kwargs ) -> dict[str, Any]:
+    #     key = {'arr', 'xyz'} & set(kwargs.keys())
+    #     if len(key) != 1:
+    #         raise ValidationError(f"Invalid keyword arguments. Only accepts 'xyz' OR 'arr', not both.")
+    #     xyz = kwargs.pop(list(key)[0])
+    #
+    #     # Override the passed point cloud with any input kwargs
+    #     if isinstance(xyz, cls):
+    #         kwargs = xyz.model_dump() | kwargs
+    #     elif isinstance(xyz, np.ndarray):
+    #         kwargs = kwargs | {'arr': xyz}
+    #     else:
+    #         raise TypeError(f'Unsupported object type passed as xyz for PointCloudData: {type(xyz)}')
 
-        # Override the passed point cloud with any input kwargs
-        if isinstance(xyz, cls):
-            kwargs = xyz.model_dump() | kwargs
-        elif isinstance(xyz, np.ndarray):
-            kwargs = kwargs | {'arr': xyz}
-        else:
-            raise TypeError(f'Unsupported object type passed as xyz for PointCloudData: {type(xyz)}')
-
-        # Ensure is_at_socs if project_transform is set (assumed transform from project to socs)
-        # TODO reimpliment when base is done
+        # TODO Resolve this with the global shift logic once the base is done
         # if kwargs.get('project_transform', None) is not None:
         #     kwargs['is_at_socs'] = True
-        return kwargs
+        # return kwargs
 
-
+    # TODO Also reimplement this
     @field_validator('transform_ledger', mode='before')
     @classmethod
     def initialise_empty_ledger(cls, value: dict | TransformLedger):
@@ -120,32 +117,29 @@ class PointCloudData(CartesianCoordinates):
     @model_validator(mode='after')
     def validate_model(self) -> Self:
         """Revalidate model to ensure that the weakref points to the correct object"""
-        if isinstance(self.sfm, ScalarFieldManager):
-            self.sfm.parent = self
+        if isinstance(self.scalar_fields, ScalarFieldManager):
+            self.scalar_fields.parent = self
 
-        elif isinstance(self.sfm, dict):
-            self.sfm = ScalarFieldManager(parent=self, fields=self.sfm)
+        elif isinstance(self.scalar_fields, dict):
+            self.scalar_fields = ScalarFieldManager(parent=self, fields=self.scalar_fields)
 
-        elif self.sfm is None:
-            self.sfm = ScalarFieldManager(parent=self)
+        elif self.scalar_fields is None:
+            self.scalar_fields = ScalarFieldManager(parent=self)
 
         return self
 
     @property
     def normals(self):
-        return self.sfm.normals
+        return self.scalar_fields.normals
     @property
     def rgb(self):
-        return self.sfm.rgb
+        return self.scalar_fields.rgb
     @property
     def intensity(self):
-        return self.sfm.intensity
+        return self.scalar_fields.intensity
     @property
     def reflectance(self):
-        return self.sfm.reflectance
-
-    def __hash__(self) -> int:
-        return hash(self.uuid)
+        return self.scalar_fields.reflectance
 
     def __getitem__(self, item):
         return self.sample(self.create_mask(item))
@@ -175,17 +169,17 @@ class PointCloudData(CartesianCoordinates):
         update = kwargs.get('update', {})
         update |= self.model_dump(exclude=set(update.keys()))
 
-        result = type(self)(**update)
+        result = type(self)(update.pop('arr'), **update)
 
         return result.model_validate(result, strict=True)
 
     def sample(self, mask):
         mask = self.create_mask(mask)
-        return self.update_copy(self.arr[mask, :], update={'sfm': self.sfm.sample(mask)})
+        return self.update_copy(self.arr[mask, :], update={'scalar_fields': self.scalar_fields.sample(mask)})
 
     def reduce(self, mask):
         super().reduce(mask)
-        self.sfm.reduce(mask)
+        self.scalar_fields.reduce(mask)
 
     def extract(self, mask):
         extracted = super().extract(mask)
@@ -199,12 +193,5 @@ class PointCloudData(CartesianCoordinates):
 
     @classmethod
     def from_o3d(cls, o3d):
-        raise NotImplementedError
-
-    def to_py4dgeo(self):
-        raise NotImplementedError
-
-    @classmethod
-    def from_py4dgeo(cls, py4dgeo):
         raise NotImplementedError
 

@@ -129,12 +129,13 @@ class TestBaseArray(BaseTests):
 
 
     def test_initialisation(self):
-        a = np.random.rand(100, 100)
-        array = self.cls(arr=a)
+        data = np.random.rand(100, 100)
+        a = self.cls(arr=data)
 
-        assert isinstance(array, self.cls)
-        assert array is not a   # -> Passes
-        assert array.arr is a   # -> Passes
+        assert isinstance(a, self.cls)
+        assert a is not data
+        assert a.arr is not data
+        assert np.all(a == a)
 
     def test_view(self):
         a = self.cls(arr=np.random.rand(100, 100))
@@ -208,7 +209,8 @@ class TestBaseArray(BaseTests):
             a = np.random.rand(100, 100)
             array = self.cls(arr=a)
             assert array.__array_interface__ == array.arr.__array_interface__
-            assert array.__array_interface__ == a.__array_interface__
+            # Every object is a "copy" to avoid any chance of a reference
+            assert array.__array_interface__ != a.__array_interface__
 
         def test_numpy_properties(self):
             a = self.cls(arr=np.random.rand(100, 100, 100, 100))
@@ -234,9 +236,9 @@ class TestBaseArray(BaseTests):
             assert a[0,0] == 13
             assert b[0,0] != 13
 
-            b[0:3] = a[0:3]
+            b[0:3, :] = a[0:3, :]
             assert b[0, 0] == 13
-            assert np.allclose(b[0:3], a[0:3])
+            assert np.allclose(b[0:3, :], a[0:3, :])
 
         def test_array_assignment(self):
             a = np.random.rand(100,100)
@@ -297,10 +299,10 @@ class TestBaseArray(BaseTests):
             assert array_2 is not b
             assert array_3 is not c
 
-            # Show that the array data is what they should be. update creates a copy
-            assert array.arr is a
-            assert array_2.arr is b
-            assert array_3.arr is c
+            # Show that the array data is also a copy and not a reference
+            assert array.arr is not a
+            assert array_2.arr is not b
+            assert array_3.arr is not c
 
         def test_min_max(self):
             a = np.random.rand(100, 100)

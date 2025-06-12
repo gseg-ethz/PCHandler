@@ -1,7 +1,7 @@
 
 import logging
 import numpy as np
-from numpy.typing import DTypeLike, ArrayLike
+from numpy.typing import ArrayLike
 
 from .constants import PI, TWO_PI, HALF_PI
 
@@ -88,37 +88,6 @@ def coerce_wrapped_horizontal_angles(array: np.ndarray) -> np.ndarray:
     array[array > PI] -= TWO_PI
     return array
 
-
-def linear_map_dtype(array: np.ndarray, target_dtype: DTypeLike) -> np.ndarray:
-
-    def get_dtype_min_max(dt: np.dtype) -> tuple[float, float]:
-        if np.issubdtype(dt, np.integer):
-            info = np.iinfo(dt)
-            return info.min, info.max
-        elif np.issubdtype(dt, np.floating):
-            return 0.0, 1.0
-        else:
-            raise TypeError(f'Invalid dtype detected: {dt}')
-
-    # Types match, exit
-    if array.dtype == target_dtype:
-        return array
-
-    # Get the corresponding min and max from the type info
-    origin_min, origin_max = get_dtype_min_max(array.dtype)
-    target_min, target_max = get_dtype_min_max(target_dtype)
-
-    # Ensure precision is not lost
-    array = array.astype(np.float64)
-    normalised = (array - origin_min) / (origin_max - origin_min)
-
-    if np.issubdtype(target_dtype, np.floating):
-        return normalised.astype(np.float32)
-
-    mapped = np.floor(normalised * float(target_max - target_min) + target_min)
-    return mapped.astype(target_dtype).flatten()
-
-
 def extract_array(value: np.ndarray | tuple[np.ndarray | object] | object | dict[str, np.ndarray]) -> np.ndarray:
     if isinstance(value, np.ndarray):
         pass
@@ -142,62 +111,11 @@ def extract_array(value: np.ndarray | tuple[np.ndarray | object] | object | dict
             value: np.ndarray = value['arr']
         else:
             raise TypeError(f"'arr' is not in the passed dictionary.")
+
     else:
         raise TypeError(f'Input value is an unsupported type: {type(value)} ')
 
     return value.copy()
-
-def normalize_array(array: np.ndarray,
-                    lower: float|np.ndarray|None = None,
-                    upper: float|np.ndarray|None = None) -> np.ndarray:
-    """
-    Normalise array by default to the bounds [0, 1] alternatively a custom range as defined by lower and upper.
-
-    Clipping will be applied if a custom bound is provided and values exceed this bound.
-    """
-
-    original_dtype = array.dtype
-    array = array.astype(np.float64)
-
-    lower = array.min(axis=0) if lower is None else lower
-    upper = array.max(axis=0) if upper is None else upper
-
-    if isinstance(lower, np.ndarray):
-        if np.any(lower >= upper):
-            raise ValueError("lower must be less than upper")
-    elif lower >= upper:
-        raise ValueError("lower must be less than upper")
-
-    np.divide(array-lower, upper-lower, out=array)
-
-    return array.astype(original_dtype)
-
-def normalise_to_integer_dtype(array: np.ndarray, name: str, target_integer_dtype: DTypeLike) -> np.ndarray:
-    """
-    Normalise values to the min and max values associated with the existing dtype
-    Parameters
-    ----------
-    array
-    name
-    target_integer_dtype
-
-    Returns
-    -------
-
-    """
-
-    if array.dtype == target_integer_dtype:
-        logger.debug(f"Scalar field `{name}` hasn't changed. No operation performed.")
-        return array
-
-    if np.dtype(target_integer_dtype).kind not in ["u", "i"]:
-        logger.debug(f"Scalar field `{name}` is floating. Not converting to dtype limits. Consider [0.0, 1.0].")
-        return array
-
-    lower = np.iinfo(target_integer_dtype).min
-    upper = np.iinfo(target_integer_dtype).max
-
-    return normalize_array(array=array, lower=lower, upper=upper)
 
 # TODO ensure error thrown with single point but a get_point function exists
 def validate_transposed_vector(array: np.ndarray) -> np.ndarray:

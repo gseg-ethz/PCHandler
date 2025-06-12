@@ -39,7 +39,6 @@ def pcd(rgb_, normals_, intensities_) -> PointCloudData:
     return PointCloudData(xyz=random_coordinates(0, 0), rgb=rgb_, normals=normals_, intensity=intensities_)
 
 
-
 class TestPointCloudData:
 
     class TestInitialisation:
@@ -55,29 +54,29 @@ class TestPointCloudData:
 
         def test_rgb_keyword(self, xyz_, rgb_):
             pcd = PointCloudData(xyz_, rgb=rgb_)
-            assert 'rgb' in pcd.sfm
+            assert 'rgb' in pcd.scalar_fields
             assert np.allclose(pcd.rgb, rgb_)
 
         def test_normals_keyword(self, xyz_, normals_):
             pcd = PointCloudData(xyz_, normals=normals_)
-            assert 'normals' in pcd.sfm
+            assert 'normals' in pcd.scalar_fields
             assert np.allclose(pcd.normals, normals_)
 
         def test_intensity_keyword(self, xyz_, intensities_):
             pcd = PointCloudData(xyz_, intensity=intensities_)
-            assert 'intensity' in pcd.sfm
+            assert 'intensity' in pcd.scalar_fields
             assert np.allclose(pcd.intensity, intensities_)
 
         def test_reflectance_keyword(self, xyz_, intensities_):
             pcd = PointCloudData(xyz_, reflectance=intensities_)
-            assert 'reflectance' in pcd.sfm
+            assert 'reflectance' in pcd.scalar_fields
             assert np.allclose(pcd.reflectance, intensities_)
 
         def test_all_scalar_fields(self, xyz_, rgb_, normals_, intensities_):
             pcd = PointCloudData(xyz_, rgb=rgb_, normals=normals_, intensity=intensities_, reflectance=intensities_)
 
             for name in ('rgb', 'normals', 'intensity', 'reflectance'):
-                assert name in pcd.sfm
+                assert name in pcd.scalar_fields
 
         def test_optimised_keyword(self, xyz_):
             pcd = PointCloudData(xyz_)
@@ -98,19 +97,19 @@ class TestPointCloudData:
 
         def test_scalar_fields(self, xyz_, sfs_):
             pcd = PointCloudData(xyz_)
-            assert pcd.sfm == {}
+            assert pcd.scalar_fields == {}
 
             pcd = PointCloudData(xyz_, scalar_fields=sfs_)
-            assert 'test' in pcd.sfm
-            assert np.all(pcd.sfm['test'] == sfs_['test'])
-            assert isinstance(pcd.sfm['test'], ScalarField)
+            assert 'test' in pcd.scalar_fields
+            assert np.all(pcd.scalar_fields['test'] == sfs_['test'])
+            assert isinstance(pcd.scalar_fields['test'], ScalarField)
 
             test_array = np.random.rand(100)
             pcd = PointCloudData(xyz_, scalar_fields={'test': ScalarField(test_array, name='test2')})
-            assert 'test' in pcd.sfm
-            assert np.all(pcd.sfm['test'] == test_array)
-            assert pcd.sfm['test'].name != 'test2'
-            assert isinstance(pcd.sfm['test'], ScalarField)
+            assert 'test' in pcd.scalar_fields
+            assert np.all(pcd.scalar_fields['test'] == test_array)
+            assert pcd.scalar_fields['test'].name != 'test2'
+            assert isinstance(pcd.scalar_fields['test'], ScalarField)
 
     class TestInvalidValues:
         def test_xyz(self, rgb_, normals_, sfs_):
@@ -121,35 +120,35 @@ class TestPointCloudData:
             # Too many columns
             with pytest.raises(ValueError):
                 data = np.random.rand(100, 4).astype(np.float32)
-                PointCloudData(data, rgb=rgb_, normals=normals_, sfm=sfs_)
+                PointCloudData(data, rgb=rgb_, normals=normals_, scalar_fields=sfs_)
 
             # Too many dimensions
             with pytest.raises(ValueError):
                 data = np.random.rand(100, 4, 3).astype(np.float32)
-                PointCloudData(data, rgb=rgb_, normals=normals_, sfm=sfs_)
+                PointCloudData(data, rgb=rgb_, normals=normals_, scalar_fields=sfs_)
 
             # Too fed dimensions
             with pytest.raises(ValueError):
                 data = np.random.rand(100, 2).astype(np.float32)
-                PointCloudData(data, rgb=rgb_, normals=normals_, sfm=sfs_)
+                PointCloudData(data, rgb=rgb_, normals=normals_, scalar_fields=sfs_)
 
         def test_rgb(self, xyz_, normals_, sfs_):
             # rgb non_array
             with pytest.raises(Exception) as e:
-                PointCloudData( xyz=xyz_, rgb="NotAnNdarray", normals=normals_, sfm=sfs_)
+                PointCloudData( xyz=xyz_, rgb="NotAnNdarray", normals=normals_, scalar_fields=sfs_)
                 assert type(e.value) in (ValueError, TypeError, AttributeError)
 
         def test_normals(self, xyz_, rgb_, sfs_):
             # normals non_array
             with pytest.raises(Exception) as e:
-                PointCloudData(xyz=xyz_, rgb=rgb_, normals=1, sfm=sfs_)
+                PointCloudData(xyz=xyz_, rgb=rgb_, normals=1, scalar_fields=sfs_)
                 assert type(e.value) in (ValueError, TypeError, AttributeError)
 
         def test_socs_origin(self, xyz_, rgb_, normals_, sfs_):
             # spherical_coordinates_origin
             with pytest.raises(Exception) as e:
                 PointCloudData(
-                    xyz=xyz_, rgb=rgb_, normals=normals_, sfm=sfs_, socs_origin="NotAnOrigin",
+                    xyz=xyz_, rgb=rgb_, normals=normals_, scalar_fields=sfs_, socs_origin="NotAnOrigin",
                 )
                 assert type(e.value) in (ValueError, TypeError, AttributeError)
 
@@ -159,16 +158,16 @@ class TestPointCloudData:
             assert pcd.rgb.shape[1] == 3
             assert pcd.rgb.dtype == np.uint8
 
-        def test_sf_input_as_sfm(self, xyz_, rgb_, normals_, intensities_):
-            sfm = ScalarFieldManager()
-            pcd = PointCloudData(xyz=xyz_, sfm=sfm)
+        def test_sf_input_as_scalar_fields(self, xyz_, rgb_, normals_, intensities_):
+            scalar_fields = ScalarFieldManager()
+            pcd = PointCloudData(xyz=xyz_, scalar_fields=scalar_fields)
 
-            assert isinstance(pcd.sfm, ScalarFieldManager)
-            assert len(pcd.sfm) == 0
+            assert isinstance(pcd.scalar_fields, ScalarFieldManager)
+            assert len(pcd.scalar_fields) == 0
 
-            pcd2 = PointCloudData(xyz=xyz_, rgb=rgb_, normals=normals_, sfm=sfm)
-            assert isinstance(pcd2.sfm, ScalarFieldManager)
-            assert len(pcd2.sfm) == 2
+            pcd2 = PointCloudData(xyz=xyz_, rgb=rgb_, normals=normals_, scalar_fields=scalar_fields)
+            assert isinstance(pcd2.scalar_fields, ScalarFieldManager)
+            assert len(pcd2.scalar_fields) == 2
 
     class TestReduceSampleExtract:
         class TestMaskGeneration:
@@ -238,7 +237,7 @@ class TestPointCloudData:
             base_xyz = pcd.xyz.copy()
             base_rgb = pcd.rgb.copy()
             base_normal = pcd.normals.copy()
-            base_intensities = copy.deepcopy(pcd.sfm["intensity"])
+            base_intensities = copy.deepcopy(pcd.scalar_fields["intensity"])
 
             mask = np.zeros(len(pcd), dtype=np.bool_)
             mask[0:10] = True
@@ -251,16 +250,16 @@ class TestPointCloudData:
             assert start_id == end_id
 
             assert np.all(base_xyz[mask, :] == pcd.xyz)
-            assert np.all(base_rgb[mask, :] == pcd.rgb)
-            assert np.all(base_normal[mask, :] == pcd.normals)
-            assert np.all(base_intensities[mask] == pcd.sfm["intensity"].arr)
+            assert np.all(base_rgb[mask] == pcd.rgb)
+            assert np.all(base_normal[mask] == pcd.normals)
+            assert np.all(base_intensities[mask] == pcd.scalar_fields["intensity"].arr)
 
         def test_sample(self, pcd):
             start_id = id(pcd)
             base_xyz = pcd.xyz.copy()
             base_rgb = pcd.rgb.copy()
             base_normal = pcd.normals.copy()
-            base_intensities = copy.deepcopy(pcd.sfm["intensity"])
+            base_intensities = copy.deepcopy(pcd.scalar_fields["intensity"])
 
             mask = np.zeros(len(pcd), dtype=np.bool_)
             mask[0:10] = True
@@ -274,13 +273,13 @@ class TestPointCloudData:
             assert id(pcd.xyz) != id(new_pcd.xyz)
             assert id(pcd.rgb) != id(new_pcd.rgb)
             assert id(pcd.normals) != id(new_pcd.normals)
-            assert id(pcd.sfm) != id(new_pcd.sfm)
+            assert id(pcd.scalar_fields) != id(new_pcd.scalar_fields)
             assert id(pcd.spher) != id(new_pcd.spher)
 
             assert np.all(base_xyz[mask, :] == new_pcd.xyz)
-            assert np.all(base_rgb[mask, :] == new_pcd.rgb)
-            assert np.all(base_normal[mask, :] == new_pcd.normals)
-            assert np.all(base_intensities[mask] == new_pcd.sfm["intensity"])
+            assert np.all(base_rgb[mask] == new_pcd.rgb)
+            assert np.all(base_normal[mask] == new_pcd.normals)
+            assert np.all(base_intensities[mask] == new_pcd.scalar_fields["intensity"])
             assert pcd.optimised == new_pcd.optimised
             if isinstance(pcd.socs_origin, np.ndarray):
                 assert np.all(pcd.socs_origin == new_pcd.socs_origin)
@@ -293,7 +292,7 @@ class TestPointCloudData:
             base_xyz = pcd.xyz.copy()
             base_rgb = pcd.rgb.copy()
             base_normal = pcd.normals.copy()
-            base_intensities = copy.deepcopy(pcd.sfm["intensity"])
+            base_intensities = copy.deepcopy(pcd.scalar_fields["intensity"])
 
             mask = np.zeros(len(pcd), dtype=np.bool_)
             mask[0:10] = True
@@ -308,20 +307,20 @@ class TestPointCloudData:
             assert id(pcd.xyz) != id(sampled_pcd.xyz)
             assert id(pcd.rgb) != id(sampled_pcd.rgb)
             assert id(pcd.normals) != id(sampled_pcd.normals)
-            assert id(pcd.sfm) != id(sampled_pcd.sfm)
+            assert id(pcd.scalar_fields) != id(sampled_pcd.scalar_fields)
             assert id(pcd.spher) != id(sampled_pcd.spher)
 
             assert np.all(base_xyz[~mask, :] == sampled_pcd.xyz)
-            assert np.all(base_rgb[~mask, :] == sampled_pcd.rgb)
-            assert np.all(base_normal[~mask, :] == sampled_pcd.normals)
+            assert np.all(base_rgb[~mask] == sampled_pcd.rgb)
+            assert np.all(base_normal[~mask] == sampled_pcd.normals)
             assert np.all(base_intensities[~mask] == sampled_pcd.intensity)
             assert np.all(pcd.socs_origin == sampled_pcd.socs_origin)
             assert np.all(pcd.optimised == sampled_pcd.optimised)
             assert np.all(pcd.spher == sampled_pcd.spher)
 
             assert np.all(base_xyz[mask, :] == extracted_pcd.xyz)
-            assert np.all(base_rgb[mask, :] == extracted_pcd.rgb)
-            assert np.all(base_normal[mask, :] == extracted_pcd.normals)
+            assert np.all(base_rgb[mask] == extracted_pcd.rgb)
+            assert np.all(base_normal[mask] == extracted_pcd.normals)
             assert np.all(base_intensities[mask] == extracted_pcd.intensity)
             assert np.all(pcd.socs_origin == extracted_pcd.socs_origin)
             assert np.all(pcd.optimised == extracted_pcd.optimised)
@@ -330,7 +329,7 @@ class TestPointCloudData:
             assert len(extracted_pcd) == 10
 
         def test_none_fields(self, xyz_):
-            ref_pcd = PointCloudData(xyz_, sfm=ScalarFieldManager(parent=None))
+            ref_pcd = PointCloudData(xyz_, scalar_fields=ScalarFieldManager(parent=None))
             this_pcd = ref_pcd.copy()
 
             mask = np.zeros(len(this_pcd), dtype=np.bool_)
@@ -355,7 +354,7 @@ class TestPointCloudData:
             assert reduced_pcd.optimised == extracted_pcd.optimised
 
     def test_immutability(self, xyz_, rgb_, normals_, intensities_):
-        pcd = PointCloudData(xyz=xyz_, rgb=rgb_, normals=normals_, sfm={"intensity": intensities_})
+        pcd = PointCloudData(xyz=xyz_, rgb=rgb_, normals=normals_, scalar_fields={"intensity": intensities_})
 
         with pytest.raises(AttributeError):
             pcd.xyz = np.random.rand(100, 3)

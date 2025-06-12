@@ -148,10 +148,16 @@ class TestPydantic:
         b_dumped = b.model_dump()
 
         # Show that the cached properties are dumped not passed onto the copy
-        assert 'my_prop' not in a_copy.__dict__.keys()
-        assert 'my_prop' not in a_dumped.__dict__.keys()
+        assert 'my_prop' in a_copy.__dict__.keys()          # my_prop is still in the dict when using model_copy
+        assert 'my_prop' not in a_dumped.keys()
+        assert hasattr(a, 'my_prop')
+        assert hasattr(a_copy, 'my_prop')
 
+
+        # Test that computed field dumps the property and has it as an attribute
         assert 'my_prop' in b_copy.__dict__.keys()
-        assert 'my_prop' in b_dumped.__dict__.keys()
+        assert 'my_prop' in b_dumped.keys()
+        assert hasattr(b, 'my_prop')
+        assert hasattr(b_copy, 'my_prop')
 
 

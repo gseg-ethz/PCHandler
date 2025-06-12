@@ -77,7 +77,7 @@ def test_global_shifted(large_coordinates, rgb_, normals_, intensities_, offset_
     # 'Scalar fields' should be identical
     assert np.all(rgb_ == pcd.rgb)
     assert np.all(normals_ == pcd.normals)
-    assert np.all(intensities_ == pcd.sfm["intensity"])
+    assert np.all(intensities_ == pcd.scalar_fields["intensity"])
 
     assert pcd.nbPoints == 100
     assert pcd.xyz.dtype == np.float32
@@ -96,7 +96,7 @@ def test_non_shifted_cloud(small_coordinates, rgb_, normals_, intensities_, offs
     # Scalar fields
     assert np.all(rgb_ == pcd.rgb)
     assert np.all(normals_ == pcd.normals)
-    assert np.all(intensities_ == pcd.sfm["intensity"])
+    assert np.all(intensities_ == pcd.scalar_fields["intensity"])
 
     # Points should match now
     assert np.all(np.isclose(pcd.xyz, xyz))

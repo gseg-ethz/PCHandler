@@ -3,7 +3,7 @@ from typing import Callable
 from abc import ABC
 
 from src.pchandler.base_arrays import BaseArray
-from src.pchandler.geometry.scalar_fields import ScalarField
+from src.pchandler.geometry.scalar_fields import ScalarField, linear_map_dtype, normalise_self, normalize_array
 from src.pchandler.validators import *
 
 from pchandler.constants import PI, TWO_PI, HALF_PI
@@ -83,6 +83,7 @@ class TestValidation(BaseAngleTestClass):
             with pytest.raises( Exception ) as e:
                 func(values)
             assert type(e.value) in (TypeError, ValueError)
+
 
     class TestInclinationAngles(BaseAngleTestClass):
         main_test: Callable = validate_inclination_angles
@@ -169,9 +170,6 @@ class TestValidation(BaseAngleTestClass):
             assert type(e.value) in (TypeError, ValueError)
 
 
-
-
-
 def test_coerce_wrapped_azimuths():
     original = np.linspace(0, TWO_PI, 1000000, endpoint=False)
     offset = 0.3455 * PI
@@ -209,68 +207,6 @@ def test_extract_array_valid(array):
 def test_extract_array_invalid(array):
     with pytest.raises(TypeError):
         extract_array(array)
-
-
-example_vectors = tuple([
-    np.linspace(0, 2 ** 8 - 1, 255, dtype=np.uint8, endpoint=True),
-    np.linspace(0, 2 ** 16 - 1, 255, dtype=np.uint16, endpoint=True),
-    np.linspace(0, 2 ** 32 - 1, 255, dtype=np.uint32, endpoint=True),
-    np.linspace(-2 ** 7, 2 ** 7 - 1, 255, dtype=np.int8, endpoint=True),
-    np.linspace(-2 ** 15, 2 ** 15 - 1, 255, dtype=np.int16, endpoint=True),
-    np.linspace(-2 ** 31, 2 ** 31 - 1, 255, dtype=np.int32, endpoint=True),
-    np.linspace(0, 1, 255, dtype=np.float32, endpoint=True),
-])
-
-pairs = []
-for i in example_vectors:
-    for j in example_vectors:
-        pairs.append((i, j))
-
-@pytest.mark.parametrize(['original', 'target'], pairs)
-def test_linear_map_dtype(original: np.ndarray, target: np.ndarray):
-    """
-    Test the linear mapping function between dtypes to ensure no clipping of values.
-    255 samples used to avoid having to accommodate any rounding of digits in the logical comparison.
-    These would be a loss of precision
-    """
-    # Adjust comparison tolerances based on bit sizes
-    original_bits = original.dtype.itemsize * 8
-    target_bits = target.dtype.itemsize * 8
-
-    # Ensure that the manually written min/max values match the iinfo
-    if np.issubdtype(original.dtype, np.integer):
-        assert np.iinfo(original.dtype).min == original.min()
-        assert np.iinfo(original.dtype).max == original.max()
-
-    mapped_array = linear_map_dtype(original, target.dtype)
-
-    # Testing of np.clip led to erroneous mapping results and often limits clipped to 0
-    if np.issubdtype(target.dtype, np.floating):
-        # Ensure start and end are exact. The others just need to be withi
-        # n the precision
-        atol = 1 / (2 ** original_bits)
-        assert np.allclose(0, mapped_array[0])
-        assert np.allclose(1, mapped_array[-1])
-        assert np.allclose(target, mapped_array, atol=atol)
-        print(f'from {original.dtype} to {target.dtype} with{atol=}')
-
-    else:
-        expected_min = np.iinfo(target.dtype).min
-        expected_max = np.iinfo(target.dtype).max
-        atol = (2 ** target_bits // 2 ** original_bits)
-        assert np.allclose(expected_min, mapped_array[0])
-        assert np.allclose(expected_max, mapped_array[-1])
-        assert np.allclose(target, mapped_array, atol=atol)
-        print(f'from {original.dtype} to {target.dtype} with {atol=}')
-
-def test_invalid_linear_map_dtype():
-    array = np.ones(14, dtype=np.complex64)
-    array2 = np.ones(14, dtype=np.uint8)
-    with pytest.raises(TypeError):
-        linear_map_dtype(array, np.uint8)
-
-    with pytest.raises(TypeError):
-        linear_map_dtype(array2, np.complex64)
 
 
 @pytest.mark.parametrize('array', (np.random.rand(3, 10), np.random.rand(10,3)))

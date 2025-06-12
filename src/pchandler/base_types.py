@@ -1,7 +1,8 @@
-from typing import Literal, Union, Annotated
+from __future__ import annotations
+
+from typing import Union, Annotated
 
 import numpy as np
-from numpy.typing import DTypeLike
 
 from numpydantic import NDArray, Shape
 from numpydantic.dtype import Integer, Float, Bool, UInt8, Float32, UInt16, Int8, Int16, Int32

@@ -3,8 +3,8 @@ from __future__ import annotations
 import logging
 import weakref
 from collections import Counter
-from collections.abc import KeysView, ValuesView, ItemsView
-from typing import Iterator, MutableMapping, overload, Self, TYPE_CHECKING, Iterable, NamedTuple, TypeVar, Union
+from collections.abc import ValuesView, ItemsView
+from typing import Iterator, MutableMapping, overload, Self, TYPE_CHECKING, Iterable
 
 import numpy as np
 from pydantic import validate_call
@@ -23,11 +23,6 @@ logger = logging.getLogger(__name__.split(".")[0])
 
 
 
-class IndexPosition(NamedTuple):
-    start: int
-    end: int
-
-
 class ScalarFieldManager(MutableMapping[str, SF_T]):
     """
     Manages a collection of ScalarField objects, ensuring that all fields have the same
@@ -35,7 +30,7 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
     """
     def __init__(self,
                  parent: PointCloudData|None = None,
-                 fields: dict[str, SF_T] | Self | None = None
+                 fields: dict[str, SF_T|np.ndarray] | Self | None = None
                 ) -> None:
         self._parent: weakref.ReferenceType[PointCloudData]|None = weakref.ref(parent) if parent is not None else None
 
@@ -104,7 +99,7 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
                 f"Scalar field length does not equal #points: {self.num_points} != {value.shape[0]}" )
 
         if isinstance(value, np.ndarray):
-            self.fields[name] = ScalarField(data=value, name=name)
+            self.fields[name] = ScalarField(value, name=name)
 
         return None
 
@@ -118,7 +113,7 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
         del self.fields[field_name.lower()]
 
     def create_field(self, name: str, data: VectorT|Array_Nx3_T) -> None:
-        sf = ScalarField(data=data, name=name)
+        sf = ScalarField(data, name=name)
         self.add_field(sf)
 
     @property
@@ -201,32 +196,21 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
         sample = {}
 
         for name, value in self.items():
-            if isinstance(value, (RGBFields, NormalFields)):
-                sample[name] = value[mask, :]
-
-            else:
-                sample[name] = value[mask]
+            mask = value.create_mask(mask)
+            sample[name] = value[mask]
 
         return sample
 
     def extract(self, mask: IndexLike) -> dict[str, ScalarField]:
         sample = self.sample(mask)
-
         self.reduce(mask)
-
         return sample
 
     def reduce(self, mask: IndexLike) -> None:
-
         for name, value in self.items():
             self.fields[name] = value[mask]
 
-    # def __and__(self, other: ScalarFieldManager) -> ScalarFieldManager:
-    #     if not isinstance(other, ScalarFieldManager):
-    #         raise TypeError(f"Can only merge with another ScalarFieldManager, got {type(other)}")
-    #
-    #     return self.merge(other)
-
+    # TODO pull out, maybe nice to have in future if requested
     @staticmethod
     def generate_point_cloud_map(sfms: Iterable[ScalarFieldManager]) -> dict[int, slice]:
         indexes = [0]
@@ -244,55 +228,39 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
 
     @classmethod
     def merge(cls, sfms: Iterable[Self]) -> Self:
-        # DISCUSS Idea to create a partial_fields dict to store all those not linked
-
         sfm_key_sets = (set(sfm) for sfm in sfms)
-        all_keys = set.union(*sfm_key_sets)
         keys_in_common = set.intersection(*sfm_key_sets)
-        partial_keys = list(set.difference(all_keys, keys_in_common))
 
-        if len(all_keys) == 0:
+        # return if there are no keys/scalar fields in common
+        if len(keys_in_common) == 0:
             return ScalarFieldManager(parent=None, fields={})
-
         new_sfm = ScalarFieldManager(parent=None)
+
         for common_key in keys_in_common:
+            # Get the scalar field managers that have the key in common
             sfs: list[ScalarField] = [sfm[common_key] for sfm in sfms]
 
-            # DISCUSS Warn when there's a mismatch between keys and names.
-            #  Should not be the case if implement robustly...
+            # Check the names are the same. If not, take the most occurring name.
+            # DECISION Name of scalar_field should always be lower case and match the key in _sfm dict
             sf_names: list[str] = [sf.name for sf in sfs]
             if len(set(sf_names)) != 1:
                 logger.warning(f"While merging scalar field {common_key} different names were encountered.")
+                name = max((counted_names := Counter(sf_names)), key=counted_names.get)
+                logger.warning(f"Using the most occurring name for the scalar field: {name} out of ")
+            else:
+                name = sfs[0].name
 
-            # Get the most occurring name
-            name = max((counted_names := Counter(sf_names)), key=counted_names.get)
-            # TODO ensures all the contents of the operations performed match between same named fields.
-            #  This is definitely worth ensuring to ensure same normalisation etc.
-            if len(set(map(tuple, [sf.operations_performed for sf in sfs]))) != 1:
+
+            # Check if the original_dtype_states match. If not, do not use.
+            if all([sfs[0] != sf for sf in sfs[1:]]):
+                origin_dtype = sfs[0].origin_dtype
+                data = np.concatenate([sf.arr for sf in sfs])
+                sf = ScalarField(data, name=name, origin_dtype=origin_dtype)
+                new_sfm.add_field(sf)
+            else:
                 logger.warning(
                     f"While merging scalar field {common_key} different list of previously performed "
                     f"operations were encountered. Merged scalar field will have an empty record!"
                 )
-                partial_keys.append(common_key)
-                continue
-            else:
-                operations_performed = sfs[0].operations_performed
-            # TODO Most important is the coerced value is constant
-            if len(set(sf.origin_dtype for sf in sfs)) != 1:
-                logger.warning(
-                    f"While merging scalar field {common_key} different original dtypes were encountered. "
-                    f"Merged scalar field will have an empty record!"
-                )
-                partial_keys.append(common_key)
-                continue
-            else:
-                original_dtype = sfs[0].origin_dtype
-
-            data = np.concatenate([sf.arr for sf in sfs])
-            sf = ScalarField(data=data, name=name,
-                             origin_dtype=original_dtype,
-                             operations_performed=operations_performed)
-            new_sfm.add_field(sf)
-
 
         return new_sfm
