@@ -37,7 +37,7 @@ import copy
 import logging
 from enum import Enum
 from functools import wraps
-from typing import Optional, Any
+from typing import Any, Optional
 
 import numpy as np
 
@@ -148,8 +148,6 @@ def convert_angles(
                     return np.multiply(values, 180 / 200, out=out)
 
 
-
-
 def unique_rows_fast(bin_idx: np.ndarray):
     """
     bin_idx: 2D int32 array of shape (N, D)
@@ -171,7 +169,6 @@ def unique_rows_fast(bin_idx: np.ndarray):
     uniq = uniq_blob.view(arr.dtype).reshape(-1, arr.shape[1])
 
     return uniq, inv
-
 
 
 def bypass_immutable(method):
@@ -199,4 +196,3 @@ def return_copy(deep=True):
         return wrapper
 
     return decorator
-

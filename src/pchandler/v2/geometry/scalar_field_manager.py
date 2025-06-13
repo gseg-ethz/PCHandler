@@ -3,8 +3,8 @@ from __future__ import annotations
 import logging
 import weakref
 from collections import Counter
-from collections.abc import ValuesView, ItemsView
-from typing import Iterator, MutableMapping, overload, Self, TYPE_CHECKING, Iterable
+from collections.abc import ItemsView, ValuesView
+from typing import TYPE_CHECKING, Iterable, Iterator, MutableMapping, Self, overload
 
 import numpy as np
 from pydantic import validate_call
@@ -12,15 +12,27 @@ from pydantic import validate_call
 if TYPE_CHECKING:
     from .core import PointCloudData
 
-from ..constants import RGB_POTENTIAL_NAMES, NORMAL_POTENTIAL_NAMES, DEFAULT_CONFIG
-from ..base_types import (IndexLike, VectorT, Array_Nx3_T, VectorT_Uint8,
-                          Array_Nx3_float32_T, VectorT_Float32, Array_Nx3_uint8_T)
+from ..base_types import (
+    Array_Nx3_float32_T,
+    Array_Nx3_T,
+    Array_Nx3_uint8_T,
+    IndexLike,
+    VectorT,
+    VectorT_Float32,
+    VectorT_Uint8,
+)
+from ..constants import DEFAULT_CONFIG, NORMAL_POTENTIAL_NAMES, RGB_POTENTIAL_NAMES
 from .scalar_fields import (
-    ScalarField, RGBFields, NormalFields, RGB_FIELD, NORMALS_FIELD, LowerStr, SF_T)
-
+    NORMALS_FIELD,
+    RGB_FIELD,
+    SF_T,
+    LowerStr,
+    NormalFields,
+    RGBFields,
+    ScalarField,
+)
 
 logger = logging.getLogger(__name__.split(".")[0])
-
 
 
 class ScalarFieldManager(MutableMapping[str, SF_T]):
@@ -28,11 +40,11 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
     Manages a collection of ScalarField objects, ensuring that all fields have the same
     number of data points. Also provides a mechanism to select subsets of the fields.
     """
-    def __init__(self,
-                 parent: PointCloudData|None = None,
-                 fields: dict[str, SF_T|np.ndarray] | Self | None = None
-                ) -> None:
-        self._parent: weakref.ReferenceType[PointCloudData]|None = weakref.ref(parent) if parent is not None else None
+
+    def __init__(
+        self, parent: PointCloudData | None = None, fields: dict[str, SF_T | np.ndarray] | Self | None = None
+    ) -> None:
+        self._parent: weakref.ReferenceType[PointCloudData] | None = weakref.ref(parent) if parent is not None else None
 
         if isinstance(fields, dict):
             for key, value in fields.items():
@@ -42,7 +54,7 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
                 elif isinstance(value, ScalarField):
                     value.name = key
                 else:
-                    raise TypeError(f'Type of input field is not of numpy array or ScalarField but {type(value)}')
+                    raise TypeError(f"Type of input field is not of numpy array or ScalarField but {type(value)}")
 
                 fields[key] = value
 
@@ -79,7 +91,7 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
     def __getitem__(self, key: IndexLike) -> Self: ...
 
     @validate_call(config=DEFAULT_CONFIG)
-    def __getitem__(self, key: LowerStr|IndexLike) -> (SF_T | dict[str, SF_T]):
+    def __getitem__(self, key: LowerStr | IndexLike) -> SF_T | dict[str, SF_T]:
 
         if isinstance(key, str):
             return self.fields[key]
@@ -91,12 +103,13 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
         if not isinstance(value, np.ndarray):
             value = value.arr
 
-        if name in RGB_POTENTIAL_NAMES: return self._handle_rgb(name, value)
-        if name in NORMAL_POTENTIAL_NAMES: return self._handle_normal(name, value)
+        if name in RGB_POTENTIAL_NAMES:
+            return self._handle_rgb(name, value)
+        if name in NORMAL_POTENTIAL_NAMES:
+            return self._handle_normal(name, value)
 
         if self.num_points != value.shape[0]:
-            raise ValueError(
-                f"Scalar field length does not equal #points: {self.num_points} != {value.shape[0]}" )
+            raise ValueError(f"Scalar field length does not equal #points: {self.num_points} != {value.shape[0]}")
 
         if isinstance(value, np.ndarray):
             self.fields[name] = ScalarField(value, name=name)
@@ -112,7 +125,7 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
     def remove_field(self, field_name: LowerStr) -> None:
         del self.fields[field_name.lower()]
 
-    def create_field(self, name: str, data: VectorT|Array_Nx3_T) -> None:
+    def create_field(self, name: str, data: VectorT | Array_Nx3_T) -> None:
         sf = ScalarField(data, name=name)
         self.add_field(sf)
 
@@ -125,72 +138,72 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
         return len(self._parent())
 
     @property
-    def rgb(self) -> RGBFields|None:
+    def rgb(self) -> RGBFields | None:
         return self.fields.get(RGB_FIELD, None)
 
     @property
     def intensity(self):
-        return self.fields.get('intensity', None)
+        return self.fields.get("intensity", None)
 
     @property
     def reflectance(self):
-        return self.fields.get('reflectance', None)
+        return self.fields.get("reflectance", None)
 
     @property
-    def normals(self) -> NormalFields|None:
+    def normals(self) -> NormalFields | None:
         return self.fields.get(NORMALS_FIELD, None)
 
     @validate_call(config=DEFAULT_CONFIG)
     def _handle_rgb(self, name: LowerStr, value: VectorT_Uint8 | Array_Nx3_uint8_T) -> None:
         # Set the whole field
-        if name in ('rgb', 'rgba', 'color', 'colour', 'colors', 'colours'):
+        if name in ("rgb", "rgba", "color", "colour", "colors", "colours"):
             self.fields[RGB_FIELD] = RGBFields(arr=value[:, [0, 1, 2]])
             return
 
-        elif name in ('bgr', 'bgra'):
+        elif name in ("bgr", "bgra"):
             self.fields[RGB_FIELD] = RGBFields(arr=value[[2, 1, 0], :])
             return
 
         if self.rgb is None:
             self.fields[RGB_FIELD] = RGBFields.initialize(self.num_points)
 
-        if name in ('r', 'red'):
+        if name in ("r", "red"):
             self.rgb.arr[:, 0] = value
 
-        elif name in ('g', 'green'):
+        elif name in ("g", "green"):
             self.rgb.arr[:, 1] = value
 
-        elif name in ('b', 'blue'):
+        elif name in ("b", "blue"):
             self.rgb.arr[:, 2] = value
 
         else:
-            raise KeyError(f'Unknown key made it into _handle_rgb : {name}')
+            raise KeyError(f"Unknown key made it into _handle_rgb : {name}")
 
     @validate_call(config=DEFAULT_CONFIG)
     def _handle_normal(self, name: LowerStr, value: VectorT_Float32 | Array_Nx3_float32_T) -> None:
         # Set the whole field
-        if name == ('nxnynz', 'normals', 'normal'):
+        if name == ("nxnynz", "normals", "normal"):
             self.fields[NORMALS_FIELD] = NormalFields(arr=value[:, [0, 1, 2]])
             return
 
-        elif name == 'nznynx':
+        elif name == "nznynx":
             self.fields[NORMALS_FIELD] = NormalFields(arr=value[[2, 1, 0], :])
             return
 
         if self.normals is None:
             self.fields[NORMALS_FIELD] = NormalFields.initialize(self.num_points)
 
-        if name in ('nx', 'normal_x'):
+        if name in ("nx", "normal_x"):
             self.normals.arr[:, 0] = value
 
-        elif name in ('ny', 'normal_y'):
+        elif name in ("ny", "normal_y"):
             self.normals.arr[:, 1] = value
 
-        elif name in ('nz', 'normal_z'):
+        elif name in ("nz", "normal_z"):
             self.normals.arr[:, 2] = value
 
         else:
-            raise KeyError(f'Unknown key made it into normals : {name}')
+            raise KeyError(f"Unknown key made it into normals : {name}")
 
     def sample(self, mask: IndexLike) -> dict[str, ScalarField]:
         sample = {}
@@ -225,7 +238,6 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
             index_map[i] = slice(value, ending_indexes[i], None)
         return index_map
 
-
     @classmethod
     def merge(cls, sfms: Iterable[Self]) -> Self:
         sfm_key_sets = (set(sfm) for sfm in sfms)
@@ -249,7 +261,6 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
                 logger.warning(f"Using the most occurring name for the scalar field: {name} out of ")
             else:
                 name = sfs[0].name
-
 
             # Check if the original_dtype_states match. If not, do not use.
             if all([sfs[0] != sf for sf in sfs[1:]]):

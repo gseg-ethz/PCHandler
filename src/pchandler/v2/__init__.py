@@ -122,7 +122,7 @@ This modular design ensures that `pchandler` is both extensible and scalable, ma
 applications in 3D data analysis, GIS, and computer vision.
 """
 
-__all__ = ["data_io", "fov", "geometry", "util", "__version__"]
+# __all__ = ["data_io", "fov", "geometry", "util", "__version__"]
 
 __author__ = "Nicholas Meyer"
 __email__ = "meyernic@ethz.ch"
@@ -130,24 +130,25 @@ __email__ = "meyernic@ethz.ch"
 import logging
 
 from pchandler._version import __version__
-from . import data_io, fov, geometry, util
 
-logger = logging.getLogger(__name__.split(".")[0])
-
-if not logging.getLogger().hasHandlers():
-    config = {
-        "version": 1,
-        "disable_existing_loggers": False,
-        "formatters": {
-            "simple": {"format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"},
-            "detailed": {
-                "format": "[%(levelname)s|%(module)s|L%(lineno)d] %(asctime)s: %(message)s",
-                "datefmt": "%Y-%m-%dT%H:%M:%S%z",
-            },
-        },
-        "handlers": {
-            "stderr": {"class": "logging.StreamHandler", "formatter": "detailed", "stream": "ext://sys.stderr"}
-        },
-        "loggers": {"root": {"level": "WARNING", "handlers": ["stderr"]}},
-    }
-    logging.config.dictConfig(config)
+# from . import data_io, fov, geometry, util
+#
+# logger = logging.getLogger(__name__.split(".")[0])
+#
+# if not logging.getLogger().hasHandlers():
+#     config = {
+#         "version": 1,
+#         "disable_existing_loggers": False,
+#         "formatters": {
+#             "simple": {"format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"},
+#             "detailed": {
+#                 "format": "[%(levelname)s|%(module)s|L%(lineno)d] %(asctime)s: %(message)s",
+#                 "datefmt": "%Y-%m-%dT%H:%M:%S%z",
+#             },
+#         },
+#         "handlers": {
+#             "stderr": {"class": "logging.StreamHandler", "formatter": "detailed", "stream": "ext://sys.stderr"}
+#         },
+#         "loggers": {"root": {"level": "WARNING", "handlers": ["stderr"]}},
+#     }
+#     logging.config.dictConfig(config)

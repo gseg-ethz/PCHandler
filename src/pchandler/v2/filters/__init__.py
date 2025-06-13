@@ -9,7 +9,7 @@ from .cartesian_filters import (
     SphereFilter,
 )
 from .core import GenericFieldFilter, PointCloudFilter
-from .downsample import RandomDownsampleFilter, VoxelDownsample, AngleBinDownsample
+from .downsample import AngleBinDownsample, RandomDownsampleFilter, VoxelDownsample
 from .outlier_filter import CartesianOutlierFilter, SphericalOutlierFilter
 from .scalar_field_filters import ScalarFieldFilter, ScalarFieldPercentileFilter
 from .spherical_coordinate_filters import FoVFilter, RangeFilter
@@ -34,6 +34,7 @@ __all__ = [
 # optional GPU support
 try:
     from . import gpu
+
     __all__.append("gpu")
 except ImportError:
     # either no GPU build or missing dependencies;

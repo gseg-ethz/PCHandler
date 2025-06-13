@@ -4,9 +4,10 @@ import warnings
 import numpy as np
 from numpy.typing import NDArray
 
+from pchandler.util import unique_rows_fast
 from pchandler.v2.geometry.core import PointCloudData
 from pchandler.v2.geometry.scalar_field_manager import ScalarFieldManager
-from pchandler.util import unique_rows_fast
+
 from .core import PointCloudFilter
 
 logger = logging.getLogger(__name__.split(".")[0])
@@ -107,6 +108,7 @@ class VoxelDownsample:
             _global_shift_already_applied=True,
         )
 
+
 class AngleBinDownsample:
     _possible_weighting_method: list[str] = ["nearest", "constant", "linear"]
 
@@ -119,12 +121,12 @@ class AngleBinDownsample:
         self.weighting_method = weighting_method
 
     def sample(self, pcd: PointCloudData) -> PointCloudData:
-        pcd_angles = pcd.spherical_coordinates[:,1:]
+        pcd_angles = pcd.spherical_coordinates[:, 1:]
         # unique, unique_inverse = np.unique(
         #     np.round(pcd_angles / self.angle_bin_size).astype(np.int32), axis=0, return_inverse=True
         # )
-        unique, unique_inverse = unique_rows_fast( #np.unique
-            ((pcd_angles + self.angle_bin_size/2) // self.angle_bin_size).astype(np.int32)
+        unique, unique_inverse = unique_rows_fast(  # np.unique
+            ((pcd_angles + self.angle_bin_size / 2) // self.angle_bin_size).astype(np.int32)
         )
 
         # Calculate centroids for each voxel
@@ -157,7 +159,10 @@ class AngleBinDownsample:
             sfm.create_field(field_name, scalar_sum / weight_sum)
             # self.scalar_fields[field_name] = (scalar_sum / weight_sum).astype(field_values.dtype)
 
-        ranges = np.bincount(unique_inverse, weights=pcd.spherical_coordinates[:,0] * weights, minlength=unique.shape[0]) / weight_sum
+        ranges = (
+            np.bincount(unique_inverse, weights=pcd.spherical_coordinates[:, 0] * weights, minlength=unique.shape[0])
+            / weight_sum
+        )
 
         # # Average scalar fields
         # averaged_scalar_fields = {}

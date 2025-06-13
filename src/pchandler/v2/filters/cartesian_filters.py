@@ -8,6 +8,7 @@ from shapely.affinity import translate
 from shapely.geometry import Polygon
 
 from pchandler.v2.geometry.core import PointCloudData
+
 from .core import PointCloudFilter
 
 logger = logging.getLogger(__name__.split(".")[0])
