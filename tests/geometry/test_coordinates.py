@@ -1,66 +1,73 @@
 import copy
 
-import pytest
-
 import numpy as np
-from scipy.spatial.transform import Rotation
+import pytest
 from pydantic import ValidationError
+from scipy.spatial.transform import Rotation
 
-from pchandler.base_arrays import ArrayNx3
+from pchandler.v2.base_arrays import ArrayNx3
+from pchandler.v2.constants import HALF_PI, PI, TWO_PI
 from pchandler.v2.geometry import (
-    CartesianCoordinates, Abstract3dCoordinates, SphericalCoordinates, rhv2xyz, xyz2rhv, AbstractCoordinates
+    Abstract3dCoordinates,
+    AbstractCoordinates,
+    CartesianCoordinates,
+    SphericalCoordinates,
+    Transform,
+    rhv2xyz,
+    xyz2rhv,
 )
-from pchandler.v2.geometry import Transform
-from pchandler.constants import PI,HALF_PI, TWO_PI
+
+_known_spher = np.array(
+    [
+        [1, 0, HALF_PI],
+        [1, HALF_PI, HALF_PI],
+        [1, 0, 0],
+        [1, PI, HALF_PI],
+        [1, -HALF_PI, HALF_PI],
+        [1, 0, PI],
+        [np.sqrt(3), np.arctan2(1, 1), np.arctan2(np.sqrt(2), 1)],
+    ]
+).astype(np.float64)
 
 
-_known_spher = np.array([
-    [1, 0, HALF_PI],
-    [1, HALF_PI, HALF_PI],
-    [1, 0, 0],
-    [1, PI, HALF_PI],
-    [1, -HALF_PI, HALF_PI],
-    [1, 0, PI],
-    [np.sqrt(3), np.arctan2(1, 1), np.arctan2(np.sqrt(2), 1)]
-]).astype(np.float64)
-
-@pytest.fixture(scope='function')
+@pytest.fixture(scope="function")
 def known_spher():
     return _known_spher
 
+
 _small_xyz = np.random.rand(100, 3)
 
-@pytest.fixture(scope='function')
+
+@pytest.fixture(scope="function")
 def small_xyz():
     return _small_xyz
 
-_known_xyz = np.array([
-    [1, 0, 0],
-    [0, 1, 0],
-    [0, 0, 1],
-    [-1, 0, 0],
-    [0, -1, 0],
-    [0, 0, -1],
-    [1, 1, 1]
-]).astype(np.float64)
 
-@pytest.fixture(scope='function')
+_known_xyz = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1], [-1, 0, 0], [0, -1, 0], [0, 0, -1], [1, 1, 1]]).astype(
+    np.float64
+)
+
+
+@pytest.fixture(scope="function")
 def known_xyz():
     return _known_xyz
 
+
 _large_xyz = np.random.rand(1_000_000, 3)
 
-@pytest.fixture(scope='function')
+
+@pytest.fixture(scope="function")
 def large_xyz():
     return _large_xyz
 
-@pytest.fixture(scope='function')
+
+@pytest.fixture(scope="function")
 def cart_obj(large_xyz) -> CartesianCoordinates:
     return CartesianCoordinates(arr=large_xyz)
 
 
 class TestCartesianCoordinates:
-    @pytest.mark.parametrize('array', (_small_xyz, _large_xyz, _known_xyz))
+    @pytest.mark.parametrize("array", (_small_xyz, _large_xyz, _known_xyz))
     def test_instantiation(self, array):
         a = CartesianCoordinates(arr=array)
         assert isinstance(a, CartesianCoordinates)
@@ -69,34 +76,34 @@ class TestCartesianCoordinates:
         assert isinstance(a, ArrayNx3)
 
     def test_cached_properties(self, cart_obj):
-        assert 'spher' not in cart_obj.__dict__
+        assert "spher" not in cart_obj.__dict__
         num_items_before = len(cart_obj.__dict__)
 
         _ = cart_obj.r
         num_items_after = len(cart_obj.__dict__)
 
-        assert 'spher' in cart_obj.__dict__
+        assert "spher" in cart_obj.__dict__
         assert num_items_after > num_items_before
 
-        del cart_obj.__dict__['spher']
+        del cart_obj.__dict__["spher"]
 
         num_items_after = len(cart_obj.__dict__)
 
         assert num_items_after == num_items_before
 
-    @pytest.mark.parametrize('attr', ('arr', 'socs_origin'))
+    @pytest.mark.parametrize("attr", ("arr", "socs_origin"))
     def test_has_attributes(self, cart_obj, attr):
         assert attr in cart_obj.__dict__.keys()
-        if attr == 'socs_origin':
+        if attr == "socs_origin":
             if cart_obj.socs_origin is not None:
                 assert np.allclose(cart_obj.socs_origin, np.zeros(3))
 
-    @pytest.mark.parametrize('prop', ('xyz' ,'spher', 'x', 'y', 'z', 'yxz', 'rhv', 'r', 'hz', 'v'))
+    @pytest.mark.parametrize("prop", ("xyz", "spher", "x", "y", "z", "yxz", "rhv", "r", "hz", "v"))
     def test_has_properties(self, cart_obj, prop):
         # These properties are access methods and shouldn't be in the base dict
         assert prop in type(cart_obj).__dict__ and prop not in cart_obj.__dict__
 
-    @pytest.mark.parametrize('method', ('to_spherical', 'from_spherical', 'transform'))
+    @pytest.mark.parametrize("method", ("to_spherical", "from_spherical", "transform"))
     def test_has_methods(self, cart_obj, method):
         assert callable(getattr(cart_obj, method))
 
@@ -129,7 +136,7 @@ class TestCartesianCoordinates:
 
         # check that the cart_obj cleans up the cached spherical coordinates
         # reasoning is that if a separate object is created, these are not needed
-        assert 'spher' not in cart_obj.__dict__
+        assert "spher" not in cart_obj.__dict__
 
         # Check the id and generate the cached property simultaneously
         assert id(spherical) != id(cart_obj.spher)
@@ -149,7 +156,7 @@ class TestCartesianCoordinates:
 
     def test_transform_method(self, cart_obj):
         xyz = cart_obj.xyz.copy()
-        rotation = Rotation.from_euler(seq='zyx', angles=np.array([0, 1.3, 1.4])).as_matrix()
+        rotation = Rotation.from_euler(seq="zyx", angles=np.array([0, 1.3, 1.4])).as_matrix()
         scale = np.array([0.5, 0.5, 0.5])
         translation = np.array([3, 3, 3])
 
@@ -164,12 +171,12 @@ class TestCartesianCoordinates:
         # assert 'AFFINE' in cart_obj.transform_ledger[-1][0]
 
     def test_left_matrix_multiplication(self, cart_obj):
-        rand_3x3 = np.random.rand(3,3)
+        rand_3x3 = np.random.rand(3, 3)
         with pytest.raises(NotImplementedError):
             cart_obj @ rand_3x3
 
     def test_right_matrix_multiplication(self, cart_obj):
-        rand_3x3 = np.random.rand(3,3)
+        rand_3x3 = np.random.rand(3, 3)
         b = rand_3x3 @ cart_obj.T
         assert np.any(b.T != cart_obj)
         assert b.T.shape == cart_obj.shape
@@ -184,12 +191,12 @@ class TestCartesianCoordinates:
         assert b.shape != cart_obj.shape
 
     def test_inplace_matrix_multiplication(self, cart_obj):
-        rand_3x3 = np.random.rand(3,3)
+        rand_3x3 = np.random.rand(3, 3)
         with pytest.raises(NotImplementedError):
             cart_obj @= rand_3x3
 
     def test_homogeneous_matrix_multiplication(self, cart_obj):
-        rand_4x4 = np.random.rand(4,4)
+        rand_4x4 = np.random.rand(4, 4)
         # Will not work with numpy arrays due to left matrix multiplication approach
         with pytest.raises(ValueError):
             rand_4x4 @ cart_obj
@@ -288,8 +295,7 @@ class TestConversions:
         def test_spherical_coordinates(self, known_xyz, known_spher):
             xyz, xyz_shift, rhv_shift, xyz2_shift = self.arrays_setup(known_xyz)
 
-            assert np.allclose(xyz.spher, known_spher)                # Reference is still the same
-            assert np.allclose(xyz_shift.spher, rhv_shift)   # shifted objects still match
-            assert np.allclose(xyz_shift.spher, xyz2_shift.spher)   # shifted objects still match
-            assert np.any(xyz.spher != xyz_shift.spher)     # Different origins should yield diff results
-
+            assert np.allclose(xyz.spher, known_spher)  # Reference is still the same
+            assert np.allclose(xyz_shift.spher, rhv_shift)  # shifted objects still match
+            assert np.allclose(xyz_shift.spher, xyz2_shift.spher)  # shifted objects still match
+            assert np.any(xyz.spher != xyz_shift.spher)  # Different origins should yield diff results

@@ -1,15 +1,15 @@
 import weakref
 
-import pytest
 import numpy as np
+import pytest
 
-from pchandler.v2.geometry import OSM_Manager
-from pchandler.v2.geometry import PointCloudData
+from pchandler.v2.geometry import OSM_Manager, PointCloudData
 
 
 def random_coordinates(scale: float, offset: float) -> np.ndarray:
     xyz_base = np.random.randn(100, 3)
     return xyz_base * scale + offset
+
 
 @pytest.fixture(scope="session", autouse=True)
 def small_coordinates(scale_small: float, offset_small: float) -> np.ndarray:
@@ -17,23 +17,28 @@ def small_coordinates(scale_small: float, offset_small: float) -> np.ndarray:
     xyz_base = np.random.randn(100, 3).astype(np.float64)
     return xyz_base * scale_small + offset_small
 
+
 @pytest.fixture(scope="session", autouse=True)
 def large_coordinates(scale_large, offset_large) -> np.ndarray:
     xyz = random_coordinates(scale_large, offset_large)
     assert np.min_scalar_type(xyz) == np.float64
     return xyz
 
+
 @pytest.fixture(scope="session", autouse=True)
 def scale_large() -> float:
     return float(2**33)
+
 
 @pytest.fixture(scope="session", autouse=True)
 def scale_small() -> float:
     return float(10**3)
 
+
 @pytest.fixture(scope="session", autouse=True)
 def offset_large() -> float:
     return float(2**49)
+
 
 @pytest.fixture(scope="session", autouse=True)
 def offset_small() -> float:
@@ -43,13 +48,16 @@ def offset_small() -> float:
 def check_origin_exists(pcd: PointCloudData):
     assert isinstance(pcd.spherical_coordinates_origin, np.ndarray) == True
 
+
 def check_global_shift_need(xyz, expected: bool):
     assert PointCloudData._needs_global_shift(xyz) == expected
+
 
 def check_global_shift_not_applied(pcd: PointCloudData):
     assert pcd.global_coordinate_shift is None or (
         isinstance(pcd.global_coordinate_shift, np.ndarray) and np.all(pcd.global_coordinate_shift == 0)
     )
+
 
 def check_global_shift_applied(pcd: PointCloudData):
     assert pcd.global_coordinate_shift is not None
@@ -70,9 +78,7 @@ def test_global_shifted(large_coordinates, rgb_, normals_, intensities_, offset_
     assert not np.all(np.isclose(pcd.xyz, xyz))
 
     # Global shift should be close to the offset
-    assert np.all(
-        np.isclose(pcd.spherical_coordinates_origin, np.array([-offset_large, -offset_large, -offset_large]))
-    )
+    assert np.all(np.isclose(pcd.spherical_coordinates_origin, np.array([-offset_large, -offset_large, -offset_large])))
 
     # 'Scalar fields' should be identical
     assert np.all(rgb_ == pcd.rgb)
@@ -102,10 +108,12 @@ def test_non_shifted_cloud(small_coordinates, rgb_, normals_, intensities_, offs
     assert np.all(np.isclose(pcd.xyz, xyz))
     assert pcd.xyz.dtype == np.float32
 
+
 def test_register():
-    a = PointCloudData(xyz = np.random.rand(100, 3) * 100, optimised=True)
+    a = PointCloudData(xyz=np.random.rand(100, 3) * 100, optimised=True)
     assert any(id(wref) == id(a) for wref in OSM_Manager.point_clouds)
     OSM_Manager.reset()
+
 
 def test_weakref_list():
     pcd_list = list()
@@ -127,28 +135,30 @@ def test_weakref_list():
     assert len(OSM_Manager.point_clouds) == 2
     OSM_Manager.reset()
 
+
 def test_optimal_shift_max_size():
     pcd_list = list()
-    pcd_list.append(PointCloudData(xyz=np.random.rand(100,3)*100, optimised=True))
-    pcd_list.append(PointCloudData(xyz=np.random.rand(100,3)*200, optimised=True))
-    pcd_list.append(PointCloudData(xyz=np.random.rand(100,3)*400, optimised=True))
-    pcd_list.append(PointCloudData(xyz=np.random.rand(100,3)*800, optimised=True))
-    pcd_list.append(PointCloudData(xyz=np.random.rand(100,3)*1000, optimised=True))
-    pcd_list.append(PointCloudData(xyz=np.random.rand(100,3)*2000, optimised=True))
-    pcd_list.append(PointCloudData(xyz=np.random.rand(100,3)*5000, optimised=True))
+    pcd_list.append(PointCloudData(xyz=np.random.rand(100, 3) * 100, optimised=True))
+    pcd_list.append(PointCloudData(xyz=np.random.rand(100, 3) * 200, optimised=True))
+    pcd_list.append(PointCloudData(xyz=np.random.rand(100, 3) * 400, optimised=True))
+    pcd_list.append(PointCloudData(xyz=np.random.rand(100, 3) * 800, optimised=True))
+    pcd_list.append(PointCloudData(xyz=np.random.rand(100, 3) * 1000, optimised=True))
+    pcd_list.append(PointCloudData(xyz=np.random.rand(100, 3) * 2000, optimised=True))
+    pcd_list.append(PointCloudData(xyz=np.random.rand(100, 3) * 5000, optimised=True))
 
     assert len(OSM_Manager.point_clouds) == 7
 
     with pytest.raises(ValueError):
-        PointCloudData(xyz=np.random.rand(100,3)*20000, optimised=True)
+        PointCloudData(xyz=np.random.rand(100, 3) * 20000, optimised=True)
 
     OSM_Manager.reset()
 
+
 def test_optimal_shift_reset():
-    a = PointCloudData(xyz=np.random.rand(100,3)*100, optimised=True)
-    b = PointCloudData(xyz=np.random.rand(100,3)*200, optimised=True)
-    c = PointCloudData(xyz=np.random.rand(100,3)*400, optimised=True)
-    d = PointCloudData(xyz=np.random.rand(100,3)*800, optimised=True)
+    a = PointCloudData(xyz=np.random.rand(100, 3) * 100, optimised=True)
+    b = PointCloudData(xyz=np.random.rand(100, 3) * 200, optimised=True)
+    c = PointCloudData(xyz=np.random.rand(100, 3) * 400, optimised=True)
+    d = PointCloudData(xyz=np.random.rand(100, 3) * 800, optimised=True)
     assert len(OSM_Manager.point_clouds) == 4
     OSM_Manager.reset()
 
@@ -157,6 +167,7 @@ def test_optimal_shift_reset():
     assert OSM_Manager.bounding_boxes is None
     assert np.allclose(OSM_Manager.optimal_shift, np.zeros(3))
     assert isinstance(OSM_Manager.point_clouds, weakref.WeakSet)
+
 
 def test_adapting_optimal_shift():
     # Test that on each addition, the new optimal shift center is calculated.
@@ -170,11 +181,11 @@ def test_adapting_optimal_shift():
     e_origin = np.array([20000]).astype(np.float32)
 
     # Update the coordinates
-    a_ = (np.random.rand(10,3)*400).astype(np.float32) + a_origin
-    b_ = (np.random.rand(10,3)*400).astype(np.float32) + b_origin
-    c_ = (np.random.rand(10,3)*400).astype(np.float32) + c_origin
-    d_ = (np.random.rand(10,3)*400).astype(np.float32) + d_origin
-    e_ = (np.random.rand(10,3)*400).astype(np.float32) - e_origin
+    a_ = (np.random.rand(10, 3) * 400).astype(np.float32) + a_origin
+    b_ = (np.random.rand(10, 3) * 400).astype(np.float32) + b_origin
+    c_ = (np.random.rand(10, 3) * 400).astype(np.float32) + c_origin
+    d_ = (np.random.rand(10, 3) * 400).astype(np.float32) + d_origin
+    e_ = (np.random.rand(10, 3) * 400).astype(np.float32) - e_origin
 
     # Initialise the first, opt shift is too close to origin (< 500) so shouldn't shift
     a = PointCloudData(xyz=a_.copy(), socs_origin=a_origin.copy(), optimised=True)
@@ -203,7 +214,6 @@ def test_adapting_optimal_shift():
     d = PointCloudData(xyz=d_.copy(), socs_origin=d_origin.copy(), optimised=True)
     assert not np.allclose(OSM_Manager.optimal_shift, last_shift)
     assert not np.allclose(last_a_socs, a.socs_origin)
-
 
     with pytest.raises(ValueError):
         PointCloudData(xyz=e_.copy().astype(np.float32), optimised=True)
