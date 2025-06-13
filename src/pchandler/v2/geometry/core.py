@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import copy
 from functools import wraps
-from typing import Any, Callable, Mapping, Optional, Self, Annotated
+from typing import Annotated, Any, Callable, Mapping, Optional, Self
 
 import numpy as np
 import numpy.typing as npt
@@ -12,6 +12,7 @@ from ..base_types import Array_4x4_T, Array_Nx3_T
 from ..validators import extract_array
 from .coordinates import CartesianCoordinates
 from .optimal_shift import OptimizedShift
+
 # from .optimal_shift import OSM_Manager
 from .scalar_field_manager import ScalarFieldManager
 from .scalar_fields import NormalFields, RGBFields, ScalarField
@@ -48,7 +49,7 @@ class PointCloudData(CartesianCoordinates):
         normals: Optional[npt.NDArray[Any, np.float32] | NormalFields] = None,
         intensity: Optional[npt.NDArray | ScalarField] = None,
         reflectance: Optional[npt.NDArray | ScalarField] = None,
-        optimal_shift: OptimizedShift | ellipsis | None  = Ellipsis,
+        optimal_shift: OptimizedShift | ellipsis | None = Ellipsis,
         socs_origin: Optional[np.ndarray] = None,
         scalar_fields: Optional[ScalarFieldManager | dict] = None,
         project_transformation: Optional[Array_4x4_T] = None,
@@ -88,8 +89,6 @@ class PointCloudData(CartesianCoordinates):
             optimal_shift = OptimizedShift()
 
         optimal_shift.register(self)
-
-
 
         kwargs["scalar_fields"] = scalar_fields
         # TODO update logic inline with the global optimisation

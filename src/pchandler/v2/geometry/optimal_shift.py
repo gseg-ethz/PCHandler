@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import weakref
 from enum import member
-from typing import NamedTuple, Self, TypeVar, TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple, Self, TypeVar
 
 import numpy as np
 from numpy.typing import NDArray
@@ -18,6 +18,7 @@ class SingletonMeta(type):
         if cls not in cls._instances:
             cls._instances[cls] = super(SingletonMeta, cls).__call__(*args, **kwargs)
         return cls._instances[cls]
+
 
 class OptimizedShiftManager(metaclass=SingletonMeta):
     _optimized_shifts: weakref.WeakSet[OptimizedShift]
@@ -41,10 +42,8 @@ class OptimizedShift:
         self.member_pcds = weakref.WeakSet()
         OptimizedShiftManager()._register(self)
 
-
     def register(self, pcd: "PointCloudData") -> None:
         self.member_pcds.add(pcd)
-
 
 
 # T = TypeVar('T')
