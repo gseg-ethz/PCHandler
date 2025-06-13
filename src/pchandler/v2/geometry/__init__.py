@@ -3,9 +3,10 @@ Public API for pchandler.geometry.
 Re-exports key classes and functions from the submodules.
 """
 
-from . import filters, scalar_fields, splitter, util
+from . import scalar_fields, splitter, util
+from pchandler.v2 import filters
 from .core import PointCloudData
-from .transforms import scale, translate
+from .transforms import *
 from .util import get_outline_polygon
 
 __all__ = [
@@ -13,8 +14,6 @@ __all__ = [
     "filters",
     "scalar_fields",
     "splitter",
-    "translate",
-    "scale",
     "util",
     "get_outline_polygon",
 ]

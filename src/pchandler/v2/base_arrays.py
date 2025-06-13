@@ -30,7 +30,6 @@ def make_ndarray_type(*args: Optional[int|str], dtype = None):
     return NDArray[Shape[', '.join(shape_list)], dtype if dtype is not None else Any]
 
 
-
 class BaseArray(ABC, BaseModel):
     """
     BaseArray is designed to be a subclassable, automatic validator for array based classes.
@@ -56,6 +55,7 @@ class BaseArray(ABC, BaseModel):
         serialize_by_alias=True,
         populate_by_name=True)
     arr: ArrayT
+
 
     @property
     def __array_interface__(self) -> dict:

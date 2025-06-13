@@ -3,9 +3,9 @@ import numpy as np
 
 from weakref import ReferenceType
 
-from pchandler.geometry.scalar_fields import ScalarField, RGBFields, NormalFields
-from pchandler.geometry.scalar_field_manager import ScalarFieldManager
-from pchandler.geometry.core import PointCloudData
+from pchandler.v2.geometry import ScalarField, RGBFields, NormalFields
+from pchandler.v2.geometry import ScalarFieldManager
+from pchandler.v2.geometry import PointCloudData
 
 N = 40
 

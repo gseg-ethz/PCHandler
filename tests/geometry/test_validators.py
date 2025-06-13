@@ -3,7 +3,7 @@ from typing import Callable
 from abc import ABC
 
 from src.pchandler.base_arrays import BaseArray
-from src.pchandler.geometry.scalar_fields import ScalarField, linear_map_dtype, normalise_self, normalize_array
+from pchandler.v2.geometry import ScalarField
 from src.pchandler.validators import *
 
 from pchandler.constants import PI, TWO_PI, HALF_PI

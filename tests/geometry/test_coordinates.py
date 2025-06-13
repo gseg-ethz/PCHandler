@@ -7,10 +7,10 @@ from scipy.spatial.transform import Rotation
 from pydantic import ValidationError
 
 from pchandler.base_arrays import ArrayNx3
-from pchandler.geometry.coordinates import (
+from pchandler.v2.geometry import (
     CartesianCoordinates, Abstract3dCoordinates, SphericalCoordinates, rhv2xyz, xyz2rhv, AbstractCoordinates
 )
-from pchandler.geometry.transforms import Transform
+from pchandler.v2.geometry import Transform
 from pchandler.constants import PI,HALF_PI, TWO_PI
 
 

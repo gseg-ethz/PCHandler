@@ -3,8 +3,8 @@ import weakref
 import pytest
 import numpy as np
 
-from src.pchandler.geometry.optimal_shift import OSM_Manager
-from src.pchandler.geometry.core import PointCloudData
+from pchandler.v2.geometry import OSM_Manager
+from pchandler.v2.geometry import PointCloudData
 
 
 def random_coordinates(scale: float, offset: float) -> np.ndarray:

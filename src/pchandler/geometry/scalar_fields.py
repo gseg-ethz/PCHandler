@@ -1,261 +1,275 @@
-from __future__ import annotations
-
 import logging
-from typing import Annotated, NamedTuple, Self, TypeVar, Union
+import sys
+from collections.abc import MutableMapping
+from dataclasses import KW_ONLY, InitVar, dataclass, field
+from typing import Iterable, Iterator, Optional
+
+if sys.version[0] == 3 and sys.version_info[1] >= 11:
+    from typing import Self
+else:
+    from typing_extensions import Self
 
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
-from pydantic import StringConstraints, AfterValidator
-
-from ..base_arrays import BaseVector
-from ..validators import extract_array
-from ..constants import RGB_FIELD, NORMALS_FIELD
-from ..base_types import (VectorT_Uint8, VectorT_Float32, Array_Nx3_uint8_T, Array_Nx3_float32_T,
-                          VectorT_Uint16, VectorT_Int16, VectorT_Int32, VectorT_Int8, VectorT_Bool)
-
 
 logger = logging.getLogger(__name__.split(".")[0])
 
-LowerStr = Annotated[str, StringConstraints(strip_whitespace=True, to_lower=True),]
 
+@dataclass(frozen=True)
+class ScalarField:
+    """
+    Represents a scalar field associated with a point cloud.
 
-class DtypeState(NamedTuple):
-    dtype: DTypeLike
-    lower: NDArray[np.number]|float|int|None
-    upper: NDArray[np.number]|float|int|None
+    Attributes
+    ----------
+    name : str
+        The name of the scalar field.
+    data : NDArray[np.generic]
+        A 1D numpy array containing scalar data (one value per point).
+    original_dtype : Optional[DTypeLike]
+        Optional unit for the scalar field (e.g., "m", "intensity").
+    operations_performed : Optional[str]
+        Optional description providing additional context for the scalar field.
+    """
 
-    @classmethod
-    def generate(cls, array: np.ndarray):
-        return DtypeState(
-            dtype=array.dtype,
-            lower=array.min(),
-            upper=array.max()
+    name: str
+    data: NDArray[np.float32]
+    _: KW_ONLY
+    original_dtype: Optional[DTypeLike] = None
+    operations_performed: list[tuple[str, tuple[str, tuple[DTypeLike, DTypeLike]]]] = field(default_factory=list)
+    override_forced_dtype_conversion: InitVar[bool] = False
+
+    def __post_init__(self, override_forced_dtype_conversion: bool) -> None:
+        if not isinstance(self.name, str):
+            raise TypeError("ScalarField name must be a string")
+        if not isinstance(self.data, np.ndarray):
+            raise TypeError("ScalarField values must be a numpy array")
+        if self.data.ndim != 1:
+            raise ValueError("ScalarField values must be a 1D numpy array")
+        if self.data.dtype != np.float32 and not override_forced_dtype_conversion:
+            logger.debug(f"Scalar field `{self.name}` converted from {self.data.dtype} to float32")
+            object.__setattr__(self, "original_dtype", self.data.dtype)
+            self.operations_performed.append(("dtype_conversion", (self.data.dtype, np.float32)))
+            object.__setattr__(self, "data", self.data.astype(np.float32))
+        elif self.data.dtype != np.float32 and override_forced_dtype_conversion:
+            logger.warning(
+                f"Scalar field `{self.name}` not converted to float32. This may not be fully supported."
+                f"Use at your own risk!"
+            )
+
+    def __getitem__(self, key: slice | NDArray[np.bool_] | NDArray[np.int_] | list[int | bool]) -> Self:
+        """
+        Returns a new ScalarField with values indexed by key.
+        Depending on the type of key, this may return a view or a copy.
+        """
+        new_values = self.data.copy()[key]
+        return type(self)(
+            name=self.name,
+            data=new_values,
+            original_dtype=self.original_dtype,
+            operations_performed=self.operations_performed.copy(),
         )
 
-    @staticmethod
-    def validate(obj: DtypeState):
-        if obj is not None and obj.lower >= obj.upper:
-            raise ValueError(f"lower must be less than upper. {obj=}")
+    @property
+    def __array_interface__(self) -> dict:
+        """
+        Function for direct numpy interoperability of ScalarField.
+        """
+        return self.data.__array_interface__
 
+    # def __array__(self, dtype: Optional[DTypeLike]=None, copy: Optional[bool]=None) -> NDArray[np.generic]:
+    #     """
+    #     Function for direct numpy interoperability of ScalarField.
+    #     Parameters
+    #     ----------
+    #     dtype: Optional[DTypeLike]
+    #     copy: Optional[bool]
+    #
+    #     Returns
+    #     -------
+    #
+    #     """
+    #     data = self.data
+    #     if dtype is not None and self.data.dtype != dtype:
+    #         data = data.astype(dtype)
+    #     if copy is not None:
+    #         data = data.copy()
+    #     return data
 
-def linear_map_dtype(array: np.ndarray, target_dtype: DTypeLike) -> np.ndarray:
+    def __len__(self) -> int:
+        return self.data.shape[0]
 
-    def get_dtype_min_max(dt: np.dtype) -> tuple[float, float]:
-        if np.issubdtype(dt, np.integer):
-            info = np.iinfo(dt)
-            return info.min, info.max
-        elif np.issubdtype(dt, np.floating):
-            return 0.0, 1.0
-        else:
-            raise TypeError(f'Invalid dtype detected: {dt}')
+    def normalize(self, lower: float = None, upper: float = None) -> None:
+        lower = self.data.min() if lower is None else lower
+        upper = self.data.max() if upper is None else upper
 
-    # Types match, exit
-    if array.dtype == target_dtype:
-        return array
+        assert lower < upper
+        # self.data = self.data / (self.data.max() - self.data.min())
+        np.divide(self.data - lower, upper - lower, out=self.data)
+        self.operations_performed.append(("normalize", (lower, upper)))
+        logger.debug(f"Normalized scalar field `{self.name}` from (original) span [{lower}, {upper}] to [0, 1].")
 
-    # Get the corresponding min and max from the type info
-    origin_min, origin_max = get_dtype_min_max(array.dtype)
-    target_min, target_max = get_dtype_min_max(target_dtype)
-
-    # Ensure precision is not lost
-    array = array.astype(np.float64)
-
-    # normalised
-    # TODO catch divide by 0
-    np.divide(array - origin_min, origin_max - origin_min, out=array)
-
-    if np.issubdtype(target_dtype, np.floating):
-        return array.astype(np.float32)
-
-    mapped = np.floor(array * float(target_max - target_min) + target_min)
-    return mapped.astype(target_dtype).flatten()
-
-
-def normalize_array(array: np.ndarray,
-                    target_state: DtypeState = None) -> np.ndarray:
-    """
-    General normalisation function.Normalise array by default to the bounds [0, 1] alternatively a custom range as defined by lower and upper.
-
-    Default -> [0.0, 1.0] np.float32
-    Custom target state will normalise to range of [0, 1] then scale to lower and upper values
-
-    If desired normalisation is a mapping from one dtype to another e.g. uint8 to uint16, use 'linear_map_dtype' as this
-    respects the datatype limit bounds
-    """
-
-    original_dtype = array.dtype
-    array = array.astype(np.float64)
-
-    arr_min, arr_max = array.min(axis=0), array.max(axis=0)
-
-    if target_state is None:
-        lower, upper = 0, 1
-    else:
-        lower, upper = target_state.lower, target_state.upper
-
-    DtypeState.validate(target_state)
-
-    np.divide(array - arr_min, arr_max - arr_min, out=array)
-    np.add(array * (upper-lower), lower, out=array)
-
-    if target_state is not None:
-        # Floating point return as is
-        if np.issubdtype(target_state.dtype, np.floating):
-            return array.astype(np.float32)
-        else:
-            # Integers need to be floored
-            np.floor(array, out=array)
-            return array.astype(original_dtype)
-    logger.debug("No dtype defined for normalisation. Set astype np.float32 by default")
-    return array.astype(np.float32)
-
-def normalise_self(array: np.ndarray) -> np.ndarray:
-    """
-    Normalise values to the min and max values of the associated integer type
-    """
-
-    if np.dtype(array.dtype).kind not in ["u", "i"]:
-        logger.debug(f"Scalar field is floating. Converting to [0.0, 1.0].")
-        target_state=DtypeState(np.float32, 0.0, 1.0)
-    else:
-        target_state = DtypeState(dtype=array.dtype,
-                                  lower=np.iinfo(array.dtype).min,
-                                  upper=np.iinfo(array.dtype).max)
-
-    return normalize_array(array=array, target_state=target_state)
-
-
-
-class ScalarField(BaseVector):
-    name: LowerStr
-    origin_dtype: DtypeState | None = None
-
-    def __init__(self, arr: np.ndarray|ScalarField, name: LowerStr = None, *args, **kwargs):
-        if isinstance(arr, ScalarField) and name is None:
-            kwargs['arr'] = extract_array(arr)
-            kwargs['name'] = arr.name
-            kwargs['origin_dtype'] = arr.origin_dtype
-            super().__init__(**kwargs)
+    def normalize_based_on_original_dtype(self) -> None:
+        if self.original_dtype is None:
+            logger.debug(f"Scalar field `{self.name}` wasn't converted. No operation performed.")
+            return
+        if self.original_dtype.kind not in ["u", "i"]:
+            logger.debug(f"Scalar field `{self.name}` was originally a float. No operation performed.")
             return
 
-        if arr is not None:
-            kwargs['arr'] = extract_array(arr)
-        kwargs['name'] = name
-        if 'origin_dtype' not in kwargs:
-            kwargs['origin_dtype'] = DtypeState.generate(kwargs['arr'])
+        lower = np.iinfo(self.original_dtype).min
+        upper = np.iinfo(self.original_dtype).max
+        self.normalize(lower=lower, upper=upper)
 
-        super().__init__(**kwargs)
+    def create_rollback(self) -> NDArray[np.generic]:
+        data = self.data.copy()
+        for operation, operation_parameters in self.operations_performed[::-1]:
+            match operation:
+                case "normalize":
+                    lower, upper = operation_parameters
+                    np.multiply(self.data, upper - lower, out=data)
+                    np.add(data, lower, out=data)
+                case "dtype_conversion":
+                    data = data.astype(operation_parameters[0])
+                case _:
+                    return ValueError(f"Operation {operation} not supported.")
+        assert self.original_dtype is None or data.dtype == self.original_dtype
 
-    def __getitem__(self, key):
-        return self.sample(key)
-
-    def get_original_data(self):
-        current_dtype_state = DtypeState.generate(self.arr)
-        if current_dtype_state == self.origin_dtype:
-            logger.info('No changes to the data as no prior conversions made')
-            return self.arr.copy()
-
-        data = self.arr.copy().astype(np.float64)
-        return normalize_array(data, self.origin_dtype)
-
-
-class ScalarFieldUInt8(ScalarField):
-    arr: VectorT_Uint8
-    def __init__(self, *args, **kwargs): super().__init__(*args, **kwargs)
-
-class ScalarFieldUInt16(ScalarField):
-    arr: VectorT_Uint16
-    def __init__(self, *args, **kwargs): super().__init__(*args, **kwargs)
-
-class ScalarFieldInt8(ScalarField):
-    arr: VectorT_Int8
-    def __init__(self, *args, **kwargs): super().__init__(*args, **kwargs)
-
-class ScalarFieldInt16(ScalarField):
-    arr: VectorT_Int16
-    def __init__(self, *args, **kwargs): super().__init__(*args, **kwargs)
+        logger.debug(f"Converted scalar field `{self.name}` to original bounds and dtype.")
+        return data
 
 
-class ScalarFieldInt32(ScalarField):
-    arr: VectorT_Int32
-    def __init__(self, *args, **kwargs): super().__init__(*args, **kwargs)
+class ScalarFieldManager(MutableMapping):
+    """
+    Manages a collection of ScalarField objects, ensuring that all fields have the same
+    number of data points. Also provides a mechanism to select subsets of the fields.
+    """
 
+    def __init__(self, expected_length: Optional[int] = None):
+        self._fields: dict[str, ScalarField] = {}
+        self._expected_length: Optional[int] = expected_length
 
-class ScalarFieldFloat32(ScalarField):
-    arr: VectorT_Float32
-    def __init__(self, *args, **kwargs): super().__init__(*args, **kwargs)
+    def __getitem__(self, key: [str, slice, NDArray[np.bool_], NDArray[np.int_], list]) -> ScalarField | Self:
+        # If key is a string, return the corresponding field.
+        if isinstance(key, str):
+            return self._fields[key.lower()]
+        # Otherwise, assume we are slicing across all fields.
+        new_manager = ScalarFieldManager()
+        for sf_field in self._fields.values():
+            new_manager.add_field(sf_field[key])
+        return new_manager
 
+    def __setitem__(self, key: str, value: ScalarField | NDArray):
+        if not isinstance(key, str):
+            raise TypeError("ScalarField key must be a string")
+        key = key.lower()
+        if not isinstance(value, ScalarField) and not isinstance(value, np.ndarray):
+            raise TypeError("Value must be an instance of ScalarField or NDArray")
+        if isinstance(value, ScalarField) and value.name.lower() != key:
+            raise ValueError("ScalarField name and key do not match")
 
-class ScalarFieldBool(ScalarField):
-    arr: VectorT_Bool
-    def __init__(self, *args, **kwargs): super().__init__(*args, **kwargs)
+        if isinstance(value, np.ndarray):
+            value = ScalarField(name=key, data=value)
 
-
-class RGBFields(ScalarField):
-    arr: Array_Nx3_uint8_T
-    name: Annotated[LowerStr, AfterValidator(lambda _: RGB_FIELD)] = RGB_FIELD
-
-    def __init__(self, arr: np.ndarray | RGBFields = None, name: LowerStr = RGB_FIELD, **kwargs):
-        super().__init__(arr, name, **kwargs)
+        field_length = value.data.shape[0]
+        if self._expected_length is None:
+            self._expected_length = field_length
+        elif field_length != self._expected_length:
+            raise ValueError(
+                f"All scalar fields must have the same number of data points. "
+                f"Expected {self._expected_length}, got {field_length}"
+            )
+        self._fields[key] = value
 
     @property
-    def r(self) -> VectorT_Uint8: return self.arr[:, 0]
-    @property
-    def g(self) -> VectorT_Uint8: return self.arr[:, 1]
-    @property
-    def b(self) -> VectorT_Uint8: return self.arr[:, 2]
+    def shape(self) -> tuple[int, ...]:
+        # if len(self) == 0:
+        #     return (0,self._expected_length)
+        return (
+            len(self),
+            self._expected_length,
+        )
+
+    def __delitem__(self, key: str):
+        del self._fields[key]
+        if not self._fields:
+            self._expected_length = None
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._fields)
+
+    def __len__(self) -> int:
+        return len(self._fields)
+
+    def add_field(self, sf_field: ScalarField) -> None:
+        self[sf_field.name.lower()] = sf_field
+
+    def create_field(self, name: str, data: NDArray[np.generic]) -> None:
+        sf = ScalarField(name=name, data=data)
+        self.add_field(sf)
+
+    def remove_field(self, field_name: str) -> None:
+        del self[field_name.lower()]
+
+    def keys(self) -> list[str]:
+        """
+        Returns a list of all available scalar field keys.
+        """
+        return list(self._fields.keys())
+
+    def values(self) -> Iterator[ScalarField]:
+        """
+        Returns an iterator over all scalar fields.
+        """
+        return iter(self._fields.values())
+
+    def items(self) -> Iterator[tuple[str, ScalarField]]:
+        """
+        Returns an iterator over key-value pairs of scalar fields.
+        """
+        return iter(self._fields.items())
+
+    def __len__(self) -> int:
+        return len(self._fields)
+
+    def __contains__(self, key: str) -> bool:
+        return key.lower() in self._fields
 
     @classmethod
-    def initialize(cls, size: int, value: Array_Nx3_uint8_T | None = None) -> RGBFields:
-        if value is None:
-            value = np.zeros((size, 3), dtype=np.uint8)
-        return RGBFields(value)
+    def merge(cls, sfms: Iterable[Self]) -> Self:
+        common_keys = set.intersection(*(set(sfm.keys()) for sfm in sfms))
+        if len(common_keys) == 0:
+            return ScalarFieldManager()
 
-    def get_normalized(self, lower: float = 0.0, upper: float = 1.0):
-        return normalize_array(self.arr.astype(np.float32, copy=True),
-                               target_state=DtypeState(np.float32, lower, upper))
+        expected_length = sum([sfm.shape[1] for sfm in sfms])
+        new_sfm = ScalarFieldManager(expected_length=expected_length)
+        for common_key in common_keys:
+            sfs: list[ScalarField] = [sfm[common_key] for sfm in sfms]
+            if len(set([sf.name for sf in sfs])) != 1:
+                logger.warning(f"While merging scalar field {common_key} different names were encountered.")
+            name = sfs[0].name
 
+            if len(set(map(tuple, [sf.operations_performed for sf in sfs]))) != 1:
+                logger.warning(
+                    f"While merging scalar field {common_key} different list of previously performed "
+                    f"operations were encountered. Merged scalar field will have an empty record!"
+                )
+                operations_performed = []
+            else:
+                operations_performed = sfs[0].operations_performed
+            if len(set(sf.original_dtype for sf in sfs)) != 1:
+                logger.warning(
+                    f"While merging scalar field {common_key} different original dtypes were encountered. "
+                    f"Merged scalar field will have an empty record!"
+                )
+                original_dtype = None
+            else:
+                original_dtype = sfs[0].original_dtype
 
-class NormalFields(ScalarField):
-    arr: Array_Nx3_float32_T
-    name: Annotated[LowerStr, AfterValidator(lambda _: NORMALS_FIELD)] = NORMALS_FIELD
+            data = np.concatenate([sf.data for sf in sfs])
+            sf = ScalarField(
+                name=name, data=data, original_dtype=original_dtype, operations_performed=operations_performed
+            )
+            new_sfm.add_field(sf)
 
-    def __init__(self, arr: np.ndarray, name: LowerStr = NORMALS_FIELD, **kwargs):
-        super().__init__(arr, name, **kwargs)
-
-    @property
-    def x(self) -> VectorT_Float32: return self.arr[:, 0]
-    @property
-    def y(self) -> VectorT_Float32: return self.arr[:, 1]
-    @property
-    def z(self) -> VectorT_Float32: return self.arr[:, 2]
-
-    @classmethod
-    def initialize(cls, size: int, value: Array_Nx3_float32_T | None=None) -> NormalFields:
-        if value is None:
-            value = np.zeros((size, 3), dtype=np.float32)
-        return NormalFields(value)
-
-
-SF_T = TypeVar('SF_T', bound=Union[ScalarField, RGBFields, NormalFields])
-
-
-class SegmentationMap(ScalarField):
-    arr: VectorT_Uint8 | VectorT_Uint16
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    @classmethod
-    def initialize(cls, name: LowerStr, pt_cloud_sizes: list[int]) -> Self:
-        vector_length = sum(pt_cloud_sizes)
-        if len(pt_cloud_sizes) <= 2**8 - 1:
-            arr = np.zeros(vector_length, dtype=np.uint8)
-        elif len(pt_cloud_sizes) <= 2**16 - 1:
-            arr = np.zeros(vector_length, dtype=np.uint16)
-        else:
-            raise ValueError(f"Creating segmentation map for more than {2**16} point {len(pt_cloud_sizes)} not supported.")
-
-        return cls(arr, name=name)
-
-
+        return new_sfm

@@ -3,10 +3,10 @@ import copy
 import numpy as np
 import pytest
 
-from pchandler.geometry.scalar_fields import RGBFields
-from pchandler.geometry.core import PointCloudData
-from pchandler.geometry.scalar_fields import ScalarField
-from pchandler.geometry.scalar_field_manager import ScalarFieldManager
+from pchandler.v2.geometry import RGBFields
+from pchandler.v2.geometry import PointCloudData
+from pchandler.v2.geometry import ScalarField
+from pchandler.v2.geometry import ScalarFieldManager
 
 
 def random_coordinates(scale: float, offset: float) -> np.ndarray:

@@ -59,9 +59,9 @@ extend-ignore = ["E203", "W503"]
 # add plugins, e.g. flake8-bugbear
 select = ["B", "C", "E", "F", "W", "T4", "D"]
 
-[tool.mypy]
-python_version = ">3.12"
-strict = true
+#[tool.mypy]
+#python_version = ">3.12"
+#strict = true
 
 
 [project.urls]
