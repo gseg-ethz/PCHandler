@@ -18,7 +18,7 @@ def random_coordinates(scale: float, offset: float) -> np.ndarray:
 
 @pytest.fixture(scope='function', autouse=True)
 def xyz_() -> np.ndarray:
-    return random_coordinates(0, 0)
+    return random_coordinates(10, 0)
 
 @pytest.fixture(scope="function", autouse=True)
 def normals_() -> np.ndarray:
@@ -31,6 +31,10 @@ def intensity_() -> np.ndarray:
 @pytest.fixture(scope="function", autouse=True)
 def reflectance_() -> np.ndarray:
     return np.random.rand(N)
+
+@pytest.fixture(scope="function", autouse=True)
+def intensities_() -> np.ndarray:
+    return np.random.rand(100).astype(np.float32)
 
 @pytest.fixture(scope="function", autouse=True)
 def scalar_field() -> ScalarField:
@@ -249,7 +253,6 @@ class TestPointCloudData:
             assert pcd.reflectance.ndim == 1
             assert pcd.reflectance.dtype == np.float64
             assert np.all(pcd.reflectance == new_data)
-
 
         def test_sf_input_as_scalar_fields(self, xyz_, rgb_, normals_):
             scalar_fields = ScalarFieldManager()
