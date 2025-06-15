@@ -15,16 +15,16 @@ from .scalar_field_manager import ScalarFieldManager
 from .scalar_fields import ScalarField, RGBFields, NormalFields
 from ..validators import extract_array
 
-# TODO decide on this artifact
-def update_transformation_ledger(name: str) -> Callable:
-    def decorator(func: Callable) -> Callable:
-        @wraps(func)
-        def wrapper(instance: PointCloudData, *args, **kwargs):
-            result = func(instance, *args, **kwargs)
-
-            result.transform_ledger[name] = TransformRecord(forward=args[0])
-        return wrapper
-    return decorator
+# TODO Update this feature later after v2.0 is done
+# def update_transformation_ledger(name: str) -> Callable:
+#     def decorator(func: Callable) -> Callable:
+#         @wraps(func)
+#         def wrapper(instance: PointCloudData, *args, **kwargs):
+#             result = func(instance, *args, **kwargs)
+#
+#             result.transform_ledger[name] = TransformRecord(forward=args[0])
+#         return wrapper
+#     return decorator
 
 
 class PointCloudData(CartesianCoordinates):
@@ -43,12 +43,12 @@ class PointCloudData(CartesianCoordinates):
             reflectance: Optional[npt.NDArray|ScalarField] = None,
             optimised: bool = False,
             socs_origin: Optional[np.ndarray] = None,
-            scalar_fields: Optional[ScalarFieldManager|dict] = None,
+            scalar_fields: ScalarFieldManager|dict = None,
             project_transformation: Optional[Array_4x4_T] = None,
-            transform_ledger: Optional[TransformLedger] = None,
-            **kwargs
+            transform_ledger: Optional[TransformLedger] = None,     #TODO update post v2.0
             ):
 
+        kwargs = {}
 
         if scalar_fields is None:
             scalar_fields = {}
@@ -70,7 +70,8 @@ class PointCloudData(CartesianCoordinates):
         for field in (rgb, normals, intensity, reflectance):
             if field is not None:
                 scalar_fields.add_field(field)
-        #
+
+        # TODO implement post v2.0
         # if transform_ledger is not None:
         #     kwargs['transform_ledger'] = TransformLedger()
 
@@ -81,25 +82,9 @@ class PointCloudData(CartesianCoordinates):
         kwargs['optimised'] = optimised
         kwargs['socs_origin'] = socs_origin
         kwargs['project_transformation'] = project_transformation
-        kwargs['transform_ledger'] =  TransformLedger()     # FIXME
+        kwargs['transform_ledger'] =  TransformLedger() # TODO implement post v2.0
 
         super(CartesianCoordinates, self).__init__(**kwargs)
-
-    # @model_validator(mode='before')
-    # @classmethod
-    # def validate_initial_coordinates(cls, kwargs ) -> dict[str, Any]:
-    #     key = {'arr', 'xyz'} & set(kwargs.keys())
-    #     if len(key) != 1:
-    #         raise ValidationError(f"Invalid keyword arguments. Only accepts 'xyz' OR 'arr', not both.")
-    #     xyz = kwargs.pop(list(key)[0])
-    #
-    #     # Override the passed point cloud with any input kwargs
-    #     if isinstance(xyz, cls):
-    #         kwargs = xyz.model_dump() | kwargs
-    #     elif isinstance(xyz, np.ndarray):
-    #         kwargs = kwargs | {'arr': xyz}
-    #     else:
-    #         raise TypeError(f'Unsupported object type passed as xyz for PointCloudData: {type(xyz)}')
 
         # TODO Resolve this with the global shift logic once the base is done
         # if kwargs.get('project_transform', None) is not None:
@@ -191,8 +176,34 @@ class PointCloudData(CartesianCoordinates):
         extracted = super().extract(mask)
         return extracted
 
-    def merge(self):
-        raise NotImplementedError
+    @staticmethod
+    def merge(*pcds: PointCloudData):
+        scalar_fields = ScalarFieldManager.merge([pcd.scalar_fields for pcd in pcds])
+        if not all([pcds[0].optimised == pcd.optimised for pcd in pcds[1:]]):
+            raise ValueError('Can only merge point clouds if they are all optimized or unoptimized.')
+
+        if isinstance(pcds[0].socs_origin, np.ndarray):
+            if not all([np.all(pcds[0].socs_origin == pcd.socs_origin) for pcd in pcds[1:]]):
+                raise ValueError("Cannot merge point clouds where some origins are known and some are ambiguous")
+        else:
+            for pcd in pcds:
+                if pcd.socs_origin is not None:
+                    raise ValueError("Cannot merge point clouds where some origins are known and some are ambiguous")
+
+        # TODO check on project transformations
+        if pcds[0].project_transformation is None:
+            for pcd in pcds[1:]:
+                if pcd.project_transformation is not None:
+                    raise ValueError("Cannot merge point clouds where only some project transforms are defined")
+        else:
+            for pcd in pcds[1:]:
+                if not isinstance(pcd.project_transformation, np.ndarray):
+                    raise ValueError("Cannot merge point clouds where only some project transforms are defined")
+
+        xyz = np.concatenate([pcd.xyz for pcd in pcds], axis=0)
+
+        return PointCloudData(xyz, scalar_fields=scalar_fields)
+
 
     def to_o3d(self):
         raise NotImplementedError

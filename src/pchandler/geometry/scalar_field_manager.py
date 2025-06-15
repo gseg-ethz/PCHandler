@@ -100,7 +100,6 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
         else:
             logger.warning('No parent object to compare length of scalar fields to corresponding coordinate set')
 
-
         if isinstance(value, np.ndarray):
             self.fields[name] = ScalarField(value, name=name)
 
@@ -108,6 +107,9 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
 
     def __delitem__(self, key: str) -> None:
         del self.fields[key]
+
+    # TODO Ensure mame of scalar_field should always be lower case and match the key in _sfm dict
+    # TODO add test for lower case fields
 
     def add_field(self, sf_field: ScalarField) -> None:
         self[sf_field.name.lower()] = sf_field
@@ -213,7 +215,7 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
         return sample
 
     def extract(self, mask: IndexLike) -> ScalarFieldManager:
-        mask = self.create_mask(mask)
+        mask = self._parent().create_mask(mask)
         sample = self.sample(mask)
         self.reduce(~mask)
         return sample
@@ -228,17 +230,17 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
         sfm_key_sets = (set(sfm) for sfm in sfms)
         keys_in_common = set.intersection(*sfm_key_sets)
 
-        # return if there are no keys/scalar fields in common
-        if len(keys_in_common) == 0:
-            return ScalarFieldManager(parent=None, fields={})
         new_sfm = ScalarFieldManager(parent=None)
 
+        if len(keys_in_common) == 0:
+            return new_sfm
+
+        # Get the scalar field managers that have the key in common
         for common_key in keys_in_common:
-            # Get the scalar field managers that have the key in common
             sfs: list[ScalarField] = [sfm[common_key] for sfm in sfms]
 
             # Check the names are the same. If not, take the most occurring name.
-            # DECISION Name of scalar_field should always be lower case and match the key in _sfm dict
+
             sf_names: list[str] = [sf.name for sf in sfs]
             if len(set(sf_names)) != 1:
                 logger.warning(f"While merging scalar field {common_key} different names were encountered.")
@@ -249,10 +251,10 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
 
 
             # Check if the original_dtype_states match. If not, do not use.
-            if all([sfs[0] != sf for sf in sfs[1:]]):
+            if all([sfs[0].origin_dtype.dtype == sf.origin_dtype.dtype for sf in sfs[1:]]):
                 origin_dtype = sfs[0].origin_dtype
                 data = np.concatenate([sf.arr for sf in sfs])
-                sf = ScalarField(data, name=name, origin_dtype=origin_dtype)
+                sf = type(sfs[0])(data, name=name, origin_dtype=origin_dtype)
                 new_sfm.add_field(sf)
             else:
                 logger.warning(

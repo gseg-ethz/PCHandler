@@ -372,7 +372,6 @@ class TestSampleExtractReduce:
         assert id(base_sfm.normals) != id(sample.normals)
         assert id(base_sfm.intensity) != id(sample.intensity)
 
-
     def test_extract(self, base_sfm):
         index = slice(0, 10, 1)
         original = copy.deepcopy(base_sfm)
@@ -386,13 +385,30 @@ class TestSampleExtractReduce:
         assert len(base_sfm.rgb) == len(original.rgb) - len(extracted.rgb)
         assert np.all(sample.rgb == extracted.rgb)
 
-        #compare
-        raise NotImplementedError('')
-
 
 class TestMerge:
-    def test_generate_point_cloud_indexes(self):
-        raise NotImplementedError('')
+    def test_merge_valid(self, intensity_field, rgb_field, reflectance_field, normals_field, scalar_field):
+        cloud1 = ScalarFieldManager(parent=None, fields={
+            'intensity': intensity_field,
+            'rgb': rgb_field,
+            'reflectance': reflectance_field
+        })
 
-    def test_merge(self):
-        raise NotImplementedError
+        cloud2 = ScalarFieldManager(parent=None, fields={
+            'rgb': rgb_field,
+            'reflectance': reflectance_field,
+            'normals': normals_field,
+            'test': scalar_field
+        })
+
+        merged = ScalarFieldManager.merge([cloud1, cloud2])
+
+        assert 'rgb' in merged
+        assert 'reflectance' in merged
+
+        assert 'intensity' not in merged
+        assert 'normals' not in merged
+        assert 'test' not in merged
+
+        assert len(merged.rgb) == (len(cloud1.rgb) + len(cloud2.rgb))
+        assert len(merged) == 2

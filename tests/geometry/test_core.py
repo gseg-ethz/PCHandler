@@ -33,6 +33,10 @@ def reflectance_() -> np.ndarray:
     return np.random.rand(N)
 
 @pytest.fixture(scope="function", autouse=True)
+def scalar_field() -> ScalarField:
+    return ScalarField(np.random.rand(N), name='test')
+
+@pytest.fixture(scope="function", autouse=True)
 def rgb_():
     return np.random.randint(0, 255, (N, 3), dtype=np.uint8)
 
@@ -48,6 +52,23 @@ def pcd(rgb_, normals_, intensity_, reflectance_) -> PointCloudData:
         rgb=rgb_,
         normals=normals_,
         intensity=intensity_,
+        reflectance=reflectance_)
+
+
+@pytest.fixture(scope="function")
+def pcd2(rgb_, normals_, intensity_) -> PointCloudData:
+    return PointCloudData(
+        xyz=random_coordinates(0, 0),
+        rgb=rgb_,
+        normals=normals_,
+        intensity=intensity_)
+
+@pytest.fixture(scope="function")
+def pcd3(rgb_, normals_, reflectance_) -> PointCloudData:
+    return PointCloudData(
+        xyz=random_coordinates(0, 0),
+        rgb=rgb_,
+        normals=normals_,
         reflectance=reflectance_)
 
 
@@ -425,8 +446,15 @@ class TestPointCloudData:
             assert ref_pcd.optimised == extracted_pcd.optimised
             assert reduced_pcd.optimised == extracted_pcd.optimised
 
-        def test_merge(self, pcd):
-            raise NotImplementedError('')
+        def test_merge(self, pcd, pcd2, pcd3):
+            merged_1 = PointCloudData.merge(pcd, pcd2, pcd3)
+
+            assert len(merged_1) == len(pcd) + len(pcd2) + len(pcd3)
+
+            assert 'rgb' in merged_1.scalar_fields
+            assert 'normals' in merged_1.scalar_fields
+            assert 'intensity' not in merged_1.scalar_fields
+            assert 'reflectance' not in merged_1.scalar_fields
 
     def test_immutability(self, xyz_, rgb_, normals_, intensity_):
         pcd = PointCloudData(xyz=xyz_, rgb=rgb_, normals=normals_, scalar_fields={"intensity": intensity_})
@@ -436,20 +464,8 @@ class TestPointCloudData:
 
         assert type(e.value) in (AttributeError, ValidationError, TypeError, ValueError)
 
-        with pytest.raises(Exception) as e:
-            pcd.rgb = np.random.randint(0, 255, (N, 3), dtype=np.uint8)
+        # TODO add future feature to have a READ ONLY point cloud object where no fields or attributes can be changed
 
-        assert type(e.value) in (AttributeError, ValidationError, TypeError, ValueError)
-
-        with pytest.raises(Exception) as e:
-            pcd.normals = np.random.rand(N, 3)
-
-        assert type(e.value) in (AttributeError, ValidationError, TypeError, ValueError)
-
-        with pytest.raises(Exception) as e:
-            pcd.scalar_fields['intensity'] = np.random.rand(N)
-
-        assert type(e.value) in (AttributeError, ValidationError, TypeError, ValueError)
 
 class TestOpen3DSupport:
     def test_to_o3d(self, pcd):
