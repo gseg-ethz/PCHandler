@@ -7,7 +7,7 @@ from scipy.spatial.transform import Rotation
 
 from pchandler.v2.base_arrays import ArrayNx3
 from pchandler.v2.constants import HALF_PI, PI, TWO_PI
-from pchandler.v2.geometry import (
+from pchandler.v2.geometry.coordinates import (
     Abstract3dCoordinates,
     AbstractCoordinates,
     CartesianCoordinates,

@@ -1,6 +1,9 @@
 import pytest
+import numpy as np
+
 from pydantic import BaseModel, ValidationError
 
+from pchandler.v2.geometry.scalar_fields import *
 
 def test_lower_str_annotation():
     class A(BaseModel):
@@ -327,9 +330,9 @@ class TestNormalsField:
         data = np.random.rand(100, 3).astype(np.float32)
         a = NormalFields(data)
 
-        assert np.all(a.x == data[:, 0])
-        assert np.all(a.y == data[:, 1])
-        assert np.all(a.z == data[:, 2])
+        assert np.all(a.nx == data[:, 0])
+        assert np.all(a.ny == data[:, 1])
+        assert np.all(a.nz == data[:, 2])
 
     def test_initialise_field_class_method(self):
         data = np.random.rand(100, 3).astype(np.float32)

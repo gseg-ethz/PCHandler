@@ -108,8 +108,11 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
         if name in NORMAL_POTENTIAL_NAMES:
             return self._handle_normal(name, value)
 
-        if self.num_points != value.shape[0]:
-            raise ValueError(f"Scalar field length does not equal #points: {self.num_points} != {value.shape[0]}")
+        if self._parent is not None:
+            if self.num_points != value.shape[0]:
+                raise ValueError( f"Scalar field length does not equal #points: {self.num_points} != {value.shape[0]}")
+        else:
+            logger.warning('No parent object to compare length of scalar fields to corresponding coordinate set')
 
         if isinstance(value, np.ndarray):
             self.fields[name] = ScalarField(value, name=name)
@@ -119,8 +122,11 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
     def __delitem__(self, key: str) -> None:
         del self.fields[key]
 
+    # TODO Ensure mame of scalar_field should always be lower case and match the key in _sfm dict
+    # TODO add test for lower case fields
+
     def add_field(self, sf_field: ScalarField) -> None:
-        self.fields[sf_field.name.lower()] = sf_field
+        self[sf_field.name.lower()] = sf_field
 
     def remove_field(self, field_name: LowerStr) -> None:
         del self.fields[field_name.lower()]
@@ -141,17 +147,33 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
     def rgb(self) -> RGBFields | None:
         return self.fields.get(RGB_FIELD, None)
 
+    @rgb.setter
+    def rgb(self, value: np.ndarray | RGBFields):
+        self.add_field(RGBFields(value))
+
     @property
     def intensity(self):
         return self.fields.get("intensity", None)
+
+    @intensity.setter
+    def intensity(self, value: np.ndarray | ScalarField):
+        self.add_field(ScalarField(value, name="intensity"))
 
     @property
     def reflectance(self):
         return self.fields.get("reflectance", None)
 
+    @reflectance.setter
+    def reflectance(self, value: np.ndarray | ScalarField):
+        self.add_field(ScalarField(value, name="reflectance"))
+
     @property
     def normals(self) -> NormalFields | None:
         return self.fields.get(NORMALS_FIELD, None)
+
+    @normals.setter
+    def normals(self, value: np.ndarray | ScalarField):
+        self.add_field(NormalFields(value))
 
     @validate_call(config=DEFAULT_CONFIG)
     def _handle_rgb(self, name: LowerStr, value: VectorT_Uint8 | Array_Nx3_uint8_T) -> None:
@@ -182,12 +204,12 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
     @validate_call(config=DEFAULT_CONFIG)
     def _handle_normal(self, name: LowerStr, value: VectorT_Float32 | Array_Nx3_float32_T) -> None:
         # Set the whole field
-        if name == ("nxnynz", "normals", "normal"):
+        if name in ("nxnynz", "normals", "normal"):
             self.fields[NORMALS_FIELD] = NormalFields(arr=value[:, [0, 1, 2]])
             return
 
         elif name == "nznynx":
-            self.fields[NORMALS_FIELD] = NormalFields(arr=value[[2, 1, 0], :])
+            self.fields[NORMALS_FIELD] = NormalFields(arr=value[:, [2, 1, 0]])
             return
 
         if self.normals is None:
@@ -205,8 +227,8 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
         else:
             raise KeyError(f"Unknown key made it into normals : {name}")
 
-    def sample(self, mask: IndexLike) -> dict[str, ScalarField]:
-        sample = {}
+    def sample(self, mask: IndexLike) -> ScalarFieldManager:
+        sample = type(self)(fields={})
 
         for name, value in self.items():
             mask = value.create_mask(mask)
@@ -214,46 +236,33 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
 
         return sample
 
-    def extract(self, mask: IndexLike) -> dict[str, ScalarField]:
+    def extract(self, mask: IndexLike) -> ScalarFieldManager:
+        mask = self._parent().create_mask(mask)
         sample = self.sample(mask)
-        self.reduce(mask)
+        self.reduce(~mask)
         return sample
 
     def reduce(self, mask: IndexLike) -> None:
         for name, value in self.items():
             self.fields[name] = value[mask]
 
-    # TODO pull out, maybe nice to have in future if requested
-    @staticmethod
-    def generate_point_cloud_map(sfms: Iterable[ScalarFieldManager]) -> dict[int, slice]:
-        indexes = [0]
-        for i, b in enumerate(sfms):
-            indexes.append(indexes[i] + b.num_points)
-
-        starting_indexes = tuple(indexes[:-1])
-        ending_indexes = tuple(indexes[1:])
-
-        index_map = {}
-        for i, value in enumerate(starting_indexes):
-            index_map[i] = slice(value, ending_indexes[i], None)
-        return index_map
 
     @classmethod
     def merge(cls, sfms: Iterable[Self]) -> Self:
         sfm_key_sets = (set(sfm) for sfm in sfms)
         keys_in_common = set.intersection(*sfm_key_sets)
 
-        # return if there are no keys/scalar fields in common
-        if len(keys_in_common) == 0:
-            return ScalarFieldManager(parent=None, fields={})
         new_sfm = ScalarFieldManager(parent=None)
 
+        if len(keys_in_common) == 0:
+            return new_sfm
+
+        # Get the scalar field managers that have the key in common
         for common_key in keys_in_common:
-            # Get the scalar field managers that have the key in common
             sfs: list[ScalarField] = [sfm[common_key] for sfm in sfms]
 
             # Check the names are the same. If not, take the most occurring name.
-            # DECISION Name of scalar_field should always be lower case and match the key in _sfm dict
+
             sf_names: list[str] = [sf.name for sf in sfs]
             if len(set(sf_names)) != 1:
                 logger.warning(f"While merging scalar field {common_key} different names were encountered.")
@@ -263,10 +272,10 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
                 name = sfs[0].name
 
             # Check if the original_dtype_states match. If not, do not use.
-            if all([sfs[0] != sf for sf in sfs[1:]]):
+            if all([sfs[0].origin_dtype.dtype == sf.origin_dtype.dtype for sf in sfs[1:]]):
                 origin_dtype = sfs[0].origin_dtype
                 data = np.concatenate([sf.arr for sf in sfs])
-                sf = ScalarField(data, name=name, origin_dtype=origin_dtype)
+                sf = type(sfs[0])(data, name=name, origin_dtype=origin_dtype)
                 new_sfm.add_field(sf)
             else:
                 logger.warning(

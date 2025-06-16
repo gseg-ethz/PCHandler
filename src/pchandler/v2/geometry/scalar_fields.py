@@ -111,14 +111,14 @@ def normalize_array(array: np.ndarray, target_state: DtypeState = None) -> np.nd
         else:
             # Integers need to be floored
             np.floor(array, out=array)
-            return array.astype(original_dtype)
+            return array.astype(target_state.dtype)
     logger.debug("No dtype defined for normalisation. Set astype np.float32 by default")
     return array.astype(np.float32)
 
 
 def normalise_self(array: np.ndarray) -> np.ndarray:
     """
-    Normalise values to the min and max values of the associated integer type
+    Normalise values to the min and max values of the associated data type
     """
 
     if np.dtype(array.dtype).kind not in ["u", "i"]:
@@ -251,15 +251,15 @@ class NormalFields(ScalarField):
         super().__init__(arr, name, **kwargs)
 
     @property
-    def x(self) -> VectorT_Float32:
+    def nx(self) -> VectorT_Float32:
         return self.arr[:, 0]
 
     @property
-    def y(self) -> VectorT_Float32:
+    def ny(self) -> VectorT_Float32:
         return self.arr[:, 1]
 
     @property
-    def z(self) -> VectorT_Float32:
+    def nz(self) -> VectorT_Float32:
         return self.arr[:, 2]
 
     @classmethod
@@ -287,7 +287,7 @@ class SegmentationMap(ScalarField):
             arr = np.zeros(vector_length, dtype=np.uint16)
         else:
             raise ValueError(
-                f"Creating segmentation map for more than {2**16} point {len(pt_cloud_sizes)} not supported."
+                f"Creating segmentation map for more than {2 ** 16} point {len(pt_cloud_sizes)} not supported."
             )
 
         return cls(arr, name=name)

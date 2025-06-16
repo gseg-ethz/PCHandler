@@ -3,7 +3,10 @@ import weakref
 import numpy as np
 import pytest
 
-from pchandler.v2.geometry import OSM_Manager, PointCloudData
+from pchandler.v2.geometry import PointCloudData
+
+# FIXME
+OSM_Manager = None
 
 
 def random_coordinates(scale: float, offset: float) -> np.ndarray:
