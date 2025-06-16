@@ -3,13 +3,10 @@ import copy
 import numpy as np
 import pytest
 
-from pchandler.v2.geometry import (
-    PointCloudData,
-    RGBFields,
-    ScalarField,
-    ScalarFieldManager,
-)
-
+from pydantic import ValidationError
+from pchandler.v2.geometry import PointCloudData
+from pchandler.v2.geometry.scalar_fields import ScalarField, RGBFields, NormalFields
+from pchandler.v2.geometry.scalar_field_manager import ScalarFieldManager
 
 N = 100
 
@@ -126,12 +123,12 @@ class TestPointCloudData:
             for name in ("rgb", "normals", "intensity", "reflectance"):
                 assert name in pcd.scalar_fields
 
-        def test_optimised_keyword(self, xyz_):
+        def test_optimized_keyword(self, xyz_):
             pcd = PointCloudData(xyz_)
-            assert not pcd.optimised
+            assert not pcd.optimized
 
-            pcd = PointCloudData(xyz_, optimised=True)
-            assert pcd.optimised
+            pcd = PointCloudData(xyz_, optimized=True)
+            assert pcd.optimized
 
         def test_socs_origin_keyword(self, xyz_):
             pcd = PointCloudData(xyz_)
@@ -391,7 +388,7 @@ class TestPointCloudData:
             assert np.all(base_rgb[mask] == new_pcd.rgb)
             assert np.all(base_normal[mask] == new_pcd.normals)
             assert np.all(base_intensities[mask] == new_pcd.scalar_fields["intensity"])
-            assert pcd.optimised == new_pcd.optimised
+            assert pcd.optimized == new_pcd.optimized
             if isinstance(pcd.socs_origin, np.ndarray):
                 assert np.all(pcd.socs_origin == new_pcd.socs_origin)
             else:
@@ -426,7 +423,7 @@ class TestPointCloudData:
             assert np.all(base_normal[~mask] == sampled_pcd.normals)
             assert np.all(base_intensities[~mask] == sampled_pcd.intensity)
             assert np.all(pcd.socs_origin == sampled_pcd.socs_origin)
-            assert np.all(pcd.optimised == sampled_pcd.optimised)
+            assert np.all(pcd.optimized == sampled_pcd.optimized)
             assert np.all(pcd.spher == sampled_pcd.spher)
 
             assert np.all(base_xyz[mask, :] == extracted_pcd.xyz)
@@ -434,7 +431,7 @@ class TestPointCloudData:
             assert np.all(base_normal[mask] == extracted_pcd.normals)
             assert np.all(base_intensities[mask] == extracted_pcd.intensity)
             assert np.all(pcd.socs_origin == extracted_pcd.socs_origin)
-            assert np.all(pcd.optimised == extracted_pcd.optimised)
+            assert np.all(pcd.optimized == extracted_pcd.optimized)
 
             assert len(extracted_pcd) + len(sampled_pcd) == base_xyz.shape[0]
             assert len(extracted_pcd) == 10
@@ -461,8 +458,8 @@ class TestPointCloudData:
             assert np.all(ref_pcd.socs_origin == extracted_pcd.socs_origin)
 
             # These should be None
-            assert ref_pcd.optimised == extracted_pcd.optimised
-            assert reduced_pcd.optimised == extracted_pcd.optimised
+            assert ref_pcd.optimized == extracted_pcd.optimized
+            assert reduced_pcd.optimized == extracted_pcd.optimized
 
         def test_merge(self, pcd, pcd2, pcd3):
             merged_1 = PointCloudData.merge(pcd, pcd2, pcd3)

@@ -1,15 +1,12 @@
+import copy
 from weakref import ReferenceType
 
 import numpy as np
 import pytest
 
-from pchandler.v2.geometry import (
-    NormalFields,
-    PointCloudData,
-    RGBFields,
-    ScalarField,
-    ScalarFieldManager,
-)
+from pchandler.v2.geometry import PointCloudData
+from pchandler.v2.geometry.scalar_field_manager import ScalarFieldManager
+from pchandler.v2.geometry.scalar_fields import ScalarField, RGBFields, NormalFields
 
 N = 40
 

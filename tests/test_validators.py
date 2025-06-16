@@ -3,10 +3,10 @@ from typing import Callable
 
 import pytest
 
-from pchandler.constants import HALF_PI, PI, TWO_PI
-from pchandler.v2.geometry import ScalarField
-from pchandler.base_arrays import BaseArray
-from pchandler.validators import *
+from pchandler.v2.constants import HALF_PI, PI, TWO_PI
+from pchandler.v2.geometry.scalar_fields import ScalarField
+from pchandler.v2.base_arrays import BaseArray
+from pchandler.v2.validators import *
 
 COORDINATE_3D_PROPERTIES = ("x", "y", "z", "r", "v", "hz", "rho", "theta", "phi", "xyz", "spher")
 

@@ -4,7 +4,7 @@ import warnings
 import numpy as np
 from numpy.typing import NDArray
 
-from pchandler.util import unique_rows_fast
+from pchandler.v2.util import unique_rows_fast
 from pchandler.v2.geometry.core import PointCloudData
 from pchandler.v2.geometry.scalar_field_manager import ScalarFieldManager
 

@@ -93,7 +93,7 @@ class PointCloudData(CartesianCoordinates):
 
         kwargs["scalar_fields"] = scalar_fields
         # TODO update logic inline with the global optimisation
-        kwargs["optimised"] = optimal_shift is not None
+        kwargs["optimized"] = optimal_shift is not None
         kwargs["optimal_shift"] = optimal_shift
         kwargs["socs_origin"] = socs_origin
         kwargs["project_transformation"] = project_transformation
@@ -160,6 +160,10 @@ class PointCloudData(CartesianCoordinates):
     def reflectance(self):
         return self.scalar_fields.reflectance
 
+    @reflectance.setter
+    def reflectance(self, value: np.ndarray|ScalarField):
+        self.scalar_fields.reflectance = value
+
     def __getitem__(self, item):
         return self.sample(self.create_mask(item))
 
@@ -215,7 +219,7 @@ class PointCloudData(CartesianCoordinates):
     @staticmethod
     def merge(*pcds: PointCloudData):
         scalar_fields = ScalarFieldManager.merge([pcd.scalar_fields for pcd in pcds])
-        if not all([pcds[0].optimised == pcd.optimised for pcd in pcds[1:]]):
+        if not all([pcds[0].optimized == pcd.optimized for pcd in pcds[1:]]):
             raise ValueError('Can only merge point clouds if they are all optimized or unoptimized.')
 
         if isinstance(pcds[0].socs_origin, np.ndarray):
@@ -241,44 +245,45 @@ class PointCloudData(CartesianCoordinates):
         return PointCloudData(xyz, scalar_fields=scalar_fields)
 
     def to_o3d(self):
+        """
+            Converts the point cloud to an Open3D `PointCloud` object.
+
+            Returns
+            -------
+            o3d.geometry.PointCloud
+                An Open3D representation of the point cloud.
+            pcd_o3d = o3d.geometry.PointCloud()
+            if self.global_coordinate_shift is None:
+                pcd_o3d.points = o3d.utility.Vector3dVector(self.xyz)
+            else:
+                pcd_o3d.points = o3d.utility.Vector3dVector((self.xyz + self.global_coordinate_shift).astype(np.float64))
+            return pcd_o3d
+        """
         raise NotImplementedError
 
-    """
-        Converts the point cloud to an Open3D `PointCloud` object.
 
-        Returns
-        -------
-        o3d.geometry.PointCloud
-            An Open3D representation of the point cloud.
-        pcd_o3d = o3d.geometry.PointCloud()
-        if self.global_coordinate_shift is None:
-            pcd_o3d.points = o3d.utility.Vector3dVector(self.xyz)
-        else:
-            pcd_o3d.points = o3d.utility.Vector3dVector((self.xyz + self.global_coordinate_shift).astype(np.float64))
-        return pcd_o3d
-    """
 
     @classmethod
     def from_o3d(cls, o3d):
+        """
+            @classmethod
+            def from_o3d(cls, pcd_o3d: o3d.geometry.PointCloud, scan_center: Optional[NDArray[np.float_]] = None) -> Self:
+                Creates a `PointCloudData` instance from an Open3D `PointCloud`.
+
+                Parameters
+                ----------
+                pcd_o3d : o3d.geometry.PointCloud
+                    An Open3D `PointCloud` object.
+                scan_center : np.ndarray, optional
+                    The scan center for spherical coordinate calculations.
+
+                Returns
+                -------
+                PointCloudData
+                    A new instance of the `PointCloudData` class.
+                return cls(np.asarray(pcd_o3d.points), spherical_coordinates_origin=scan_center)
+        """
         raise NotImplementedError
-        """
-        @classmethod
-        def from_o3d(cls, pcd_o3d: o3d.geometry.PointCloud, scan_center: Optional[NDArray[np.float_]] = None) -> Self:
-            Creates a `PointCloudData` instance from an Open3D `PointCloud`.
-    
-            Parameters
-            ----------
-            pcd_o3d : o3d.geometry.PointCloud
-                An Open3D `PointCloud` object.
-            scan_center : np.ndarray, optional
-                The scan center for spherical coordinate calculations.
-    
-            Returns
-            -------
-            PointCloudData
-                A new instance of the `PointCloudData` class.
-            return cls(np.asarray(pcd_o3d.points), spherical_coordinates_origin=scan_center)
-        """
 
     # # DECIDE Implement in PCHandler or in pc2image
     # @classmethod

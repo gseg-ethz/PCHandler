@@ -53,7 +53,7 @@ class Abstract2dCoordinates(ArrayNx2, AbstractCoordinates):
 class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates):
     project_transformation: Optional[Array_4x4_T] = None
     socs_origin: Optional[np.ndarray] = None
-    optimised: bool = Field(default=False, exclude=True)
+    optimized: bool = Field(default=False, exclude=True)
 
     @property
     @abstractmethod

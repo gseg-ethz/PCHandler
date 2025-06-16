@@ -10,6 +10,6 @@ TWO_PI = pi * 2
 RGB_FIELD = "rgb"
 NORMALS_FIELD = "normals"
 RGB_POTENTIAL_NAMES = ("r", "g", "b", "rgb", "bgr", "red", "green", "blue", "rgba")
-NORMAL_POTENTIAL_NAMES = ("normal", "normals", "normal_fields")
+NORMAL_POTENTIAL_NAMES = ("normal", "normals", "normal_fields", "nx", "ny", "nz")
 
 DEFAULT_CONFIG = ConfigDict(arbitrary_types_allowed=True)

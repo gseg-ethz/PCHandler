@@ -5,7 +5,7 @@ from numpy.typing import NDArray
 from shapely import contains_xy
 from shapely.geometry import Polygon
 
-from fov import FoV
+from ...fov import FoV
 from ..core import PointCloudData
 from .core import PointCloudFilter
 
