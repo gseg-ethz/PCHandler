@@ -37,7 +37,7 @@ import copy
 import logging
 from enum import Enum
 from functools import wraps
-from typing import Optional, Any
+from typing import Any, Optional
 
 import numpy as np
 
@@ -110,7 +110,7 @@ def convert_angles(
     --------
     Convert an array of angles from degrees to radians:
     >>> import numpy as np
-    >>> from v2 import convert_angles, AngleUnit
+    >>> from pchandler.util import convert_angles, AngleUnit
     >>> angles_deg = np.array([0, 90, 180, 360])
     >>> convert_angles(angles_deg, AngleUnit.DEGREE, AngleUnit.RAD)
     array([0.        , 1.57079633, 3.14159265, 6.28318531])
@@ -148,8 +148,6 @@ def convert_angles(
                     return np.multiply(values, 180 / 200, out=out)
 
 
-
-
 def unique_rows_fast(bin_idx: np.ndarray):
     """
     bin_idx: 2D int32 array of shape (N, D)
@@ -171,7 +169,6 @@ def unique_rows_fast(bin_idx: np.ndarray):
     uniq = uniq_blob.view(arr.dtype).reshape(-1, arr.shape[1])
 
     return uniq, inv
-
 
 
 def bypass_immutable(method):

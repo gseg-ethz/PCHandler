@@ -5,7 +5,7 @@ from typing import Callable
 import numpy as np
 from numpy.typing import NDArray
 
-from ..core import PointCloudData
+from pchandler.v2.geometry.core import PointCloudData
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -71,7 +71,7 @@ class PointCloudFilter(ABC):
             A new PointCloudData instance containing only the sampled points.
         """
         m = self.mask(pcd)
-        return pcd.sample()
+        return pcd.sample(m)
 
 
 class GenericFieldFilter(PointCloudFilter):

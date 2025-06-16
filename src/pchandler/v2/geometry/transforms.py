@@ -3,19 +3,26 @@ Transforms module for pchandler.geometry.
 
 Provides helper functions for transforming point clouds and converting between coordinate systems.
 """
+
 from __future__ import annotations
 
 import copy
-from typing import Optional, overload, MutableMapping
 from collections import OrderedDict
-
 from enum import IntEnum, auto
+from typing import MutableMapping, Optional, overload
 
-import numpy    as np
-from pydantic import BaseModel, model_validator, ValidationError, ConfigDict, Field, field_validator
+import numpy as np
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
-from base_arrays import BaseArray, BaseVector, FixedLengthArray
-from base_types import Array_4x4_T, Array_3x3_T
+from ..base_arrays import BaseArray, BaseVector, FixedLengthArray
+from ..base_types import Array_3x3_T, Array_4x4_T
 
 
 class TransformType(IntEnum):
@@ -26,17 +33,24 @@ class TransformType(IntEnum):
 
 
 class _TransformArray(BaseArray):
-    def create_mask(self, *args, **kwargs): raise NotImplementedError('')
-    def sample(self, *args, **kwargs): raise NotImplementedError
-    def extract(self, *args, **kwargs): raise NotImplementedError
-    def reduce(self, *args, **kwargs): raise NotImplementedError
+    def create_mask(self, *args, **kwargs):
+        raise NotImplementedError("")
 
-    @field_validator('arr', mode='before')
+    def sample(self, *args, **kwargs):
+        raise NotImplementedError
+
+    def extract(self, *args, **kwargs):
+        raise NotImplementedError
+
+    def reduce(self, *args, **kwargs):
+        raise NotImplementedError
+
+    @field_validator("arr", mode="before")
     @classmethod
     def always_copy(cls, arr):
         return copy.deepcopy(arr)
 
-    def __matmul__(self, other: np.ndarray|BaseArray):
+    def __matmul__(self, other: np.ndarray | BaseArray):
         if isinstance(other, np.ndarray):
             return self.get_copy(array=self.arr @ other)
 
@@ -68,7 +82,6 @@ class _Transform4x4(_TransformArray):
     arr: Array_4x4_T = Field(default_factory=lambda: np.eye(4))
 
 
-
 class Transform(_Transform4x4):
     @classmethod
     def from_translation(cls, vector: BaseVector) -> Transform:
@@ -92,7 +105,7 @@ class Transform(_Transform4x4):
         | 0 1 |     | 0 1 |      | 0 1 |
         """
         if rotation is None and translation is None and scale is None:
-            raise ValueError('TransformRecord must have at least one of the arguments')
+            raise ValueError("TransformRecord must have at least one of the arguments")
 
         affine = np.eye(4)
         if rotation:
@@ -111,14 +124,15 @@ class Transform(_Transform4x4):
             return TransformRecord(forward=self.arr)
         return TransformRecord(backward=self.arr)
 
+
 class TransformRecord(BaseModel):
     forward: Optional[Array_4x4_T] = None
     backward: Optional[Array_4x4_T] = None
 
-    @model_validator(mode='after')
+    @model_validator(mode="after")
     def update_matrices(self):
         if self.forward is None and self.backward is None:
-            raise ValidationError('TransformRecord must receive at least one forward or backward transformation')
+            raise ValidationError("TransformRecord must receive at least one forward or backward transformation")
 
         if self.forward is None:
             self.forward = np.linalg.inv(self.backward)
@@ -127,20 +141,18 @@ class TransformRecord(BaseModel):
             self.backward = np.linalg.inv(self.forward)
 
 
-
-
-class TransformLedger(OrderedDict, MutableMapping   [str, TransformRecord]):
+class TransformLedger(OrderedDict, MutableMapping[str, TransformRecord]):
     def __int__(self):
         super(TransformLedger, self).__init__()
 
-    def __getitem__(self, key: str|int) -> tuple[str, TransformRecord]:
-        """ Use either an index or named key to access a record"""
+    def __getitem__(self, key: str | int) -> tuple[str, TransformRecord]:
+        """Use either an index or named key to access a record"""
         if isinstance(key, int):
             return list(super(TransformLedger, self).items())[key]
 
         return key, super(TransformLedger, self).__getitem__(key)
 
-    def __setitem__(self, key: str|int, value: np.ndarray | _Transform4x4 | TransformRecord):
+    def __setitem__(self, key: str | int, value: np.ndarray | _Transform4x4 | TransformRecord):
         if isinstance(value, TransformRecord):
             if isinstance(key, int):
                 key = list(super(TransformLedger, self).items())[key]
@@ -148,9 +160,9 @@ class TransformLedger(OrderedDict, MutableMapping   [str, TransformRecord]):
                 super(TransformLedger, self).__setitem__(key, value)
 
             # Create a new record appended with the number entry if entry name doesn't exist
-            super(TransformLedger, self).__setitem__(f'{key}_{len(self)}', value)
+            super(TransformLedger, self).__setitem__(f"{key}_{len(self)}", value)
         else:
-            raise ValueError(f'Cannot set transform record value of type: {type(value)}')
+            raise ValueError(f"Cannot set transform record value of type: {type(value)}")
 
     def rollback_record(self, index: int) -> tuple[np.ndarray, TransformLedger]:
         previous_history = type(self)()
@@ -169,7 +181,7 @@ class TransformLedger(OrderedDict, MutableMapping   [str, TransformRecord]):
 
 
 class GlobalShift(BaseVector):
-    model_config = ConfigDict(extra='forbid')
+    model_config = ConfigDict(extra="forbid")
 
     def as_record(self):
         (forward := np.eye(4))[:3, 3] = -self.arr

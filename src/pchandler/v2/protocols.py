@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Protocol, Self, Any
+from typing import Any, Protocol, Self
 
 import numpy as np
 
@@ -33,7 +33,6 @@ class CartesianCoordProtocol(Protocol):
     def from_spherical(cls, xyz: np.ndarray) -> Self: ...
 
 
-
 class SphericalCoordProtocol(Protocol):
     @property
     def spher(self) -> np.ndarray: ...
@@ -54,7 +53,7 @@ class SphericalCoordProtocol(Protocol):
 
 class PointCloudProtocol(CartesianCoordProtocol, SphericalCoordProtocol, Protocol):
     @property
-    def coords(self) -> CartesianCoordProtocol|SphericalCoordProtocol: ...
+    def coords(self) -> CartesianCoordProtocol | SphericalCoordProtocol: ...
 
     @property
     def scalar_fields(self) -> np.ndarray: ...
