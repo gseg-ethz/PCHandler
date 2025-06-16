@@ -17,7 +17,6 @@ from numpydantic.dtype import (
     UInt16,
 )
 from pydantic import BeforeValidator
-from validators import extract_array, validate_transposed_vector, validate_n_by_2_transposed, validate_n_by_3_transposed
 
 from .validators import (
     extract_array,

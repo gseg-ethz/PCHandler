@@ -11,6 +11,7 @@ Features:
   - PLY (``.ply``)
   - LAS/LAZ (``.las``, ``.laz``)
   - ASCII/CSV (``.txt``, ``.csv``)
+  - E57 (``.e57``)
 
 - **Key Functionalities**:
   - Find PCD files in a directory with optional subdirectory inclusion.
@@ -68,6 +69,7 @@ import csv
 import logging
 import warnings
 from datetime import datetime
+from enum import IntEnum, auto
 from pathlib import Path
 from typing import Generator, Optional
 
@@ -75,22 +77,30 @@ import laspy
 import numpy as np
 import pye57
 from plyfile import PlyData, PlyElement
-from yaml import warnings
 
 from pchandler.v2.geometry.core import PointCloudData
 from pchandler.v2.geometry.scalar_field_manager import ScalarFieldManager
-from pchandler.v2.geometry.scalar_fields import ScalarField
+from pchandler.v2.geometry.scalar_fields import (
+    ScalarField,
+    RGBFields,
+    NormalFields,
+    linear_map_dtype,
+    normalise_self,
+    normalize_array,
+    DtypeState,
+)
+from pchandler.v2.constants import RGB_FIELD, NORMALS_FIELD
 
 logger = logging.getLogger(__name__.split(".")[0])
 
-# TODO: Implement `Enum` for FileTypes
-# class PCDFileTypes(Enum):
-#     E57 = ".e57"  # Not yet implemented
-#     PLY = ".ply"
-#     LAS = ".las"
-#     LAZ = ".laz"
-#     ASCII = ".txt"
 
+SUPPORTED_TYPES = (".ply", ".las", ".laz", ".txt", ".csv", ".ply", ".e57")
+
+class NormaliseEnum(IntEnum):
+    NONE = auto()
+    MINMAX = auto()
+    DTYPE = auto()
+    MAPPING = auto()
 
 def find_pcd_in_directory(directory_path, pcd_file_types: list[str], include_subdirectories: bool = True) -> list[Path]:
     """
@@ -161,95 +171,57 @@ def load_ply(
         logger.error(f"Failed to read PLY file {pcd_path}: {e}")
         raise
 
-    nbPoints = plydata["vertex"].count
-    logger.debug(f"PLY file {pcd_path} contains {nbPoints} points")
+    num_points = plydata["vertex"].count
+    normals = None
+    rgb = None
+    logger.debug(f"PLY file {pcd_path} contains {num_points} points")
 
-    xyz = np.empty(
-        (
-            nbPoints,
-            3,
-        ),
-        dtype=float,
-    )
+    xyz = np.empty((num_points, 3), dtype=float)
     xyz[:, 0] = plydata["vertex"]["x"]
     xyz[:, 1] = plydata["vertex"]["y"]
     xyz[:, 2] = plydata["vertex"]["z"]
 
-    ply_scalar_fields = [pe.name for pe in plydata["vertex"].properties]
+    # DECIDE should there be a flag for cloud_compare exported files with scalar_ prefix?
+    ply_scalar_fields = set([pe.name for pe in plydata["vertex"].properties])
+    for name in ('x', 'y', 'z'):
+        ply_scalar_fields.remove(name)
 
-    # ply_scalar_fields_lower = [ply_sf.lower() for ply_sf in ply_scalar_fields]
-    # scalar_fields = None if scalar_fields is None else [sf for sf in scalar_fields]
+    rgb_field_names = ply_scalar_fields & {"r", "g", "b", "red", "green", "blue"}
+    if retain_colors and len(rgb_field_names) == 3:
+        color_dtype = plydata["vertex"]["r"].dtype if "r" in ply_scalar_fields else plydata["vertex"]["red"].dtype
 
-    colors = None
-    if retain_colors and len(set(ply_scalar_fields) & set(["r", "g", "b", "red", "green", "blue"])) == 3:
-        color_dytpe = plydata["vertex"]["r"].dtype if "r" in ply_scalar_fields else plydata["vertex"]["red"].dtype
-        colors = np.empty(
-            (
-                nbPoints,
-                3,
-            ),
-            dtype=color_dytpe,
-        )
-        colors[:, 0] = plydata["vertex"]["r"] if "r" in ply_scalar_fields else plydata["vertex"]["red"]
-        colors[:, 1] = plydata["vertex"]["g"] if "g" in ply_scalar_fields else plydata["vertex"]["green"]
-        colors[:, 2] = plydata["vertex"]["b"] if "b" in ply_scalar_fields else plydata["vertex"]["blue"]
+        rgb = np.empty((num_points, 3), dtype=color_dtype)
+        rgb[:, 0] = plydata["vertex"]["r"] if "r" in ply_scalar_fields else plydata["vertex"]["red"]
+        rgb[:, 1] = plydata["vertex"]["g"] if "g" in ply_scalar_fields else plydata["vertex"]["green"]
+        rgb[:, 2] = plydata["vertex"]["b"] if "b" in ply_scalar_fields else plydata["vertex"]["blue"]
 
-        assert 0.0 <= colors.min() <= colors.max() <= 255.0
-        colors = colors.astype(np.uint8)
-        logger.debug("Color information loaded successfully.")
+        # DECIDE check values and normalise
+        rgb = linear_map_dtype(rgb, np.uint8)
+        logger.debug("Color information extracted successfully.")
 
-    normals = None
-    if retain_normals and len(set(ply_scalar_fields) & set(["nx", "ny", "nz"])) == 3:
-        normals = np.empty(
-            (
-                nbPoints,
-                3,
-            ),
-            dtype=float,
-        )
+        for name in rgb_field_names:
+            ply_scalar_fields.remove(name)
+
+    normals_field_names = ply_scalar_fields & {"nx", "ny", "nz"}
+
+    if retain_normals and len(normals_field_names) == 3:
+        normals = np.empty((num_points, 3), dtype=np.float32)
         normals[:, 0] = plydata["vertex"]["nx"]
         normals[:, 1] = plydata["vertex"]["ny"]
         normals[:, 2] = plydata["vertex"]["nz"]
-        logger.debug("Normal vectors loaded successfully.")
 
-    ply_scalar_fields_stripped = [sf.removeprefix("scalar_").lower() for sf in ply_scalar_fields]
+        normals = normalise_self(normals)
+        logger.debug("Normal vectors extracted successfully.")
 
-    common_scalar_fields = (
-        ply_scalar_fields_stripped
-        if scalar_fields is None
-        else list(set([sf.removeprefix("scalar_").lower() for sf in scalar_fields]) & set(ply_scalar_fields_stripped))
-    )
+        for name in normals_field_names:
+            ply_scalar_fields.remove(name)
 
-    # scalar_fields_dict = dict()
-    sfm = ScalarFieldManager(expected_length=nbPoints)
-    for sf in ply_scalar_fields:
-        sf_label = sf.removeprefix("scalar_")
-        if sf_label.lower() in common_scalar_fields and sf_label.lower() not in [
-            "x",
-            "y",
-            "z",
-            "r",
-            "g",
-            "b",
-            "red",
-            "green",
-            "blue",
-            "nx",
-            "ny",
-            "nz",
-        ]:
-            sfm.add_field(ScalarField(sf_label, np.array(plydata["vertex"][sf]).squeeze()))
-            logger.debug(f"Loaded scalar field: {sf_label}")
-    if "Intensity" in sfm and normalize_intensities:
-        warnings.warn(
-            "normalize_intensities has been deprecated, and will be removed in future relases. Please call the "
-            "ScalarField.normalize() function on the individual scalar fields after loading instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        sfm["Intensity"].normalize()
-    logger.info(f"Successfully loaded PLY file: {pcd_path}")
-    return PointCloudData(xyz, color=colors, normals=normals, scalar_fields=sfm, **kwargs)
+    scalar_fields = ScalarFieldManager()
+
+    for name in ply_scalar_fields:
+        scalar_fields.add_field(ScalarField(plydata["vertex"][name], name=name))
+
+    return PointCloudData(xyz, rgb=rgb, normals=normals, scalar_fields=scalar_fields)
 
 
 def save_ply(
@@ -257,8 +229,8 @@ def save_ply(
     pcd: PointCloudData,
     retain_colors: bool = True,
     retain_normals: bool = True,
-    scalar_fields: list[str] = None,
-    convert_scalar_fields_to_original_dtype_and_bounds: bool = False,
+    scalar_fields: list[str]|set[str] = None,
+    revert_scalar_field_type: bool = False,
 ) -> None:
     """
     Saves a `PointCloudData` object to a `.ply` file.
@@ -275,13 +247,12 @@ def save_ply(
         Whether to include normal vectors in the saved file.
     scalar_fields : list[str], optional
         A list of scalar fields to include in the saved file. If `None`, all scalar fields are saved.
-    convert_scalar_fields_to_original_dtype_and_bounds : bool, default=False
+    revert_scalar_field_type : bool, default=False
         Whether to convert scalar fields to original dtype and undo normalization.
     """
     logger.info(f"Saving point cloud to PLY file: {pcd_path}")
-    nb_points = pcd.nbPoints
 
-    xyz_dtype = np.dtype(np.float64).str if pcd.global_coordinate_shift is not None else pcd.xyz.dtype.str
+    xyz_dtype = np.dtype(np.float64).str if pcd.optimized is not None else pcd.xyz.dtype.str
 
     dtype_list = [
         ("x", xyz_dtype),
@@ -289,9 +260,10 @@ def save_ply(
         ("z", xyz_dtype),
     ]
 
-    if retain_colors and pcd.color is not None:
-        assert pcd.color.shape == (nb_points, 3)
-        color_dtype = pcd.color.dtype.str
+    pcd_scalar_fields = set(pcd.scalar_fields.keys()).difference({RGB_FIELD, NORMALS_FIELD})
+
+    if retain_colors and pcd.rgb is not None:
+        color_dtype = pcd.rgb.dtype.str
         dtype_list.extend(
             [
                 ("red", color_dtype),
@@ -301,7 +273,6 @@ def save_ply(
         )
 
     if retain_normals and pcd.normals is not None:
-        assert pcd.normals.shape == (nb_points, 3)
         normal_dtype = pcd.normals.dtype.str
         dtype_list.extend(
             [
@@ -311,58 +282,48 @@ def save_ply(
             ]
         )
 
-    pcd_scalar_fields = pcd.scalar_fields.keys()
-
-    # Strip `scalar_` from the elements in scalar_fields
-    scalar_fields = (
-        [s.lower().removeprefix("scalar_") for s in scalar_fields] if scalar_fields is not None else scalar_fields
-    )
-    common_scalar_fields = (
+    common_scalar_field_names = (
         pcd_scalar_fields if scalar_fields is None else list(set(scalar_fields) & set(pcd_scalar_fields))
     )
 
-    for sf in common_scalar_fields:
-        assert len(pcd.scalar_fields[sf]) == nb_points
-        sf_label = pcd.scalar_fields[sf].name
-        sf_label = sf_label if sf_label.startswith("scalar_") else f"scalar_{sf_label}"
-        if convert_scalar_fields_to_original_dtype_and_bounds and pcd.scalar_fields[sf].origin_dtype is not None:
-            dtype_list.append((sf_label, pcd.scalar_fields[sf].origin_dtype.str))
+    # DECIDE should we prefix all scalar fields with 'scalar_'? Is this required by the file format definition
+
+    for name in common_scalar_field_names:
+        if revert_scalar_field_type is not None:
+            dtype_list.append((name, pcd.scalar_fields[name].origin_dtype.dtype.str))
         else:
-            dtype_list.append((sf_label, pcd.scalar_fields[sf].data.dtype.str))
+            dtype_list.append((name, pcd.scalar_fields[name].dtype.str))
 
-    pcd_np_st = np.empty((nb_points,), dtype=dtype_list)
+    pcd_np_st = np.empty((len(pcd),), dtype=dtype_list)
 
-    pcd_np_st["x"] = pcd.xyz[:, 0]
-    pcd_np_st["y"] = pcd.xyz[:, 1]
-    pcd_np_st["z"] = pcd.xyz[:, 2]
+    base_shift = np.zeros(3, dtype=np.float32) if pcd.optimal_shift is None else pcd.optimal_shift.optimal_shift
 
-    if pcd.global_coordinate_shift is not None:
-        pcd_np_st["x"] += pcd.global_coordinate_shift[0]
-        pcd_np_st["y"] += pcd.global_coordinate_shift[1]
-        pcd_np_st["z"] += pcd.global_coordinate_shift[2]
+    pcd_np_st["x"] = pcd.x + base_shift[0]
+    pcd_np_st["y"] = pcd.y + base_shift[1]
+    pcd_np_st["z"] = pcd.z + base_shift[2]
 
-    if retain_colors and pcd.color is not None:
-        pcd_np_st["red"] = pcd.color[:, 0]
-        pcd_np_st["green"] = pcd.color[:, 1]
-        pcd_np_st["blue"] = pcd.color[:, 2]
+    if retain_colors and pcd.rgb is not None:
+        pcd_np_st["red"] = pcd.rgb.r
+        pcd_np_st["green"] = pcd.rgb.g
+        pcd_np_st["blue"] = pcd.rgb.b
 
     if retain_normals and pcd.normals is not None:
-        pcd_np_st["nx"] = pcd.normals[:, 0]
-        pcd_np_st["ny"] = pcd.normals[:, 1]
-        pcd_np_st["nz"] = pcd.normals[:, 2]
+        pcd_np_st["nx"] = pcd.normals.nx
+        pcd_np_st["ny"] = pcd.normals.ny
+        pcd_np_st["nz"] = pcd.normals.nz
 
-    for sf in common_scalar_fields:
-        sf_label = pcd.scalar_fields[sf].name
-        sf_label = sf_label if sf_label.startswith("scalar_") else f"scalar_{sf_label}"
-        if convert_scalar_fields_to_original_dtype_and_bounds:
-            pcd_np_st[sf_label] = pcd.scalar_fields[sf].create_rollback()
+    for name in common_scalar_field_names:
+
+        if revert_scalar_field_type:
+            pcd_np_st[name] = pcd.scalar_fields[name].get_original_data()
         else:
-            pcd_np_st[sf_label] = pcd.scalar_fields[sf].data
+            pcd_np_st[name] = pcd.scalar_fields[name].arr
 
     # TODO: Rename program in comment
+    # DECIDE: project transformation
     el = PlyElement.describe(
         pcd_np_st,
-        "vertex",
+        name="vertex",
         comments=[
             "Created with dranjan/python-plyfile in gseg-ethz/pchandler",
             f"Created {datetime.now():%Y-%m-%dT%H:%M:%S%z}",
@@ -406,25 +367,31 @@ def load_csv(
     with open(pcd_path, "r") as f:
         reader = csv.reader(f, delimiter=delimeter)
         data = list(reader)
-    xyz = np.array([row[:3] for row in data], dtype=np.float32)
 
-    colors = (
+    if scalar_fields is None:
+        header = data[0]
+        header[0] = header[0].strip('//')
+        scalar_fields = set(name.lower() for name in header)
+        data = data[1:]
+
+    xyz = np.array([row[:3] for row in data], dtype=np.float32)
+    for name in ('x', 'y', 'z'):
+        scalar_fields.remove(name)
+
+    rgb = (
         np.empty(
             shape=(
                 len(data),
                 3,
             ),
-            dtype=np.uint8,
+            dtype=np.float32,
         )
         if (scalar_fields is not None and len(set(scalar_fields).intersection({"r", "g", "b"})) == 3)
         else None
     )
 
-    normals = (
-        np.empty(
-            shape=(
-                len(data),
-                3,
+
+    normals = ( np.empty( shape=( len(data), 3,
             ),
             dtype=np.float32,
         )
@@ -435,27 +402,27 @@ def load_csv(
     sfm = ScalarFieldManager()
     if scalar_fields is not None:
 
-        for i, sf in enumerate(scalar_fields):
-            if sf is None:
+        for i, sf_name in enumerate(scalar_fields):
+            if sf_name is None:
                 continue
-            elif colors and sf in {"r", "g", "b"}:
-                if sf == "r":
-                    colors[:, 0] = np.array([row[3 + i] for row in data], dtype=np.uint8)
-                elif sf == "g":
-                    colors[:, 1] = np.array([row[3 + i] for row in data], dtype=np.uint8)
+            elif rgb is not None and sf_name in {"r", "g", "b"}:
+                if sf_name == "r":
+                    rgb[:, 0] = np.array([row[3 + i] for row in data])
+                elif sf_name == "g":
+                    rgb[:, 1] = np.array([row[3 + i] for row in data])
                 else:
-                    colors[:, 2] = np.array([row[3 + i] for row in data], dtype=np.uint8)
+                    rgb[:, 2] = np.array([row[3 + i] for row in data])
                 continue
-            elif normals and sf in {"nx", "ny", "nz"}:
-                if sf == "nx":
+            elif normals is not None and sf_name in {"nx", "ny", "nz"}:
+                if sf_name == "nx":
                     normals[:, 0] = np.array([row[3 + i] for row in data], dtype=np.float32)
-                elif sf == "ny":
+                elif sf_name == "ny":
                     normals[:, 1] = np.array([row[3 + i] for row in data], dtype=np.float32)
                 else:
                     normals[:, 2] = np.array([row[3 + i] for row in data], dtype=np.float32)
                 continue
-            # scalar_fields_dict[sf] = np.array([row[3+i] for row in data], dtype=np.float32)
-            sfm.add_field(ScalarField(sf, np.array([row[3 + i] for row in data], dtype=np.float32)))
+
+            sfm.add_field(ScalarField(np.array([row[3 + i] for row in data], dtype=np.float32), name=sf_name))
 
     if "Intensity" in sfm and normalize_intensities:
         warnings.warn(
@@ -466,8 +433,11 @@ def load_csv(
         )
         sfm["Intensity"].normalize()
 
+    target_state = DtypeState(np.uint8, 0, 255)
+    rgb = normalize_array(rgb, target_state)
+
     logger.info(f"CSV file loaded successfully: {pcd_path}")
-    return PointCloudData(xyz, color=colors, normals=normals, scalar_fields=sfm, **kwargs)
+    return PointCloudData(xyz, rgb=rgb, normals=normals, scalar_fields=sfm, **kwargs)
 
 
 def save_csv(
@@ -488,6 +458,8 @@ def save_csv(
         The output path for the CSV file.
     pcd : PointCloudData
         The point cloud data to save.
+    add_header : bool, default=False
+        Create a header line for the CSV file with the column info.
     delimiter : str, default=" "
         The delimiter to use in the CSV file.
     retain_colors : bool, default=True
@@ -515,9 +487,9 @@ def save_csv(
         ]
     )
 
-    if retain_colors and pcd.color is not None:
-        assert pcd.color.shape == (nb_points, 3)
-        dtype_list.extend([("r", pcd.color.dtype.str), ("g", pcd.color.dtype.str), ("b", pcd.color.dtype.str)])
+    if retain_colors and pcd.rgb is not None:
+        assert pcd.rgb.shape == (nb_points, 3)
+        dtype_list.extend([("r", pcd.rgb.dtype.str), ("g", pcd.rgb.dtype.str), ("b", pcd.rgb.dtype.str)])
 
     if retain_normals and pcd.normals is not None:
         assert pcd.normals.shape == (nb_points, 3)
@@ -544,10 +516,10 @@ def save_csv(
         data["y"] += pcd.global_coordinate_shift[1]
         data["z"] += pcd.global_coordinate_shift[2]
 
-    if retain_colors and pcd.color is not None:
-        data["r"] = pcd.color[:, 0]
-        data["g"] = pcd.color[:, 1]
-        data["b"] = pcd.color[:, 2]
+    if retain_colors and pcd.rgb is not None:
+        data["r"] = pcd.rgb[:, 0]
+        data["g"] = pcd.rgb[:, 1]
+        data["b"] = pcd.rgb[:, 2]
 
     if retain_normals and pcd.normals is not None:
         data["nx"] = pcd.normals[:, 0]

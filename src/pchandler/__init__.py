@@ -129,7 +129,7 @@ __email__ = "meyernic@ethz.ch"
 
 import logging
 
-from v2 import data_io, fov, geometry, util
+from .v2 import data_io, fov, geometry, util
 # TODO fix with versioning
 # from ._version import __version__
 # __all__ = ["data_io", "fov", "geometry", "util", "__version__"]

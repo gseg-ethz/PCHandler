@@ -111,14 +111,14 @@ def normalize_array(array: np.ndarray, target_state: DtypeState = None) -> np.nd
         else:
             # Integers need to be floored
             np.floor(array, out=array)
-            return array.astype(original_dtype)
+            return array.astype(target_state.dtype)
     logger.debug("No dtype defined for normalisation. Set astype np.float32 by default")
     return array.astype(np.float32)
 
 
 def normalise_self(array: np.ndarray) -> np.ndarray:
     """
-    Normalise values to the min and max values of the associated integer type
+    Normalise values to the min and max values of the associated data type
     """
 
     if np.dtype(array.dtype).kind not in ["u", "i"]:

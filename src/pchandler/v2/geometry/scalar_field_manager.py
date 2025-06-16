@@ -209,7 +209,7 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
             return
 
         elif name == "nznynx":
-            self.fields[NORMALS_FIELD] = NormalFields(arr=value[[2, 1, 0], :])
+            self.fields[NORMALS_FIELD] = NormalFields(arr=value[:, [2, 1, 0]])
             return
 
         if self.normals is None:
