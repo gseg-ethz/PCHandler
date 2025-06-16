@@ -7,11 +7,11 @@ import numpy as np
 from numpy.typing import DTypeLike, NDArray
 from pydantic import StringConstraints, AfterValidator
 
-from ..base_arrays import BaseVector
-from ..validators import extract_array
-from ..constants import RGB_FIELD, NORMALS_FIELD
-from ..base_types import (VectorT_Uint8, VectorT_Float32, Array_Nx3_uint8_T, Array_Nx3_float32_T,
-                          VectorT_Uint16, VectorT_Int16, VectorT_Int32, VectorT_Int8, VectorT_Bool)
+from base_arrays import BaseVector
+from validators import extract_array
+from constants import RGB_FIELD, NORMALS_FIELD
+from base_types import (VectorT_Uint8, VectorT_Float32, Array_Nx3_uint8_T, Array_Nx3_float32_T,
+                        VectorT_Uint16, VectorT_Int16, VectorT_Int32, VectorT_Int8, VectorT_Bool)
 
 
 logger = logging.getLogger(__name__.split(".")[0])

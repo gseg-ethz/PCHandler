@@ -5,9 +5,9 @@ import pytest
 import numpy as np
 
 
-from pchandler.geometry.scalar_fields import ScalarField, RGBFields, NormalFields
-from pchandler.geometry.scalar_field_manager import ScalarFieldManager
-from pchandler.geometry.core import PointCloudData
+from scalar_fields import ScalarField, RGBFields, NormalFields
+from scalar_field_manager import ScalarFieldManager
+from core import PointCloudData
 
 N = 40
 

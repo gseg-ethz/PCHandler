@@ -5,7 +5,7 @@ import numpy as np
 from pydantic import BaseModel, Field, ConfigDict, ValidationError, computed_field
 
 
-from src.pchandler.base_arrays import BaseArray
+from v2 import BaseArray
 
 class TestPydantic:
     def test_initialisation_of_multiple_instances(self):

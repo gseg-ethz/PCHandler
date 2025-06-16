@@ -6,13 +6,12 @@ import numpy as np
 from scipy.spatial.transform import Rotation
 from pydantic import ValidationError
 
-from pchandler.base_arrays import ArrayNx3
-from pchandler.geometry.coordinates import (
+from v2 import ArrayNx3
+from coordinates import (
     CartesianCoordinates, Abstract3dCoordinates, SphericalCoordinates, rhv2xyz, xyz2rhv, AbstractCoordinates
 )
-from pchandler.geometry.transforms import Transform
-from pchandler.constants import PI,HALF_PI, TWO_PI
-
+from transforms import Transform
+from v2 import PI,HALF_PI
 
 _known_spher = np.array([
     [1, 0, HALF_PI],

@@ -3,7 +3,7 @@ import logging
 import numpy as np
 from numpy.typing import ArrayLike
 
-from .constants import PI, TWO_PI, HALF_PI
+from constants import PI, TWO_PI, HALF_PI
 
 logger = logging.getLogger(__name__.split(".")[0])
 

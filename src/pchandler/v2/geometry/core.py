@@ -9,11 +9,11 @@ import numpy.typing as npt
 
 from .transforms import Transform, TransformLedger, TransformRecord
 from .coordinates import CartesianCoordinates
-from ..base_types import Array_Nx3_T, Array_4x4_T
+from base_types import Array_Nx3_T, Array_4x4_T
 from .optimal_shift import OSM_Manager
 from .scalar_field_manager import ScalarFieldManager
 from .scalar_fields import ScalarField, RGBFields, NormalFields
-from ..validators import extract_array
+from validators import extract_array
 
 # TODO Update this feature later after v2.0 is done
 # def update_transformation_ledger(name: str) -> Callable:

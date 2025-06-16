@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import copy
 from abc import ABC
-from functools import cached_property
 from typing import Any, Optional, Generator, Mapping, Self
 
 import numpy as np
@@ -11,8 +10,8 @@ from numpydantic import NDArray, Shape
 from pydantic import BaseModel, ConfigDict, model_validator, field_validator
 
 
-from .base_types import ArrayT, VectorT, Array_NxM_T, Array_Nx3_T, Array_Nx2_T, Array_NxM_3_T
-from .base_types import IndexLike
+from base_types import ArrayT, VectorT, Array_NxM_T, Array_Nx3_T, Array_Nx2_T, Array_NxM_3_T
+from base_types import IndexLike
 
 
 def make_ndarray_type(*args: Optional[int|str], dtype = None):

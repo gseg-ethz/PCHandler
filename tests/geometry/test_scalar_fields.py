@@ -2,8 +2,6 @@ import pytest
 
 from pydantic import BaseModel, ValidationError
 
-from src.pchandler.geometry.scalar_fields import *
-
 
 def test_lower_str_annotation():
     class A(BaseModel):

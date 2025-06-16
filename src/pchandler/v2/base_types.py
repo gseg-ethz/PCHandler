@@ -7,7 +7,7 @@ import numpy as np
 from numpydantic import NDArray, Shape
 from numpydantic.dtype import Integer, Float, Bool, UInt8, Float32, UInt16, Int8, Int16, Int32
 from pydantic import BeforeValidator
-from .validators import extract_array, validate_transposed_vector, validate_n_by_2_transposed, validate_n_by_3_transposed
+from validators import extract_array, validate_transposed_vector, validate_n_by_2_transposed, validate_n_by_3_transposed
 
 IndexLike = Union[int, slice, np.ndarray[np.bool_], np.ndarray[np.integer], list[int], tuple[int, ...], tuple[slice, ...]]
 

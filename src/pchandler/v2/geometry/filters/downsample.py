@@ -6,7 +6,7 @@ from numpy.typing import NDArray
 
 from ..core import PointCloudData
 from ..scalar_field_manager import ScalarFieldManager
-from ...util import unique_rows_fast
+from util import unique_rows_fast
 from .core import PointCloudFilter
 
 logger = logging.getLogger(__name__.split(".")[0])

@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 from joblib import Parallel, delayed, parallel_config
 
-from ..fov import FoV, FoVTree
+from fov import FoV, FoVTree
 from .core import PointCloudData
 from .filters.spherical_coordinate_filters import FoVFilter
 

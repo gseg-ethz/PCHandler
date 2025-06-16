@@ -110,7 +110,7 @@ def convert_angles(
     --------
     Convert an array of angles from degrees to radians:
     >>> import numpy as np
-    >>> from pchandler.util import convert_angles, AngleUnit
+    >>> from v2 import convert_angles, AngleUnit
     >>> angles_deg = np.array([0, 90, 180, 360])
     >>> convert_angles(angles_deg, AngleUnit.DEGREE, AngleUnit.RAD)
     array([0.        , 1.57079633, 3.14159265, 6.28318531])

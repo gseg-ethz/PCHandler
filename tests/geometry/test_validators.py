@@ -2,11 +2,11 @@ import pytest
 from typing import Callable
 from abc import ABC
 
-from src.pchandler.base_arrays import BaseArray
-from src.pchandler.geometry.scalar_fields import ScalarField, linear_map_dtype, normalise_self, normalize_array
-from src.pchandler.validators import *
+from v2 import BaseArray
+from scalar_fields import ScalarField
+from validators import *
 
-from pchandler.constants import PI, TWO_PI, HALF_PI
+from v2 import PI, TWO_PI, HALF_PI
 
 COORDINATE_3D_PROPERTIES = ('x', 'y', 'z', 'r', 'v', 'hz', 'rho', 'theta', 'phi', 'xyz', 'spher')
 

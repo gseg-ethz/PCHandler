@@ -12,9 +12,9 @@ from pydantic import validate_call
 if TYPE_CHECKING:
     from .core import PointCloudData
 
-from ..constants import RGB_POTENTIAL_NAMES, NORMAL_POTENTIAL_NAMES, DEFAULT_CONFIG
-from ..base_types import (IndexLike, VectorT, Array_Nx3_T, VectorT_Uint8,
-                          Array_Nx3_float32_T, VectorT_Float32, Array_Nx3_uint8_T)
+from constants import RGB_POTENTIAL_NAMES, NORMAL_POTENTIAL_NAMES, DEFAULT_CONFIG
+from base_types import (IndexLike, VectorT, Array_Nx3_T, VectorT_Uint8,
+                        Array_Nx3_float32_T, VectorT_Float32, Array_Nx3_uint8_T)
 from .scalar_fields import (
     ScalarField, RGBFields, NormalFields, RGB_FIELD, NORMALS_FIELD, LowerStr, SF_T)
 

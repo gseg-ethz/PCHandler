@@ -1,8 +1,7 @@
-import pytest
 import numpy as np
 
-from pchandler.constants import (EPS, PI, HALF_PI, TWO_PI, DEFAULT_CONFIG,
-                                 RGB_FIELD, NORMAL_POTENTIAL_NAMES, NORMALS_FIELD, RGB_POTENTIAL_NAMES)
+from v2 import (EPS, PI, HALF_PI, TWO_PI, DEFAULT_CONFIG,
+                RGB_FIELD, NORMAL_POTENTIAL_NAMES, NORMALS_FIELD, RGB_POTENTIAL_NAMES)
 
 
 def test_eps():

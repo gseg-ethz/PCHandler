@@ -5,9 +5,9 @@ import pytest
 
 from pydantic import ValidationError
 
-from pchandler.geometry.scalar_fields import RGBFields, NormalFields, ScalarField
-from pchandler.geometry.core import PointCloudData
-from pchandler.geometry.scalar_field_manager import ScalarFieldManager
+from scalar_fields import RGBFields, NormalFields, ScalarField
+from core import PointCloudData
+from scalar_field_manager import ScalarFieldManager
 
 
 N = 100

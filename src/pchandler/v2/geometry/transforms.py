@@ -14,8 +14,8 @@ from enum import IntEnum, auto
 import numpy    as np
 from pydantic import BaseModel, model_validator, ValidationError, ConfigDict, Field, field_validator
 
-from ..base_arrays import BaseArray, BaseVector, FixedLengthArray
-from ..base_types import Array_4x4_T, Array_3x3_T
+from base_arrays import BaseArray, BaseVector, FixedLengthArray
+from base_types import Array_4x4_T, Array_3x3_T
 
 
 class TransformType(IntEnum):

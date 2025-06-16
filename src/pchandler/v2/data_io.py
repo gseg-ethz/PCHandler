@@ -68,10 +68,8 @@ import csv
 import logging
 import warnings
 from datetime import datetime
-from enum import Enum
-from itertools import compress
 from pathlib import Path
-from typing import Any, Callable, Generator, Optional
+from typing import Generator, Optional
 
 import laspy
 import numpy as np
@@ -79,9 +77,9 @@ import pye57
 from plyfile import PlyData, PlyElement
 from yaml import warnings
 
-from .geometry.core import PointCloudData
-from .geometry.scalar_fields import ScalarField
-from .geometry.scalar_field_manager import ScalarFieldManager
+from core import PointCloudData
+from geometry import ScalarField
+from geometry import ScalarFieldManager
 
 logger = logging.getLogger(__name__.split(".")[0])
 

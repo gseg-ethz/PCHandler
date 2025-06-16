@@ -7,7 +7,7 @@ import numpy as np
 from numpydantic import NDArray, Shape
 from pydantic import BaseModel, ValidationError, ConfigDict
 
-from src.pchandler.base_arrays import (
+from v2 import (
     BaseArray, make_ndarray_type, HomoegeneousArray, SampleArray, FixedLengthArray, BaseVector, ArrayNx2,
     ArrayNx3, ReadOnlyArray, ReadOnlyVector
 )

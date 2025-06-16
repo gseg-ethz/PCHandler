@@ -129,8 +129,9 @@ __email__ = "meyernic@ethz.ch"
 
 import logging
 
-from ._version import __version__
-from . import data_io, fov, geometry, util
+from _version import __version__
+from pchandler import data_io, fov, util
+import geometry
 
 logger = logging.getLogger(__name__.split(".")[0])
 
