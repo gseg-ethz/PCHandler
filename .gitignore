@@ -2,7 +2,7 @@
 src/**/_version.py
 
 # TestData
-test/data/
+/tests/data/
 
 # BAK files
 **/*.bak
