@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 import weakref
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar, Self, Literal, NamedTuple, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -10,6 +10,7 @@ from numpy.typing import NDArray
 if TYPE_CHECKING:
     from .core import PointCloudData
 
+from ..base_types import Vector_3_T, Array_Nx3_T
 
 class SingletonMeta(type):
     _instances: ClassVar[dict[type, object]] = {}
@@ -24,9 +25,11 @@ class SingletonMeta(type):
 
 class OptimizedShiftManager(metaclass=SingletonMeta):
     _optimized_shifts: weakref.WeakSet[OptimizedShift]
+    _maximum_decimal_places: int
 
-    def __init__(self) -> None:
+    def __init__(self, maximum_decimal_places: int = 4) -> None:
         self._optimized_shifts = weakref.WeakSet()
+        self._maximum_decimal_places = maximum_decimal_places
 
     def register(self, shift: OptimizedShift) -> None:
         self._optimized_shifts.add(shift)
@@ -35,21 +38,84 @@ class OptimizedShiftManager(metaclass=SingletonMeta):
     def new_shift() -> OptimizedShift:
         return OptimizedShift()
 
+    @property
     def all_shifts(self) -> list[OptimizedShift]:
         return list(self._optimized_shifts)
 
+    @property
+    def maximum_decimal_places(self) -> int:
+        return self._maximum_decimal_places
+
+    @maximum_decimal_places.setter
+    def maximum_decimal_places(self, maximum_decimal_places: int) -> None:
+        pass # Todo: Should probably check all registered GlobalShifts and their pcds if they conform to new limit
+
+    def is_shift_needed(self, values: NDArray[np.floating] | "PointCloudData") -> bool:
+        return np.any(np.abs(values) >= 10 ** self._maximum_decimal_places)
 
 class OptimizedShift:
-    optimal_shift: NDArray[np.float64]
+
+    class MinMaxPoints(NamedTuple):
+        minimum: Vector_3_T
+        maximum: Vector_3_T
+
+        @classmethod
+        def from_points(cls, points: Array_Nx3_T) -> Self:
+            min_point = np.min(points, axis=0)
+            max_point = np.max(points, axis=0)
+            return cls(min_point, max_point)
+
+        @property
+        def central_point(self) -> Vector_3_T:
+            return Vector_3_T(np.mean(np.vstack((self.minimum, self.maximum)), axis=0))
+
+
+
+    _optimal_shift: Vector_3_T
     _member_pcds: weakref.WeakSet["PointCloudData"]
+    _member_pcds_bbox: weakref.WeakKeyDictionary["PointCloudData", MinMaxPoints]
 
     def __init__(self) -> None:
-        self.optimal_shift = np.zeros(3)
+        self._optimal_shift = Vector_3_T(np.zeros(3))
         self._member_pcds = weakref.WeakSet()
+        self._member_pcds_bbox = weakref.WeakKeyDictionary()
         OptimizedShiftManager().register(self)
 
-    def register(self, pcd: "PointCloudData") -> None:
+    def register(self, pcd: "PointCloudData", values: Array_Nx3_T) -> Vector_3_T:
+        if self.does_current_shift_fit(values):
+            self._member_pcds.add(pcd)
+            self._member_pcds_bbox[pcd] = OptimizedShift.MinMaxPoints.from_points(values)
+            return self._optimal_shift
+        if len(self._member_pcds) == 0:
+            self._optimal_shift = self.calculate_shift(pcd)
+            self._member_pcds.add(pcd)
+            return
+
+
         self._member_pcds.add(pcd)
+
+
+
+    @property
+    def optimal_shift(self) -> NDArray[np.float64]:
+        return self._optimal_shift
+
+
+    def does_current_shift_fit(self, values: Array_Nx3_T | NDArray[np.floating]) -> bool:
+        return not bool(OptimizedShiftManager().is_shift_needed(np.subtract(values, self._optimal_shift)))
+
+    def calculate_new_shift(self, values: Array_Nx3_T| NDArray[np.floating]) -> Vector_3_T:
+        minmax = OptimizedShift.MinMaxPoints.from_points(values)
+
+
+
+    # def
+    # def calculate_shift(self, pcd: "PointCloudData") -> NDArray[np.float64]:
+
+    @staticmethod
+    def calculate_shift(values: NDArray[np.floating] | "PointCloudData") -> Array_Nx3_T:
+        return Array_Nx3_T(np.median(np.round(values, decimals=-(OptimizedShiftManager().maximum_decimal_places - 1)), axis=0).astype(np.float64))
+
 
 
 #
