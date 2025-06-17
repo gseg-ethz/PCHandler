@@ -43,7 +43,7 @@ class PointCloudData(CartesianCoordinates):
 
     def __init__(
         self,
-        xyz: npt.NDArray[np.floating] | CartesianCoordinates = None,
+        xyz: npt.NDArray[np.floating] | CartesianCoordinates,
         *,
         rgb: Optional[npt.NDArray[Any, np.uint8] | RGBFields] = None,
         normals: Optional[npt.NDArray[Any, np.float32] | NormalFields] = None,
