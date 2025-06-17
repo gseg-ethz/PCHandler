@@ -19,7 +19,6 @@ from pchandler.v2.constants import (
     NORMAL_PARTIAL_NAMES
 )
 from pchandler.v2.geometry.core import PointCloudData
-from pchandler.v2.geometry.scalar_field_manager import ScalarFieldManager
 from pchandler.v2.geometry.scalar_fields import (
     ScalarField,
     RGBFields,
@@ -29,7 +28,6 @@ from pchandler.v2.geometry.scalar_fields import (
     normalize_array,
     DtypeState,
 )
-from pchandler.v2.constants import RGB_FIELD, NORMALS_FIELD
 
 logger = logging.getLogger(__name__.split(".")[0])
 

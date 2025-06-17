@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, NamedTuple, Unpack
+from typing import Unpack
 import logging
 from datetime import datetime
 
@@ -9,7 +9,6 @@ from plyfile import PlyData, PlyElement
 from .core import AbstractIOHandler, _BaseLoadConfigType, _BaseSaveConfigType
 from ..geometry import PointCloudData
 from ..constants import (
-    RGB_PARTIAL_NAMES,
     RGB_FIELD,
     NORMALS_FIELD,
     INTENSITY_FIELD,
@@ -17,7 +16,6 @@ from ..constants import (
     RGB_WORD,
     NORMAL_PARTIAL_NAMES
 )
-from ..geometry.scalar_field_manager import ScalarFieldManager
 
 logger = logging.getLogger(__name__.split(".")[0])
 
