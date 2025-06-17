@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Annotated, NamedTuple, Self, TypeVar, Union
+from typing import Annotated, NamedTuple, Self, TypeVar, Union, Optional
 
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
@@ -89,7 +89,6 @@ def normalize_array(array: np.ndarray, target_state: DtypeState = None) -> np.nd
     respects the datatype limit bounds
     """
 
-    original_dtype = array.dtype
     array = array.astype(np.float64)
 
     arr_min, arr_max = array.min(axis=0), array.max(axis=0)
@@ -116,7 +115,7 @@ def normalize_array(array: np.ndarray, target_state: DtypeState = None) -> np.nd
     return array.astype(np.float32)
 
 
-def normalise_self(array: np.ndarray) -> np.ndarray:
+def normalize_self(array: np.ndarray) -> np.ndarray:
     """
     Normalise values to the min and max values of the associated data type
     """
@@ -134,18 +133,26 @@ class ScalarField(BaseVector):
     name: LowerStr
     origin_dtype: DtypeState | None = None
 
-    def __init__(self, arr: np.ndarray | ScalarField, name: LowerStr = None, *args, **kwargs):
+    def __init__(self, arr: np.ndarray | ScalarField, name: LowerStr = None, origin_dtype: Optional[DtypeState] = None):
+        kwargs = {}
+
         if isinstance(arr, ScalarField) and name is None:
-            kwargs["arr"] = extract_array(arr)
+            kwargs["arr"] = arr.arr
             kwargs["name"] = arr.name
             kwargs["origin_dtype"] = arr.origin_dtype
             super().__init__(**kwargs)
             return
 
+        if name is None:
+            raise ValueError(f"Cannot create a scalar field without a specific name")
+
         if arr is not None:
             kwargs["arr"] = extract_array(arr)
+
         kwargs["name"] = name
-        if "origin_dtype" not in kwargs:
+        if origin_dtype is not None:
+            kwargs["origin_dtype"] = origin_dtype
+        else:
             kwargs["origin_dtype"] = DtypeState.generate(kwargs["arr"])
 
         super().__init__(**kwargs)
@@ -216,8 +223,11 @@ class RGBFields(ScalarField):
     arr: Array_Nx3_uint8_T
     name: Annotated[LowerStr, AfterValidator(lambda _: RGB_FIELD)] = RGB_FIELD
 
-    def __init__(self, arr: np.ndarray | RGBFields = None, name: LowerStr = RGB_FIELD, **kwargs):
-        super().__init__(arr, name, **kwargs)
+    def __init__(self,
+                 arr: np.ndarray | RGBFields = None,
+                 name: LowerStr = RGB_FIELD,
+                 origin_dtype: Optional[DtypeState] = None):
+        super().__init__(arr, name, origin_dtype)
 
     @property
     def r(self) -> VectorT_Uint8:
@@ -247,8 +257,11 @@ class NormalFields(ScalarField):
     arr: Array_Nx3_float32_T
     name: Annotated[LowerStr, AfterValidator(lambda _: NORMALS_FIELD)] = NORMALS_FIELD
 
-    def __init__(self, arr: np.ndarray, name: LowerStr = NORMALS_FIELD, **kwargs):
-        super().__init__(arr, name, **kwargs)
+    def __init__(self,
+                 arr: np.ndarray,
+                 name: LowerStr = NORMALS_FIELD,
+                 origin_dtype: Optional[DtypeState] = None):
+        super().__init__(arr, name, origin_dtype)
 
     @property
     def nx(self) -> VectorT_Float32:

@@ -1,6 +1,9 @@
 # Actions
 src/**/_version.py
 
+# TestData
+test/data/
+
 # BAK files
 **/*.bak
 

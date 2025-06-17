@@ -473,7 +473,7 @@ def test_invalid_linear_map_dtype():
 
 def test_normalise_self_valid():
     array = np.random.randint(13, 144, 1000, np.uint8)
-    normalised = normalise_self(array)
+    normalised = normalize_self(array)
 
     assert not np.allclose(array, normalised)
     assert normalised.min() == 0
@@ -483,7 +483,7 @@ def test_normalise_self_valid():
 def test_normalise_self_invalid():
     array = np.random.rand(1000) * 244 - 50
 
-    normalised = normalise_self(array)
+    normalised = normalize_self(array)
     assert not np.allclose(array, normalised)
     assert normalised.min() == 0
     assert normalised.max() == 1

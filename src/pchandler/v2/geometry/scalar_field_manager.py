@@ -21,7 +21,7 @@ from ..base_types import (
     VectorT_Float32,
     VectorT_Uint8,
 )
-from ..constants import DEFAULT_CONFIG, NORMAL_POTENTIAL_NAMES, RGB_POTENTIAL_NAMES
+from ..constants import DEFAULT_CONFIG, NORMAL_POTENTIAL_NAMES, RGB_ALL_POTENTIAL_NAMES
 from .scalar_fields import (
     NORMALS_FIELD,
     RGB_FIELD,
@@ -103,7 +103,7 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
         if not isinstance(value, np.ndarray):
             value = value.arr
 
-        if name in RGB_POTENTIAL_NAMES:
+        if name in RGB_ALL_POTENTIAL_NAMES:
             return self._handle_rgb(name, value)
         if name in NORMAL_POTENTIAL_NAMES:
             return self._handle_normal(name, value)

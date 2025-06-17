@@ -9,7 +9,7 @@ from pchandler.v2.constants import (
     NORMALS_FIELD,
     PI,
     RGB_FIELD,
-    RGB_POTENTIAL_NAMES,
+    RGB_ALL_POTENTIAL_NAMES,
     TWO_PI,
 )
 
@@ -32,7 +32,7 @@ def test_field_names():
     assert RGB_FIELD == "rgb"
     assert NORMALS_FIELD == "normals"
     for val in ("r", "g", "b", "rgb", "bgr", "red", "green", "blue", "rgba"):
-        assert val in RGB_POTENTIAL_NAMES
+        assert val in RGB_ALL_POTENTIAL_NAMES
 
     for val in ("normal", "normals", "normal_fields"):
         assert val in NORMAL_POTENTIAL_NAMES
