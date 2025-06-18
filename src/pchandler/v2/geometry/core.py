@@ -39,7 +39,7 @@ class PointCloudData(CartesianCoordinates):
     scalar_fields: ScalarFieldManager | dict[str, ScalarField] = Field(default_factory=ScalarFieldManager)
 
     # TODO: Check if this should move to the CartesianCoordinates
-    optimal_shift: Optional[OptimizedShift]
+    optimized_shift: Optional[OptimizedShift]
 
     def __init__(
         self,
@@ -54,6 +54,7 @@ class PointCloudData(CartesianCoordinates):
         scalar_fields: Optional[ScalarFieldManager | dict] = None,
         project_transformation: Optional[Array_4x4_T] = None,
         transform_ledger: Optional[TransformLedger] = None,
+        frozen: bool = False
     ):
         if scalar_fields is None:
             scalar_fields = {}
@@ -72,6 +73,7 @@ class PointCloudData(CartesianCoordinates):
         if isinstance(reflectance, np.ndarray):
             reflectance = ScalarField(reflectance, name="reflectance")
 
+
         for field in (rgb, normals, intensity, reflectance):
             if field is not None:
                 scalar_fields.add_field(field)
@@ -79,8 +81,6 @@ class PointCloudData(CartesianCoordinates):
         # TODO implement post v2.0
         # if transform_ledger is not None:
         #     kwargs['transform_ledger'] = TransformLedger()
-
-        xyz = extract_array(xyz)
 
         if optimized_shift is Ellipsis:
             optimized_shift = OptimizedShift()
@@ -104,6 +104,9 @@ class PointCloudData(CartesianCoordinates):
         # return kwargs
 
         # super().__init__(**kwargs)
+
+        self.model_config["frozen"] = frozen
+        # TODO Propagate this through to scalar_fields (ScalarField should set this if the parent has it)
         super().__init__(
             xyz=xyz,
             scalar_fields = scalar_fields,
@@ -178,48 +181,44 @@ class PointCloudData(CartesianCoordinates):
         self.scalar_fields.reflectance = value
 
     def __getitem__(self, item):
-        return self.sample(self.create_mask(item))
+        return self.sample(item)
 
     def __setitem__(self, key, value: PointCloudData):
         raise IndexError(
-            f"Setting items in PointCloudData is not supported. Consider using the update_copy or "
+            f"Setting items in PointCloudData is not supported. Consider using the copy or "
             f"dump data to a dict and reinstantiate."
         )
 
-    def update_copy(
-        self, array: npt.NDArray | Self | None = None, *, deep: bool = True, update: Mapping[str, Any] = None
-    ) -> Self:
-        """
-        This function is designed to be more efficient by not dumping the memory heavy array if it's to be updated in
-        the new instance.
-        E.g. if 'arr' is in the update dict {'arr': np.random.rand(10000, 3)}, don't dump the existing, just add this
-        new value.
-        """
-        update = update or {}
-
-        if array is not None:
-            update["xyz"] = array.arr if isinstance(array, PointCloudData) else array
-
-        return self.copy(deep=deep, update=update)
 
     # TODO explicitly state the
-    def copy(self, *, deep: bool = True, update: dict = None) -> Self:
+    def copy(self,
+             array: npt.NDArray | Self | None = None,
+             *,
+             update: Mapping[str, Any] = None,
+             **kwargs) -> Self:
         """
         Produce a deep or shallow copy of the model. Updates the model also if parameter is parsed.
         """
-        if not deep:
-            raise NotImplementedError(f"Shallow copy is not implemented on this class: {type(self)}")
 
-        if update is None:
-            update = self.model_dump()
-        else:
-            update |= self.model_dump(exclude=(set(update.keys()) | {"arr"}))
-        update = copy.deepcopy(update)
-        return type(self)(update.pop("xyz"), **update)
+        update = update or {}
 
-    def sample(self, mask):
+        # array is passed when sampling and advanced indexing automatically makes a copy
+        if array is not None:
+            if isinstance(array, CartesianCoordinates):
+                update["xyz"] = array.arr
+            elif isinstance(array, np.ndarray):
+                update["xyz"] = array
+            else:
+                raise TypeError(f"Invalid type of array passed: {type(array)}. Should be PointCloudData or np.ndarray")
+
+        # Create a copy of the rest of the fields
+        update = self.model_dump(exclude=(set(update.keys()))) | update
+
+        return type(self)(update.pop('xyz'), **update)
+
+    def sample(self, mask) -> PointCloudData:
         mask = self.create_mask(mask)
-        return self.update_copy(self.arr[mask, :], update={"scalar_fields": self.scalar_fields.sample(mask)})
+        return self.copy(self.arr[mask, :], update={"scalar_fields": self.scalar_fields.sample(mask)})
 
     def reduce(self, mask):
         super().reduce(mask)

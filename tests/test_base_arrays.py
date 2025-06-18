@@ -79,7 +79,6 @@ class BaseTests(ABC):
             for name in (
                 "freeze",
                 "__array_interface__",
-                "update_copy",
                 "copy",
                 "view",
                 "T",
@@ -180,7 +179,8 @@ class TestBaseArray(BaseTests):
 
         assert isinstance(a, self.cls)
         assert a is not data
-        assert a.arr is not data
+        # Decision to enable a view on instantiation to be created as the idea this object won't be used again 9
+        assert a.arr is data
         assert np.all(a == a)
 
     def test_view(self):
@@ -256,8 +256,12 @@ class TestBaseArray(BaseTests):
             a = np.random.rand(100, 100)
             array = self.cls(arr=a)
             assert array.__array_interface__ == array.arr.__array_interface__
-            # Every object is a "copy" to avoid any chance of a reference
-            assert array.__array_interface__ != a.__array_interface__
+            # Decision made that when initialising with a numpy array, no copy is made
+            assert array.__array_interface__ == a.__array_interface__
+
+            b = self.cls(arr=array)
+
+            assert array.__array_interface__ == a.__array_interface__
 
         def test_numpy_properties(self):
             a = self.cls(arr=np.random.rand(100, 100, 100, 100))
@@ -318,17 +322,19 @@ class TestBaseArray(BaseTests):
             with pytest.raises(NotImplementedError):
                 a.copy(deep=False)
 
+        # FIXME need to update these tests
         def test_update_copy(self):
             a = np.random.rand(100, 100)
             b = np.random.rand(10, 10)
             c = np.random.rand(5, 3)
 
             array = self.cls(arr=a)
-            array_2 = array.update_copy(b)
-            array_3 = array.update_copy(update={"arr": c})
+            array_2 = array.copy(b)
+            array_3 = array.copy(update={"arr": c})
 
-            with pytest.raises(TypeError):
-                array.update_copy(update={"arr": "asdasd"})
+            with pytest.raises(Exception) as e:
+                array.copy(update={"arr": "asdasd"})
+            assert type(e.value) in (AttributeError, ValueError)
 
             # Show the original object hasn't changed
             assert array.shape == a.shape
@@ -348,8 +354,9 @@ class TestBaseArray(BaseTests):
             assert array_2 is not b
             assert array_3 is not c
 
-            # Show that the array data is also a copy and not a reference
-            assert array.arr is not a
+            # The initiallization from numpy array does not make a copy but initialising from other objects does
+            assert array.arr is a
+            # But the copy methods should all ensure a unique object
             assert array_2.arr is not b
             assert array_3.arr is not c
 

@@ -30,6 +30,7 @@ from .scalar_fields import (
     NormalFields,
     RGBFields,
     ScalarField,
+    AbstractScalarField
 )
 
 logger = logging.getLogger(__name__.split(".")[0])
@@ -51,7 +52,7 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
                 if isinstance(value, np.ndarray):
                     value = ScalarField(value, name=key)
 
-                elif isinstance(value, ScalarField):
+                elif isinstance(value, AbstractScalarField):
                     value.name = key
                 else:
                     raise TypeError(f"Type of input field is not of numpy array or ScalarField but {type(value)}")
@@ -90,7 +91,6 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
     @overload
     def __getitem__(self, key: IndexLike) -> Self: ...
 
-    @validate_call(config=DEFAULT_CONFIG)
     def __getitem__(self, key: LowerStr | IndexLike) -> SF_T | dict[str, SF_T]:
 
         if isinstance(key, str):
@@ -98,7 +98,6 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
 
         return self.sample(key)
 
-    @validate_call(config=DEFAULT_CONFIG)
     def __setitem__(self, name: LowerStr, value: SF_T) -> None:
         if not isinstance(value, np.ndarray):
             value = value.arr
@@ -126,7 +125,7 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
     # TODO add test for lower case fields
 
     def add_field(self, sf_field: ScalarField) -> None:
-        self[sf_field.name.lower()] = sf_field
+        self[sf_field.name] = sf_field
 
     def remove_field(self, field_name: LowerStr) -> None:
         del self.fields[field_name.lower()]
@@ -227,14 +226,13 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
         else:
             raise KeyError(f"Unknown key made it into normals : {name}")
 
-    def sample(self, mask: IndexLike) -> ScalarFieldManager:
-        sample = type(self)(fields={})
+    def sample(self, mask: IndexLike, view=False) -> ScalarFieldManager:
+        sampled = type(self)(fields={})
 
         for name, value in self.items():
-            mask = value.create_mask(mask)
-            sample[name] = value[mask]
+            sampled[name] = value.sample(mask)
 
-        return sample
+        return sampled
 
     def extract(self, mask: IndexLike) -> ScalarFieldManager:
         mask = self._parent().create_mask(mask)

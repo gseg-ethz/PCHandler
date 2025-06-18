@@ -7,6 +7,7 @@ from pydantic import ValidationError
 from pchandler.v2.geometry import PointCloudData
 from pchandler.v2.geometry.scalar_fields import ScalarField, RGBFields, NormalFields
 from pchandler.v2.geometry.scalar_field_manager import ScalarFieldManager
+from pchandler.v2.geometry.optimal_shift import OptimizedShift
 
 N = 100
 
@@ -59,7 +60,7 @@ def sfs_():
 @pytest.fixture(scope="function")
 def pcd(rgb_, normals_, intensity_, reflectance_) -> PointCloudData:
     return PointCloudData(
-        xyz=random_coordinates(0, 0),
+        xyz=random_coordinates(1, 0),
         rgb=rgb_,
         normals=normals_,
         intensity=intensity_,
@@ -69,7 +70,7 @@ def pcd(rgb_, normals_, intensity_, reflectance_) -> PointCloudData:
 @pytest.fixture(scope="function")
 def pcd2(rgb_, normals_, intensity_) -> PointCloudData:
     return PointCloudData(
-        xyz=random_coordinates(0, 0),
+        xyz=random_coordinates(1, 0),
         rgb=rgb_,
         normals=normals_,
         intensity=intensity_)
@@ -78,7 +79,7 @@ def pcd2(rgb_, normals_, intensity_) -> PointCloudData:
 @pytest.fixture(scope="function")
 def pcd3(rgb_, normals_, reflectance_) -> PointCloudData:
     return PointCloudData(
-        xyz=random_coordinates(0, 0),
+        xyz=random_coordinates(1, 0),
         rgb=rgb_,
         normals=normals_,
         reflectance=reflectance_)
@@ -127,8 +128,8 @@ class TestPointCloudData:
             pcd = PointCloudData(xyz_)
             assert not pcd.optimized
 
-            pcd = PointCloudData(xyz_, optimized=True)
-            assert pcd.optimized
+            pcd = PointCloudData(xyz_, optimized_shift=OptimizedShift())
+            assert pcd.optimized is not None
 
         def test_socs_origin_keyword(self, xyz_):
             pcd = PointCloudData(xyz_)
@@ -472,7 +473,7 @@ class TestPointCloudData:
             assert 'reflectance' not in merged_1.scalar_fields
 
     def test_immutability(self, xyz_, rgb_, normals_, intensity_):
-        pcd = PointCloudData(xyz=xyz_, rgb=rgb_, normals=normals_, scalar_fields={"intensity": intensity_})
+        pcd = PointCloudData(xyz=xyz_, rgb=rgb_, normals=normals_, scalar_fields={"intensity": intensity_}, frozen=True)
 
         with pytest.raises(Exception) as e:
             pcd.xyz = np.random.rand(N, 3)

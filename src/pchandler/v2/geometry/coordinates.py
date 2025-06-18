@@ -11,7 +11,7 @@ from pydantic import BeforeValidator, ConfigDict, Field, validate_call
 
 from ..base_arrays import Array_Nx3_T, ArrayNx2, ArrayNx3, BaseArray
 from ..base_types import Array_4x4_T, Vector_3_T
-from ..constants import HALF_PI, PI, TWO_PI
+from ..constants import HALF_PI, PI, TWO_PI, DEFAULT_CONFIG
 from ..validators import validate_spherical_angles
 from .transforms import (
     GlobalShift,
@@ -63,7 +63,7 @@ class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates):
     @abstractmethod
     def spher(self) -> np.ndarray: ...
 
-    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
+    @validate_call(config=DEFAULT_CONFIG)
     def __rmatmul__(self, matrix: TransformT | np.ndarray) -> Self | np.ndarray:
         if isinstance(matrix, TransformT):
             matrix: np.ndarray = matrix.arr
@@ -76,10 +76,10 @@ class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates):
         else:
             return matrix @ self.arr
 
-        temp = self.update_copy(temp)
+        temp = self.copy(temp)
         return temp
 
-    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
+    @validate_call(config=DEFAULT_CONFIG)
     def __imatmul__(self, transpose_matrix: TransformT | np.ndarray) -> Self | np.ndarray:
         raise NotImplementedError(
             "In place matrix multiplication not supported due to ambiguity between left and right multiplication.\n\n"
@@ -164,7 +164,7 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
         self.arr = (affine @ self.H.T).T[:, :3]
 
-
+# TODO check the validation process and performance
 class SphericalCoordinates(Abstract3dCoordinates):
     arr: Annotated[Array_Nx3_T, Field(validation_alias="spher"), BeforeValidator(validate_spherical_angles)]
 
@@ -232,7 +232,7 @@ class SphericalCoordinates(Abstract3dCoordinates):
     #         self.arr[:, 2] = np.abs(temp := self.v - pitch)
 
 
-@validate_call(config=ConfigDict(arbitrary_types_allowed=True))
+@validate_call(config=DEFAULT_CONFIG)
 def rhv2xyz(spher: npt.ArrayLike, origin_shift: Vector_3_T | None = None) -> np.ndarray:
     xyz: np.ndarray = np.zeros_like(spher)
     xyz[:, 0] = spher[:, 0] * np.sin(spher[:, 2]) * np.cos(spher[:, 1])
@@ -242,7 +242,7 @@ def rhv2xyz(spher: npt.ArrayLike, origin_shift: Vector_3_T | None = None) -> np.
     return xyz if origin_shift is None else xyz - origin_shift
 
 
-@validate_call(config=ConfigDict(arbitrary_types_allowed=True))
+@validate_call(config=DEFAULT_CONFIG)
 def xyz2rhv(cart: npt.ArrayLike, origin_shift: Vector_3_T = np.zeros(3)) -> np.ndarray:
     spher: np.ndarray = np.zeros_like(cart)
 
