@@ -8,7 +8,7 @@ import numpy as np
 import numpy.typing as npt
 from pydantic import Field, field_validator, model_validator
 
-from ..base_types import Array_4x4_T, Array_Nx3_T
+from ..base_types import Array_4x4_T, Array_Nx3_T, Vector_3_T
 from ..validators import extract_array
 from .coordinates import CartesianCoordinates
 from .optimal_shift import OptimizedShift, OptimizedShiftManager
@@ -43,7 +43,6 @@ class PointCloudData(CartesianCoordinates):
 
     def __init__(
         self,
-        # xyz: npt.NDArray[np.floating] | CartesianCoordinates = None,
         xyz: npt.NDArray[np.floating] | Array_Nx3_T | CartesianCoordinates,
         *,
         rgb: Optional[npt.NDArray[Any, np.uint8] | RGBFields] = None,
@@ -86,29 +85,19 @@ class PointCloudData(CartesianCoordinates):
         if optimized_shift is Ellipsis:
             optimized_shift = OptimizedShift()
 
+        if optimized_shift is not None:
+            optimized_shift = optimized_shift.register(self, xyz)
 
-        needed_shift = optimized_shift.register(self, xyz)
-        xyz = xyz - needed_shift
-
-        # kwargs["scalar_fields"] = scalar_fields
-        # # TODO update logic inline with the global optimisation
-        # kwargs["optimized"] = optimal_shift is not None
-        # kwargs["optimal_shift"] = optimal_shift
-        # kwargs["socs_origin"] = socs_origin
-        # kwargs["project_transformation"] = project_transformation
-        # # TODO update logic once global shift and corresponding transforms supported
-        # kwargs["transform_ledger"] = transform_ledger if transform_ledger is not None else TransformLedger()
+        xyz = xyz - optimized_shift.optimal_shift if optimized_shift is not None else xyz
 
         # TODO Resolve this with the global shift logic once the base is done
         # if kwargs.get('project_transform', None) is not None:
         #     kwargs['is_at_socs'] = True
-        # return kwargs
 
-        # super().__init__(**kwargs)
         super().__init__(
             xyz=xyz,
             scalar_fields = scalar_fields,
-            optimized_shift = optimized_shift,
+            optimal_shift = optimized_shift,
             socs_origin = socs_origin,
             project_transformation = project_transformation,
             transform_ledger = transform_ledger if transform_ledger is not None else TransformLedger(),
@@ -119,9 +108,8 @@ class PointCloudData(CartesianCoordinates):
         return id(self)
 
 
-    def update_coordinates_to_optimized_shift(self, optimized_shift: OptimizedShift):
-        if optimized_shift is self.optimal_shift:
-            pass
+    def update_shift(self, delta_shift: Vector_3_T):
+        self.xyz = self.xyz + delta_shift
 
 
     # TODO Also reimplement this
