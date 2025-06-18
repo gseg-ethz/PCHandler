@@ -10,7 +10,7 @@ from typing import Any, Mapping, TypedDict, Iterable, Unpack, Optional, NotRequi
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from pchandler.v2.constants import (
+from ..constants import (
     INTENSITY_POTENTIAL_NAMES,
     REFLECTANCE_POTENTIAL_NAMES,
     RGB_PARTIAL_NAMES,
@@ -18,16 +18,15 @@ from pchandler.v2.constants import (
     RGB_WORD,
     NORMAL_PARTIAL_NAMES
 )
-from pchandler.v2.geometry.core import PointCloudData
-from pchandler.v2.geometry.scalar_fields import (
+from ..geometry.core import PointCloudData
+from ..geometry.scalar_fields import (
     ScalarField,
     RGBFields,
     NormalFields,
-    linear_map_dtype,
-    normalize_self,
-    normalize_array,
     DtypeState,
 )
+
+from ..geometry.util import linear_map_dtype, normalize_min_max, normalize_self
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -273,7 +272,10 @@ class AbstractIOHandler(ABC):
                 # Normalises based on array min_max values to target
                 if not isinstance(target_dtype, np.dtype):
                     target_dtype = DtypeState(dtype=target_dtype, lower=0, upper=1)
-                return normalize_array(array, target_dtype)
+                return normalize_min_max(val=array,
+                                         lower=target_dtype.lower,
+                                         upper=target_dtype.upper,
+                                         target_dtype=target_dtype.dtype)
 
             case _:
                 raise ValueError(f"Unknown normalisation method passed.")

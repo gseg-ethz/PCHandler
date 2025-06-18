@@ -3,6 +3,7 @@ import numpy as np
 
 from pydantic import BaseModel, ValidationError
 
+from pchandler.v2.geometry.util import linear_map_dtype, normalize_self
 from pchandler.v2.geometry.scalar_fields import *
 
 def test_lower_str_annotation():
@@ -114,7 +115,7 @@ class TestScalarFieldClass:
 
     def test_get_original_data(self):
         a = np.random.randint(-1000, 1000, 2000, dtype=np.int16)
-        b = normalize_array(a)
+        b = normalize_self(a)
         b = linear_map_dtype(b, np.uint8)
         field = ScalarField(b, name="converted", origin_dtype=DtypeState(a.dtype, a.min(), a.max()))
 
@@ -246,9 +247,11 @@ class TestRgbField:
             RGBFields(data)
 
     def test_invalid_dtypes(self):
-        data = np.random.randint(0, 1000, (100, 3), dtype=np.int16)
-        with pytest.raises(ValidationError):
+        data = np.array([[1+2j, 3+4j, 5+6j], [1+2j, 3+4j, 5+6j], [1+2j, 3+4j, 5+6j]])
+        with pytest.raises(Exception) as e:
             RGBFields(data)
+
+        assert type(e.value) in (ValidationError, TypeError)
 
     def test_properties(self):
         data = np.random.randint(0, 255, (100, 3), dtype=np.uint8)
@@ -291,6 +294,30 @@ class TestRgbField:
         assert floats.min() == 0
         assert floats.max() == 1
         assert floats.dtype == np.float32
+
+    def test_get_normalized_2(self):
+        num = 10000
+        a = np.random.rand(num, 3)
+        b = np.random.rand(num, 3) * 2 - 1
+        c = np.random.rand(num, 3) * (2 ** 8 - 1)
+        d = np.random.randint(-2 ** 7, 2 ** 7, (num, 3)).astype(np.float32)
+        e = np.random.randint(-2 ** 7, 2 ** 7, (num, 3), dtype=np.int8)
+        f = np.random.randint(0, 2 ** 16, (num, 3), dtype=np.uint16)
+        g = np.random.randint(0, 2 ** 8, (num, 3), dtype=np.uint8)
+
+        for val in (a, b, c, d, e, f, g):
+            rgb = RGBFields(val)
+            original: np.ndarray = rgb.get_original_data()
+
+            original_bits = val.dtype.itemsize * 8
+            target_bits = rgb.dtype.itemsize * 8
+            if np.issubdtype(val.dtype, np.floating):
+                atol = 1
+            else:
+                atol = (2 ** original_bits // 2 ** target_bits)
+                atol += 1
+
+            assert np.allclose(val, original, atol=atol)
 
 
 class TestNormalsField:
@@ -452,7 +479,7 @@ def test_linear_map_dtype(original: np.ndarray, target: np.ndarray):
         expected_min, expected_max = 0, 1
 
     else:
-        atol = 2**target_bits // 2**original_bits
+        atol = (2**target_bits // 2**original_bits) or 1
         expected_min, expected_max = np.iinfo(target.dtype).min, np.iinfo(target.dtype).max
 
     assert np.allclose(expected_min, mapped_array[0])

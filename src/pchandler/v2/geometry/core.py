@@ -1,22 +1,18 @@
 from __future__ import annotations
 
-import copy
-from functools import wraps
-from typing import Annotated, Any, Callable, Mapping, Optional, Self
+from typing import Any, Mapping, Optional, Self
 
 import numpy as np
 import numpy.typing as npt
 from pydantic import Field, field_validator, model_validator
 
 from ..base_types import Array_4x4_T, Array_Nx3_T
-from ..validators import extract_array
 from .coordinates import CartesianCoordinates
-from .optimal_shift import OptimizedShift, OptimizedShiftManager
+from .optimal_shift import OptimizedShift
 
-# from .optimal_shift import OSM_Manager
 from .scalar_field_manager import ScalarFieldManager
 from .scalar_fields import NormalFields, RGBFields, ScalarField
-from .transforms import Transform, TransformLedger, TransformRecord
+from .transforms import Transform, TransformLedger
 
 
 # # TODO decide on this artifact

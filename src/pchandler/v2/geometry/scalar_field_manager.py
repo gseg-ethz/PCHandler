@@ -21,10 +21,8 @@ from ..base_types import (
     VectorT_Float32,
     VectorT_Uint8,
 )
-from ..constants import DEFAULT_CONFIG, NORMAL_POTENTIAL_NAMES, RGB_ALL_POTENTIAL_NAMES
+from ..constants import DEFAULT_CONFIG, NORMAL_POTENTIAL_NAMES, RGB_ALL_POTENTIAL_NAMES, NORMALS_FIELD, RGB_FIELD
 from .scalar_fields import (
-    NORMALS_FIELD,
-    RGB_FIELD,
     SF_T,
     LowerStr,
     NormalFields,

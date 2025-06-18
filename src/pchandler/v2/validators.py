@@ -96,11 +96,12 @@ def coerce_wrapped_horizontal_angles(array: np.ndarray) -> np.ndarray:
 
 
 def extract_array(value: np.ndarray | tuple[np.ndarray | object] | object | dict[str, np.ndarray]) -> np.ndarray:
+    # Don't copy numpy data as this should be initialisation of the object
     if isinstance(value, np.ndarray):
-        pass
+        return value
 
     elif hasattr(value, "arr"):
-        value: np.ndarray = value.arr
+        value: np.ndarray = value.arr.copy()
 
     elif isinstance(value, tuple):
         if len(value) != 1:
@@ -109,7 +110,7 @@ def extract_array(value: np.ndarray | tuple[np.ndarray | object] | object | dict
         if isinstance(value[0], np.ndarray):
             value: np.ndarray = value[0]
         elif hasattr(value[0], "arr"):
-            value: np.ndarray = value[0].arr
+            value: np.ndarray = value[0].arr.copy()
         else:
             raise TypeError(f"Input value is an unsupported type: {type(value[0])} ")
 
@@ -122,7 +123,7 @@ def extract_array(value: np.ndarray | tuple[np.ndarray | object] | object | dict
     else:
         raise TypeError(f"Input value is an unsupported type: {type(value)} ")
 
-    return value.copy()
+    return value
 
 
 # TODO ensure error thrown with single point but a get_point function exists

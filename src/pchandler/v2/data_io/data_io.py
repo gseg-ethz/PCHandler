@@ -85,7 +85,7 @@ from pchandler.v2.geometry.scalar_fields import (
     ScalarField,
     linear_map_dtype,
     normalize_self,
-    normalize_array,
+    normalize_min_max,
     DtypeState,
 )
 from pchandler.v2.constants import RGB_FIELD, NORMALS_FIELD
@@ -396,9 +396,6 @@ def load_csv(
         )
         sfm["Intensity"].normalize()
 
-    target_state = DtypeState(np.uint8, 0, 255)
-    rgb = normalize_array(rgb, target_state)
-
     logger.info(f"CSV file loaded successfully: {pcd_path}")
     return PointCloudData(xyz, rgb=rgb, normals=normals, scalar_fields=sfm, **kwargs)
 
@@ -636,7 +633,7 @@ def load_laz(pcd_path, retain_colors: bool = True, scalar_fields: list[str] = No
     for sf in common_scalar_fields:
         if sf.lower() not in ["x", "y", "z", "red", "green", "blue"]:
             if isinstance(pcd[sf], np.ndarray):
-                scalar_fields_dict[sf] = pcd[sf]
+                sfm[sf] = pcd[sf]
             elif isinstance(pcd[sf], laspy.point.dims.SubFieldView):
                 if sf in [
                     "scan_direction_flag",
@@ -646,14 +643,14 @@ def load_laz(pcd_path, retain_colors: bool = True, scalar_fields: list[str] = No
                     "withheld",
                     "overlap",
                 ]:
-                    scalar_fields_dict[sf] = np.array(pcd[sf], dtype=bool)
+                    sfm[sf] = np.array(pcd[sf], dtype=bool)
                 else:
-                    scalar_fields_dict[sf] = np.array(pcd[sf])
+                    sfm[sf] = np.array(pcd[sf])
 
             else:
                 raise NotImplementedError
 
     print(f"{pcd.header.point_count:,d} points added for file '{pcd_path.name:s}'.")
     logger.info(f"Successfully loaded LAZ file: {pcd_path}")
-    return PointCloudData(xyz=pcd.xyz, color=colors, scalar_fields=scalar_fields_dict)
+    return PointCloudData(xyz=pcd.xyz, color=colors, scalar_fields=sfm)
 

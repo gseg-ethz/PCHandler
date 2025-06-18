@@ -6,7 +6,7 @@ import pytest
 
 from pchandler.v2.geometry import PointCloudData
 from pchandler.v2.geometry.scalar_field_manager import ScalarFieldManager
-from pchandler.v2.geometry.scalar_fields import ScalarField, RGBFields, NormalFields
+from pchandler.v2.geometry.scalar_fields import ScalarField, RGBFields, NormalFields, AbstractScalarField
 
 N = 40
 
@@ -149,7 +149,7 @@ class TestSfmDunderMethods:
     def test_iter(self, base_sfm):
         for name, value in base_sfm.items():
             assert name in ("intensity", "rgb", "normals", "reflectance", "test")
-            assert isinstance(value, ScalarField)
+            assert isinstance(value, AbstractScalarField)
             assert value.shape[0] == N
 
     def test_contains(self, base_sfm):
@@ -209,7 +209,7 @@ class TestMutableMappingMethods:
     def test_values(self, base_sfm):
         assert len(base_sfm.values()) == 5
         for value in base_sfm.values():
-            assert isinstance(value, ScalarField)
+            assert isinstance(value, AbstractScalarField)
             assert value.shape[0] == N
 
     def test_items(self, base_sfm):
