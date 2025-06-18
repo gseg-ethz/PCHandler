@@ -11,7 +11,7 @@ from pydantic import Field, field_validator, model_validator
 from ..base_types import Array_4x4_T, Array_Nx3_T
 from ..validators import extract_array
 from .coordinates import CartesianCoordinates
-from .optimal_shift import OptimizedShift
+from .optimal_shift import OptimizedShift, OptimizedShiftManager
 
 # from .optimal_shift import OSM_Manager
 from .scalar_field_manager import ScalarFieldManager
@@ -43,21 +43,18 @@ class PointCloudData(CartesianCoordinates):
 
     def __init__(
         self,
-        xyz: npt.NDArray[np.floating] | CartesianCoordinates,
+        xyz: npt.NDArray[np.floating] | Array_Nx3_T | CartesianCoordinates,
         *,
         rgb: Optional[npt.NDArray[Any, np.uint8] | RGBFields] = None,
         normals: Optional[npt.NDArray[Any, np.float32] | NormalFields] = None,
         intensity: Optional[npt.NDArray | ScalarField] = None,
         reflectance: Optional[npt.NDArray | ScalarField] = None,
-        optimal_shift: OptimizedShift | ellipsis | None = Ellipsis,
+        optimized_shift: OptimizedShift | ellipsis | None = Ellipsis,
         socs_origin: Optional[np.ndarray] = None,
         scalar_fields: Optional[ScalarFieldManager | dict] = None,
         project_transformation: Optional[Array_4x4_T] = None,
         transform_ledger: Optional[TransformLedger] = None,
     ):
-
-        kwargs = {}
-
         if scalar_fields is None:
             scalar_fields = {}
 
@@ -83,32 +80,48 @@ class PointCloudData(CartesianCoordinates):
         # if transform_ledger is not None:
         #     kwargs['transform_ledger'] = TransformLedger()
 
-        if xyz is not None:
-            kwargs["xyz"] = extract_array(xyz)
+        xyz = extract_array(xyz)
 
-        if optimal_shift is Ellipsis:
-            optimal_shift = OptimizedShift()
+        if optimized_shift is Ellipsis:
+            optimized_shift = OptimizedShift()
 
-        optimal_shift.register(self)
 
-        kwargs["scalar_fields"] = scalar_fields
-        # TODO update logic inline with the global optimisation
-        kwargs["optimized"] = optimal_shift is not None
-        kwargs["optimal_shift"] = optimal_shift
-        kwargs["socs_origin"] = socs_origin
-        kwargs["project_transformation"] = project_transformation
-        # TODO update logic once global shift and corresponding transforms supported
-        kwargs["transform_ledger"] = transform_ledger if transform_ledger is not None else TransformLedger()
+        needed_shift = optimized_shift.register(self, xyz)
+        xyz = xyz - needed_shift
+
+        # kwargs["scalar_fields"] = scalar_fields
+        # # TODO update logic inline with the global optimisation
+        # kwargs["optimized"] = optimal_shift is not None
+        # kwargs["optimal_shift"] = optimal_shift
+        # kwargs["socs_origin"] = socs_origin
+        # kwargs["project_transformation"] = project_transformation
+        # # TODO update logic once global shift and corresponding transforms supported
+        # kwargs["transform_ledger"] = transform_ledger if transform_ledger is not None else TransformLedger()
 
         # TODO Resolve this with the global shift logic once the base is done
         # if kwargs.get('project_transform', None) is not None:
         #     kwargs['is_at_socs'] = True
         # return kwargs
 
-        super().__init__(**kwargs)
+        # super().__init__(**kwargs)
+        super().__init__(
+            xyz=xyz,
+            scalar_fields = scalar_fields,
+            optimized_shift = optimized_shift,
+            socs_origin = socs_origin,
+            project_transformation = project_transformation,
+            transform_ledger = transform_ledger if transform_ledger is not None else TransformLedger(),
+        )
+
 
     def __hash__(self) -> int:
         return id(self)
+
+
+    def update_coordinates_to_optimized_shift(self, optimized_shift: OptimizedShift):
+        if optimized_shift is self.optimal_shift:
+            pass
+
 
     # TODO Also reimplement this
     @field_validator("transform_ledger", mode="before")
