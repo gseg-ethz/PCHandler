@@ -1,10 +1,9 @@
-import csv
 from pathlib import Path
-from typing import Unpack, NotRequired
+from typing import Unpack, NotRequired, Iterable, Optional, Sequence
 import logging
-from datetime import datetime
 
 import numpy as np
+from pydantic import Field
 
 from .core import AbstractIOHandler, _BaseLoadConfigType, _BaseSaveConfigType, BaseSaveConfig, BaseLoadConfig
 from ..geometry import PointCloudData
@@ -19,40 +18,214 @@ from ..constants import (
 
 logger = logging.getLogger(__name__.split(".")[0])
 
-# TODO implement sniffer to derive delimiter... not a priority
-def delimiter_sniffer(file: Path, sample_size=1024, delimiters=' ,;'):
-    pass
-
-# TODO implement function to get header based on comment string. Returns number of lines and the header lines
-def check_for_header(file: Path, sample_size=1024) -> tuple[int, list[str]]:
-    pass
-
-# TODO
-def get_column_names(file: Path, header_row: int = 0, comment: str = "//") -> tuple[str]:
-    pass
-
 
 
 class _CsvLoadConfigType(_BaseLoadConfigType):
+    comment: NotRequired[str]
     skip_rows: NotRequired[int]
+    delimiter: NotRequired[str]
+    num_points_line: NotRequired[bool]
+    column_names: NotRequired[Iterable[str]]
+    column_names_row: NotRequired[int]
+
 
 class _CsvSaveConfigType(_BaseSaveConfigType):
-    pass
+    delimiter: NotRequired[str]
+    number_points: NotRequired[bool]
+    header_lines: NotRequired[Iterable[str]]
 
 
 class CsvLoadConfig(BaseLoadConfig):
-    pass
+    comment: str = '//'
+    skip_rows: Optional[int] = None
+    delimiter: Optional[str] = None
+    num_points_line: Optional[bool] = None
+    column_names: Sequence[str] = Field(default_factory=list)
+    column_names_row: int = -1
 
 class CsvSaveConfig(BaseSaveConfig):
-    pass
+    delimiter: str = ' '
+    number_points_line: bool = False
+    header_lines: Sequence[str] = Field(default_factory=list)
+
 
 class CsvHandler(AbstractIOHandler):
     FORMATS = ['.csv', '.txt', '.xyz', '.asc', '.ascii', '.pts']
+    LOAD_CONFIG: type[BaseLoadConfig] = CsvLoadConfig
+    SAVE_CONFIG: type[BaseSaveConfig] = CsvSaveConfig
 
     @classmethod
     def load(cls, /, path: str | Path, **config: Unpack[_CsvLoadConfigType]):
-        pass
+        cfg: CsvLoadConfig = cls._get_config(**config)
+
+        header, delimiter, column_names, num_cols, num_points = sniff_file(path, comment=cfg.comment)
+
+        # Automatically detect the delimiter if none is defined
+        if cfg.delimiter:
+            delimiter = cfg.delimiter
+
+        # Check for the number points line which can be output by cloud compare (to skip)
+        if num_points:
+            cfg.num_points_line = True
+
+        use_columns = cls.get_col_indexes(cfg, column_names, num_cols)
+
+        dtype = cls.generate_dtype(cfg)
+
+        skip_rows = len(header) + cfg.num_points_line
+
+        data = np.loadtxt(path,
+                          comments=cfg.comment,
+                          dtype=dtype,
+                          delimiter=delimiter,
+                          skiprows = skip_rows,
+                          usecols=use_columns
+                          )
+
+        num_points = data.size
+
+        field_names = set([name.lower() for name in cfg.column_names])
+
+        xyz = cls._extract_xyz(data, num_points, field_names)
+        rgb = cls._extract_rgb(data, num_points, field_names, cfg.normalize_rgb)
+        normals = cls._extract_normals(data, num_points, field_names)
+        intensity = cls._extract_intensity(data, field_names, cfg.normalize_intensity)
+        reflectance = cls._extract_reflectance(data, field_names, cfg.normalize_reflectance)
+
+        print(True)
+
+
+    @staticmethod
+    def generate_dtype(cfg):
+        elements = []
+        for name in cfg.column_names:
+            if name.lower() in ('x', 'y', 'z'):
+                elements.append((name.lower(), 'f8'))
+            else:
+                elements.append((name.lower(), 'f4'))
+        return np.dtype(elements)
+
+    @staticmethod
+    def get_col_indexes(cfg: CsvLoadConfig, header_names: Sequence[str], num_cols: int) -> Sequence[int]|None:
+        if header_names is None or not cfg.column_names:
+            if num_cols == 3:
+                cfg.column_names = ['x', 'y', 'z']
+                return 0, 1, 2
+            elif len(header_names) == num_cols:
+                cfg.column_names = header_names
+                return tuple([i for i in range(num_cols)])
+            else:
+                raise ValueError(f"Unknown fields in text file detect. {num_cols=} > 3.\n"
+                                 f"Please define the column names")
+
+        if len(cfg.column_names) > num_cols:
+            logger.warning(f"More columns are detected than field names provided. "
+                           f"Extracting the first {len(cfg.column_names)} fields as {cfg.column_names}")
+            cfg.column_names = cfg.column_names[:num_cols]
+            return tuple([i for i in range(num_cols)])
+
+        if len(set(cfg.column_names)) > len(set(header_names)):
+            raise ValueError("There are more user defined column names than ")
+
+        # TODO implement logic to keep only the "kept fields"
+
+        return tuple([header_names.index(name) for name in cfg.column_names])
 
     @classmethod
     def save(cls, /, pcd: PointCloudData, path: str | Path, **config: Unpack[_CsvSaveConfigType]):
-        pass
+        cfg = cls._get_config(**config)
+
+def sniff_file(file,
+               delimiters = (' ', ';', '\t', ','),
+               names_row: int = -1,
+               lines_to_check: int = 10,
+               minimum_columns: int = 3,
+               comment: str = "//") -> tuple[list[str], str, tuple[str, ...]|None, int, int|None]:
+
+    header, num_points = _get_header(file, comment)
+    delimiter, number_fields = _delimiter_sniffer(file, delimiters, lines_to_check, minimum_columns, comment)
+
+    if len(header) == 0:
+        return header, delimiter, None, number_fields, num_points
+    line: str = header[names_row]
+
+    for i in (' ', delimiter):
+        column_names = line.split(i)
+        if len(column_names) == number_fields:
+            return header, delimiter, tuple(column_names), number_fields, num_points
+
+    raise ValueError(f"Header line does not appear to have column_names at row number {names_row}: {line=}")
+
+
+def _get_field_counts(file: Path, character: str, lines_to_check: int = 10, minimum_columns: int = 3, comment: str = "//"):
+
+    header, number_points = _get_header(file, comment)
+    skip_lines = len(header)
+
+    if number_points is not None:
+        skip_lines += 1
+
+    field_counts = set()
+
+    with open(file, "r") as f:
+        for i in range(skip_lines):
+            f.readline()
+
+        for i in range(lines_to_check):
+            line = f.readline()
+
+            if not line:
+                break
+
+            line = line.rstrip('\n\r')
+
+            # Case for empty line
+            if not line.strip():
+                continue
+
+            if character not in line:
+                return False
+
+            fields = line.split(character)
+            field_counts.add(len(fields))
+
+        # Ensure number of fields per line are consistent
+        if len(field_counts) > 1:
+            return False
+
+        # Check all lines have same number of columns
+        num_fields = field_counts.pop()
+        if num_fields < minimum_columns:
+            return False
+
+        return num_fields
+
+def _delimiter_sniffer(file: Path,
+                       delimiters = (' ', ';', '\t', ','),
+                       lines_to_check: int = 10,
+                       minimum_columns: int = 3,
+                       comment: str = "//"):
+
+    for delimiter in delimiters:
+        number_fields = _get_field_counts(file, delimiter, lines_to_check, minimum_columns, comment)
+        if number_fields:
+            return delimiter, number_fields
+
+    else:
+        raise ValueError(f"No valid delimiter was not found in selection: {repr(delimiters)}")
+
+
+def _get_header(file: Path, comment: str = '//') -> tuple[list[str], int|None]:
+    with open(file, "r") as f:
+        header = []
+        while True:
+            line = f.readline()
+
+            if not line.startswith(comment):
+                line = line.strip("\n\r").strip()
+                number_points = int(line) if line.isdigit() else None
+                break
+
+            header.append(line.lstrip('//').strip('\n\r'))
+
+    return header, number_points

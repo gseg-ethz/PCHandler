@@ -6,7 +6,7 @@ from datetime import datetime
 import numpy as np
 from plyfile import PlyData, PlyElement
 
-from .core import AbstractIOHandler, _BaseLoadConfigType, _BaseSaveConfigType
+from .core import AbstractIOHandler, _BaseLoadConfigType, _BaseSaveConfigType, BaseLoadConfig, BaseSaveConfig
 from ..geometry import PointCloudData
 from ..constants import (
     RGB_FIELD,
@@ -26,8 +26,16 @@ class _PlyLoadConfigType(_BaseLoadConfigType):
 class _PlySaveConfigType(_BaseSaveConfigType):
     pass
 
+class PlyLoadConfig(BaseLoadConfig):
+    pass
+
+class PlySaveConfig(BaseSaveConfig):
+    pass
+
 class PlyHandler(AbstractIOHandler):
     FORMATS = ['.ply']
+    LOAD_CONFIG: type[BaseLoadConfig] = PlyLoadConfig
+    SAVE_CONFIG: type[BaseSaveConfig] = PlySaveConfig
 
     @classmethod
     def load(cls, /, path: str | Path, **config: Unpack[_PlyLoadConfigType]):
@@ -101,13 +109,17 @@ class PlyHandler(AbstractIOHandler):
             dtype_list.append((sf_name, sf_dtype))
 
         pcd_structured_array = np.empty((len(pcd),), dtype=dtype_list)
-        base_shift = np.zeros(3, dtype=np.float32) if pcd.optimal_shift is None else pcd.optimal_shift.optimal_shift
 
-        pcd_structured_array["x"] = pcd.x + base_shift[0]
-        pcd_structured_array["y"] = pcd.y + base_shift[1]
-        pcd_structured_array["z"] = pcd.z + base_shift[2]
+        if pcd.optimized_shift is not None:
+            shift = pcd.optimized_shift.optimal_shift
+        else:
+            shift = np.zeros(3, dtype=np.float32)
 
-        if cfg.keep_rgb and pcd.rgb is not None:
+        pcd_structured_array["x"] = pcd.x + shift[0]
+        pcd_structured_array["y"] = pcd.y + shift[1]
+        pcd_structured_array["z"] = pcd.z + shift[2]
+
+        if cfg.keep_rgb and (pcd.rgb is not None):
             rgb = pcd.rgb.get_original_data() if cfg.revert_sf_types else pcd.rgb
 
             pcd_structured_array["red"] = rgb.r

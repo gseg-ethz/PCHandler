@@ -93,8 +93,6 @@ from pchandler.v2.constants import RGB_FIELD, NORMALS_FIELD
 logger = logging.getLogger(__name__.split(".")[0])
 
 
-
-
 def load_ply(
     pcd_path: Path,
     retain_colors: bool = True,
