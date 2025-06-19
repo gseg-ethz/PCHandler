@@ -37,7 +37,7 @@ class LasHandler(AbstractIOHandler):
 
     @classmethod
     def load(cls, /, path: str | Path, **config: Unpack[_LASLoadConfigType]) -> PointCloudData:
-        config = cls.get_config(config)
+        config = cls.get_config(**config)
           # TODO: Extend usage from `dimension_names` to `extra_dimension_names`
         logger.info(f"Loading LAZ file: {path}")
         las = laspy.read(path)
@@ -45,6 +45,7 @@ class LasHandler(AbstractIOHandler):
         lower_sf_names = {name.lower(): name for name in scalar_field_names}
         pcd = PointCloudData(las.xyz)
 
+        # Update the abstractIOhandler class to clean this up and be more DRY
         if config.keep_rgb:
             if field_names := cls._get_rgb_field_names(set(lower_sf_names.values())):
                 pcd.rgb = cls.extract_rgb(las.points.array, len(pcd),
@@ -94,18 +95,15 @@ class LasHandler(AbstractIOHandler):
 
     @classmethod
     def save(cls, /, pcd: PointCloudData, path: str | Path, **config: Unpack[_LASSaveConfigType]):
-        config = cls.get_config(load=False)
-
-        scale = np.array([0.0001, 0.0001, 0.0001])
-        offsets = pcd.min(axis=0)
+        config = cls.get_config(**config, load=False)
 
         las = laspy.create()
-        las.header.offsets = np.min(pcd.xyz, axis=0)
-        las.header.scales = np.array([0.0001, 0.0001, 0.0001])
+        las.header.offsets = (offsets := pcd.min(axis=0))
+        las.header.scales = (scales := np.array([0.0001, 0.0001, 0.0001]))
 
-        las.X = (pcd.x - offsets[0]) / scale[0]
-        las.Y = (pcd.y - offsets[1]) / scale[1]
-        las.Z = (pcd.z - offsets[2]) / scale[2]
+        las.X = (pcd.x - offsets[0]) / scales[0]
+        las.Y = (pcd.y - offsets[1]) / scales[1]
+        las.Z = (pcd.z - offsets[2]) / scales[2]
 
         if config.keep_intensity and pcd.intensity:
             las.intensity = pcd.intensity
@@ -116,12 +114,9 @@ class LasHandler(AbstractIOHandler):
             las.blue = pcd.b
 
         if config.keep_normals and pcd.normals:
-            las.add_extra_dim(laspy.ExtraBytesParams('nx', pcd.normals.dtype))
-            las.add_extra_dim(laspy.ExtraBytesParams('ny', pcd.normals.dtype))
-            las.add_extra_dim(laspy.ExtraBytesParams('nz', pcd.normals.dtype))
-            las.nx = pcd.normals.nx
-            las.ny = pcd.normals.ny
-            las.nz = pcd.normals.nz
+            for val in ('nx', 'ny', 'nz'):
+                las.add_extra_dim(laspy.ExtraBytesParams(val, pcd.normals.dtype))
+                setattr(las, val, getattr(pcd.normals, val))
 
         if config.keep_reflectance and pcd.reflectance:
             las.reflectance = pcd.reflectance

@@ -56,7 +56,7 @@ class PlyHandler(AbstractIOHandler):
     # DISCUSS is it worth saving the optimised state with the np.float64 shift written in a header?
     @classmethod
     def save(cls, /, pcd: PointCloudData, path: str | Path, **config: Unpack[_PlySaveConfigType]):
-        cfg = cls.get_config(load=False, **config)
+        cfg = cls.get_config(**config, load=False)
 
         structured_array = cls.generate_structured_array(pcd, cfg)
 
