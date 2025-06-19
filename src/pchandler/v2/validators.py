@@ -232,6 +232,9 @@ def normalize_self(array: np.ndarray) -> np.ndarray:
     return normalize_min_max(array, lower, upper, array.dtype)
 
 
+# TODO implement more advanced array data detection
+#  e.g. integer values in np.float
+#  e.g. minimum dtype required
 def _normalize_base(array: np.ndarray, dtype: npt.DTypeLike) -> np.ndarray:
     if array.dtype != dtype:
         if np.issubdtype(dtype, np.floating):

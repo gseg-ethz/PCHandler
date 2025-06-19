@@ -56,95 +56,21 @@ class PlyHandler(AbstractIOHandler):
         ply_scalar_fields = set([pe.name.lower() for pe in plydata["vertex"].properties])
 
         pcd = PointCloudData(cls._extract_xyz(plydata["vertex"], num_points, ply_scalar_fields))
-
-        if cfg.keep_rgb:
-            pcd.rgb = cls._extract_rgb(plydata["vertex"], num_points, ply_scalar_fields, cfg.normalize_rgb)
-
-        if cfg.keep_normals:
-            pcd.normals = cls._extract_normals(plydata["vertex"], num_points, ply_scalar_fields)
-
-        if cfg.keep_intensity:
-            pcd.intensity = cls._extract_intensity(plydata["vertex"], num_points, cfg.normalize_intensity)
-
-        if cfg.keep_reflectance:
-            pcd.reflectance = cls._extract_reflectance(plydata["vertex"], num_points, cfg.normalize_reflectance)
-
-        ply_scalar_fields &= cfg.keep_extra_scalar_fields
-
-        for name in ply_scalar_fields:
-            pcd.scalar_fields.create_field(name, plydata["vertex"][name])
+        cls.extract_common_fields_to_pcd(pcd, plydata["vertex"], cfg, num_points, ply_scalar_fields)
+        cls.extract_extra_fields_to_pcd(pcd, plydata["vertex"], cfg, ply_scalar_fields)
 
         return pcd
 
+
+    # DISCUSS is it worth saving the optimised state with the np.float64 shift written in a header?
     @classmethod
     def save(cls, /, pcd: PointCloudData, path: str | Path, **config: Unpack[_PlySaveConfigType]):
         cfg = cls._get_config(load=False, **config)
 
-        xyz_dtype = np.dtype(np.float64).str if pcd.optimized is not None else pcd.xyz.dtype.str
-        dtype_list = [(name, str(xyz_dtype)) for name in ('x', 'y', 'z')]
-
-        pcd_scalar_fields = set(pcd.scalar_fields.keys()).difference(
-            {RGB_FIELD, NORMALS_FIELD, INTENSITY_FIELD, REFLECTANCE_FIELD})
-
-        if cfg.keep_rgb and pcd.rgb is not None:
-            sf_dtype = cls._get_sf_save_dtype(cfg, pcd.rgb)
-            dtype_list.extend((name, sf_dtype) for name in RGB_WORD)
-
-        if cfg.keep_normals and pcd.normals is not None:
-            sf_dtype = cls._get_sf_save_dtype(cfg, pcd.normals)
-            dtype_list.extend((name, sf_dtype) for name in NORMAL_PARTIAL_NAMES)
-
-        if cfg.keep_intensity and pcd.intensity is not None:
-            sf_dtype = cls._get_sf_save_dtype(cfg, pcd.intensity)
-            dtype_list.append((INTENSITY_FIELD, sf_dtype))
-
-        if cfg.keep_reflectance and pcd.reflectance is not None:
-            sf_dtype = cls._get_sf_save_dtype(cfg, pcd.reflectance)
-            dtype_list.append((REFLECTANCE_FIELD, sf_dtype))
-
-        pcd_scalar_fields = list(cfg.keep_extra_scalar_fields & pcd_scalar_fields)
-
-        for sf_name in pcd_scalar_fields:
-            sf_dtype = cls._get_sf_save_dtype(cfg, pcd[sf_name])
-            dtype_list.append((sf_name, sf_dtype))
-
-        pcd_structured_array = np.empty((len(pcd),), dtype=dtype_list)
-
-        if pcd.optimized_shift is not None:
-            shift = pcd.optimized_shift.optimal_shift
-        else:
-            shift = np.zeros(3, dtype=np.float32)
-
-        pcd_structured_array["x"] = pcd.x + shift[0]
-        pcd_structured_array["y"] = pcd.y + shift[1]
-        pcd_structured_array["z"] = pcd.z + shift[2]
-
-        if cfg.keep_rgb and (pcd.rgb is not None):
-            rgb = pcd.rgb.get_original_data() if cfg.revert_sf_types else pcd.rgb
-
-            pcd_structured_array["red"] = rgb.r
-            pcd_structured_array["green"] = rgb.g
-            pcd_structured_array["blue"] = rgb.b
-
-        if cfg.keep_normals and pcd.normals is not None:
-            normals = pcd.normals.get_original_data() if cfg.revert_sf_types else pcd.normals
-
-            pcd_structured_array["nx"] = normals.nx
-            pcd_structured_array["ny"] = normals.ny
-            pcd_structured_array["nz"] = normals.nz
-
-        if cfg.keep_intensity and pcd.intensity is not None:
-            pcd_structured_array[INTENSITY_FIELD] = pcd.intensity
-
-        if cfg.keep_reflectance and pcd.reflectance is not None:
-            pcd_structured_array[REFLECTANCE_FIELD] = pcd.reflectance
-
-        for name in pcd_scalar_fields:
-            sf = pcd.scalar_fields[name]
-            pcd_structured_array[name] = sf.get_original_data() if cfg.revert_sf_types else sf.arr
+        structured_array = cls.generate_structured_array(pcd, cfg)
 
         element = PlyElement.describe(
-            pcd_structured_array,
+            structured_array,
             name="vertex",
             comments=[
                 "Created with dranjan/python-plyfile in gseg-ethz/pchandler",

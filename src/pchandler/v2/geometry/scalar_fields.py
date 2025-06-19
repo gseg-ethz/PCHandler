@@ -7,16 +7,14 @@ import numpy as np
 from numpy.typing import DTypeLike, NDArray
 from pydantic import StringConstraints, model_validator, BeforeValidator
 
-from ..validators import normalize_min_max, normalize_uint8, ensure_unit_vector
+from ..validators import normalize_min_max, normalize_uint8, ensure_unit_vector, normalize_int16
 from ..base_arrays import BaseVector, ArrayNx3, FixedLengthArray
 from ..base_types import (
     Array_Nx3_float32_T,
     Array_Nx3_uint8_T,
     VectorT_Bool,
     VectorT_Float32,
-    VectorT_Int8,
     VectorT_Int16,
-    VectorT_Int32,
     VectorT_Uint8,
     VectorT_Uint16,
 )
@@ -171,51 +169,26 @@ class SegmentationMap(ScalarField):
 
         return cls(arr, name=name)
 
-
-class ScalarFieldUInt8(ScalarField):
+class ScalarFieldUint8(ScalarField):
     arr: VectorT_Uint8
 
     def __init__(self, arr: Self|np.ndarray, **kwargs: Unpack[ScalarKwargT]):
         super().__init__(arr=arr, **kwargs)
 
-
-
-class ScalarFieldUInt16(ScalarField):
-    arr: VectorT_Uint16
-
-    def __init__(self, arr: Self|np.ndarray, **kwargs: Unpack[ScalarKwargT]):
-        super().__init__(arr=arr, **kwargs)
-
-
-class ScalarFieldInt8(ScalarField):
-    arr: VectorT_Int8
+class NormalisedInt16ScalarField(ScalarField):
+    """
+    Class to support importing reflectance or intensity values as they are often in a range larger than Uint8
+    """
+    arr: Annotated[VectorT_Int16, BeforeValidator(normalize_int16)]
 
     def __init__(self, arr: Self|np.ndarray, **kwargs: Unpack[ScalarKwargT]):
         super().__init__(arr=arr, **kwargs)
 
-
-class ScalarFieldInt16(ScalarField):
-    arr: VectorT_Int16
-
-    def __init__(self, arr: Self|np.ndarray, **kwargs: Unpack[ScalarKwargT]):
-        super().__init__(arr=arr, **kwargs)
+    def to_uint8(self):
+        return ScalarFieldUint8(normalize_uint8(self.arr), name=self.name, origin_dtype=self.origin_dtype)
 
 
-class ScalarFieldInt32(ScalarField):
-    arr: VectorT_Int32
-
-    def __init__(self, arr: Self|np.ndarray, **kwargs: Unpack[ScalarKwargT]):
-        super().__init__(arr=arr, **kwargs)
-
-
-class ScalarFieldFloat32(ScalarField):
-    arr: VectorT_Float32
-
-    def __init__(self, arr: Self|np.ndarray, **kwargs: Unpack[ScalarKwargT]):
-        super().__init__(arr=arr, **kwargs)
-
-
-class ScalarFieldBool(ScalarField):
+class BooleanScalarField(ScalarField):
     arr: VectorT_Bool
 
     def __init__(self, arr: Self|np.ndarray, **kwargs: Unpack[ScalarKwargT]):

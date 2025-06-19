@@ -133,88 +133,22 @@ class TestScalarFieldClass:
 
 
 class TestTypeDefinedScalarFields:
-    def test_uint8_valid(self):
-        array = np.random.randint(0, 255, 100, dtype=np.uint8)
-        b = ScalarFieldUInt8(array, name="temp")
-        assert isinstance(b, ScalarFieldUInt8)
-        assert np.all(b == array)
-
-    def test_uint8_invalid(self):
-        array = np.random.randint(0, 1000, 100, dtype=np.uint16)
-        with pytest.raises(Exception) as e:
-            ScalarFieldUInt8(array)
-        assert type(e.value) in (ValidationError, ValueError, TypeError)
-
-    def test_uint16_valid(self):
-        array = np.random.randint(0, 2**15, 100, dtype=np.uint16)
-        b = ScalarFieldUInt16(array, name="temp")
-        assert isinstance(b, ScalarFieldUInt16)
-        assert np.all(b == array)
-
-    def test_uint16_invalid(self):
-        array = np.random.randint(0, 255, 100, dtype=np.uint8)
-        with pytest.raises(Exception) as e:
-            ScalarFieldUInt16(array)
-        assert type(e.value) in (ValidationError, ValueError, TypeError)
-
-    def test_int8_valid(self):
-        array = np.random.randint(-128, 127, 100, dtype=np.int8)
-        b = ScalarFieldInt8(array, name="temp")
-        assert isinstance(b, ScalarFieldInt8)
-        assert np.all(b == array)
-
-    def test_int8_invalid(self):
-        array = np.random.randint(0, 1000, 100, dtype=np.int16)
-        with pytest.raises(Exception) as e:
-            ScalarFieldInt8(array)
-        assert type(e.value) in (ValidationError, ValueError, TypeError)
-
-    def test_int16_valid(self):
+    def test_normalised_int16(self):
         array = np.random.randint(-(2**14), 2**13, 100, dtype=np.int16)
-        b = ScalarFieldInt16(array, name="temp")
-        assert isinstance(b, ScalarFieldInt16)
+        b = NormalisedInt16ScalarField(array, name="temp")
+        assert isinstance(b, NormalisedInt16ScalarField)
         assert np.all(b == array)
-
-    def test_int16_invalid(self):
-        array = np.random.randint(-128, 127, 100, dtype=np.int8)
-        with pytest.raises(Exception) as e:
-            ScalarFieldInt16(array)
-        assert type(e.value) in (ValidationError, ValueError, TypeError)
-
-    def test_int32_valid(self):
-        array = np.random.randint(-(2**23), 2**22, 1000, dtype=np.int32)
-        b = ScalarFieldInt32(array, name="temp")
-        assert isinstance(b, ScalarFieldInt32)
-        assert np.all(b == array)
-
-    def test_int32_invalid(self):
-        array = np.random.randint(-128, 127, 100, dtype=np.int8)
-        with pytest.raises(Exception) as e:
-            ScalarFieldInt32(array)
-        assert type(e.value) in (ValidationError, ValueError, TypeError)
-
-    def test_float32_valid(self):
-        array = np.random.rand(1000).astype(np.float32)
-        b = ScalarFieldFloat32(array, name="temp")
-        assert isinstance(b, ScalarFieldFloat32)
-        assert np.all(b == array)
-
-    def test_float32_invalid(self):
-        array = np.random.randint(-128, 127, 100, dtype=np.int8)
-        with pytest.raises(Exception) as e:
-            ScalarFieldFloat32(array)
-        assert type(e.value) in (ValidationError, ValueError, TypeError)
 
     def test_bool_valid(self):
         array = np.random.randint(0, 1, 1000, dtype=np.bool_)
-        b = ScalarFieldBool(array, name="temp")
-        assert isinstance(b, ScalarFieldBool)
+        b = BooleanScalarField(array, name="temp")
+        assert isinstance(b, BooleanScalarField)
         assert np.all(b == array)
 
     def test_bool_invalid(self):
         array = np.random.randint(-128, 127, 100, dtype=np.int8)
         with pytest.raises(Exception) as e:
-            ScalarFieldBool(array)
+            BooleanScalarField(array)
         assert type(e.value) in (ValidationError, ValueError, TypeError)
 
 

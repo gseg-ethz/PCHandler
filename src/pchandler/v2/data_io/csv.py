@@ -69,9 +69,7 @@ class CsvHandler(AbstractIOHandler):
             cfg.num_points_line = True
 
         use_columns = cls.get_col_indexes(cfg, column_names, num_cols)
-
         dtype = cls.generate_dtype(cfg)
-
         skip_rows = len(header) + cfg.num_points_line
 
         data = np.loadtxt(path,
@@ -86,27 +84,16 @@ class CsvHandler(AbstractIOHandler):
 
         field_names = set([name.lower() for name in cfg.column_names])
 
-        xyz = cls._extract_xyz(data, num_points, field_names)
-        rgb = cls._extract_rgb(data, num_points, field_names, cfg.normalize_rgb)
-        normals = cls._extract_normals(data, num_points, field_names)
-        intensity = cls._extract_intensity(data, field_names, cfg.normalize_intensity)
-        reflectance = cls._extract_reflectance(data, field_names, cfg.normalize_reflectance)
+        pcd = PointCloudData(cls._extract_xyz(data, num_points, field_names))
+        cls.extract_common_fields_to_pcd(pcd, data, cfg, num_points, field_names, cfg.normalize_rgb)
+        cls.extract_extra_fields_to_pcd(pcd, data, cfg, num_points, field_names, cfg.normalize_rgb)
 
-        print(True)
+        return pcd
 
-
-    @staticmethod
-    def generate_dtype(cfg):
-        elements = []
-        for name in cfg.column_names:
-            if name.lower() in ('x', 'y', 'z'):
-                elements.append((name.lower(), 'f8'))
-            else:
-                elements.append((name.lower(), 'f4'))
-        return np.dtype(elements)
 
     @staticmethod
     def get_col_indexes(cfg: CsvLoadConfig, header_names: Sequence[str], num_cols: int) -> Sequence[int]|None:
+        # TODO by default, header_names starts with {'x', 'y', 'z'}
         if header_names is None or not cfg.column_names:
             if num_cols == 3:
                 cfg.column_names = ['x', 'y', 'z']
@@ -126,8 +113,6 @@ class CsvHandler(AbstractIOHandler):
 
         if len(set(cfg.column_names)) > len(set(header_names)):
             raise ValueError("There are more user defined column names than ")
-
-        # TODO implement logic to keep only the "kept fields"
 
         return tuple([header_names.index(name) for name in cfg.column_names])
 

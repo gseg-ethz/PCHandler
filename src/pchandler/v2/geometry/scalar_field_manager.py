@@ -84,12 +84,15 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
         return self.fields.items()
 
     @overload
-    def __getitem__(self, key: str) -> ScalarField: ...
+    def __getitem__(self, key: str) -> SF_T: ...
 
     @overload
     def __getitem__(self, key: IndexLike) -> Self: ...
 
-    def __getitem__(self, key: LowerStr | IndexLike) -> SF_T | dict[str, SF_T]:
+    @overload
+    def __getitem__(self, key: LowerStr) -> SF_T: ...
+
+    def __getitem__(self, key: str | LowerStr | IndexLike) -> SF_T | Self:
 
         if isinstance(key, str):
             return self.fields[key]
