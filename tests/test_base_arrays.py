@@ -12,7 +12,7 @@ from pchandler.v2.base_arrays import (
     BaseArray,
     BaseVector,
     FixedLengthArray,
-    HomoegeneousArray,
+    HomogeneousArray,
     ReadOnlyArray,
     ReadOnlyVector,
     SampleArray,
@@ -667,11 +667,11 @@ class TestBaseVector:
 
 
 class TestHomogeneousAndMixins(BaseTests):
-    cls = HomoegeneousArray
+    cls = HomogeneousArray
 
     def test_initialisation(self):
-        a = HomoegeneousArray(arr=np.zeros((10, 3)))
-        assert isinstance(a, HomoegeneousArray)
+        a = HomogeneousArray(arr=np.zeros((10, 3)))
+        assert isinstance(a, HomogeneousArray)
         assert np.all(a.arr == np.zeros((10, 3)))
 
     def test_properties(self):

@@ -165,9 +165,6 @@ class PointCloudData(CartesianCoordinates):
     def reflectance(self, value: np.ndarray|ScalarField):
         self.scalar_fields.reflectance = value
 
-    def __getitem__(self, item):
-        return self.sample(item)
-
     def __setitem__(self, key, value: PointCloudData):
         raise IndexError(
             f"Setting items in PointCloudData is not supported. Consider using the copy or "

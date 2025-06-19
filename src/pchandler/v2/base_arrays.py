@@ -188,6 +188,10 @@ class BaseArray(ABC, BaseModel):
 
 
 class SampleArray(BaseArray):
+
+    def __getitem__(self, key):
+        return self.sample(key)
+
     def create_mask(self, selection: IndexLike, as_vector=False) -> NDArray[np.bool_] | NDArray[np.int_]:
         """Creates a boolean mask for the whole array
 
@@ -352,17 +356,17 @@ class BaseVector(FixedLengthArray):
     arr: VectorT
 
 
-class HomoegeneousArray(FixedLengthArray):
+class HomogeneousArray(FixedLengthArray):
     @property
     def H(self) -> np.ndarray:
         return np.column_stack((self.arr, np.ones(len(self), dtype=self.dtype)))
 
 
-class ArrayNx2(HomoegeneousArray):
+class ArrayNx2(HomogeneousArray):
     arr: Array_Nx2_T
 
 
-class ArrayNx3(HomoegeneousArray):
+class ArrayNx3(HomogeneousArray):
     arr: Array_Nx3_T
 
 
@@ -390,6 +394,6 @@ class _ImageLike(SampleArray, _NumericMixins, ABC):
         return mask
 
     def view(self, cls: Optional[type] = None) -> Self:
-        return self.updated_copy(self.arr.view(cls=cls), deep=False)
+        return self.copy(self.arr.view(cls=cls), deep=False)
 
 

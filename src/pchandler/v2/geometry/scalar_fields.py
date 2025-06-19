@@ -9,7 +9,7 @@ from numpy.typing import DTypeLike, NDArray
 from pydantic import AfterValidator, StringConstraints, model_validator
 
 from .util import normalize_min_max
-from ..base_arrays import BaseVector, ArrayNx3, BaseArray
+from ..base_arrays import BaseVector, ArrayNx3, BaseArray, FixedLengthArray
 from ..base_types import (
     Array_Nx3_float32_T,
     Array_Nx3_uint8_T,
@@ -47,8 +47,7 @@ class DtypeState(NamedTuple):
             raise ValueError(f"lower must be less than upper. {obj=}")
 
 
-
-class AbstractScalarField(BaseArray):
+class AbstractScalarField(FixedLengthArray):
     name: LowerStr
     origin_dtype: DtypeState | None = None
 
@@ -79,9 +78,6 @@ class AbstractScalarField(BaseArray):
             data['origin_dtype'] = DtypeState.generate(data['arr'])
         return data
 
-
-    def __getitem__(self, key):
-        return self.sample(key)
 
     def get_original_data(self):
         current_dtype_state = DtypeState.generate(self.arr)

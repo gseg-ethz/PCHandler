@@ -9,7 +9,7 @@ import numpy as np
 import numpy.typing as npt
 from pydantic import BeforeValidator, ConfigDict, Field, validate_call
 
-from ..base_arrays import Array_Nx3_T, ArrayNx2, ArrayNx3, BaseArray
+from ..base_arrays import Array_Nx3_T, ArrayNx2, ArrayNx3, FixedLengthArray
 from ..base_types import Array_4x4_T, Vector_3_T
 from ..constants import HALF_PI, PI, TWO_PI, DEFAULT_CONFIG
 from ..validators import validate_spherical_angles
@@ -25,10 +25,7 @@ from .transforms import (
 TransformT = _Transform4x4 | _Transform3x3 | Transform
 
 
-class AbstractCoordinates(BaseArray, ABC):
-    def __getitem__(self, key):
-        mask = self.create_mask(key)
-        return self.sample(mask)
+class AbstractCoordinates(FixedLengthArray, ABC):
 
     def __matmul__(self, transpose_matrix: TransformT | np.ndarray) -> Self | np.ndarray:
         raise NotImplementedError(
