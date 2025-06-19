@@ -88,21 +88,26 @@ def get_outline_polygon(pcd: PointCloudData, plane: str, alpha_value: float = 10
     return als
 
 
-def normalize_min_max(val: npt.ArrayLike,
+def normalize_min_max(array: npt.ArrayLike,
                       lower: float|int,
                       upper: float|int,
                       target_dtype: npt.DTypeLike,
                       v_min: Optional[float|int] = None,
                       v_max: Optional[float|int] = None):
 
-    val = val.astype(np.float64)
+    if (not np.issubdtype(array.dtype, np.floating) and
+            not np.issubdtype(array.dtype, np.integer) and
+            not np.issubdtype(array.dtype, np.bool)):
+        raise TypeError(f"Cannot convert numpy array of type {array.dtype}")
 
-    v_min = v_min or val.min()
-    v_max = v_max or val.max()
+    array = array.astype(np.float64)
 
-    val = (val - v_min) / (v_max - v_min)
-    val = np.add(val * (upper - lower), lower)
-    return np.clip(val, lower, upper).astype(target_dtype)
+    v_min = v_min or array.min()
+    v_max = v_max or array.max()
+
+    array = (array - v_min) / (v_max - v_min)
+    array = np.add(array * (upper - lower), lower)
+    return np.clip(array, lower, upper).astype(target_dtype)
 
 
 def linear_map_dtype(array: np.ndarray, target_dtype: npt.DTypeLike) -> np.ndarray:
@@ -123,7 +128,7 @@ def linear_map_dtype(array: np.ndarray, target_dtype: npt.DTypeLike) -> np.ndarr
     origin_min, origin_max = get_dtype_min_max(array.dtype)
     target_min, target_max = get_dtype_min_max(target_dtype)
 
-    return normalize_min_max(val=array,
+    return normalize_min_max(array=array,
                              lower=target_min,
                              upper=target_max,
                              target_dtype=target_dtype,

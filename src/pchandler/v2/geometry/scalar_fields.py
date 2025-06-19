@@ -1,15 +1,14 @@
 from __future__ import annotations
 
-import copy
 import logging
-from typing import Annotated, NamedTuple, Self, TypeVar, Union, Optional, Any
+from typing import Annotated, NamedTuple, Self, TypeVar, Union, Optional, Any, TypedDict, NotRequired, Unpack
 
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
-from pydantic import AfterValidator, StringConstraints, model_validator
+from pydantic import StringConstraints, model_validator
 
 from .util import normalize_min_max
-from ..base_arrays import BaseVector, ArrayNx3, BaseArray, FixedLengthArray
+from ..base_arrays import BaseVector, ArrayNx3, FixedLengthArray
 from ..base_types import (
     Array_Nx3_float32_T,
     Array_Nx3_uint8_T,
@@ -30,6 +29,10 @@ LowerStr = Annotated[
     str,
     StringConstraints(strip_whitespace=True, to_lower=True),
 ]
+
+class _SW_KW_T(TypedDict):
+    name: NotRequired[LowerStr]
+    origin_dtype: NotRequired[DtypeState]
 
 
 class DtypeState(NamedTuple):
@@ -52,32 +55,37 @@ class AbstractScalarField(FixedLengthArray):
     origin_dtype: DtypeState | None = None
 
     def __init__(self,
-                 arr: np.ndarray | ScalarField,
-                 name: LowerStr = None,
+                 arr: np.ndarray | Self,
                  *,
+                 name: LowerStr = None,
                  origin_dtype: Optional[DtypeState] = None):
 
-        if isinstance(arr, ScalarField):
-            arr = copy.deepcopy(arr)
-            if name is None:
-                name = arr.name
+        if hasattr(arr, 'name') and name is None:
+            name = arr.name
 
-            super().__init__(arr=arr.arr, name=name, origin_dtype=arr.origin_dtype)
-            return
+        if hasattr(arr, 'origin_dtype') and origin_dtype is None:
+            origin_dtype = arr.origin_dtype
 
         super().__init__(arr=arr, name=name, origin_dtype=origin_dtype)
         return
 
+
     @model_validator(mode='before')
     @classmethod
-    def validate_model_before(cls, data: dict):
+    def validate_model_before(cls, data: Any):
         if data['name'] is None:
             data['name'] = cls.model_fields['name'].default
 
         if data['origin_dtype'] is None:
             data['origin_dtype'] = DtypeState.generate(data['arr'])
-        return data
 
+        if isinstance(data['arr'], AbstractScalarField):
+            return data
+
+        if hasattr(cls, '_normalize'):
+            data['arr'] = cls._normalize(data['arr'])
+
+        return data
 
     def get_original_data(self):
         current_dtype_state = DtypeState.generate(self.arr)
@@ -88,18 +96,14 @@ class AbstractScalarField(FixedLengthArray):
         return normalize_min_max(self.arr.copy(), self.origin_dtype.lower, self.origin_dtype.upper, self.origin_dtype.dtype)
 
 
-    def get_normalized(self, lower=0, upper=1, target_dtype=np.float32):
-        return normalize_min_max(self.arr, lower=lower, upper=upper, target_dtype=target_dtype)
-
-
 class ScalarField(BaseVector, AbstractScalarField):
-    def __init__(self, arr: np.ndarray, name: LowerStr = None, *, origin_dtype: Optional[DtypeState] = None):
-        super().__init__(arr, name=name, origin_dtype=origin_dtype)
+    def __init__(self, arr: Self|np.ndarray, **kwargs: Unpack[_SW_KW_T]):
+        super().__init__(arr=arr, **kwargs)
 
 
 class _ScalarFieldTriplet(ArrayNx3, AbstractScalarField):
-    def __init__(self, arr: Self|np.ndarray, name: LowerStr = None, *, origin_dtype: Optional[DtypeState] = None):
-        super().__init__(arr, name=name, origin_dtype=origin_dtype)
+    def __init__(self, arr: Self|np.ndarray, **kwargs: Unpack[_SW_KW_T]):
+        super().__init__(arr=arr, **kwargs)
 
     @classmethod
     def initialize(cls, size: int, value: Array_Nx3_float32_T | Array_Nx3_uint8_T | None = None) -> Self:
@@ -111,14 +115,11 @@ class _ScalarFieldTriplet(ArrayNx3, AbstractScalarField):
 
 class RGBFields(_ScalarFieldTriplet):
     arr: Array_Nx3_uint8_T
-    name: Annotated[LowerStr, AfterValidator(lambda _: RGB_FIELD)] = RGB_FIELD
+    name: LowerStr = RGB_FIELD
 
-    def __init__(self,
-                 arr: Self|np.ndarray,
-                 name: LowerStr = RGB_FIELD,
-                 *,
-                 origin_dtype: Optional[DtypeState] = None):
-        super().__init__(arr, name=name, origin_dtype=origin_dtype)
+    def __init__(self, arr: Self|np.ndarray, **kwargs: Unpack[_SW_KW_T]):
+        kwargs['name'] = RGB_FIELD
+        super().__init__(arr, **kwargs)
 
     @property
     def r(self) -> VectorT_Uint8:
@@ -132,42 +133,20 @@ class RGBFields(_ScalarFieldTriplet):
     def b(self) -> VectorT_Uint8:
         return self.arr[:, 2]
 
-    @model_validator(mode='before')
-    @classmethod
-    def validate_model_before(cls, data: Any):
-
-        if data['origin_dtype'] is None:
-            data['origin_dtype'] = DtypeState.generate(data['arr'])
-
-        if isinstance(data['arr'], RGBFields):
-            return data
-
-        if not isinstance(data['arr'], np.ndarray):
-            raise TypeError(f'Input value is not of type RGBFields or numpy array but of {type(data['arr'])}')
-
-
-        if (not np.issubdtype(data['arr'].dtype, np.floating) and
-                not np.issubdtype(data['arr'].dtype, np.integer) and
-                not np.issubdtype(data['arr'].dtype, np.bool)):
-            raise TypeError(f"Cannot convert numpy array of type {data['arr'].dtype}")
-
-        if data['arr'].dtype != np.uint8:
-            data['arr'] = normalize_min_max(data['arr'], 0, 255, np.uint8)
-
-        return data
+    @staticmethod
+    def _normalize(array: np.ndarray) -> np.ndarray:
+        if array.dtype != np.uint8:
+            array = normalize_min_max(array, 0, 255, np.uint8)
+        return array
 
 
 class NormalFields(_ScalarFieldTriplet):
     arr: Array_Nx3_float32_T
-    name: Annotated[LowerStr, AfterValidator(lambda _: NORMALS_FIELD)] = NORMALS_FIELD
+    name: LowerStr = NORMALS_FIELD
 
-    def __init__(self,
-                 arr: Self|np.ndarray,
-                 name: LowerStr = NORMALS_FIELD,
-                 *,
-                 origin_dtype: Optional[DtypeState] = None):
-        super().__init__(arr, name=name, origin_dtype=origin_dtype)
-
+    def __init__(self, arr: Self|np.ndarray, **kwargs: Unpack[_SW_KW_T]):
+        kwargs['name'] = NORMALS_FIELD
+        super().__init__(arr=arr, **kwargs)
 
     @property
     def nx(self) -> VectorT_Float32:
@@ -181,19 +160,21 @@ class NormalFields(_ScalarFieldTriplet):
     def nz(self) -> VectorT_Float32:
         return self.arr[:, 2]
 
+    @staticmethod
+    def _normalize(array: np.ndarray) -> np.ndarray:
+        if not (np.issubdtype(array.dtype, np.floating) or np.issubdtype(array.dtype, np.signedinteger)):
+            raise TypeError("Dtype of normals array must be of type floating or signed integer}")
 
-
-
+        if array.dtype == np.float32:
+            return array
+        array = array.astype(np.float32)
+        return array / np.linalg.norm(array, axis=1).reshape(-1, 1)
 
 class SegmentationMap(ScalarField):
     arr: VectorT_Uint8 | VectorT_Uint16
 
-    def __init__(self,
-                 arr: Self|np.ndarray,
-                 name: LowerStr = None,
-                 *,
-                 origin_dtype: Optional[DtypeState] = None):
-        super().__init__(arr, name=name, origin_dtype=origin_dtype)
+    def __init__(self, arr: Self|np.ndarray, **kwargs: Unpack[_SW_KW_T]):
+        super().__init__(arr=arr, **kwargs)
 
     @classmethod
     def initialize(cls, name: LowerStr, pt_cloud_sizes: list[int]) -> Self:
@@ -213,50 +194,50 @@ class SegmentationMap(ScalarField):
 class ScalarFieldUInt8(ScalarField):
     arr: VectorT_Uint8
 
-    def __init__(self, arr: np.ndarray, name: LowerStr = None, *, origin_dtype: Optional[DtypeState] = None):
-        super().__init__(arr, name=name, origin_dtype=origin_dtype)
+    def __init__(self, arr: Self|np.ndarray, **kwargs: Unpack[_SW_KW_T]):
+        super().__init__(arr=arr, **kwargs)
 
 
 class ScalarFieldUInt16(ScalarField):
     arr: VectorT_Uint16
 
-    def __init__(self, arr: Self|np.ndarray, name: LowerStr = None, *, origin_dtype: Optional[DtypeState] = None):
-        super().__init__(arr, name=name, origin_dtype=origin_dtype)
+    def __init__(self, arr: Self|np.ndarray, **kwargs: Unpack[_SW_KW_T]):
+        super().__init__(arr=arr, **kwargs)
 
 
 class ScalarFieldInt8(ScalarField):
     arr: VectorT_Int8
 
-    def __init__(self, arr: Self|np.ndarray, name: LowerStr = None, *, origin_dtype: Optional[DtypeState] = None):
-        super().__init__(arr, name=name, origin_dtype=origin_dtype)
+    def __init__(self, arr: Self|np.ndarray, **kwargs: Unpack[_SW_KW_T]):
+        super().__init__(arr=arr, **kwargs)
 
 
 class ScalarFieldInt16(ScalarField):
     arr: VectorT_Int16
 
-    def __init__(self, arr: Self|np.ndarray, name: LowerStr = None, *, origin_dtype: Optional[DtypeState] = None):
-        super().__init__(arr, name=name, origin_dtype=origin_dtype)
+    def __init__(self, arr: Self|np.ndarray, **kwargs: Unpack[_SW_KW_T]):
+        super().__init__(arr=arr, **kwargs)
 
 
 class ScalarFieldInt32(ScalarField):
     arr: VectorT_Int32
 
-    def __init__(self, arr: Self|np.ndarray, name: LowerStr = None, *, origin_dtype: Optional[DtypeState] = None):
-        super().__init__(arr, name=name, origin_dtype=origin_dtype)
+    def __init__(self, arr: Self|np.ndarray, **kwargs: Unpack[_SW_KW_T]):
+        super().__init__(arr=arr, **kwargs)
 
 
 class ScalarFieldFloat32(ScalarField):
     arr: VectorT_Float32
 
-    def __init__(self, arr: Self|np.ndarray, name: LowerStr = None, *, origin_dtype: Optional[DtypeState] = None):
-        super().__init__(arr, name=name, origin_dtype=origin_dtype)
+    def __init__(self, arr: Self|np.ndarray, **kwargs: Unpack[_SW_KW_T]):
+        super().__init__(arr=arr, **kwargs)
 
 
 class ScalarFieldBool(ScalarField):
     arr: VectorT_Bool
 
-    def __init__(self, arr: Self|np.ndarray, name: LowerStr = None, *, origin_dtype: Optional[DtypeState] = None):
-        super().__init__(arr, name=name, origin_dtype=origin_dtype)
+    def __init__(self, arr: Self|np.ndarray, **kwargs: Unpack[_SW_KW_T]):
+        super().__init__(arr=arr, **kwargs)
 
 
 SF_T = TypeVar("SF_T", bound=Union[ScalarField, RGBFields, NormalFields])

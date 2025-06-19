@@ -220,7 +220,7 @@ class AbstractIOHandler(ABC):
 
         origin_dtype = DtypeState.generate(data[intensity_name[0]])
         array = cls._normalise(data[intensity_name[0]], method=normalise_method, target_dtype=target_dtype)
-        array = ScalarField(array, intensity_name[0], origin_dtype=origin_dtype)
+        array = ScalarField(array, name=intensity_name[0], origin_dtype=origin_dtype)
         cls._remove_field_names(field_names, *intensity_name)
 
         return array
@@ -242,7 +242,7 @@ class AbstractIOHandler(ABC):
 
         origin_dtype = DtypeState.generate(data[reflectance_name[0]])
         array = cls._normalise(data[reflectance_name[0]], method=normalise_method, target_dtype=target_dtype)
-        array = ScalarField(array, reflectance_name[0], origin_dtype=origin_dtype)
+        array = ScalarField(array, name=reflectance_name[0], origin_dtype=origin_dtype)
 
         cls._remove_field_names(field_names, *reflectance_name)
 
@@ -272,7 +272,7 @@ class AbstractIOHandler(ABC):
                 # Normalises based on array min_max values to target
                 if not isinstance(target_dtype, np.dtype):
                     target_dtype = DtypeState(dtype=target_dtype, lower=0, upper=1)
-                return normalize_min_max(val=array,
+                return normalize_min_max(array=array,
                                          lower=target_dtype.lower,
                                          upper=target_dtype.upper,
                                          target_dtype=target_dtype.dtype)

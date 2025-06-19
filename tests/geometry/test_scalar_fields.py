@@ -56,7 +56,7 @@ class TestScalarFieldClass:
         assert isinstance(a, ScalarField)
 
     def test_positional_init(self):
-        a = ScalarField(np.ones(10), "steve")
+        a = ScalarField(np.ones(10), name="steve")
 
         assert a.name == "steve"
         assert np.all(a == np.ones(10))
@@ -78,7 +78,7 @@ class TestScalarFieldClass:
     )
     def test_invalid_values(self, array, name, origin_dtype):
         with pytest.raises(Exception) as e:
-            _ = ScalarField(array, name, origin_dtype=origin_dtype)
+            _ = ScalarField(array, name=name, origin_dtype=origin_dtype)
 
         assert type(e.value) in (ValidationError, ValueError, TypeError)
 
@@ -135,7 +135,7 @@ class TestScalarFieldClass:
 class TestTypeDefinedScalarFields:
     def test_uint8_valid(self):
         array = np.random.randint(0, 255, 100, dtype=np.uint8)
-        b = ScalarFieldUInt8(array, "temp")
+        b = ScalarFieldUInt8(array, name="temp")
         assert isinstance(b, ScalarFieldUInt8)
         assert np.all(b == array)
 
@@ -147,7 +147,7 @@ class TestTypeDefinedScalarFields:
 
     def test_uint16_valid(self):
         array = np.random.randint(0, 2**15, 100, dtype=np.uint16)
-        b = ScalarFieldUInt16(array, "temp")
+        b = ScalarFieldUInt16(array, name="temp")
         assert isinstance(b, ScalarFieldUInt16)
         assert np.all(b == array)
 
@@ -159,7 +159,7 @@ class TestTypeDefinedScalarFields:
 
     def test_int8_valid(self):
         array = np.random.randint(-128, 127, 100, dtype=np.int8)
-        b = ScalarFieldInt8(array, "temp")
+        b = ScalarFieldInt8(array, name="temp")
         assert isinstance(b, ScalarFieldInt8)
         assert np.all(b == array)
 
@@ -171,7 +171,7 @@ class TestTypeDefinedScalarFields:
 
     def test_int16_valid(self):
         array = np.random.randint(-(2**14), 2**13, 100, dtype=np.int16)
-        b = ScalarFieldInt16(array, "temp")
+        b = ScalarFieldInt16(array, name="temp")
         assert isinstance(b, ScalarFieldInt16)
         assert np.all(b == array)
 
@@ -183,7 +183,7 @@ class TestTypeDefinedScalarFields:
 
     def test_int32_valid(self):
         array = np.random.randint(-(2**23), 2**22, 1000, dtype=np.int32)
-        b = ScalarFieldInt32(array, "temp")
+        b = ScalarFieldInt32(array, name="temp")
         assert isinstance(b, ScalarFieldInt32)
         assert np.all(b == array)
 
@@ -195,7 +195,7 @@ class TestTypeDefinedScalarFields:
 
     def test_float32_valid(self):
         array = np.random.rand(1000).astype(np.float32)
-        b = ScalarFieldFloat32(array, "temp")
+        b = ScalarFieldFloat32(array, name="temp")
         assert isinstance(b, ScalarFieldFloat32)
         assert np.all(b == array)
 
@@ -207,7 +207,7 @@ class TestTypeDefinedScalarFields:
 
     def test_bool_valid(self):
         array = np.random.randint(0, 1, 1000, dtype=np.bool_)
-        b = ScalarFieldBool(array, "temp")
+        b = ScalarFieldBool(array, name="temp")
         assert isinstance(b, ScalarFieldBool)
         assert np.all(b == array)
 
@@ -226,7 +226,7 @@ class TestRgbField:
         assert a.name == RGB_FIELD
         assert np.all(a == data)
 
-        a = RGBFields(data, "not_rgb")
+        a = RGBFields(data, name="not_rgb")
         assert a.name == RGB_FIELD
         assert a.name != "not_rgb"
 
@@ -272,52 +272,28 @@ class TestRgbField:
         assert np.uint8 == rgb2.dtype
         assert np.all(rgb2 == data)
 
-    def test_get_normalized(self):
-        # Test the default normalisation
-        data: np.ndarray = np.random.randint(0, 255, (100000, 3), dtype=np.uint8)
-        rgb = RGBFields(data)
-        floats = rgb.get_normalized()
-        assert floats.min() == 0
-        assert floats.max() == 1
-        assert floats.dtype == np.float32
+    @pytest.mark.parametrize('arr', (
+        np.random.rand(10000, 3),
+        np.random.rand(10000, 3) * 2 - 1,
+        np.random.rand(10000, 3) * (2 ** 8 - 1),
+        np.random.randint(-2 ** 7, 2 ** 7, (10000, 3)).astype(np.float32),
+        np.random.randint(-2 ** 7, 2 ** 7, (10000, 3), dtype=np.int8),
+        np.random.randint(0, 2 ** 16, (10000, 3), dtype=np.uint16),
+        np.random.randint(0, 2 ** 8, (10000, 3), dtype=np.uint8),
+    ))
+    def test_normalized(self, arr):
+        rgb = RGBFields(arr)
+        original: np.ndarray = rgb.get_original_data()
 
-        # Test a different number range
-        floats = rgb.get_normalized(lower=-1.0, upper=2.0)
-        assert floats.min() == -1.0
-        assert floats.max() == 2.0
-        assert floats.dtype == np.float32
+        original_bits = arr.dtype.itemsize * 8
+        target_bits = rgb.dtype.itemsize * 8
+        if np.issubdtype(arr.dtype, np.floating):
+            atol = 1
+        else:
+            atol = (2 ** original_bits // 2 ** target_bits)
+            atol += 1
 
-        # Test a different range(not full uint8)
-        data: np.ndarray = np.random.randint(13, 147, (100000, 3), dtype=np.uint8)
-        rgb = RGBFields(data)
-        floats = rgb.get_normalized()
-        assert floats.min() == 0
-        assert floats.max() == 1
-        assert floats.dtype == np.float32
-
-    def test_get_normalized_2(self):
-        num = 10000
-        a = np.random.rand(num, 3)
-        b = np.random.rand(num, 3) * 2 - 1
-        c = np.random.rand(num, 3) * (2 ** 8 - 1)
-        d = np.random.randint(-2 ** 7, 2 ** 7, (num, 3)).astype(np.float32)
-        e = np.random.randint(-2 ** 7, 2 ** 7, (num, 3), dtype=np.int8)
-        f = np.random.randint(0, 2 ** 16, (num, 3), dtype=np.uint16)
-        g = np.random.randint(0, 2 ** 8, (num, 3), dtype=np.uint8)
-
-        for val in (a, b, c, d, e, f, g):
-            rgb = RGBFields(val)
-            original: np.ndarray = rgb.get_original_data()
-
-            original_bits = val.dtype.itemsize * 8
-            target_bits = rgb.dtype.itemsize * 8
-            if np.issubdtype(val.dtype, np.floating):
-                atol = 1
-            else:
-                atol = (2 ** original_bits // 2 ** target_bits)
-                atol += 1
-
-            assert np.allclose(val, original, atol=atol)
+        assert np.allclose(arr, original, atol=atol)
 
 
 class TestNormalsField:
@@ -328,7 +304,7 @@ class TestNormalsField:
         assert a.name == NORMALS_FIELD
         assert np.all(a == data)
 
-        a = NormalFields(data, "not_normals")
+        a = NormalFields(data, name="not_normals")
         assert a.name == NORMALS_FIELD
         assert a.name != "not_normals"
 
@@ -349,9 +325,11 @@ class TestNormalsField:
             NormalFields(data)
 
     def test_invalid_dtypes(self):
-        data = np.random.randint(0, 1000, (100, 3), dtype=np.int16)
-        with pytest.raises(ValidationError):
+        data = np.random.randint(0, 2, (100, 3), dtype=np.bool_)
+        with pytest.raises(Exception) as e:
             NormalFields(data)
+
+        assert type(e.value) in (ValidationError, TypeError)
 
     def test_properties(self):
         data = np.random.rand(100, 3).astype(np.float32)
