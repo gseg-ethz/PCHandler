@@ -5,10 +5,10 @@ from abc import ABC, abstractmethod
 from enum import IntEnum, auto
 from pathlib import Path
 
-from typing import Any, Mapping, TypedDict, Iterable, Unpack, Optional, NotRequired
+from typing import Any, Mapping, TypedDict, Iterable, Unpack, Optional, NotRequired, Annotated
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, BeforeValidator
 
 from ..constants import (
     INTENSITY_POTENTIAL_NAMES,
@@ -26,7 +26,7 @@ from ..geometry.scalar_fields import (
     DtypeState,
 )
 
-from ..geometry.util import linear_map_dtype, normalize_min_max, normalize_self
+from ..validators import normalize_min_max, linear_map_dtype, normalize_self
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -75,25 +75,26 @@ class _BaseConfigType(TypedDict):
     keep_intensity: NotRequired[bool]
     keep_reflectance: NotRequired[bool]
     keep_extra_scalar_fields: NotRequired[Iterable[str]]
+    cloud_compare_exported: NotRequired[bool]
 
 
 class _BaseLoadConfigType(_BaseConfigType):
-    normalize_rgb: NotRequired[NormaliseEnum]
-    normalize_intensity: NotRequired[NormaliseEnum]
-    normalize_reflectance: NotRequired[NormaliseEnum]
-    cloud_compare_exported: NotRequired[bool]
+    pass
+
 
 class _BaseSaveConfigType(_BaseConfigType):
     revert_sf_types: NotRequired[bool]
 
 
+# FIXME
 class _BaseConfig(BaseModel):
     model_config = ConfigDict(extra='ignore')
     keep_rgb: Optional[bool] = False
     keep_normals: Optional[bool] = False
     keep_intensity: Optional[bool] = False
     keep_reflectance: Optional[bool] = False
-    keep_extra_scalar_fields: set[str] = Field(default_factory=set)
+    keep_extra_scalar_fields: Annotated[set[str], BeforeValidator(set)] = Field(default_factory=set)
+    cloud_compare_exported: bool = False
 
     @field_validator('keep_extra_scalar_fields', mode='before')
     @classmethod
@@ -102,11 +103,7 @@ class _BaseConfig(BaseModel):
 
 
 class BaseLoadConfig(_BaseConfig):
-    normalize_rgb: NormaliseEnum = Field(default=NormaliseEnum.MINMAX)
-    normalize_intensity: NormaliseEnum = Field(default=NormaliseEnum.NONE)
-    normalize_reflectance: NormaliseEnum = Field(default=NormaliseEnum.NONE)
-    keep_extra_scalar_fields: Iterable[str] = Field(default_factory=set)
-    cloud_compare_exported: bool = False
+    pass
 
 
 class BaseSaveConfig(_BaseConfig):
@@ -179,7 +176,7 @@ class AbstractIOHandler(ABC):
     def _extract_normals(cls, data: Mapping[str, np.ndarray],
                     num_points: int,
                     field_names: set[str],
-                    ) -> NormalFields:
+                    ) -> np.ndarray:
 
         normal_names = field_names & set(NORMAL_PARTIAL_NAMES)
 
@@ -192,12 +189,6 @@ class AbstractIOHandler(ABC):
 
         for i, name in enumerate(NORMAL_PARTIAL_NAMES):
             array[:, i] = data[name]
-
-        origin_dtype = DtypeState.generate(array)
-        dist = np.linalg.norm(array, axis=1).astype(np.float32)
-        if not np.allclose(dist, 1):
-            array /= dist
-        array = NormalFields(array, origin_dtype = origin_dtype)
 
         cls._remove_field_names(field_names, *normal_names)
 
@@ -248,37 +239,6 @@ class AbstractIOHandler(ABC):
 
         return array
 
-    @staticmethod
-    def _normalise(array: np.ndarray,
-                   method: NormaliseEnum,
-                   target_dtype: np.typing.DTypeLike|DtypeState = None
-                   ) -> np.ndarray:
-        match method:
-            case NormaliseEnum.NONE:
-                return array
-
-            case NormaliseEnum.DTYPE:
-                # Normalizes to min and max of the integer dtype or 0.0 and 1.0 for floating point
-                return normalize_self(array)
-
-            case NormaliseEnum.MAPPING:
-                # Linearly maps the current values to the target dtype based on the min_max values of the
-                # array dtype.
-                if not isinstance(target_dtype, DtypeState):
-                    target_dtype = target_dtype.dtype
-                return linear_map_dtype(array, target_dtype)
-
-            case NormaliseEnum.MINMAX:
-                # Normalises based on array min_max values to target
-                if not isinstance(target_dtype, np.dtype):
-                    target_dtype = DtypeState(dtype=target_dtype, lower=0, upper=1)
-                return normalize_min_max(array=array,
-                                         lower=target_dtype.lower,
-                                         upper=target_dtype.upper,
-                                         target_dtype=target_dtype.dtype)
-
-            case _:
-                raise ValueError(f"Unknown normalisation method passed.")
 
     @classmethod
     def _get_config(cls, load=True, **kwargs):

@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import alphashape
 import numpy as np
 
-import numpy.typing as npt
 from shapely.affinity import scale, translate
 from shapely.geometry import MultiPolygon, Polygon
 
@@ -88,62 +87,3 @@ def get_outline_polygon(pcd: PointCloudData, plane: str, alpha_value: float = 10
     return als
 
 
-def normalize_min_max(array: npt.ArrayLike,
-                      lower: float|int,
-                      upper: float|int,
-                      target_dtype: npt.DTypeLike,
-                      v_min: Optional[float|int] = None,
-                      v_max: Optional[float|int] = None):
-
-    if (not np.issubdtype(array.dtype, np.floating) and
-            not np.issubdtype(array.dtype, np.integer) and
-            not np.issubdtype(array.dtype, np.bool)):
-        raise TypeError(f"Cannot convert numpy array of type {array.dtype}")
-
-    array = array.astype(np.float64)
-
-    v_min = v_min or array.min()
-    v_max = v_max or array.max()
-
-    array = (array - v_min) / (v_max - v_min)
-    array = np.add(array * (upper - lower), lower)
-    return np.clip(array, lower, upper).astype(target_dtype)
-
-
-def linear_map_dtype(array: np.ndarray, target_dtype: npt.DTypeLike) -> np.ndarray:
-
-    def get_dtype_min_max(dt: np.dtype) -> tuple[float, float]:
-        if np.issubdtype(dt, np.integer):
-            return np.iinfo(dt).min, np.iinfo(dt).max
-        elif np.issubdtype(dt, np.floating):
-            return 0.0, 1.0
-        else:
-            raise TypeError(f"Invalid dtype detected: {dt}")
-
-    # Types match, exit
-    if array.dtype == target_dtype:
-        return array
-
-    # Get the corresponding min and max from the type info
-    origin_min, origin_max = get_dtype_min_max(array.dtype)
-    target_min, target_max = get_dtype_min_max(target_dtype)
-
-    return normalize_min_max(array=array,
-                             lower=target_min,
-                             upper=target_max,
-                             target_dtype=target_dtype,
-                             v_min=origin_min,
-                             v_max=origin_max)
-
-
-def normalize_self(array: np.ndarray) -> np.ndarray:
-    """
-    Normalise values to the min and max values of the associated data type or [0, 1] for floating point
-    """
-    if np.dtype(array.dtype).kind not in ["u", "i"]:
-        logger.debug(f"Scalar field is floating. Converting to [0.0, 1.0].")
-        lower, upper = 0, 1
-    else:
-        lower, upper = np.iinfo(array.dtype).min, np.iinfo(array.dtype).max
-
-    return normalize_min_max(array, lower, upper, array.dtype)

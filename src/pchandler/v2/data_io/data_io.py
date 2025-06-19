@@ -85,9 +85,9 @@ from pchandler.v2.geometry.scalar_fields import (
     ScalarField,
     linear_map_dtype,
     normalize_self,
-    normalize_min_max,
     DtypeState,
 )
+from v2.validators import normalize_min_max
 from pchandler.v2.constants import RGB_FIELD, NORMALS_FIELD
 
 logger = logging.getLogger(__name__.split(".")[0])
