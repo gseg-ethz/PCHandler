@@ -5,7 +5,7 @@ import pytest
 
 from pydantic import ValidationError
 from pchandler.v2.geometry import PointCloudData
-from pchandler.v2.geometry.scalar_fields import ScalarField, RGBFields, NormalFields
+from pchandler.v2.geometry.scalar_fields import ScalarField, RGBFields, NormalFields, NormalisedInt16ScalarField
 from pchandler.v2.geometry.scalar_field_manager import ScalarFieldManager
 from pchandler.v2.geometry.optimal_shift import OptimizedShift
 
@@ -110,13 +110,16 @@ class TestPointCloudData:
 
         def test_intensity_keyword(self, xyz_, intensity_):
             pcd = PointCloudData(xyz_, intensity=intensity_)
+            vals = NormalisedInt16ScalarField(intensity_, name='test')
             assert "intensity" in pcd.scalar_fields
-            assert np.allclose(pcd.intensity, intensity_)
+            assert np.allclose(pcd.intensity, vals)
 
         def test_reflectance_keyword(self, xyz_, intensity_):
             pcd = PointCloudData(xyz_, reflectance=intensity_)
+
+            vals = NormalisedInt16ScalarField(intensity_, name='test')
             assert "reflectance" in pcd.scalar_fields
-            assert np.allclose(pcd.reflectance, intensity_)
+            assert np.allclose(pcd.reflectance, vals)
 
         def test_all_scalar_fields(self, xyz_, rgb_, normals_, intensity_):
             pcd = PointCloudData(xyz_, rgb=rgb_, normals=normals_, intensity=intensity_, reflectance=intensity_)

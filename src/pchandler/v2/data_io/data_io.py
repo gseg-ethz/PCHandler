@@ -508,10 +508,10 @@ def save_csv(
     np.savetxt(
         pcd_path,
         plain_data,
+        fmt=fmt,
         delimiter=delimiter,
         header=header,
         comments="",  # Avoid prepending '#' to the header
-        fmt=fmt,
     )
 
     logger.info(f"CSV file saved successfully: {pcd_path}")

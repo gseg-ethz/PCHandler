@@ -5,10 +5,10 @@ from abc import ABC, abstractmethod
 from enum import IntEnum, auto
 from pathlib import Path
 
-from typing import Mapping, TypedDict, Iterable, Unpack, Optional, NotRequired, Annotated
+from typing import Mapping, TypedDict, Iterable, Unpack, Optional, NotRequired, Annotated, Sequence
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field, field_validator, BeforeValidator
+from pydantic import BaseModel, ConfigDict, Field, BeforeValidator
 
 from ..constants import (
     INTENSITY_POTENTIAL_NAMES,
@@ -16,6 +16,8 @@ from ..constants import (
     RGB_PARTIAL_NAMES,
     RGB_CHAR,
     RGB_WORD,
+    NORMALS_CHAR,
+    NORMALS_WORD,
     NORMAL_PARTIAL_NAMES,
     RGB_FIELD,
     NORMALS_FIELD,
@@ -73,6 +75,8 @@ def find_pcd_in_directory(directory_path, pcd_file_types: list[str], include_sub
     return file_list
 
 
+def skip_main_fields(field_names: Sequence[str]|set[str]):
+    return set(field_names).difference({RGB_FIELD, INTENSITY_FIELD, NORMALS_FIELD, REFLECTANCE_FIELD})
 
 
 class _BaseConfigType(TypedDict):
@@ -98,7 +102,7 @@ class _BaseConfig(BaseModel):
     keep_normals: Optional[bool] = True
     keep_intensity: Optional[bool] = True
     keep_reflectance: Optional[bool] = True
-    keep_extra_scalar_fields: Annotated[set[str], BeforeValidator(lambda value: set(value)), Field(default_factory=set)]
+    keep_extra_scalar_fields: Annotated[set[str], BeforeValidator(skip_main_fields), Field(default_factory=set)]
     cloud_compare_exported: bool = False
 
 
@@ -124,6 +128,12 @@ class AbstractIOHandler(ABC):
     def save(cls, /, pcd: PointCloudData, path: str | Path, **config: Unpack[_BaseSaveConfigType]): ...
 
     @classmethod
+    def get_config(cls, load=True, **kwargs):
+        if load:
+            return cls.LOAD_CONFIG(**kwargs)
+        return cls.SAVE_CONFIG(**kwargs)
+
+    @classmethod
     def find_pcds_in_directory(cls, directory_path: str|Path, include_subdirectories: bool = True):
         return find_pcd_in_directory(directory_path, cls.FORMATS, include_subdirectories)
 
@@ -134,126 +144,93 @@ class AbstractIOHandler(ABC):
         xyz[:, 1] = data["y"]
         xyz[:, 2] = data["z"]
 
-        cls._remove_field_names(field_names, 'x', 'y', 'z')
+        cls.remove_field_names(field_names, 'x', 'y', 'z')
 
         return xyz
 
     @classmethod
-    def extract_common_fields_to_pcd(cls,
+    def extract_common_fields(cls,
                               pcd: PointCloudData,
                               data: BaseDataT,
                               cfg: BaseLoadConfig,
                               num_points: int,
-                              field_names: set[str]):
+                              field_names: set[str]) -> None:
 
         if cfg.keep_rgb:
-            pcd.rgb = cls._extract_rgb(data, num_points, field_names)
+            if rgb_names := cls._get_rgb_field_names(field_names):
+                pcd.rgb = cls.extract_rgb(data, num_points, rgb_names)
+                cls.remove_field_names(field_names, *rgb_names)
 
         if cfg.keep_normals:
-            pcd.normals = cls._extract_normals(data, num_points, field_names)
+            if normal_names := cls._get_normals_field_names(field_names):
+                pcd.normals = cls.extract_normals(data, num_points, normal_names)
+                cls.remove_field_names(field_names, *normal_names)
 
         if cfg.keep_intensity:
-            pcd.intensity = cls._extract_intensity(data, field_names)
+            if intensity_names := cls._get_intensity_field_names(field_names):
+                pcd.intensity = cls.extract_intensity(data)
+                cls.remove_field_names(field_names, *intensity_names)
 
         if cfg.keep_reflectance:
-            pcd.reflectance = cls._extract_reflectance(data, field_names)
+            if reflectance_names := cls._get_reflectance_field_names(field_names):
+                pcd.reflectance = cls.extract_reflectance(data)
+                cls.remove_field_names(field_names, *reflectance_names)
 
     @classmethod
-    def extract_extra_fields_to_pcd(cls,
-                              pcd: PointCloudData,
-                              data: BaseDataT,
-                              cfg: BaseLoadConfig,
-                              field_names: set[str]):
-
+    def extract_extra_fields(cls, pcd: PointCloudData, data: BaseDataT, cfg: BaseLoadConfig, field_names: set[str]):
         field_names &= cfg.keep_extra_scalar_fields
 
         for name in field_names:
             pcd.scalar_fields.create_field(name, data)
 
     @classmethod
-    def _extract_rgb(cls, data: BaseDataT, num_points: int, field_names: set[str], ) -> RGBFields:
-        rgb_names = field_names & set(RGB_PARTIAL_NAMES)
-
-        if rgb_names == set(RGB_CHAR):
-            rgb_names = RGB_CHAR
-        elif rgb_names == set(RGB_WORD):
-            rgb_names = RGB_WORD
-        else:
-            raise ValueError(f"No full set of {RGB_CHAR} or {RGB_WORD} fields were found.\nOnly :{field_names=}")
-
+    def extract_rgb(cls, data: BaseDataT, num_points: int, rgb_names: list[str]) -> RGBFields:
         array = np.empty((num_points, 3), dtype=data[rgb_names[0]].dtype)
+
         for i, name in enumerate(rgb_names):
             array[:, i] = data[name]
-
-        cls._remove_field_names(field_names, *rgb_names)
 
         return RGBFields(array)
 
     @classmethod
-    def _extract_normals(cls, data: BaseDataT, num_points: int, field_names: set[str], ) -> NormalFields:
-        normal_names = field_names & set(NORMAL_PARTIAL_NAMES)
-
-        if not normal_names == set(NORMAL_PARTIAL_NAMES):
-            raise ValueError(f"No set of {NORMAL_PARTIAL_NAMES} fields were found. \nOnly :{normal_names=}")
+    def extract_normals(cls, data: BaseDataT, num_points: int, normals_names: list[str]) -> NormalFields:
 
         array = np.empty((num_points, 3), dtype=np.float32)
-        for i, name in enumerate(NORMAL_PARTIAL_NAMES):
-            array[:, i] = data[name]
 
-        cls._remove_field_names(field_names, *normal_names)
+        for i, name in enumerate(normals_names):
+            array[:, i] = data[name]
 
         return NormalFields(array)
 
     @classmethod
-    def _extract_reflectance_or_intensity(cls,
-                                          data: BaseDataT,
-                                          field_names: set[str],
-                                          potential_names: set[str],
-                                          fixed_name: str) -> NormalisedInt16ScalarField:
+    def _extract_reflectance_or_intensity(cls, data: BaseDataT, fixed_name: str) -> NormalisedInt16ScalarField:
 
-        matched_names = list(field_names & set(potential_names))
-
-        if len(matched_names) != 1:
-            raise ValueError(f"No {fixed_name} like field name found in [{potential_names}] fields.")
-
-        cls._remove_field_names(field_names, *matched_names)
-
-        arr = data[matched_names[0]]
+        arr = data[fixed_name]
         origin_dtype = DtypeState.generate(arr)
 
         return NormalisedInt16ScalarField(arr, name=fixed_name, origin_dtype=origin_dtype)
 
     @classmethod
-    def _extract_intensity(cls, data: BaseDataT, field_names: set[str], ) -> NormalisedInt16ScalarField:
-        return cls._extract_reflectance_or_intensity(
-            data, field_names, INTENSITY_POTENTIAL_NAMES, INTENSITY_FIELD
-        )
+    def extract_intensity(cls, data: BaseDataT, ) -> NormalisedInt16ScalarField:
+        return cls._extract_reflectance_or_intensity(data, INTENSITY_FIELD)
 
     @classmethod
-    def _extract_reflectance(cls, data: BaseDataT, field_names: set[str]) -> NormalisedInt16ScalarField:
-        return cls._extract_reflectance_or_intensity(
-            data, field_names, REFLECTANCE_POTENTIAL_NAMES, REFLECTANCE_FIELD
-        )
-
-    @classmethod
-    def _get_config(cls, load=True, **kwargs):
-        if load:
-            return cls.LOAD_CONFIG(**kwargs)
-        return cls.SAVE_CONFIG(**kwargs)
+    def extract_reflectance(cls, data: BaseDataT) -> NormalisedInt16ScalarField:
+        return cls._extract_reflectance_or_intensity(data, REFLECTANCE_FIELD)
 
     @staticmethod
-    def _remove_field_names(field_names: set, *args):
+    def remove_field_names(field_names: set[str], *args):
         for name in args:
             field_names.remove(name)
 
     @staticmethod
-    def _get_sf_save_dtype(cfg: BaseSaveConfig, scalar_field: ScalarField) -> str:
+    def _get_sf_dtype(cfg: BaseSaveConfig, scalar_field: ScalarField) -> str:
         if cfg.revert_sf_types:
             return scalar_field.origin_dtype.dtype.str
         return scalar_field.dtype.str
 
     @classmethod
-    def _generate_struct_dtype(cls, pcd: PointCloudData, cfg: BaseSaveConfig):
+    def generate_struct_dtype(cls, pcd: PointCloudData, cfg: BaseSaveConfig):
         xyz_dtype = np.dtype(np.float64).str if pcd.optimized is not None else pcd.xyz.dtype.str
         dtype_list = [(name, str(xyz_dtype)) for name in ('x', 'y', 'z')]
 
@@ -262,36 +239,36 @@ class AbstractIOHandler(ABC):
 
         if cfg.keep_rgb and pcd.rgb is not None:
             dtype_list.extend(
-                (name, cls._get_sf_save_dtype(cfg, pcd.rgb)) for name in RGB_WORD
+                (name, cls._get_sf_dtype(cfg, pcd.rgb)) for name in RGB_WORD
             )
 
         if cfg.keep_normals and pcd.normals is not None:
             dtype_list.extend(
-                (name, cls._get_sf_save_dtype(cfg, pcd.normals)) for name in NORMAL_PARTIAL_NAMES
+                (name, cls._get_sf_dtype(cfg, pcd.normals)) for name in NORMALS_CHAR
             )
 
         if cfg.keep_intensity and pcd.intensity is not None:
             dtype_list.append(
-                (INTENSITY_FIELD, cls._get_sf_save_dtype(cfg, pcd.intensity))
+                (INTENSITY_FIELD, cls._get_sf_dtype(cfg, pcd.intensity))
             )
 
         if cfg.keep_reflectance and pcd.reflectance is not None:
             dtype_list.append(
-                (REFLECTANCE_FIELD, cls._get_sf_save_dtype(cfg, pcd.reflectance))
+                (REFLECTANCE_FIELD, cls._get_sf_dtype(cfg, pcd.reflectance))
             )
 
         extra_fields = list(cfg.keep_extra_scalar_fields & pcd_scalar_fields)
 
         for sf_name in extra_fields:
             dtype_list.append(
-                (sf_name, cls._get_sf_save_dtype(cfg, pcd.scalar_fields[sf_name]))
+                (sf_name, cls._get_sf_dtype(cfg, pcd.scalar_fields[sf_name]))
             )
 
         return dtype_list, extra_fields
 
     @classmethod
     def generate_structured_array(cls, pcd: PointCloudData, cfg: BaseSaveConfig):
-        dtype_list, extra_fields = cls._generate_struct_dtype(pcd, cfg)
+        dtype_list, extra_fields = cls.generate_struct_dtype(pcd, cfg)
         array = np.empty((len(pcd),), dtype=dtype_list)
 
         shift = pcd.optimized_shift.optimal_shift
@@ -323,3 +300,51 @@ class AbstractIOHandler(ABC):
             array[name] = sf.get_original_data() if cfg.revert_sf_types else sf.arr
 
         return array
+
+    @staticmethod
+    def _get_rgb_field_names(field_names: set[str]) -> list[str] | None:
+        rgb_names = field_names & set(RGB_PARTIAL_NAMES)
+
+        if rgb_names == set(RGB_CHAR):
+            return list(RGB_CHAR)
+
+        elif rgb_names == set(RGB_WORD):
+            return list(RGB_WORD)
+
+        else:
+            logger.warning(f"No full set of {RGB_CHAR} or {RGB_WORD} fields were found.\nOnly :{field_names=}")
+            return None
+
+    @staticmethod
+    def _get_normals_field_names(field_names: set[str]) -> list[str] | None:
+        normal_names = field_names & set(NORMAL_PARTIAL_NAMES)
+
+        if normal_names == set(NORMALS_CHAR):
+            return list(NORMALS_CHAR)
+
+        elif normal_names == set(NORMALS_WORD):
+            return list(NORMALS_WORD)
+
+        else:
+            logger.warning(f"No full set of {NORMALS_CHAR} or {NORMALS_WORD} fields were found. \n"
+                           f"Only :{normal_names=}")
+            return None
+
+
+    @staticmethod
+    def _get_intensity_or_reflectance_field_name(field_names: set[str], potential_names: set[str]) -> list[str]|None:
+        matched_names = list(field_names & set(potential_names))
+
+        if len(matched_names) != 1:
+            logger.warning(f"No 'intensity' or 'reflectance' like field in [{potential_names}] fields.")
+            return None
+
+        return matched_names
+
+    @classmethod
+    def _get_intensity_field_names(cls, field_names) -> list[str] | None:
+        return cls._get_intensity_or_reflectance_field_name(field_names, INTENSITY_POTENTIAL_NAMES)
+
+    @classmethod
+    def _get_reflectance_field_names(cls, field_names) -> list[str] | None:
+        return cls._get_intensity_or_reflectance_field_name(field_names, REFLECTANCE_POTENTIAL_NAMES)

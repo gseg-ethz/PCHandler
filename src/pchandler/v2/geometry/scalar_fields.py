@@ -195,4 +195,4 @@ class BooleanScalarField(ScalarField):
         super().__init__(arr=arr, **kwargs)
 
 
-SF_T = TypeVar("SF_T", bound=Union[ScalarField, RGBFields, NormalFields])
+SF_T = TypeVar("SF_T", bound=Union[AbstractScalarField])

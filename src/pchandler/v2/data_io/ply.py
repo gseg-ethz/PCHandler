@@ -3,19 +3,10 @@ from typing import Unpack
 import logging
 from datetime import datetime
 
-import numpy as np
 from plyfile import PlyData, PlyElement
 
 from .core import AbstractIOHandler, _BaseLoadConfigType, _BaseSaveConfigType, BaseLoadConfig, BaseSaveConfig
 from ..geometry import PointCloudData
-from ..constants import (
-    RGB_FIELD,
-    NORMALS_FIELD,
-    INTENSITY_FIELD,
-    REFLECTANCE_FIELD,
-    RGB_WORD,
-    NORMAL_PARTIAL_NAMES
-)
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -39,7 +30,7 @@ class PlyHandler(AbstractIOHandler):
 
     @classmethod
     def load(cls, /, path: str | Path, **config: Unpack[_PlyLoadConfigType]):
-        cfg = cls._get_config(**config)
+        cfg = cls.get_config(**config)
 
         logger.info(f"Loading PLY file: {path}")
 
@@ -56,8 +47,8 @@ class PlyHandler(AbstractIOHandler):
         ply_scalar_fields = set([pe.name.lower() for pe in plydata["vertex"].properties])
 
         pcd = PointCloudData(cls._extract_xyz(plydata["vertex"], num_points, ply_scalar_fields))
-        cls.extract_common_fields_to_pcd(pcd, plydata["vertex"], cfg, num_points, ply_scalar_fields)
-        cls.extract_extra_fields_to_pcd(pcd, plydata["vertex"], cfg, ply_scalar_fields)
+        cls.extract_common_fields(pcd, plydata["vertex"], cfg, num_points, ply_scalar_fields)
+        cls.extract_extra_fields(pcd, plydata["vertex"], cfg, ply_scalar_fields)
 
         return pcd
 
@@ -65,7 +56,7 @@ class PlyHandler(AbstractIOHandler):
     # DISCUSS is it worth saving the optimised state with the np.float64 shift written in a header?
     @classmethod
     def save(cls, /, pcd: PointCloudData, path: str | Path, **config: Unpack[_PlySaveConfigType]):
-        cfg = cls._get_config(load=False, **config)
+        cfg = cls.get_config(load=False, **config)
 
         structured_array = cls.generate_structured_array(pcd, cfg)
 

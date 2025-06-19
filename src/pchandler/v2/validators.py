@@ -236,6 +236,9 @@ def normalize_self(array: np.ndarray) -> np.ndarray:
 #  e.g. integer values in np.float
 #  e.g. minimum dtype required
 def _normalize_base(array: np.ndarray, dtype: npt.DTypeLike) -> np.ndarray:
+    if hasattr(array, 'arr'):
+        array = array.arr
+
     if array.dtype != dtype:
         if np.issubdtype(dtype, np.floating):
             return normalize_min_max(array, 0, 1, dtype)
