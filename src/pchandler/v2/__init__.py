@@ -123,7 +123,7 @@ applications in 3D data analysis, GIS, and computer vision.
 """
 
 # __all__ = ["data_io", "fov", "geometry", "util", "__version__"]
-__all__ = ["data_io", "fov", "geometry", "util", "constants", "validators", "filters"]
+__all__ = ["data_io", "geometry", "util", "constants", "validators", "filters"]
 
 __author__ = "Nicholas Meyer"
 __email__ = "meyernic@ethz.ch"
@@ -132,7 +132,7 @@ import logging
 
 # from _version import __version__
 # from pchandler.v2 import data_io, fov, util
-from . import geometry, data_io, fov, util
+from . import geometry, data_io, util
 
 logger = logging.getLogger(__name__.split(".")[0])
 

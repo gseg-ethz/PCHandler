@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, Mapping, Optional, Self
+from typing import Any, Mapping, Optional, Self, Annotated
 
 import numpy as np
 import numpy.typing as npt
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator, BeforeValidator
 
 from ..base_types import Array_4x4_T, Array_Nx3_T, Vector_3_T
 from ..validators import extract_array
@@ -15,27 +15,16 @@ from .scalar_field_manager import ScalarFieldManager
 from .scalar_fields import NormalFields, RGBFields, ScalarField
 from .transforms import Transform, TransformLedger
 
-
-# # TODO decide on this artifact
-# def update_transformation_ledger(name: str) -> Callable:
-#     def decorator(func: Callable) -> Callable:
-#         @wraps(func)
-#         def wrapper(instance: PointCloudData, *args, **kwargs):
-#             result = func(instance, *args, **kwargs)
-#
-#             result.transform_ledger[name] = TransformRecord(forward=args[0])
-#
-#         return wrapper
-#
-#     return decorator
-
+# TODO check for a better converter - TypeAdapter?
 
 class PointCloudData(CartesianCoordinates):
     arr: Array_Nx3_T = Field(alias="xyz")
-    transform_ledger: TransformLedger[str, [Transform]] = Field(default_factory=TransformLedger)
+    transform_ledger: Annotated[
+        TransformLedger[str, [Transform]],
+        Field(default_factory=TransformLedger),
+        BeforeValidator(lambda value: value if not isinstance(value, TransformLedger) else TransformLedger(**value))
+    ]
     scalar_fields: ScalarFieldManager | dict[str, ScalarField] = Field(default_factory=ScalarFieldManager)
-
-    # TODO: Check if this should move to the CartesianCoordinates
     optimized_shift: Optional[OptimizedShift]
 
     def __init__(
@@ -86,9 +75,7 @@ class PointCloudData(CartesianCoordinates):
 
         xyz = xyz - optimized_shift.optimal_shift if optimized_shift is not None else xyz
 
-        # TODO Resolve this with the global shift logic once the base is done
-        # if kwargs.get('project_transform', None) is not None:
-        #     kwargs['is_at_socs'] = True
+        # TODO Add an easy accessor to the original point cloud data (e.g. at_socs)
 
         # TODO Propagate this through to scalar_fields (ScalarField should set this if the parent has it)
         self.model_config["frozen"] = frozen
@@ -110,14 +97,6 @@ class PointCloudData(CartesianCoordinates):
     def update_shift(self, delta_shift: Vector_3_T):
         self.xyz = self.xyz + delta_shift
 
-
-    # TODO Also reimplement this
-    @field_validator("transform_ledger", mode="before")
-    @classmethod
-    def initialise_empty_ledger(cls, value: dict | TransformLedger):
-        if isinstance(value, dict):
-            return TransformLedger(**value)
-        return value
 
     @model_validator(mode="after")
     def update_parent_weakref(self) -> Self:
@@ -223,7 +202,7 @@ class PointCloudData(CartesianCoordinates):
             if pcd.socs_origin is not None:
                 raise ValueError("Cannot merge point clouds where some origins are known and some are ambiguous")
 
-        # TODO check on project transformations
+        # TODO update when implementing the transformations
         if pcds[0].project_transformation is None:
             for pcd in pcds[1:]:
                 if pcd.project_transformation is not None:
