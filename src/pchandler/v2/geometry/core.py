@@ -1,45 +1,31 @@
 from __future__ import annotations
 
-import copy
-from functools import wraps
-from typing import Annotated, Any, Callable, Mapping, Optional, Self
+from typing import Any, Mapping, Optional, Self, Annotated
 
 import numpy as np
 import numpy.typing as npt
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator, BeforeValidator
 
 from ..base_types import Array_4x4_T, Array_Nx3_T, Vector_3_T
 from ..validators import extract_array
 from .coordinates import CartesianCoordinates
-from .optimal_shift import OptimizedShift, OptimizedShiftManager
+from .optimal_shift import OptimizedShift
 
-# from .optimal_shift import OSM_Manager
 from .scalar_field_manager import ScalarFieldManager
 from .scalar_fields import NormalFields, RGBFields, ScalarField
-from .transforms import Transform, TransformLedger, TransformRecord
+from .transforms import Transform, TransformLedger
 
-
-# # TODO decide on this artifact
-# def update_transformation_ledger(name: str) -> Callable:
-#     def decorator(func: Callable) -> Callable:
-#         @wraps(func)
-#         def wrapper(instance: PointCloudData, *args, **kwargs):
-#             result = func(instance, *args, **kwargs)
-#
-#             result.transform_ledger[name] = TransformRecord(forward=args[0])
-#
-#         return wrapper
-#
-#     return decorator
-
+# TODO check for a better converter - TypeAdapter?
 
 class PointCloudData(CartesianCoordinates):
     arr: Array_Nx3_T = Field(alias="xyz")
-    transform_ledger: TransformLedger[str, [Transform]] = Field(default_factory=TransformLedger)
+    transform_ledger: Annotated[
+        TransformLedger[str, [Transform]],
+        Field(default_factory=TransformLedger),
+        BeforeValidator(lambda value: value if not isinstance(value, TransformLedger) else TransformLedger(**value))
+    ]
     scalar_fields: ScalarFieldManager | dict[str, ScalarField] = Field(default_factory=ScalarFieldManager)
-
-    # TODO: Check if this should move to the CartesianCoordinates
-    optimal_shift: Optional[OptimizedShift]
+    optimized_shift: Optional[OptimizedShift]
 
     def __init__(
         self,
@@ -54,6 +40,7 @@ class PointCloudData(CartesianCoordinates):
         scalar_fields: Optional[ScalarFieldManager | dict] = None,
         project_transformation: Optional[Array_4x4_T] = None,
         transform_ledger: Optional[TransformLedger] = None,
+        frozen: bool = False
     ):
         if scalar_fields is None:
             scalar_fields = {}
@@ -80,27 +67,26 @@ class PointCloudData(CartesianCoordinates):
         # if transform_ledger is not None:
         #     kwargs['transform_ledger'] = TransformLedger()
 
-        xyz = extract_array(xyz)
-
         if optimized_shift is Ellipsis:
-            optimized_shift = OptimizedShift()
+            optimized_shift = OptimizedShift(np.zeros(3, dtype=np.float32))
 
         if optimized_shift is not None:
             optimized_shift = optimized_shift.register(self, xyz)
 
         xyz = xyz - optimized_shift.optimal_shift if optimized_shift is not None else xyz
 
-        # TODO Resolve this with the global shift logic once the base is done
-        # if kwargs.get('project_transform', None) is not None:
-        #     kwargs['is_at_socs'] = True
+        # TODO Add an easy accessor to the original point cloud data (e.g. at_socs)
+
+        # TODO Propagate this through to scalar_fields (ScalarField should set this if the parent has it)
+        self.model_config["frozen"] = frozen
 
         super().__init__(
             xyz=xyz,
             scalar_fields = scalar_fields,
-            optimal_shift = optimized_shift,
+            optimized_shift = optimized_shift,
             socs_origin = socs_origin,
             project_transformation = project_transformation,
-            transform_ledger = transform_ledger if transform_ledger is not None else TransformLedger(),
+            transform_ledger = transform_ledger if transform_ledger else TransformLedger(),
         )
 
 
@@ -111,14 +97,6 @@ class PointCloudData(CartesianCoordinates):
     def update_shift(self, delta_shift: Vector_3_T):
         self.xyz = self.xyz + delta_shift
 
-
-    # TODO Also reimplement this
-    @field_validator("transform_ledger", mode="before")
-    @classmethod
-    def initialise_empty_ledger(cls, value: dict | TransformLedger):
-        if isinstance(value, dict):
-            return TransformLedger(**value)
-        return value
 
     @model_validator(mode="after")
     def update_parent_weakref(self) -> Self:
@@ -166,49 +144,41 @@ class PointCloudData(CartesianCoordinates):
     def reflectance(self, value: np.ndarray|ScalarField):
         self.scalar_fields.reflectance = value
 
-    def __getitem__(self, item):
-        return self.sample(self.create_mask(item))
-
     def __setitem__(self, key, value: PointCloudData):
         raise IndexError(
-            f"Setting items in PointCloudData is not supported. Consider using the update_copy or "
+            f"Setting items in PointCloudData is not supported. Consider using the copy or "
             f"dump data to a dict and reinstantiate."
         )
 
-    def update_copy(
-        self, array: npt.NDArray | Self | None = None, *, deep: bool = True, update: Mapping[str, Any] = None
-    ) -> Self:
-        """
-        This function is designed to be more efficient by not dumping the memory heavy array if it's to be updated in
-        the new instance.
-        E.g. if 'arr' is in the update dict {'arr': np.random.rand(10000, 3)}, don't dump the existing, just add this
-        new value.
-        """
-        update = update or {}
 
-        if array is not None:
-            update["xyz"] = array.arr if isinstance(array, PointCloudData) else array
-
-        return self.copy(deep=deep, update=update)
-
-    # TODO explicitly state the
-    def copy(self, *, deep: bool = True, update: dict = None) -> Self:
+    def copy(self,
+             array: npt.NDArray | Self | None = None,
+             *,
+             update: Mapping[str, Any] = None,
+             **kwargs) -> Self:
         """
         Produce a deep or shallow copy of the model. Updates the model also if parameter is parsed.
         """
-        if not deep:
-            raise NotImplementedError(f"Shallow copy is not implemented on this class: {type(self)}")
 
-        if update is None:
-            update = self.model_dump()
-        else:
-            update |= self.model_dump(exclude=(set(update.keys()) | {"arr"}))
-        update = copy.deepcopy(update)
-        return type(self)(update.pop("xyz"), **update)
+        update = update or {}
 
-    def sample(self, mask):
+        # array is passed when sampling and advanced indexing automatically makes a copy
+        if array is not None:
+            if isinstance(array, CartesianCoordinates):
+                update["xyz"] = array.arr
+            elif isinstance(array, np.ndarray):
+                update["xyz"] = array
+            else:
+                raise TypeError(f"Invalid type of array passed: {type(array)}. Should be PointCloudData or np.ndarray")
+
+        # Create a copy of the rest of the fields
+        update = self.model_dump(exclude=(set(update.keys()))) | update
+
+        return type(self)(update.pop('xyz'), **update)
+
+    def sample(self, mask) -> PointCloudData:
         mask = self.create_mask(mask)
-        return self.update_copy(self.arr[mask, :], update={"scalar_fields": self.scalar_fields.sample(mask)})
+        return self.copy(self.arr[mask, :], update={"scalar_fields": self.scalar_fields.sample(mask)})
 
     def reduce(self, mask):
         super().reduce(mask)
@@ -232,7 +202,7 @@ class PointCloudData(CartesianCoordinates):
             if pcd.socs_origin is not None:
                 raise ValueError("Cannot merge point clouds where some origins are known and some are ambiguous")
 
-        # TODO check on project transformations
+        # TODO update when implementing the transformations
         if pcds[0].project_transformation is None:
             for pcd in pcds[1:]:
                 if pcd.project_transformation is not None:

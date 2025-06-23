@@ -88,7 +88,7 @@ class OptimizedShift:
     _member_pcds: weakref.WeakSet["PointCloudData"]
     _member_pcds_unshifted_bbox: weakref.WeakKeyDictionary["PointCloudData", MinMaxPoints]
 
-    def __init__(self, optimal_shift: Optional[NDArray[np.floating] | Vector_3_T]) -> None:
+    def __init__(self, optimal_shift: Optional[NDArray[np.floating] | Vector_3_T] = None) -> None:
         self._optimal_shift = Vector_3_T(np.zeros(3)) if None else optimal_shift
         self._member_pcds = weakref.WeakSet()
         self._member_pcds_unshifted_bbox = weakref.WeakKeyDictionary()

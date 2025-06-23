@@ -6,7 +6,8 @@ import pytest
 
 from pchandler.v2.geometry import PointCloudData
 from pchandler.v2.geometry.scalar_field_manager import ScalarFieldManager
-from pchandler.v2.geometry.scalar_fields import ScalarField, RGBFields, NormalFields
+from pchandler.v2.geometry.scalar_fields import ScalarField, RGBFields, NormalFields, AbstractScalarField, \
+    NormalisedInt16ScalarField
 
 N = 40
 
@@ -33,12 +34,12 @@ def invalid_size() -> ScalarField:
 
 @pytest.fixture(scope="function", autouse=True)
 def intensity_field() -> ScalarField:
-    return ScalarField(np.random.rand(N), name="intensity")
+    return NormalisedInt16ScalarField(np.random.rand(N), name="intensity")
 
 
 @pytest.fixture(scope="function", autouse=True)
 def reflectance_field() -> ScalarField:
-    return ScalarField(np.random.rand(N), name="reflectance")
+    return NormalisedInt16ScalarField(np.random.rand(N), name="reflectance")
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -149,7 +150,7 @@ class TestSfmDunderMethods:
     def test_iter(self, base_sfm):
         for name, value in base_sfm.items():
             assert name in ("intensity", "rgb", "normals", "reflectance", "test")
-            assert isinstance(value, ScalarField)
+            assert isinstance(value, AbstractScalarField)
             assert value.shape[0] == N
 
     def test_contains(self, base_sfm):
@@ -176,7 +177,7 @@ class TestSfmDunderMethods:
     def test_setitem(self, base_sfm, invalid_size, scalar_field):
         original = base_sfm["intensity"].copy()
         base_sfm["intensity"] = scalar_field
-        assert np.all(base_sfm.intensity == scalar_field)
+        assert np.allclose(base_sfm.intensity.get_original_data(), scalar_field, atol=1/2**16)
         assert not np.allclose(base_sfm.intensity, original)
 
     def test_delitem(self, base_sfm):
@@ -209,7 +210,7 @@ class TestMutableMappingMethods:
     def test_values(self, base_sfm):
         assert len(base_sfm.values()) == 5
         for value in base_sfm.values():
-            assert isinstance(value, ScalarField)
+            assert isinstance(value, AbstractScalarField)
             assert value.shape[0] == N
 
     def test_items(self, base_sfm):
@@ -233,12 +234,12 @@ class TestNamedFieldPropertyGetters:
     def test_intensity_getter(self, base_sfm):
         assert hasattr(base_sfm, "intensity")
         assert np.all(base_sfm.intensity == base_sfm["intensity"])
-        assert base_sfm.intensity.dtype == np.float64
+        assert base_sfm.intensity.dtype == np.int16
 
     def test_reflectance_getter(self, base_sfm):
         assert hasattr(base_sfm, "reflectance")
         assert np.all(base_sfm.reflectance == base_sfm["reflectance"])
-        assert base_sfm.reflectance.dtype == np.float64
+        assert base_sfm.reflectance.dtype == np.int16
 
     def test_rgb_setter(self, empty_sfm):
         array = np.random.randint(0, 255, (N, 3), dtype=np.uint8)
@@ -257,17 +258,20 @@ class TestNamedFieldPropertyGetters:
     def test_intensity_setter(self, empty_sfm):
         array = np.random.rand(N)
         empty_sfm.intensity = array
+
+        assert np.all(empty_sfm.intensity != array)
         assert hasattr(empty_sfm, "intensity")
-        assert np.all(empty_sfm.intensity == array)
-        assert empty_sfm.intensity.dtype == np.float64
+        assert np.allclose(empty_sfm.intensity.get_original_data(), array, atol=1/2**16)
+        assert empty_sfm.intensity.dtype == np.int16
 
     def test_reflectance_setter(self, empty_sfm):
         array = np.random.rand(N)
         empty_sfm.reflectance = array
 
         assert hasattr(empty_sfm, "reflectance")
-        assert np.all(empty_sfm.reflectance == array)
-        assert empty_sfm.reflectance.dtype == np.float64
+        assert np.all(empty_sfm.reflectance != array)
+        assert np.allclose(empty_sfm.reflectance.get_original_data(), array, atol=1/2**16)
+        assert empty_sfm.reflectance.dtype == np.int16
 
 
 class TestShapeHelpers:

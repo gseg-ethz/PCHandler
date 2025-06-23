@@ -4,9 +4,8 @@ from abc import ABC, abstractmethod
 import numpy as np
 from joblib import Parallel, delayed, parallel_config
 
-from pchandler.v2.filters.spherical_coordinate_filters import FoVFilter
-
-from ..fov import FoV, FoVTree
+from ..filters.spherical_coordinate_filters import FoVFilter
+from ..geometry.fov import FoV, FoVTree
 from .core import PointCloudData
 
 logger = logging.getLogger(__name__.split(".")[0])

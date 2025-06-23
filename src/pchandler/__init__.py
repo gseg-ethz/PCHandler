@@ -122,17 +122,16 @@ This modular design ensures that `pchandler` is both extensible and scalable, ma
 applications in 3D data analysis, GIS, and computer vision.
 """
 
-__all__ = ["data_io", "fov", "geometry", "util"]
+__all__ = ["data_io", "geometry", "util", "__version__"]
 
 __author__ = "Nicholas Meyer"
 __email__ = "meyernic@ethz.ch"
 
 import logging
 
-from .v2 import data_io, fov, geometry, util
+from .v2 import data_io, geometry, util
 # TODO fix with versioning
-# from ._version import __version__
-# __all__ = ["data_io", "fov", "geometry", "util", "__version__"]
+from ._version import __version__
 
 logger = logging.getLogger(__name__.split(".")[0])
 

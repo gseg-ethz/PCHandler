@@ -9,7 +9,18 @@ TWO_PI = pi * 2
 
 RGB_FIELD = "rgb"
 NORMALS_FIELD = "normals"
-RGB_POTENTIAL_NAMES = ("r", "g", "b", "rgb", "bgr", "red", "green", "blue", "rgba")
-NORMAL_POTENTIAL_NAMES = ("normal", "normals", "normal_fields", "nx", "ny", "nz")
+INTENSITY_FIELD = "intensity"
+REFLECTANCE_FIELD = "reflectance"
+
+RGB_CHAR = ("r", "g", "b")
+RGB_WORD = ("red", "green", "blue")
+RGB_PARTIAL_NAMES = RGB_CHAR + RGB_WORD
+RGB_ALL_POTENTIAL_NAMES = (RGB_FIELD, "bgr", "rgba") + RGB_PARTIAL_NAMES
+NORMALS_CHAR = ("nx", "ny", "nz")
+NORMALS_WORD = ("normalx", "normaly", "normalz")
+NORMAL_PARTIAL_NAMES = NORMALS_CHAR + NORMALS_WORD
+NORMAL_POTENTIAL_NAMES = (NORMALS_FIELD, "normal", "normal_fields") + NORMAL_PARTIAL_NAMES
+INTENSITY_POTENTIAL_NAMES = (INTENSITY_FIELD, "intensities", "i")
+REFLECTANCE_POTENTIAL_NAMES = (REFLECTANCE_FIELD, )
 
 DEFAULT_CONFIG = ConfigDict(arbitrary_types_allowed=True)

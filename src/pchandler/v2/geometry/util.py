@@ -1,11 +1,16 @@
+from __future__ import annotations
+
 import logging
+from typing import TYPE_CHECKING
 
 import alphashape
 import numpy as np
+
 from shapely.affinity import scale, translate
 from shapely.geometry import MultiPolygon, Polygon
 
-from .core import PointCloudData
+if TYPE_CHECKING:
+    from .core import PointCloudData
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -80,3 +85,5 @@ def get_outline_polygon(pcd: PointCloudData, plane: str, alpha_value: float = 10
         als = translate(als, *gs)
 
     return als
+
+
