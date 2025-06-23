@@ -109,6 +109,10 @@ class CartesianCoordinates(Abstract3dCoordinates):
     def xyz(self) -> np.ndarray:
         return self.arr
 
+    @xyz.setter
+    def xyz(self, value: np.array):
+        self.arr = value
+
     @property
     def yxz(self) -> np.ndarray:
         return self.xyz[:, [1, 0, 2]]
