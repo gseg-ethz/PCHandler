@@ -89,18 +89,24 @@ class GenericFieldFilter(PointCloudFilter):
         self.field = field_label
         self.filter_func = filter_func
 
+    # TODO add cartesian_coordinates
     def mask(self, pcd: PointCloudData) -> NDArray[np.bool_]:
         """
         Retrieves the field data from the point cloud, applies the filter function,
         and returns the resulting boolean mask.
         """
-        if self.field == "spherical_coordinates":
-            _ = pcd.spherical_coordinates  # Ensure it's computed.
-            data = pcd.spherical_coordinates
+        if self.field == "cartesian_coordinates":
+            data = pcd.xyz
+        elif self.field == "spherical_coordinates":
+            data = pcd.spher
         elif self.field in pcd.scalar_fields:
-            data = pcd.scalar_fields[self.field].data
+            data = pcd.scalar_fields[self.field].arr
         elif hasattr(pcd, self.field):
             data = getattr(pcd, self.field)
         else:
             raise ValueError(f"Field '{self.field}' does not exist in the point cloud.")
+
+        if data is None:
+            raise ValueError(f"Field '{self.field}' does not exist in the point cloud.")
+
         return self.filter_func(data)

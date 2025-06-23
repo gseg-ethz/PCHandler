@@ -16,7 +16,7 @@ class SingletonMeta(type):
     _instances: ClassVar[dict[type, object]] = {}
     _lock: ClassVar[threading.RLock] = threading.RLock()
 
-    def __call__(cls, *args, **kwargs) -> object:
+    def __call__(cls, *args, **kwargs) -> Self:
         with cls._lock:
             if cls not in cls._instances:
                 cls._instances[cls] = super().__call__(*args, **kwargs)
@@ -37,6 +37,7 @@ class OptimizedShiftManager(metaclass=SingletonMeta):
     def register(self, shift: OptimizedShift) -> None:
         self._optimized_shifts.add(shift)
 
+    # FIXME: Has no usages?
     @staticmethod
     def new_shift() -> OptimizedShift:
         return OptimizedShift()
@@ -89,7 +90,7 @@ class OptimizedShift:
     _member_pcds_unshifted_bbox: weakref.WeakKeyDictionary["PointCloudData", MinMaxPoints]
 
     def __init__(self, optimal_shift: Optional[NDArray[np.floating] | Vector_3_T] = None) -> None:
-        self._optimal_shift = Vector_3_T(np.zeros(3)) if None else optimal_shift
+        self._optimal_shift = Vector_3_T(np.zeros(3)) if optimal_shift is None else optimal_shift
         self._member_pcds = weakref.WeakSet()
         self._member_pcds_unshifted_bbox = weakref.WeakKeyDictionary()
         OptimizedShiftManager().register(self)

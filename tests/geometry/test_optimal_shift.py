@@ -4,63 +4,182 @@ import numpy as np
 import pytest
 
 from pchandler.v2.geometry import PointCloudData
+from pchandler.v2.geometry.optimal_shift import OptimizedShiftManager, OptimizedShift
 
 # FIXME
 OSM_Manager = None
 
 
 def random_coordinates(scale: float, offset: float) -> np.ndarray:
-    xyz_base = np.random.randn(100, 3)
-    return xyz_base * scale + offset
+    xyz_base = np.random.randn(100, 3).astype(np.float32)
+    return (xyz_base * np.float32(scale) + np.float32(offset)).astype(np.float64)
 
-
-@pytest.fixture(scope="session", autouse=True)
-def small_coordinates(scale_small: float, offset_small: float) -> np.ndarray:
-    # this is to ensure the conversion resolves this but no shift applied
-    xyz_base = np.random.randn(100, 3).astype(np.float64)
-    return xyz_base * scale_small + offset_small
-
-
-@pytest.fixture(scope="session", autouse=True)
-def large_coordinates(scale_large, offset_large) -> np.ndarray:
-    xyz = random_coordinates(scale_large, offset_large)
-    assert np.min_scalar_type(xyz) == np.float64
-    return xyz
-
-
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="function", autouse=True)
 def scale_large() -> float:
     return float(2**33)
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="function", autouse=True)
 def scale_small() -> float:
     return float(10**3)
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="function", autouse=True)
 def offset_large() -> float:
     return float(2**49)
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="function", autouse=True)
 def offset_small() -> float:
     return float(10**3)
 
-
-def check_origin_exists(pcd: PointCloudData):
-    assert isinstance(pcd.spherical_coordinates_origin, np.ndarray) == True
-
-
-def check_global_shift_need(xyz, expected: bool):
-    assert PointCloudData._needs_global_shift(xyz) == expected
+@pytest.fixture(scope="function", autouse=True)
+def small_coordinates_no_shift(scale_small: float):
+    xyz = random_coordinates(scale_small, 0)
+    return xyz
 
 
-def check_global_shift_not_applied(pcd: PointCloudData):
-    assert pcd.global_coordinate_shift is None or (
-        isinstance(pcd.global_coordinate_shift, np.ndarray) and np.all(pcd.global_coordinate_shift == 0)
-    )
+@pytest.fixture(scope="function", autouse=True)
+def small_coordinates_shifted(scale_small: float, offset_small: float) -> np.ndarray:
+    # this is to ensure the conversion resolves this but no shift applied
+    xyz = random_coordinates(scale_small, offset_small)
+    return xyz
 
+
+@pytest.fixture(scope="function", autouse=True)
+def large_coordinates(scale_large, offset_large) -> np.ndarray:
+    xyz = random_coordinates(scale_large, offset_large)
+    return xyz
+
+
+# @pytest.fixture(scope="function", autouse=True)
+# def osm():
+#     return OptimizedShiftManager()
+
+
+def clear_instantiated_osm():
+    OptimizedShiftManager._instances = {}
+
+
+class TestOptimizedShift:
+    def test_class_attributes(self):
+        raise NotImplementedError
+
+    def test_initialisation(self):
+        raise NotImplementedError
+
+    def test_optimal_shift_property(self):
+        raise NotImplementedError
+
+    def test_register_method(self):
+        raise NotImplementedError
+
+    def test_can_add_without_change_method(self):
+        raise NotImplementedError
+
+    def test_add_member_method(self):
+        raise NotImplementedError
+
+    def test_expand_and_add_method(self):
+        raise NotImplementedError
+
+    def test_compute_shift_method(self):
+        raise NotImplementedError
+
+    def test_apply_shift_delta_method(self):
+        raise NotImplementedError
+
+    def test_restart_or_fail_method(self):
+        raise NotImplementedError
+
+    class TestMinMaxPoints:
+        def test_class_attributes(self):
+            min_max_pts = OptimizedShift.MinMaxPoints(np.zeros(3), np.ones(3))
+            assert hasattr(min_max_pts, 'minimum')
+            assert hasattr(min_max_pts, 'maximum')
+            assert np.all(min_max_pts.minimum, 0)
+            assert np.all(min_max_pts.maximum, 1)
+
+        def test_from_points_method(self):
+            raise NotImplementedError
+
+        def test_from_minmax_points_method(self):
+            raise NotImplementedError
+
+        def test_central_point_property(self):
+            raise NotImplementedError
+
+        def test_extents_property(self):
+            raise NotImplementedError
+
+
+
+class TestOptimizedShiftManager:
+    def test_custom_error(self):
+        # Implement when ready
+        with pytest.raises(OptimizedShiftManager.ShiftNotFeasibleError):
+            raise NotImplementedError
+
+
+    def test_class_variables(self):
+        osm = OptimizedShiftManager()
+        for name in ('_optimized_shifts', '_maximum_decimal_places'):
+            assert hasattr(osm, name)
+
+        clear_instantiated_osm()
+
+    def test_has_class_methods(self):
+        for name in (
+                'register', 'new_shift', 'all_shifts', 'maximum_decimal_places', 'is_shift_needed', 'is_shift_possible'
+        ):
+            assert hasattr(OptimizedShiftManager, name)
+
+        clear_instantiated_osm()
+
+    def test_empty_initialisation(self):
+        osm = OptimizedShiftManager()
+        assert isinstance(osm, OptimizedShiftManager)
+        assert len(osm._optimized_shifts) == 0
+        assert osm._maximum_decimal_places == 4
+
+        osm: OptimizedShiftManager = OptimizedShiftManager(5)
+        assert osm.maximum_decimal_places != 5
+
+        clear_instantiated_osm()
+
+    def test_maximal_decimal_initialisation(self):
+        osm_ = OptimizedShiftManager(maximum_decimal_places=10)
+        assert osm_._maximum_decimal_places == 10
+
+        clear_instantiated_osm()
+
+    def test_singleton(self):
+        osm = OptimizedShiftManager()
+        osm2 = OptimizedShiftManager(5)
+        osm3 = OptimizedShiftManager(6)
+        assert id(osm) == id(osm2)
+        assert id(osm) == id(osm3)
+
+        assert osm.maximum_decimal_places == 4
+
+        clear_instantiated_osm()
+
+
+class TestPracticalUsage:
+    def test_no_shift_required(self):
+        raise NotImplementedError
+
+    def test_single_pcd_shift_required(self):
+        raise NotImplementedError
+
+    def test_multiple_pcd_single_shift(self):
+        raise NotImplementedError
+
+    def test_multiple_pcd_multiple_shifts(self):
+        raise NotImplementedError
+
+    def test_no_shift_possible(self):
+        raise NotImplementedError
 
 def check_global_shift_applied(pcd: PointCloudData):
     assert pcd.global_coordinate_shift is not None
