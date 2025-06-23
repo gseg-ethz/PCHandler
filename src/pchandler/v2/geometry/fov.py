@@ -79,8 +79,8 @@ import numpy as np
 import numpy.typing as npt
 from pydantic import Field
 
-from v2.constants import EPS, TWO_PI, PI, HALF_PI
-from v2.util import AngleUnit, convert_angles
+from ..constants import EPS, TWO_PI, PI, HALF_PI
+from ..util import AngleUnit, convert_angles
 
 if TYPE_CHECKING:
     from .coordinates import SphericalCoordinates, CartesianCoordinates
@@ -117,21 +117,17 @@ class FoV(NamedTuple):
                    top=coordinates.v.min(),
                    bottom=coordinates.v.max())
 
-    @property
     def width(self) -> HzAngleT:
         if self.crosses_pi:
             return TWO_PI - (self.right - self.left)
         return self.left - self.right
 
-    @property
     def height(self) -> ElevAngleT:
         return self.bottom - self.top
 
-    @property
     def extent(self) -> tuple[HzAngleT, ElevAngleT]:
-        return self.width, self.height
+        return self.width(), self.height()
 
-    @property
     def center(self) -> tuple[HzAngleT, ElevAngleT]:
         horizontal_center = (self.left + self.right) / 2
         elevation_center = (self.top + self.bottom) / 2
@@ -211,7 +207,7 @@ class FoV(NamedTuple):
         float
             The aspect ratio (width/height) of the FoV.
         """
-        return self.extent[0] / self.extent[1]
+        return self.extent()[0] / self.extent()[1]
 
     def __repr__(self):
         return (
@@ -221,7 +217,7 @@ class FoV(NamedTuple):
 
     def extend_to_ratio(self, ratio: float) -> Self:
         if self.ratio() - ratio > EPS:
-            target_vertical_extent = self.extent[0] / ratio
+            target_vertical_extent = self.extent()[0] / ratio
             new_fov = FoV(
                 left=self.left,
                 top=self.top,
@@ -229,7 +225,7 @@ class FoV(NamedTuple):
                 bottom=self.bottom + target_vertical_extent,
             )
         elif ratio - self.ratio() > EPS:
-            target_horizontal_extent = self.extent[1] * ratio
+            target_horizontal_extent = self.extent()[1] * ratio
             new_fov = FoV(
                 left=self.left,
                 top=self.top,
@@ -260,14 +256,14 @@ class FoV(NamedTuple):
             return [self]
 
         horizontal_borders = np.linspace(
-            start=self.left, stop=self.right, num=shape[0] + 1, endpoint=True, retstep=False
+            start=self.right, stop=self.left, num=shape[0] + 1, endpoint=True, retstep=False
         )
         elevation_borders = np.linspace(
             start=self.top, stop=self.bottom, num=shape[1] + 1, endpoint=True, retstep=False
         )
 
         fov_splits = [
-            FoV(horizontal_min=hor_min, elevation_min=elev_min, horizontal_max=hor_max, elevation_max=elev_max)
+            FoV(right=hor_min, top=elev_min, left=hor_max, bottom=elev_max)
             for hor_min, hor_max in zip(horizontal_borders[:-1], horizontal_borders[1:])
             for elev_min, elev_max in zip(elevation_borders[:-1], elevation_borders[1:])
         ]
@@ -308,10 +304,10 @@ class FoV(NamedTuple):
                 if elev_bin[-1] - elev_bin[0] <= 0:
                     continue
                 new_fov = FoV(
-                    horizontal_min=hor_bin[0],
-                    elevation_min=elev_bin[0],
-                    horizontal_max=hor_bin[1],
-                    elevation_max=elev_bin[1],
+                    right=hor_bin[0],
+                    top=elev_bin[0],
+                    left=hor_bin[1],
+                    bottom=elev_bin[1],
                 )
                 if all(e > EPS for e in new_fov.extent()):
                     horizontal_tiles.append(new_fov)
@@ -346,11 +342,11 @@ class FoV(NamedTuple):
         return self.left
 
     @property
-    def vertical_min(self):
+    def elevation_min(self):
         return self.top
 
     @property
-    def vertical_max(self):
+    def elevation_max(self):
         return self.bottom
 
 @dataclass(init=False, frozen=True)

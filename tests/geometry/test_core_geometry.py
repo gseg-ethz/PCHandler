@@ -231,12 +231,12 @@ class TestPointCloudData:
         def test_intensity_getter(self, pcd):
             assert isinstance(pcd.intensity, ScalarField)
             assert pcd.intensity.ndim == 1
-            assert pcd.intensity.dtype == np.float64
+            assert pcd.intensity.dtype == np.int16
 
         def test_reflectance_getter(self, pcd):
             assert isinstance(pcd.reflectance, ScalarField)
             assert pcd.reflectance.ndim == 1
-            assert pcd.reflectance.dtype == np.float64
+            assert pcd.reflectance.dtype == np.int16
 
         def test_rgb_setter(self, pcd):
             new_data = np.random.randint(0, 255, (N, 3), dtype=np.uint8)
@@ -259,16 +259,16 @@ class TestPointCloudData:
             pcd.intensity = new_data
             assert isinstance(pcd.intensity, ScalarField)
             assert pcd.intensity.ndim == 1
-            assert pcd.intensity.dtype == np.float64
-            assert np.all(pcd.intensity == new_data)
+            assert pcd.intensity.dtype == np.int16
+            assert np.allclose(pcd.intensity.get_original_data(), new_data, atol=1/2**16)
 
         def test_reflectance_setter(self, pcd):
             new_data = np.random.rand(N)
             pcd.reflectance = new_data
             assert isinstance(pcd.reflectance, ScalarField)
             assert pcd.reflectance.ndim == 1
-            assert pcd.reflectance.dtype == np.float64
-            assert np.all(pcd.reflectance == new_data)
+            assert pcd.reflectance.dtype == np.int16
+            assert np.allclose(pcd.reflectance.get_original_data(), new_data, atol=1/2**16)
 
         def test_sf_input_as_scalar_fields(self, xyz_, rgb_, normals_):
             scalar_fields = ScalarFieldManager()

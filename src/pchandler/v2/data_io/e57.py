@@ -1,22 +1,12 @@
 from pathlib import Path
 from typing import Unpack, NotRequired, Generator, Optional
 import logging
-from datetime import datetime
 
 import numpy as np
-import laspy
 import pye57
 
 from .core import AbstractIOHandler, _BaseLoadConfigType, _BaseSaveConfigType, BaseSaveConfig, BaseLoadConfig
 from ..geometry import PointCloudData
-from ..constants import (
-    RGB_FIELD,
-    NORMALS_FIELD,
-    INTENSITY_FIELD,
-    REFLECTANCE_FIELD,
-    RGB_WORD,
-    NORMAL_PARTIAL_NAMES
-)
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -66,7 +56,7 @@ class E57Handler(AbstractIOHandler):
 
     @classmethod
     def save(cls, /, pcd: PointCloudData, path: str | Path, **config: Unpack[_E57SaveConfigType]):
-        pass
+        raise NotImplementedError
 
     @classmethod
     def _load_all_e57_scans(cls, pcd_path: Path, **config: Unpack[_E57LoadConfigType]) -> Generator[PointCloudData, None, None]:
@@ -102,7 +92,7 @@ class E57Handler(AbstractIOHandler):
         if "reflectance" in data:
             pcd.reflectance = data["reflectance"]
 
-        # TODO investigate file format to fin other fields
+        # TODO study file format to find other key parameters for functions
 
         e57.close()
         logger.info(f"Successfully loaded scan {pcd_index} from E57 file: {pcd_path}")

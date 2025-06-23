@@ -156,25 +156,13 @@ class AbstractIOHandler(ABC):
                               num_points: int,
                               field_names: set[str]) -> None:
 
-        if cfg.keep_rgb:
-            if rgb_names := cls._get_rgb_field_names(field_names):
-                pcd.rgb = cls.extract_rgb(data, num_points, rgb_names)
-                cls.remove_field_names(field_names, *rgb_names)
-
-        if cfg.keep_normals:
-            if normal_names := cls._get_normals_field_names(field_names):
-                pcd.normals = cls.extract_normals(data, num_points, normal_names)
-                cls.remove_field_names(field_names, *normal_names)
-
-        if cfg.keep_intensity:
-            if intensity_names := cls._get_intensity_field_names(field_names):
-                pcd.intensity = cls.extract_intensity(data)
-                cls.remove_field_names(field_names, *intensity_names)
-
-        if cfg.keep_reflectance:
-            if reflectance_names := cls._get_reflectance_field_names(field_names):
-                pcd.reflectance = cls.extract_reflectance(data)
-                cls.remove_field_names(field_names, *reflectance_names)
+        for name in ('rgb', 'normals', 'intensity', 'reflectance'):
+            if getattr(cfg, f'keep_{name}'):
+                if current_field_names := getattr(cls, f"_get_{name}_field_names")(field_names):
+                    if name in ('normals', 'rgb'):
+                        setattr(pcd, name, getattr(cls, f"extract_{name}")(data, num_points, current_field_names))
+                    else:
+                        setattr(pcd, name, getattr(cls, f"extract_{name}")(data))
 
     @classmethod
     def extract_extra_fields(cls, pcd: PointCloudData, data: BaseDataT, cfg: BaseLoadConfig, field_names: set[str]):
@@ -236,6 +224,8 @@ class AbstractIOHandler(ABC):
 
         pcd_scalar_fields = set(pcd.scalar_fields.keys()).difference(
             {RGB_FIELD, NORMALS_FIELD, INTENSITY_FIELD, REFLECTANCE_FIELD})
+
+        # TODO try to fix this and make more concise
 
         if cfg.keep_rgb and pcd.rgb is not None:
             dtype_list.extend(

@@ -86,7 +86,7 @@ class PointCloudData(CartesianCoordinates):
             optimized_shift = optimized_shift,
             socs_origin = socs_origin,
             project_transformation = project_transformation,
-            transform_ledger = transform_ledger if transform_ledger is not None else TransformLedger(),
+            transform_ledger = transform_ledger if transform_ledger else TransformLedger(),
         )
 
 
