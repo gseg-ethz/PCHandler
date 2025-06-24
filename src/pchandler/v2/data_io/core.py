@@ -262,11 +262,17 @@ class AbstractIOHandler(ABC):
         dtype_list, extra_fields = cls.generate_struct_dtype(pcd, cfg)
         array = np.empty((len(pcd),), dtype=dtype_list)
 
-        shift = pcd.optimized_shift.optimal_shift
+        if pcd.optimized_shift:
+            shift = pcd.optimized_shift.optimal_shift
 
-        array["x"] = pcd.x + shift[0] if pcd.optimized_shift else pcd.x
-        array["y"] = pcd.y + shift[1] if pcd.optimized_shift else pcd.y
-        array["z"] = pcd.z + shift[2] if pcd.optimized_shift else pcd.z
+            array["x"] = pcd.x + shift[0]
+            array["y"] = pcd.y + shift[1]
+            array["z"] = pcd.z + shift[2]
+        else:
+            array["x"] = pcd.x
+            array["y"] = pcd.y
+            array["z"] = pcd.z
+
 
         if cfg.keep_rgb and (pcd.rgb is not None):
             rgb = pcd.rgb.get_original_data() if cfg.revert_sf_types else pcd.rgb
