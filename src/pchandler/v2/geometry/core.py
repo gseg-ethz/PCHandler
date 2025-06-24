@@ -18,7 +18,6 @@ from .transforms import Transform, TransformLedger
 # TODO check for a better converter - TypeAdapter?
 
 class PointCloudData(CartesianCoordinates):
-    arr: Array_Nx3_T = Field(alias="xyz")
     transform_ledger: Annotated[
         TransformLedger[str, [Transform]],
         Field(default_factory=TransformLedger),

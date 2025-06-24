@@ -8,7 +8,7 @@ from pchandler.v2.data_io.e57 import E57Handler
 
 
 class TestE57Handler:
-    file_1 = Path(r"D:\Python\pchandler\tests\data\test_target.e57")
+    file_1 = Path(r"D:\Python\pchandler\tests\data\test_target_intensity_normals_rgb.e57")
 
     def test_load(self):
         pcd = E57Handler.load(self.file_1)

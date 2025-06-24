@@ -16,6 +16,7 @@ from ..constants import (
     RGB_PARTIAL_NAMES,
     RGB_CHAR,
     RGB_WORD,
+    RGB_FLOAT,
     NORMALS_CHAR,
     NORMALS_WORD,
     NORMAL_PARTIAL_NAMES,
@@ -300,6 +301,9 @@ class AbstractIOHandler(ABC):
 
         elif rgb_names == set(RGB_WORD):
             return list(RGB_WORD)
+
+        elif rgb_names == set(RGB_FLOAT):
+            return list(RGB_FLOAT)
 
         else:
             logger.warning(f"No full set of {RGB_CHAR} or {RGB_WORD} fields were found.\nOnly :{field_names=}")

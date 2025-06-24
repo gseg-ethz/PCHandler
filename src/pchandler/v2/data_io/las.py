@@ -109,9 +109,9 @@ class LasHandler(AbstractIOHandler):
             las.intensity = pcd.intensity
 
         if config.keep_rgb and pcd.rgb:
-            las.red = pcd.r
-            las.green = pcd.g
-            las.blue = pcd.b
+            las.red = pcd.rgb.r
+            las.green = pcd.rgb.g
+            las.blue = pcd.rgb.b
 
         if config.keep_normals and pcd.normals:
             for val in ('nx', 'ny', 'nz'):

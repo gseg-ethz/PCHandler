@@ -12,9 +12,10 @@ NORMALS_FIELD = "normals"
 INTENSITY_FIELD = "intensity"
 REFLECTANCE_FIELD = "reflectance"
 
+RGB_FLOAT = ("rf", "gf", "bf")
 RGB_CHAR = ("r", "g", "b")
 RGB_WORD = ("red", "green", "blue")
-RGB_PARTIAL_NAMES = RGB_CHAR + RGB_WORD
+RGB_PARTIAL_NAMES = RGB_CHAR + RGB_WORD + RGB_FLOAT
 RGB_ALL_POTENTIAL_NAMES = (RGB_FIELD, "bgr", "rgba") + RGB_PARTIAL_NAMES
 NORMALS_CHAR = ("nx", "ny", "nz")
 NORMALS_WORD = ("normalx", "normaly", "normalz")

@@ -7,14 +7,15 @@ import numpy as np
 from pchandler.v2.data_io.las import LasHandler
 
 
-class TestCsvHandler:
-    rgb_file = Path(r"D:\Python\pchandler\tests\data\test_target_intensity.las")
+class TestLasHandler:
+    rgb_file = Path(r"D:\Python\pchandler\tests\data\test_target_intensity_normals_rgb.las")
 
     def test_load(self):
         pcd = LasHandler.load(self.rgb_file)
         assert len(pcd) == 43577
         assert 'intensity' in pcd.scalar_fields
         assert 'normals' in pcd.scalar_fields
+        assert 'rgb' in pcd.scalar_fields
 
     def test_save(self):
         out_path = Path(r"D:\Python\pchandler\tests\data\test_target_rgb_temp.las")

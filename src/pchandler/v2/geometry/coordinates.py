@@ -88,7 +88,7 @@ class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates):
 
 
 class CartesianCoordinates(Abstract3dCoordinates):
-    arr: Array_Nx3_T
+    arr: Array_Nx3_T = Field(alias="xyz")
 
     @property
     def x(self) -> np.ndarray:
@@ -243,8 +243,9 @@ def rhv2xyz(spher: npt.ArrayLike, origin_shift: Vector_3_T | None = None) -> np.
     return xyz if origin_shift is None else xyz - origin_shift
 
 
+# TODO fix this to support the optimal shifts (e.g. remove origin shift)
 @validate_call(config=DEFAULT_CONFIG)
-def xyz2rhv(cart: npt.ArrayLike, origin_shift: Vector_3_T = np.zeros(3)) -> np.ndarray:
+def xyz2rhv(cart: npt.ArrayLike, origin_shift: Optional[Vector_3_T] = np.zeros(3)) -> np.ndarray:
     spher: np.ndarray = np.zeros_like(cart)
 
     # Apply the shift in place to avoid creating additional copies

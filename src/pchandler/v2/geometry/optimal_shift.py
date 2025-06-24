@@ -37,6 +37,9 @@ class OptimizedShiftManager(metaclass=SingletonMeta):
     def register(self, shift: OptimizedShift) -> None:
         self._optimized_shifts.add(shift)
 
+    def __len__(self):
+        return len(self._optimized_shifts)
+
     # FIXME: Has no usages?
     @staticmethod
     def new_shift() -> OptimizedShift:
@@ -54,10 +57,10 @@ class OptimizedShiftManager(metaclass=SingletonMeta):
     def maximum_decimal_places(self, maximum_decimal_places: int) -> None:
         pass # Todo: Should probably check all registered GlobalShifts and their pcds if they conform to new limit
 
-    def is_shift_needed(self, values: NDArray[np.floating] | Array_Nx3_T | "PointCloudData") -> bool:
+    def is_shift_needed(self, values: NDArray[np.floating] | Array_Nx3_T | PointCloudData) -> bool:
         return np.any(np.abs(values) >= 10 ** self._maximum_decimal_places)
 
-    def is_shift_possible(self, values: NDArray[np.floating] | Array_Nx3_T | "PointCloudData") -> bool:
+    def is_shift_possible(self, values: NDArray[np.floating] | Array_Nx3_T | PointCloudData) -> bool:
         return np.all(np.subtract(np.max(values, axis=0), np.min(values, axis=0)) < 10 ** self._maximum_decimal_places)
 
 class OptimizedShift:
