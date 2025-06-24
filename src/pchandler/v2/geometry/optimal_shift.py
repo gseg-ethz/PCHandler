@@ -6,10 +6,12 @@ from typing import TYPE_CHECKING, ClassVar, Self, Literal, NamedTuple, cast, Ite
 
 import numpy as np
 from numpy.typing import NDArray
+from pydantic import validate_call
 
 if TYPE_CHECKING:
     from .core import PointCloudData
 
+from ..constants import DEFAULT_CONFIG
 from ..base_types import Vector_3_T, Array_Nx3_T
 
 class SingletonMeta(type):
@@ -82,11 +84,11 @@ class OptimizedShift:
 
         @property
         def central_point(self) -> Vector_3_T:
-            return Vector_3_T(np.mean(np.vstack((self.minimum, self.maximum)), axis=0))
+            return np.mean(np.vstack((self.minimum, self.maximum)), axis=0)
 
         @property
         def extents(self) -> Vector_3_T:
-            return Vector_3_T(np.subtract((self.maximum, self.minimum)), axis=0)
+            return self.maximum - self.minimum
 
     _optimal_shift: Vector_3_T
     _member_pcds: weakref.WeakSet["PointCloudData"]
@@ -97,6 +99,9 @@ class OptimizedShift:
         self._member_pcds = weakref.WeakSet()
         self._member_pcds_unshifted_bbox = weakref.WeakKeyDictionary()
         OptimizedShiftManager().register(self)
+
+    def __len__(self):
+        return len(self._member_pcds)
 
     @property
     def optimal_shift(self) -> NDArray[np.float64]:
@@ -118,7 +123,6 @@ class OptimizedShift:
         except OptimizedShiftManager.ShiftNotFeasibleError:
             return self._restart_or_fail(pcd, points)
 
-
     def _can_add_without_change(self, pts: Array_Nx3_T) -> bool:
         shifted = np.subtract(pts, self._optimal_shift)
         return not OptimizedShiftManager().is_shift_needed(shifted)
@@ -139,7 +143,7 @@ class OptimizedShift:
         self._optimal_shift = new_shift
         return self._add_member(pcd, pts)
 
-    def _compute_new_shift(self, pts) -> Vector_3_T:
+    def _compute_new_shift(self, pts: Array_Nx3_T) -> Vector_3_T:
         # build up the combined bounding‐box
         all_boxes = list(self._member_pcds_unshifted_bbox.values())
         all_boxes.append(OptimizedShift.MinMaxPoints.from_points(pts))
@@ -149,7 +153,7 @@ class OptimizedShift:
             raise OptimizedShiftManager.ShiftNotFeasibleError()
 
         # round the center to keep ints
-        return Vector_3_T(np.round(combined.central_point, decimals=-(OptimizedShiftManager().maximum_decimal_places- 1)))
+        return Vector_3_T(np.round(combined.central_point, decimals=-(OptimizedShiftManager().maximum_decimal_places)-1))
 
     def _apply_shift_delta(self, new_shift):
         """Move every registered PCD by the change from old→new shift."""

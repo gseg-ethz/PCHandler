@@ -108,6 +108,8 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
     @xyz.setter
     def xyz(self, value: np.array):
+        # if self.model_config['frozen']:
+        #     raise ValueError('Cannot edit XYZ coordinates of frozen object')
         self.arr = value
 
     @property

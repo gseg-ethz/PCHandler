@@ -34,7 +34,7 @@ class PointCloudData(CartesianCoordinates):
         normals: Optional[npt.NDArray[Any, np.float32] | NormalFields] = None,
         intensity: Optional[npt.NDArray | ScalarField] = None,
         reflectance: Optional[npt.NDArray | ScalarField] = None,
-        optimized_shift: OptimizedShift | ellipsis | None = Ellipsis,
+        optimized_shift: Optional[OptimizedShift | ellipsis] = Ellipsis,
         socs_origin: Optional[np.ndarray] = None,
         scalar_fields: Optional[ScalarFieldManager | dict] = None,
         project_transformation: Optional[Array_4x4_T] = None,
@@ -66,18 +66,14 @@ class PointCloudData(CartesianCoordinates):
         # if transform_ledger is not None:
         #     kwargs['transform_ledger'] = TransformLedger()
 
-        if optimized_shift is Ellipsis:
-            optimized_shift = OptimizedShift(np.zeros(3, dtype=np.float32))
-
-        if optimized_shift is not None:
-            optimized_shift = optimized_shift.register(self, xyz)
-
-        xyz = xyz - optimized_shift.optimal_shift if optimized_shift is not None else xyz
 
         # TODO Add an easy accessor to the original point cloud data (e.g. at_socs)
 
         # TODO Propagate this through to scalar_fields (ScalarField should set this if the parent has it)
         self.model_config["frozen"] = frozen
+
+        if optimized_shift is Ellipsis:
+            optimized_shift = OptimizedShift(np.zeros(3, dtype=np.float32))
 
         super().__init__(
             xyz=xyz,
@@ -87,6 +83,14 @@ class PointCloudData(CartesianCoordinates):
             project_transformation = project_transformation,
             transform_ledger = transform_ledger if transform_ledger else TransformLedger(),
         )
+
+        if optimized_shift is not None:
+            optimized_shift = optimized_shift.register(self, xyz)
+
+        if optimized_shift:
+            self.update_shift(optimized_shift.optimal_shift)
+
+        self.optimized_shift = optimized_shift
 
 
     def __hash__(self) -> int:
