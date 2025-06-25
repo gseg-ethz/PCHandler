@@ -25,8 +25,8 @@ class BoxFilter(PointCloudFilter):
             raise ValueError(f"Cannot create box filter where minimum corner is greater than the maximum corner"
                              f"\n {minimum=} vs {maximum=}")
 
-        self.minimum = Vector_3_T(minimum)
-        self.maximum = Vector_3_T(maximum)
+        self.minimum: np.ndarray = Vector_3_T(minimum)
+        self.maximum: np.ndarray = Vector_3_T(maximum)
 
     @property
     def extents(self) -> Vector_3_T:
@@ -48,14 +48,17 @@ class BoxFilter(PointCloudFilter):
 
 class SphereFilter(PointCloudFilter):
     def __init__(self, sphere_center: Vector_3_T, radius: PositiveFloat):
-        self.sphere_center = Vector_3_T(sphere_center)
-        self.radius = radius
+        self.sphere_center: np.ndarray = Vector_3_T(sphere_center)
+        self.radius: float = float(abs(radius))
+
+        if not isinstance(radius, float):
+            raise TypeError(f"Input radius must be a numeric type. Not of type {type(self.radius)}")
 
     def mask(self, pcd: PointCloudData) -> NDArray[np.bool_]:
         point = (
             self.sphere_center
             if pcd.optimized_shift is None
-            else self.sphere_center - pcd.optimized_shift
+            else self.sphere_center - pcd.optimized_shift.optimal_shift
         )
 
         distances_to_point: np.ndarray = np.linalg.norm(pcd.xyz - point, axis=1)
@@ -63,15 +66,16 @@ class SphereFilter(PointCloudFilter):
 
 
 class PolygonFilter(PointCloudFilter):
-    @validate_call(config=DEFAULT_CONFIG)
     def __init__(self, polygon: Polygon, plane: str = "xy"):
         # TODO check if function should be able to clip along a normal direction
 
-        if plane not in ['nx', 'ny', 'nz']:
+        polygon = Polygon(polygon)
+
+        if plane not in ['xy', 'xz', 'yz']:
             raise ValueError(f"plane value string or normal vector does not exist")
 
-        self.polygon = polygon
-        self.plane = plane
+        self.polygon: Polygon = polygon
+        self.plane: str = plane
 
     def mask(self, pcd: PointCloudData) -> NDArray[np.bool_]:
         if self.plane == "xy":
