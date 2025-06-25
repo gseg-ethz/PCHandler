@@ -1,6 +1,7 @@
 import pytest
 
 from shapely.geometry import box
+from pydantic import ValidationError
 
 from pchandler.v2.filters.cartesian_filters import *
 
@@ -62,7 +63,7 @@ class TestSphereFilter:
         with pytest.raises(ValueError):
             SphereFilter(np.array([0, 1, 1, 1]), 1.2)
 
-        with pytest.raises(TypeError):
+        with pytest.raises(ValidationError):
             SphereFilter(np.array([0, 1, 1]), "Fasb")
 
     @pytest.mark.parametrize('kwargs', ({}, {'optimized_shift': None}))
@@ -87,7 +88,7 @@ class TestPolygonFilter:
         with pytest.raises(ValueError):
             PolygonFilter(box(0, 0, 1, 1), 'zzz')
 
-        with pytest.raises(ValueError):
+        with pytest.raises(ValidationError):
             PolygonFilter('asdsa', 'xy')
 
 

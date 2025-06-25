@@ -1,5 +1,5 @@
 import logging
-from typing import Tuple
+from typing import Tuple, Annotated, Literal
 
 import numpy as np
 from numpy.typing import NDArray
@@ -7,7 +7,7 @@ from shapely import contains_xy
 from shapely.affinity import translate
 from shapely.geometry import Polygon
 
-from pydantic import PositiveFloat, validate_call
+from pydantic import PositiveFloat, BeforeValidator, model_validator
 
 from ..constants import DEFAULT_CONFIG
 
@@ -19,14 +19,21 @@ from ..base_types import Array_Nx3_T, Vector_3_T
 logger = logging.getLogger(__name__.split(".")[0])
 
 
-class BoxFilter(PointCloudFilter):
-    def __init__(self, minimum: Vector_3_T, maximum: Vector_3_T):
-        if np.any(minimum >= maximum):
-            raise ValueError(f"Cannot create box filter where minimum corner is greater than the maximum corner"
-                             f"\n {minimum=} vs {maximum=}")
+PlaneStrings = Literal["xy", "xz", "yz"]
 
-        self.minimum: np.ndarray = Vector_3_T(minimum)
-        self.maximum: np.ndarray = Vector_3_T(maximum)
+
+class BoxFilter(PointCloudFilter):
+    minimum: Vector_3_T
+    maximum: Vector_3_T
+
+    def __init__(self, minimum, maximum):
+        super().__init__(minimum=minimum, maximum=maximum)
+
+    @model_validator(mode="after")
+    def post_validation(self):
+        if np.any(self.minimum >= self.maximum):
+            raise ValueError(f"Cannot create box filter where minimum corner is greater than the maximum corner"
+                             f"\n {self.minimum=} vs {self.maximum=}")
 
     @property
     def extents(self) -> Vector_3_T:
@@ -47,12 +54,11 @@ class BoxFilter(PointCloudFilter):
 
 
 class SphereFilter(PointCloudFilter):
-    def __init__(self, sphere_center: Vector_3_T, radius: PositiveFloat):
-        self.sphere_center: np.ndarray = Vector_3_T(sphere_center)
-        self.radius: float = float(abs(radius))
+    sphere_center: Vector_3_T
+    radius: PositiveFloat
 
-        if not isinstance(radius, float):
-            raise TypeError(f"Input radius must be a numeric type. Not of type {type(self.radius)}")
+    def __init__(self, sphere_center, radius):
+        super().__init__(sphere_center=sphere_center, radius=radius)
 
     def mask(self, pcd: PointCloudData) -> NDArray[np.bool_]:
         point = (
@@ -66,16 +72,11 @@ class SphereFilter(PointCloudFilter):
 
 
 class PolygonFilter(PointCloudFilter):
+    polygon: Annotated[Polygon, BeforeValidator(lambda x: Polygon(x))]
+    plane: PlaneStrings
+
     def __init__(self, polygon: Polygon, plane: str = "xy"):
-        # TODO check if function should be able to clip along a normal direction
-
-        polygon = Polygon(polygon)
-
-        if plane not in ['xy', 'xz', 'yz']:
-            raise ValueError(f"plane value string or normal vector does not exist")
-
-        self.polygon: Polygon = polygon
-        self.plane: str = plane
+        super().__init__(polygon=polygon, plane=plane)
 
     def mask(self, pcd: PointCloudData) -> NDArray[np.bool_]:
         if self.plane == "xy":

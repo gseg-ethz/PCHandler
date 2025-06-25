@@ -24,4 +24,4 @@ NORMAL_POTENTIAL_NAMES = (NORMALS_FIELD, "normal", "normal_fields") + NORMAL_PAR
 INTENSITY_POTENTIAL_NAMES = (INTENSITY_FIELD, "intensities", "i")
 REFLECTANCE_POTENTIAL_NAMES = (REFLECTANCE_FIELD, )
 
-DEFAULT_CONFIG = ConfigDict(arbitrary_types_allowed=True)
+DEFAULT_CONFIG = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True)

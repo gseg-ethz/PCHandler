@@ -4,13 +4,16 @@ from typing import Callable
 
 import numpy as np
 from numpy.typing import NDArray
+from pydantic import BaseModel
 
-from pchandler.v2.geometry.core import PointCloudData
+from ..constants import DEFAULT_CONFIG
+from ..geometry.core import PointCloudData
 
 logger = logging.getLogger(__name__.split(".")[0])
 
 
-class PointCloudFilter(ABC):
+class PointCloudFilter(ABC, BaseModel):
+    model_config = DEFAULT_CONFIG
     """
     Abstract base class for filters on a PointCloudData.
 
@@ -78,35 +81,34 @@ class GenericFieldFilter(PointCloudFilter):
     """
     A generic filter that uses a user-supplied function to generate a mask
     from a given field.
+
+    Parameters:
+        field_label: The field (attribute or scalar field key) on which to operate.
+        filter_func: A callable that takes the field data and returns a boolean mask.
     """
+    field_label: str
+    filter_func: Callable
 
-    def __init__(self, field_label: str, filter_func: Callable):
-        """
-        Parameters:
-            field_label: The field (attribute or scalar field key) on which to operate.
-            filter_func: A callable that takes the field data and returns a boolean mask.
-        """
-        self.field = field_label
-        self.filter_func = filter_func
+    def __init__(self, field_label, filter_func):
+        super().__init__(field_label=field_label, filter_func=filter_func)
 
-    # TODO add cartesian_coordinates
     def mask(self, pcd: PointCloudData) -> NDArray[np.bool_]:
         """
         Retrieves the field data from the point cloud, applies the filter function,
         and returns the resulting boolean mask.
         """
-        if self.field == "cartesian_coordinates":
+        if self.field_label == "cartesian_coordinates":
             data = pcd.xyz
-        elif self.field == "spherical_coordinates":
+        elif self.field_label == "spherical_coordinates":
             data = pcd.spher
-        elif self.field in pcd.scalar_fields:
-            data = pcd.scalar_fields[self.field].arr
-        elif hasattr(pcd, self.field):
-            data = getattr(pcd, self.field)
+        elif self.field_label in pcd.scalar_fields:
+            data = pcd.scalar_fields[self.field_label].arr
+        elif hasattr(pcd, self.field_label):
+            data = getattr(pcd, self.field_label)
         else:
-            raise ValueError(f"Field '{self.field}' does not exist in the point cloud.")
+            raise ValueError(f"Field '{self.field_label}' does not exist in the point cloud.")
 
         if data is None:
-            raise ValueError(f"Field '{self.field}' does not exist in the point cloud.")
+            raise ValueError(f"Field '{self.field_label}' does not exist in the point cloud.")
 
         return self.filter_func(data)
