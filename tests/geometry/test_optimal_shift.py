@@ -6,6 +6,7 @@ import pytest
 from pchandler.v2.geometry.coordinates import CartesianCoordinates
 from pchandler.v2.geometry import PointCloudData
 from pchandler.v2.geometry.optimal_shift import OptimizedShiftManager, OptimizedShift
+from pchandler.v2.geometry.util import MinMaxPoints
 
 # FIXME
 OSM_Manager = None
@@ -192,7 +193,7 @@ class TestOptimizedShift:
 
     class TestMinMaxPoints:
         def test_class_attributes(self):
-            min_max_pts = OptimizedShift.MinMaxPoints(np.zeros(3), np.ones(3))
+            min_max_pts = MinMaxPoints(np.zeros(3), np.ones(3))
 
             assert hasattr(min_max_pts, 'minimum')
             assert hasattr(min_max_pts, 'maximum')
@@ -209,16 +210,16 @@ class TestOptimizedShift:
             low = np.ones(3)
             high = np.full_like(low, 15)
 
-            min_max = OptimizedShift.MinMaxPoints(low, high)
-            assert isinstance(min_max, OptimizedShift.MinMaxPoints)
+            min_max = MinMaxPoints(low, high)
+            assert isinstance(min_max, MinMaxPoints)
             assert np.allclose(min_max.minimum, low)
             assert np.allclose(min_max.maximum, high)
 
         def test_from_points_method(self):
             array = np.random.rand(100,3)
-            min_max = OptimizedShift.MinMaxPoints.from_minmax_points(array)
+            min_max = MinMaxPoints.from_minmax_points(array)
 
-            assert isinstance(min_max, OptimizedShift.MinMaxPoints)
+            assert isinstance(min_max, MinMaxPoints)
             assert np.all(array.min(axis=0) == min_max.minimum)
             assert np.all(array.max(axis=0) == min_max.maximum)
 
@@ -226,10 +227,10 @@ class TestOptimizedShift:
             pts_minmax = []
             for i in range(7):
                 pts_minmax.append(
-                    OptimizedShift.MinMaxPoints(minimum=np.ones(3) * -i, maximum=np.ones(3) * i)
+                    MinMaxPoints(minimum=np.ones(3) * -i, maximum=np.ones(3) * i)
                 )
 
-            minmax = OptimizedShift.MinMaxPoints.from_minmax_points(pts_minmax)
+            minmax = MinMaxPoints.from_minmax_points(pts_minmax)
             assert np.all(minmax.minimum == -6)
             assert np.all(minmax.maximum == 6)
 
@@ -237,7 +238,7 @@ class TestOptimizedShift:
 
             low = np.array([0, 1, 2])
             high = np.array([3, 14, 20])
-            min_max = OptimizedShift.MinMaxPoints(low, high)
+            min_max = MinMaxPoints(low, high)
 
             center = min_max.central_point
 
@@ -248,7 +249,7 @@ class TestOptimizedShift:
         def test_extents_property(self):
             low = np.array([0, 1, 2])
             high = np.array([3, 14, 20])
-            min_max = OptimizedShift.MinMaxPoints(low, high)
+            min_max = MinMaxPoints(low, high)
 
             extents = min_max.extents
 

@@ -2,16 +2,15 @@ from __future__ import annotations
 
 import threading
 import weakref
-from typing import TYPE_CHECKING, ClassVar, Self, Literal, NamedTuple, cast, Iterable, Optional
+from typing import TYPE_CHECKING, ClassVar, Self, Optional
 
 import numpy as np
 from numpy.typing import NDArray
-from pydantic import validate_call
 
 if TYPE_CHECKING:
     from .core import PointCloudData
 
-from ..constants import DEFAULT_CONFIG
+from .util import MinMaxPoints
 from ..base_types import Vector_3_T, Array_Nx3_T
 
 class SingletonMeta(type):
@@ -67,32 +66,9 @@ class OptimizedShiftManager(metaclass=SingletonMeta):
 
 class OptimizedShift:
 
-    class MinMaxPoints(NamedTuple):
-        minimum: Vector_3_T
-        maximum: Vector_3_T
-
-        @classmethod
-        def from_points(cls, points: Array_Nx3_T) -> Self:
-            min_point = np.min(points, axis=0)
-            max_point = np.max(points, axis=0)
-            return cls(min_point, max_point)
-
-        @classmethod
-        def from_minmax_points(cls, minmax_points: Iterable[Self]) -> Self:
-            arr = Array_Nx3_T(np.vstack(tuple(minmax_points)))
-            return cls.from_points(arr)
-
-        @property
-        def central_point(self) -> Vector_3_T:
-            return np.mean(np.vstack((self.minimum, self.maximum)), axis=0)
-
-        @property
-        def extents(self) -> Vector_3_T:
-            return self.maximum - self.minimum
-
     _optimal_shift: Vector_3_T
-    _member_pcds: weakref.WeakSet["PointCloudData"]
-    _member_pcds_unshifted_bbox: weakref.WeakKeyDictionary["PointCloudData", MinMaxPoints]
+    _member_pcds: weakref.WeakSet[PointCloudData]
+    _member_pcds_unshifted_bbox: weakref.WeakKeyDictionary[PointCloudData, MinMaxPoints]
 
     def __init__(self, optimal_shift: Optional[NDArray[np.floating] | Vector_3_T] = None) -> None:
         self._optimal_shift = Vector_3_T(np.zeros(3)) if optimal_shift is None else optimal_shift
@@ -130,7 +106,7 @@ class OptimizedShift:
     def _add_member(self, pcd, pts):
         """Add the point‐cloud under the existing shift."""
         self._member_pcds.add(pcd)
-        self._member_pcds_unshifted_bbox[pcd] = OptimizedShift.MinMaxPoints.from_points(pts)
+        self._member_pcds_unshifted_bbox[pcd] = MinMaxPoints.from_points(pts)
         return self
 
     def _expand_and_add(self, pcd, pts):
@@ -146,14 +122,14 @@ class OptimizedShift:
     def _compute_new_shift(self, pts: Array_Nx3_T) -> Vector_3_T:
         # build up the combined bounding‐box
         all_boxes = list(self._member_pcds_unshifted_bbox.values())
-        all_boxes.append(OptimizedShift.MinMaxPoints.from_points(pts))
-        combined = OptimizedShift.MinMaxPoints.from_minmax_points(all_boxes)
+        all_boxes.append(MinMaxPoints.from_points(pts))
+        combined = MinMaxPoints.from_minmax_points(all_boxes)
 
         if not OptimizedShiftManager().is_shift_possible(np.vstack((combined.minimum, combined.maximum))):
             raise OptimizedShiftManager.ShiftNotFeasibleError()
 
         # round the center to keep ints
-        return Vector_3_T(np.round(combined.central_point, decimals=-(OptimizedShiftManager().maximum_decimal_places)-1))
+        return Vector_3_T(np.round(combined.central_point, decimals=-OptimizedShiftManager().maximum_decimal_places)-1)
 
     def _apply_shift_delta(self, new_shift):
         """Move every registered PCD by the change from old→new shift."""

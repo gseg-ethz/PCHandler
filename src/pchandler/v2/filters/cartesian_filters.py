@@ -7,54 +7,68 @@ from shapely import contains_xy
 from shapely.affinity import translate
 from shapely.geometry import Polygon
 
-from pchandler.v2.geometry.core import PointCloudData
+from pydantic import PositiveFloat, validate_call
 
+from ..constants import DEFAULT_CONFIG
+
+from ..geometry.core import PointCloudData
 from .core import PointCloudFilter
+from ..base_types import Array_Nx3_T, Vector_3_T
+
 
 logger = logging.getLogger(__name__.split(".")[0])
 
 
 class BoxFilter(PointCloudFilter):
-    def __init__(self, minimum_corner: Tuple[float, float, float], maximum_corner: Tuple[float, float, float]):
-        self.min_corner = np.array(minimum_corner, dtype=float)
-        self.max_corner = np.array(maximum_corner, dtype=float)
+    def __init__(self, minimum: Vector_3_T, maximum: Vector_3_T):
+        if np.any(minimum >= maximum):
+            raise ValueError(f"Cannot create box filter where minimum corner is greater than the maximum corner"
+                             f"\n {minimum=} vs {maximum=}")
+
+        self.minimum = Vector_3_T(minimum)
+        self.maximum = Vector_3_T(maximum)
+
+    @property
+    def extents(self) -> Vector_3_T:
+        return self.maximum - self.minimum
 
     def mask(self, pcd: PointCloudData) -> NDArray[np.bool_]:
-        if pcd.global_coordinate_shift is not None:
-            min_corner = self.min_corner - pcd.global_coordinate_shift
-            max_corner = self.max_corner - pcd.global_coordinate_shift
+        if pcd.optimized_shift is not None:
+            min_corner = self.minimum - pcd.optimized_shift.optimal_shift
+            max_corner = self.maximum - pcd.optimized_shift.optimal_shift
         else:
-            min_corner = self.min_corner
-            max_corner = self.max_corner
+            min_corner = self.minimum
+            max_corner = self.maximum
 
-        span = max_corner - min_corner
-        min_corner[span == 0] = -np.inf
-        max_corner[span == 0] = np.inf
+        min_corner[self.extents == 0] = -np.inf
+        max_corner[self.extents == 0] = np.inf
 
         return np.all((pcd.xyz >= min_corner) & (pcd.xyz <= max_corner), axis=1)
 
 
 class SphereFilter(PointCloudFilter):
-    def __init__(self, sphere_center_point: NDArray[np.floating], radius: float):
-        assert sphere_center_point.shape == (3,)
-        assert radius > 0
-        self.sphere_center_point = sphere_center_point
+    def __init__(self, sphere_center: Vector_3_T, radius: PositiveFloat):
+        self.sphere_center = Vector_3_T(sphere_center)
         self.radius = radius
 
     def mask(self, pcd: PointCloudData) -> NDArray[np.bool_]:
         point = (
-            self.sphere_center_point
-            if pcd.global_coordinate_shift is None
-            else self.sphere_center_point - pcd.global_coordinate_shift
+            self.sphere_center
+            if pcd.optimized_shift is None
+            else self.sphere_center - pcd.optimized_shift
         )
 
-        distances_to_point = np.linalg.norm(pcd.xyz - point, axis=1)
+        distances_to_point: np.ndarray = np.linalg.norm(pcd.xyz - point, axis=1)
         return distances_to_point <= self.radius
 
 
 class PolygonFilter(PointCloudFilter):
+    @validate_call(config=DEFAULT_CONFIG)
     def __init__(self, polygon: Polygon, plane: str = "xy"):
-        assert plane in ["xy", "xz", "yz"]
+        # TODO check if function should be able to clip along a normal direction
+
+        if plane not in ['nx', 'ny', 'nz']:
+            raise ValueError(f"plane value string or normal vector does not exist")
 
         self.polygon = polygon
         self.plane = plane
@@ -69,8 +83,8 @@ class PolygonFilter(PointCloudFilter):
 
         polygon = (
             self.polygon
-            if pcd.global_coordinate_shift is None
-            else (translate(self.polygon, *(-1 * pcd.global_coordinate_shift[dims])))
+            if pcd.optimized_shift is None
+            else (translate(self.polygon, *(-1 * pcd.optimized_shift.optimal_shift[dims])))
         )
 
         mask = contains_xy(polygon, pcd.xyz[:, dims[0]], pcd.xyz[:, dims[1]])
