@@ -140,6 +140,10 @@ class CartesianCoordinates(Abstract3dCoordinates):
         return self.spher
 
     @property
+    def _hz_v(self) -> np.ndarray:
+        return self.rhv[:, 1:]
+
+    @property
     def fov(self):  # TODO must implement this
         raise NotImplementedError
 
@@ -194,6 +198,10 @@ class SphericalCoordinates(Abstract3dCoordinates):
     @property
     def v(self) -> np.ndarray:
         return self.rhv[:, 2]
+
+    @property
+    def _hz_v(self) -> np.ndarray:
+        return self.rhv[:, 1:]
 
     @cached_property
     def xyz(self) -> np.ndarray:
