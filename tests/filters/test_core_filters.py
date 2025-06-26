@@ -1,8 +1,7 @@
 import pytest
 
-import numpy as np
+from pydantic import ValidationError
 
-from pchandler.v2.geometry.core import PointCloudData
 from pchandler.v2.filters.core import *
 
 @pytest.fixture(scope='function', autouse=True)
@@ -29,7 +28,7 @@ class TestGenericFieldFilter:
     def test_initialisation(self):
         field_filter = GenericFieldFilter('dummy', lambda x: x > 5)
 
-        assert field_filter.field == 'dummy'
+        assert field_filter.field_label == 'dummy'
         assert isinstance(field_filter.filter_func, Callable)
 
 
@@ -49,5 +48,11 @@ class TestGenericFieldFilter:
         field_filter = GenericFieldFilter('rgb', lambda x: np.ones_like(x, dtype=np.bool_))
         with pytest.raises(ValueError):
             field_filter.mask(pcd_only_coords)
+
+        with pytest.raises(ValidationError):
+            GenericFieldFilter([1, 2, 3], lambda x: x)
+
+        with pytest.raises(ValidationError):
+            GenericFieldFilter('rgb', 23)
 
 
