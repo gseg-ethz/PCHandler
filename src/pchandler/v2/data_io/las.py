@@ -1,12 +1,13 @@
 from pathlib import Path
-from typing import Unpack, NotRequired
+from typing import Unpack, NotRequired, Any
 import logging
 from datetime import datetime
 
 import numpy as np
-import laspy
+import numpy.typing as npt
+import laspy                # type: ignore[import-untyped]
 
-from .core import AbstractIOHandler, _BaseLoadConfigType, _BaseSaveConfigType, BaseSaveConfig, BaseLoadConfig
+from .core import AbstractIOHandler, _LoadConfigType, _SaveConfigType, SaveConfig, LoadConfig
 from ..geometry import PointCloudData
 from ..geometry.scalar_field_manager import ScalarFieldManager
 from ..geometry.scalar_fields import BooleanScalarField, ScalarField
@@ -14,30 +15,20 @@ from ..geometry.scalar_fields import BooleanScalarField, ScalarField
 logger = logging.getLogger(__name__.split(".")[0])
 
 
-class _LASLoadConfigType(_BaseLoadConfigType):
+class _LASLoadConfigType(_LoadConfigType):
     pass
 
 
-class _LASSaveConfigType(_BaseSaveConfigType):
-    pass
-
-
-class LASLoadConfig(BaseLoadConfig):
-    pass
-
-
-class LASSaveConfig(BaseSaveConfig):
+class _LASSaveConfigType(_SaveConfigType):
     pass
 
 
 class LasHandler(AbstractIOHandler):
     FORMATS = ['.las', '.laz']
-    LOAD_CONFIG: type[LASLoadConfig] = LASLoadConfig
-    SAVE_CONFIG: type[LASSaveConfig] = LASSaveConfig
 
     @classmethod
     def load(cls, /, path: str | Path, **config: Unpack[_LASLoadConfigType]) -> PointCloudData:
-        config = cls.get_config(**config)
+        cfg = LoadConfig(**config)
           # TODO: Extend usage from `dimension_names` to `extra_dimension_names`
         logger.info(f"Loading LAZ file: {path}")
         las = laspy.read(path)
@@ -46,25 +37,25 @@ class LasHandler(AbstractIOHandler):
         pcd = PointCloudData(las.xyz)
 
         # Update the abstractIOhandler class to clean this up and be more DRY
-        if config.keep_rgb:
-            if field_names := cls._get_rgb_field_names(set(lower_sf_names.values())):
+        if cfg.keep_rgb:
+            if rgb_field_names := cls._get_rgb_field_names(set(lower_sf_names.values())):
                 pcd.rgb = cls.extract_rgb(las.points.array, len(pcd),
-                                          [lower_sf_names[name] for name in field_names])
-                cls.remove_field_names(scalar_field_names, *[lower_sf_names.pop(i) for i in field_names])
+                                          [lower_sf_names[name] for name in rgb_field_names])
+                cls.remove_field_names(scalar_field_names, *[lower_sf_names.pop(i) for i in rgb_field_names])
 
-        if config.keep_normals:
-            if field_names := cls._get_normals_field_names(set(lower_sf_names.keys())):
+        if cfg.keep_normals:
+            if normal_field_names := cls._get_normals_field_names(set(lower_sf_names.keys())):
                 pcd.normals = cls.extract_normals(las.points.array, len(pcd),
-                                                    [lower_sf_names[name] for name in field_names])
-                cls.remove_field_names(scalar_field_names, *[lower_sf_names.pop(i) for i in field_names])
+                                                    [lower_sf_names[name] for name in normal_field_names])
+                cls.remove_field_names(scalar_field_names, *[lower_sf_names.pop(i) for i in normal_field_names])
 
-        if config.keep_intensity:
-            if field_names := cls._get_intensity_field_names(set(lower_sf_names.values())):
+        if cfg.keep_intensity:
+            if intensity_field_names := cls._get_intensity_field_names(set(lower_sf_names.values())):
                 pcd.intensity = cls.extract_intensity(las.points.array)
-                cls.remove_field_names(scalar_field_names, *[lower_sf_names.pop(i) for i in field_names])
+                cls.remove_field_names(scalar_field_names, *[lower_sf_names.pop(i) for i in intensity_field_names])
 
-        if config.keep_extra_scalar_fields:
-            field_names = tuple(set(config.keep_extra_scalar_fields) & set(lower_sf_names))
+        if cfg.keep_extra_scalar_fields:
+            field_names = tuple(set(cfg.keep_extra_scalar_fields) & set(lower_sf_names))
         else:
             field_names = tuple(scalar_field_names)
 
@@ -83,7 +74,7 @@ class LasHandler(AbstractIOHandler):
                     "withheld",
                     "overlap",
                 ]:
-                    pcd.scalar_fields[lower_name] = BooleanScalarField(las[name].array.astype(np.bool), name=lower_name)
+                    pcd.scalar_fields[lower_name] = BooleanScalarField(las[name].array.astype(np.bool_), name=lower_name)
                 else:
                     pcd.scalar_fields[lower_name] = ScalarField(las[name].array, name=lower_name)
 
@@ -94,35 +85,38 @@ class LasHandler(AbstractIOHandler):
         return pcd
 
     @classmethod
-    def save(cls, /, pcd: PointCloudData, path: str | Path, **config: Unpack[_LASSaveConfigType]):
-        config = cls.get_config(**config, load=False)
+    def save(cls, /, pcd: PointCloudData, path: str | Path, **config: Unpack[_LASSaveConfigType]) -> None:
+        cfg = SaveConfig(**config)
+
+        offsets: npt.NDArray[np.float32|np.float64] = pcd.min(axis=0)
+        scales: npt.NDArray[np.float32|np.float64] = np.array([0.0001, 0.0001, 0.0001])
 
         las = laspy.create()
-        las.header.offsets = (offsets := pcd.min(axis=0))
-        las.header.scales = (scales := np.array([0.0001, 0.0001, 0.0001]))
+        las.header.offsets = offsets
+        las.header.scales = scales
 
         las.X = (pcd.x - offsets[0]) / scales[0]
         las.Y = (pcd.y - offsets[1]) / scales[1]
         las.Z = (pcd.z - offsets[2]) / scales[2]
 
-        if config.keep_intensity and pcd.intensity:
+        if cfg.keep_intensity and pcd.intensity:
             las.intensity = pcd.intensity
 
-        if config.keep_rgb and pcd.rgb:
+        if cfg.keep_rgb and pcd.rgb:
             las.red = pcd.rgb.r
             las.green = pcd.rgb.g
             las.blue = pcd.rgb.b
 
-        if config.keep_normals and pcd.normals:
+        if cfg.keep_normals and pcd.normals:
             for val in ('nx', 'ny', 'nz'):
                 las.add_extra_dim(laspy.ExtraBytesParams(val, pcd.normals.dtype))
                 setattr(las, val, getattr(pcd.normals, val))
 
-        if config.keep_reflectance and pcd.reflectance:
+        if cfg.keep_reflectance and pcd.reflectance:
             las.reflectance = pcd.reflectance
 
-        if config.keep_extra_scalar_fields:
-            extra_fields = config.keep_extra_scalar_fields & pcd.scalar_fields.keys()
+        if cfg.keep_extra_scalar_fields:
+            extra_fields = cfg.keep_extra_scalar_fields & pcd.scalar_fields.keys()
             for field in extra_fields:
                 las.add_extra_dim(laspy.ExtraBytesParams(field, pcd.scalar_fields[field].dtype))
                 setattr(las, field, pcd.scalar_fields[field])

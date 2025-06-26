@@ -50,7 +50,7 @@ class DtypeState(NamedTuple):
 
 class AbstractScalarField(FixedLengthArray):
     name: LowerStr
-    origin_dtype: DtypeState | None = None
+    origin_dtype: DtypeState
 
     def __init__(self,
                  arr: np.ndarray | Self,
@@ -81,7 +81,7 @@ class AbstractScalarField(FixedLengthArray):
 
         return data
 
-    def get_original_data(self):
+    def get_original_data(self) -> NDArray[Any]:
         current_dtype_state = DtypeState.generate(self.arr)
         if current_dtype_state == self.origin_dtype:
             logger.info("No changes to the data as no prior conversions made")
@@ -95,7 +95,7 @@ class ScalarField(BaseVector, AbstractScalarField):
         super().__init__(arr=arr, **kwargs)
 
 
-class _ScalarFieldTriplet(ArrayNx3, AbstractScalarField):
+class ScalarFieldTriplet(ArrayNx3, AbstractScalarField):
     def __init__(self, arr: Self|np.ndarray, **kwargs: Unpack[ScalarKwargT]):
         super().__init__(arr=arr, **kwargs)
 
@@ -107,7 +107,7 @@ class _ScalarFieldTriplet(ArrayNx3, AbstractScalarField):
         return cls(value)
 
 
-class RGBFields(_ScalarFieldTriplet):
+class RGBFields(ScalarFieldTriplet):
     arr: Annotated[Array_Nx3_uint8_T, BeforeValidator(normalize_uint8)]
     name: LowerStr = RGB_FIELD
 
@@ -128,7 +128,7 @@ class RGBFields(_ScalarFieldTriplet):
         return self.arr[:, 2]
 
 
-class NormalFields(_ScalarFieldTriplet):
+class NormalFields(ScalarFieldTriplet):
     arr: Annotated[Array_Nx3_float32_T, BeforeValidator(ensure_unit_vector)]
     name: LowerStr = NORMALS_FIELD
 
@@ -195,4 +195,4 @@ class BooleanScalarField(ScalarField):
         super().__init__(arr=arr, **kwargs)
 
 
-SF_T = TypeVar("SF_T", bound=Union[AbstractScalarField])
+SF_T = TypeVar("SF_T", bound=AbstractScalarField)

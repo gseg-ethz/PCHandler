@@ -80,7 +80,7 @@ class BaseArray(ABC, BaseModel):
         return self.arr.__array_interface__
 
     @property
-    def T(self) -> npt.NDArray:
+    def T(self) -> npt.NDArray[Any]:
         return self.arr.T
 
     @property
@@ -88,7 +88,7 @@ class BaseArray(ABC, BaseModel):
         return self.arr.shape
 
     @property
-    def dtype(self) -> npt.DTypeLike:
+    def dtype(self) -> npt.DTypeLike[Any]:
         return self.arr.dtype
 
     @property
@@ -96,17 +96,17 @@ class BaseArray(ABC, BaseModel):
         return self.arr.ndim
 
     @property
-    def base(self) -> npt.NDArray | None:
+    def base(self) -> npt.NDArray[Any] | None:
         return self.arr.base
 
     @property
     def size(self) -> int:
         return self.arr.size
 
-    def min(self, **kwargs) -> np.number | npt.NDArray:
+    def min(self, **kwargs) -> npt.NDArray[Any]:
         return self.arr.min(**kwargs)
 
-    def max(self, **kwargs) -> np.number | npt.NDArray:
+    def max(self, **kwargs) -> npt.NDArray[Any]:
         return self.arr.max(**kwargs)
 
     def model_dump(self, exclude: set[str]|None = None, **kwargs) -> dict:
@@ -160,7 +160,7 @@ class BaseArray(ABC, BaseModel):
             return self.copy(result)
         return result
 
-    def __setitem__(self, key: IndexLike, value: npt.NDArray | BaseArray) -> None:
+    def __setitem__(self, key: IndexLike, value: npt.NDArray[Any] | BaseArray) -> None:
         if isinstance(key, slice):
             key = [key]
         if isinstance(value, BaseArray):

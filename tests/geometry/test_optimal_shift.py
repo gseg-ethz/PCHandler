@@ -108,7 +108,7 @@ class TestOptimizedShift:
             assert item.optimized_shift is None
             opt_shift.register(item, item.xyz)
             # FIXME: THIS IS THE LINE OF FAILURE
-            # assert item.optimized_shift is not None
+            assert item.optimized_shift is not None
             assert len(opt_shift) == i+1
             assert item in set(opt_shift._member_pcds)
 

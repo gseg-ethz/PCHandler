@@ -141,7 +141,7 @@ class TransformRecord(BaseModel):
             self.backward = np.linalg.inv(self.forward)
 
 
-class TransformLedger(OrderedDict, MutableMapping[str, TransformRecord]):
+class TransformLedger(OrderedDict[str, TransformRecord], MutableMapping[str, TransformRecord]):
     def __int__(self):
         super(TransformLedger, self).__init__()
 

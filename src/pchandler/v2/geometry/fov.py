@@ -69,6 +69,7 @@ from __future__ import annotations
 import copy
 import logging
 import math
+import warnings
 
 from dataclasses import dataclass, field
 from fractions import Fraction
@@ -353,6 +354,8 @@ class FoV(NamedTuple):
 
     @property
     def horizontal_min(self):
+        # TODO
+        warnings.deprecated("To change to ... ")
         return self.right
 
     @property

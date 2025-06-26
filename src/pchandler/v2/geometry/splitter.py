@@ -171,10 +171,14 @@ def split_pc_with_fov_tree(
         return {fov_tree.identifier: pcd}
         # return [(fov_tree.identifier, fov_tree.node, pcd,)]
 
-    # Setup argumenets for call
-    split_packages = [
-        (pcd.extract_angles(child.node), child, remove_empty, n_jobs) for child in fov_tree.children.values()
-    ]
+    # Setup arguments for call
+    if fov_tree.children is not None:
+        split_packages = [
+            (pcd.extract_angles(child.node), child, remove_empty, n_jobs) for child in fov_tree.children.values()
+        ]
+    else:
+        split_packages = []
+
     if remove_empty:
         split_packages = [sp for sp in split_packages if sp[0].nbPoints]
     # print(*[FoV(**sp[0].fov, unit="rad") for sp in split_packages], sep='\n')
