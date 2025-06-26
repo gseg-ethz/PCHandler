@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import copy
 from abc import ABC
-from typing import Any, Generator, Mapping, Optional, Self
+from typing import Any, Generator, MutableMapping, Optional, Self
 
 import numpy as np
 import numpy.typing as npt
-from numpydantic import NDArray, Shape
+from numpydantic import NDArray, Shape  # type: ignore
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from .base_types import (
@@ -20,7 +20,7 @@ from .base_types import (
 )
 
 
-def make_ndarray_type(*args: Optional[int | str], dtype=None):
+def make_ndarray_type(*args: Optional[int | str], dtype: Optional[npt.DTypeLike] = None) -> NDArray[Any, Any]:
     """
     Helper function to generate the numpydantic type for a ndarray.
 
@@ -30,7 +30,7 @@ def make_ndarray_type(*args: Optional[int | str], dtype=None):
     if len(args) == 0:
         shape_list = ["*", "..."]
     else:
-        shape_list: list = [str(x) if x is not None else "*" for x in args]
+        shape_list = [str(x) if x is not None else "*" for x in args]
 
     return NDArray[Shape[", ".join(shape_list)], dtype if dtype is not None else Any]
 
@@ -70,7 +70,7 @@ class BaseArray(ABC, BaseModel):
         return self
 
     @property
-    def __array_interface__(self) -> dict:
+    def __array_interface__(self) -> dict[Any, Any]:
         """Gives access for all numpy functions to the root array object
 
         All objects will be converted to numpy arrays when processed with numpy functions.
@@ -80,7 +80,7 @@ class BaseArray(ABC, BaseModel):
         return self.arr.__array_interface__
 
     @property
-    def T(self) -> npt.NDArray:
+    def T(self) -> npt.NDArray[Any]:
         return self.arr.T
 
     @property
@@ -92,24 +92,24 @@ class BaseArray(ABC, BaseModel):
         return self.arr.dtype
 
     @property
-    def ndim(self) -> int:
+    def ndim(self) -> Any:
         return self.arr.ndim
 
     @property
-    def base(self) -> npt.NDArray | None:
+    def base(self) -> Any:
         return self.arr.base
 
     @property
     def size(self) -> int:
         return self.arr.size
 
-    def min(self, **kwargs) -> np.number | npt.NDArray:
+    def min(self, **kwargs: dict[str, Any]) -> npt.NDArray[Any]:
         return self.arr.min(**kwargs)
 
-    def max(self, **kwargs) -> np.number | npt.NDArray:
+    def max(self, **kwargs: dict[str, Any]) -> npt.NDArray[Any]:
         return self.arr.max(**kwargs)
 
-    def model_dump(self, exclude: set[str]|None = None, **kwargs) -> dict:
+    def model_dump(self, exclude: set[str]|None = None, **kwargs: dict[str, Any]) -> dict:
         """Dumps the model as a serialised dict object"""
         exclude = exclude or set()
         exclude.add("spher")
@@ -117,11 +117,11 @@ class BaseArray(ABC, BaseModel):
 
 
     def copy(self,
-             array: npt.NDArray | BaseArray | None = None,
+             array: npt.NDArray[Any] | BaseArray | None = None,
              *,
              deep: bool = True,
-             update: Mapping[str, Any] = None,
-             **kwargs) -> Self:
+             update: Optional[MutableMapping[str, Any]] = None,
+             **kwargs: dict[str, Any]) -> Self:
         """
         Produce a deep or shallow copy of the model. Updates the model also if parameter is parsed.
         """
@@ -150,7 +150,7 @@ class BaseArray(ABC, BaseModel):
     def __len__(self) -> int:
         raise NotImplementedError("Length of an undefined array shape is not clear")
 
-    def __getitem__(self, key: IndexLike) -> np.ndarray | Self:
+    def __getitem__(self, key: IndexLike) -> npt.NDArray[Any] | Self:
         if isinstance(key, slice):
             key = [key]
 
@@ -160,7 +160,7 @@ class BaseArray(ABC, BaseModel):
             return self.copy(result)
         return result
 
-    def __setitem__(self, key: IndexLike, value: npt.NDArray | BaseArray) -> None:
+    def __setitem__(self, key: IndexLike, value: npt.NDArray[Any] | BaseArray) -> None:
         if isinstance(key, slice):
             key = [key]
         if isinstance(value, BaseArray):
@@ -192,7 +192,7 @@ class SampleArray(BaseArray):
     def __getitem__(self, key):
         return self.sample(key)
 
-    def create_mask(self, selection: IndexLike, as_vector=False) -> NDArray[np.bool_] | NDArray[np.int_]:
+    def create_mask(self, selection: IndexLike, as_vector: bool = False) -> NDArray[np.bool_] | NDArray[np.int_]:
         """Creates a boolean mask for the whole array
 
         This ensures all new objects are a copy of an array and no views/references
@@ -325,14 +325,14 @@ class FixedLengthArray(SampleArray, _NumericMixins):
     Array to support objects like Coordinate sets or vectors which have "len()" or number of items == rows
     """
 
-    def __len__(self) -> int:
+    def __len__(self) -> Any:
         return self.arr.shape[0]
 
-    def __iter__(self) -> Generator[np.ndarray]:
+    def __iter__(self) -> Generator[tuple[str, Any], None, None]:
         for i in self.arr:
             yield i
 
-    def create_mask(self, selection: IndexLike, **kwargs) -> NDArray[np.bool_] | NDArray[np.int_]:
+    def create_mask(self, selection: IndexLike, **kwargs: dict[str, Any]) -> NDArray[np.bool_] | NDArray[np.int_]:
         return super().create_mask(selection, as_vector=True)
 
     def sample(self, index: IndexLike) -> Self:
@@ -346,7 +346,7 @@ class FixedLengthArray(SampleArray, _NumericMixins):
 
     def extract(self, index: IndexLike) -> Self:
         """Returns the points indexed but also reduces the indexed array by these points"""
-        mask: np.ndarray[np.bool_] | np.ndarray[np.integer] = self.create_mask(index)
+        mask: npt.NDArray[np.bool_] | npt.NDArray[np.integer] = self.create_mask(index)
         extracted = self.sample(mask)
         self.reduce(~mask)
         return extracted
@@ -358,7 +358,7 @@ class BaseVector(FixedLengthArray):
 
 class HomogeneousArray(FixedLengthArray):
     @property
-    def H(self) -> np.ndarray:
+    def H(self) -> npt.NDArray[Any]:
         return np.column_stack((self.arr, np.ones(len(self), dtype=self.dtype)))
 
 
@@ -385,7 +385,7 @@ class _ImageLike(SampleArray, _NumericMixins, ABC):
     def __getitem__(self, *key: IndexLike) -> Any:
         return self.arr[*key]
 
-    def create_mask(self, *indices):
+    def create_mask(self, *indices: int|slice):
         if isinstance(indices, slice):
             mask = indices
         else:

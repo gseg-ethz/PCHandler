@@ -7,7 +7,7 @@ import numpy as np
 # TODO decide if to use https://github.com/MapIV/pypcd4
 #  It has already done similar work on "merge" / concatenating point clouds
 
-from .core import AbstractIOHandler, _BaseLoadConfigType, _BaseSaveConfigType, BaseSaveConfig, BaseLoadConfig
+from .core import AbstractIOHandler, _LoadConfigType, _SaveConfigType, SaveConfig, LoadConfig
 from ..geometry import PointCloudData
 from ..constants import (
     RGB_FIELD,
@@ -21,26 +21,20 @@ from ..constants import (
 logger = logging.getLogger(__name__.split(".")[0])
 
 
-class _PcdLoadConfigType(_BaseLoadConfigType):
+class _PcdLoadConfigType(_LoadConfigType):
     pass
 
-class _PcdSaveConfigType(_BaseSaveConfigType):
+class _PcdSaveConfigType(_SaveConfigType):
     pass
 
-
-class PcdLoadConfig(BaseLoadConfig):
-    pass
-
-class PcdSaveConfig(BaseSaveConfig):
-    pass
 
 class PcdHandler(AbstractIOHandler):
     FORMATS = ['.pcd']
 
     @classmethod
-    def load(cls, /, path: str | Path, **config: Unpack[_PcdLoadConfigType]):
-        pass
+    def load(cls, /, path: str | Path, **config: Unpack[_PcdLoadConfigType]) -> PointCloudData:
+        raise NotImplementedError
 
     @classmethod
-    def save(cls, /, pcd: PointCloudData, path: str | Path, **config: Unpack[_PcdSaveConfigType]):
-        pass
+    def save(cls, /, pcd: PointCloudData, path: str | Path, **config: Unpack[_PcdSaveConfigType]) -> None:
+        raise NotImplementedError

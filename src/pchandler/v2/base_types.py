@@ -4,7 +4,7 @@ from typing import Annotated, Union
 
 import numpy as np
 import numpy.typing as npt
-from numpydantic import NDArray, Shape
+from numpydantic import NDArray, Shape  # type: ignore
 from numpydantic.dtype import (
     Bool,
     Float,
@@ -15,7 +15,7 @@ from numpydantic.dtype import (
     Integer,
     UInt8,
     UInt16,
-)
+) # type: ignore
 from pydantic import BeforeValidator
 
 from .validators import (

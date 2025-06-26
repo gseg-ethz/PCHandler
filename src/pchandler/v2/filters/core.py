@@ -1,9 +1,9 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import Callable
+from typing import Callable, Any
 
 import numpy as np
-from numpy.typing import NDArray
+import numpy.typing as npt
 from pydantic import BaseModel
 
 from ..constants import DEFAULT_CONFIG
@@ -20,9 +20,11 @@ class PointCloudFilter(ABC, BaseModel):
     Subclasses should implement the mask() method to return a boolean mask
     that selects the desired points.
     """
+    def __init__(self, **kwargs: dict[str, Any]) -> None:
+        super().__init__(**kwargs)
 
     @abstractmethod
-    def mask(self, pcd: PointCloudData) -> NDArray[np.bool_]:
+    def mask(self, pcd: PointCloudData) -> npt.NDArray[np.bool_]:
         """
         Compute and return a boolean mask for the provided point cloud.
 
@@ -92,7 +94,7 @@ class GenericFieldFilter(PointCloudFilter):
     def __init__(self, field_label, filter_func):
         super().__init__(field_label=field_label, filter_func=filter_func)
 
-    def mask(self, pcd: PointCloudData) -> NDArray[np.bool_]:
+    def mask(self, pcd: PointCloudData) -> npt.NDArray[np.bool_]:
         """
         Retrieves the field data from the point cloud, applies the filter function,
         and returns the resulting boolean mask.

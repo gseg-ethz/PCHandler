@@ -3,10 +3,11 @@ from __future__ import annotations
 import logging
 import weakref
 from collections import Counter
-from collections.abc import ItemsView, ValuesView
-from typing import TYPE_CHECKING, Iterable, Iterator, MutableMapping, Self, overload, Optional
+from collections.abc import ItemsView, ValuesView, KeysView
+from typing import TYPE_CHECKING, Iterable, Iterator, MutableMapping, Self, overload, Optional, Any
 
 import numpy as np
+import numpy.typing as npt
 from pydantic import validate_call
 
 if TYPE_CHECKING:
@@ -84,8 +85,8 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
     def __len__(self) -> int:
         return len(self.fields)
 
-    def keys(self) -> list[str]:
-        return list(self.fields.keys())
+    def keys(self) -> KeysView[str]:
+        return self.fields.keys()
 
     def values(self) -> ValuesView[SF_T]:
         return self.fields.values()
@@ -94,15 +95,15 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
         return self.fields.items()
 
     @overload
-    def __getitem__(self, key: str) -> SF_T: ...
+    def __getitem__(self, key: str) -> ScalarField | RGBFields | NormalFields: ...
 
     @overload
     def __getitem__(self, key: IndexLike) -> Self: ...
 
     @overload
-    def __getitem__(self, key: LowerStr) -> SF_T: ...
+    def __getitem__(self, key: LowerStr) -> ScalarField | RGBFields | NormalFields: ...
 
-    def __getitem__(self, key: str | LowerStr | IndexLike) -> SF_T | Self:
+    def __getitem__(self, key: str | LowerStr | IndexLike) -> ScalarField | RGBFields | NormalFields | Self:
 
         if isinstance(key, str):
             return self.fields[key]
@@ -150,7 +151,7 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
     # TODO Ensure mame of scalar_field should always be lower case and match the key in _sfm dict
     # TODO add test for lower case fields
 
-    def add_field(self, sf_field: SF_T) -> None:
+    def add_field(self, sf_field: ScalarField | RGBFields | NormalFields) -> None:
         self[sf_field.name] = sf_field
 
     def remove_field(self, field_name: LowerStr) -> None:
@@ -173,9 +174,9 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
         return self.fields.get(RGB_FIELD, None)
 
     @rgb.setter
-    def rgb(self, value: np.ndarray | RGBFields):
+    def rgb(self, value: npt.NDArray[Any] | RGBFields) -> None:
         if isinstance(value, np.ndarray):
-            value = RGBFields(value)
+            value: RGBFields = RGBFields(value)
         self.add_field(value)
 
     @property

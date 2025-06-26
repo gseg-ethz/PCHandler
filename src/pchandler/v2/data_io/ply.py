@@ -3,34 +3,27 @@ from typing import Unpack
 import logging
 from datetime import datetime
 
-from plyfile import PlyData, PlyElement
+from plyfile import PlyData, PlyElement     # type: ignore
 
-from .core import AbstractIOHandler, _BaseLoadConfigType, _BaseSaveConfigType, BaseLoadConfig, BaseSaveConfig
+from .core import AbstractIOHandler, _LoadConfigType, _SaveConfigType, LoadConfig, SaveConfig
 from ..geometry import PointCloudData
 
 logger = logging.getLogger(__name__.split(".")[0])
 
 
-class _PlyLoadConfigType(_BaseLoadConfigType):
+class _PlyLoadConfigType(_LoadConfigType):
     pass
 
-class _PlySaveConfigType(_BaseSaveConfigType):
+class _PlySaveConfigType(_SaveConfigType):
     pass
 
-class PlyLoadConfig(BaseLoadConfig):
-    pass
-
-class PlySaveConfig(BaseSaveConfig):
-    pass
 
 class PlyHandler(AbstractIOHandler):
     FORMATS = ['.ply']
-    LOAD_CONFIG: type[BaseLoadConfig] = PlyLoadConfig
-    SAVE_CONFIG: type[BaseSaveConfig] = PlySaveConfig
 
     @classmethod
-    def load(cls, /, path: str | Path, **config: Unpack[_PlyLoadConfigType]):
-        cfg = cls.get_config(**config)
+    def load(cls, /, path: str | Path, **config: Unpack[_PlyLoadConfigType]) -> PointCloudData:
+        cfg = LoadConfig(**config)
 
         logger.info(f"Loading PLY file: {path}")
 
@@ -55,8 +48,9 @@ class PlyHandler(AbstractIOHandler):
 
     # DISCUSS is it worth saving the optimised state with the np.float64 shift written in a header?
     @classmethod
-    def save(cls, /, pcd: PointCloudData, path: str | Path, **config: Unpack[_PlySaveConfigType]):
-        cfg = cls.get_config(**config, load=False)
+    def save(cls, /, pcd: PointCloudData, path: str | Path, **config: Unpack[_PlySaveConfigType]) -> None:
+        path = Path(path)
+        cfg = SaveConfig(**config)
 
         structured_array = cls.generate_structured_array(pcd, cfg)
 

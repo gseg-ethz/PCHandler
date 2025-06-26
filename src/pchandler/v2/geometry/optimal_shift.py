@@ -83,7 +83,7 @@ class OptimizedShift:
     def optimal_shift(self) -> NDArray[np.float64]:
         return self._optimal_shift
 
-    def register(self, pcd: PointCloudData, points: Array_Nx3_T) -> Optional[Self]:
+    def register(self, pcd: PointCloudData, points: Array_Nx3_T) -> Self:
         """
         Try to add `pcd` (with its point‐cloud `points`) into this shift.
         Returns self if successful;

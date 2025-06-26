@@ -37,9 +37,13 @@ import copy
 import logging
 from enum import Enum
 from functools import wraps
-from typing import Any, Optional
+from typing import Any, Optional, Callable, TYPE_CHECKING
 
 import numpy as np
+import numpy.typing as npt
+
+if TYPE_CHECKING:
+    from .base_arrays import BaseArray
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -76,8 +80,8 @@ class AngleUnit(Enum):
 
 
 def convert_angles(
-    values: np.ndarray, source_unit: AngleUnit, target_unit: AngleUnit, out: Optional[np.ndarray] = None
-) -> np.ndarray:
+    values: npt.NDArray[np.floating], source_unit: AngleUnit, target_unit: AngleUnit, out: Optional[np.ndarray] = None
+) -> npt.NDArray[Any]:
     """
     Converts an array of angles from one unit to another.
 
@@ -146,9 +150,11 @@ def convert_angles(
                     return np.multiply(values, np.pi / 200, out=out)
                 case AngleUnit.DEGREE:
                     return np.multiply(values, 180 / 200, out=out)
+        case _:
+            raise ValueError(f"Invalid unit: {source_unit}")
 
 
-def unique_rows_fast(bin_idx: np.ndarray):
+def unique_rows_fast(bin_idx: npt.NDArray[np.int32]) -> tuple[npt.NDArray[Any], npt.NDArray[np.int32]]:
     """
     bin_idx: 2D int32 array of shape (N, D)
     returns (unique_rows, inverse_indices) exactly like
@@ -170,8 +176,8 @@ def unique_rows_fast(bin_idx: np.ndarray):
 
     return uniq, inv
 
-
-def bypass_immutable(method):
+# TODO update this to support the current implementation
+def bypass_immutable(method: Callable) -> Callable:
     @wraps(method)
     def wrapper(self, *args: Any, **kwargs: dict[str, Any]) -> Any:
         original_state: bool = getattr(self, "_immutable", False)
@@ -184,21 +190,8 @@ def bypass_immutable(method):
     return wrapper
 
 
-def return_copy(deep=True):
-    def decorator(method):
-        @wraps(method)
-        def wrapper(self, *args: Any, **kwargs: dict[str, Any]) -> Any:
-            result: Any = method(self, *args, **kwargs)
-            if not self._mutability:
-                return result
-            return copy.deepcopy(result) if deep else copy.copy(result)
-
-        return wrapper
-
-    return decorator
-
 # DECIDE does this serve any future purpose? If so, write tests
-def unpack_npydantic_dtype(cls: type[Any]) -> tuple[np.typing.DTypeLike, ...]:
+def unpack_npydantic_dtype(cls: type[BaseArray]) -> tuple[np.typing.DTypeLike, ...]:
     a = cls.model_fields['arr'].annotation.__dict__['__args__'][1]
     all_types = []
 

@@ -216,7 +216,7 @@ class TestMutableMappingMethods:
     def test_items(self, base_sfm):
         for i, item in enumerate(base_sfm.items()):
             k, v = item
-            assert k == base_sfm.keys()[i]
+            assert k == list(base_sfm.keys())[i]
             assert np.all(v == list(base_sfm.values())[i])
 
 

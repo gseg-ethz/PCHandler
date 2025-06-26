@@ -3,14 +3,14 @@ from __future__ import annotations
 import warnings
 from abc import ABC, abstractmethod
 from functools import cached_property
-from typing import Annotated, Optional, Self
+from typing import Annotated, Optional, Self, Any
 
 import numpy as np
 import numpy.typing as npt
 from pydantic import BeforeValidator, ConfigDict, Field, validate_call
 
-from ..base_arrays import Array_Nx3_T, ArrayNx2, ArrayNx3, FixedLengthArray
-from ..base_types import Array_4x4_T, Vector_3_T
+from ..base_arrays import ArrayNx2, ArrayNx3, FixedLengthArray
+from ..base_types import Array_4x4_T, Vector_3_T, Array_Nx3_T, Array_3x3_T
 from ..constants import HALF_PI, PI, TWO_PI, DEFAULT_CONFIG
 from ..validators import validate_spherical_angles
 from .transforms import (
@@ -27,7 +27,7 @@ TransformT = _Transform4x4 | _Transform3x3 | Transform
 
 class AbstractCoordinates(FixedLengthArray, ABC):
 
-    def __matmul__(self, transpose_matrix: TransformT | np.ndarray) -> Self | np.ndarray:
+    def __matmul__(self, transpose_matrix: TransformT | npt.NDArray[np.floating]) -> Self | np.ndarray:
         raise NotImplementedError(
             "Left matrix multiplication is not supported.\n"
             "For 3D coordinates use the formula: \n"
@@ -40,11 +40,11 @@ class AbstractCoordinates(FixedLengthArray, ABC):
 class Abstract2dCoordinates(ArrayNx2, AbstractCoordinates):
     @property
     @abstractmethod
-    def row(self) -> np.ndarray: ...
+    def row(self) -> npt.NDArray[Any]: ...
 
     @property
     @abstractmethod
-    def col(self) -> np.ndarray: ...
+    def col(self) -> npt.NDArray[Any]: ...
 
 
 class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates):
@@ -54,14 +54,14 @@ class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates):
 
     @property
     @abstractmethod
-    def xyz(self) -> np.ndarray: ...
+    def xyz(self) -> npt.NDArray[np.floating]: ...
 
     @property
     @abstractmethod
-    def spher(self) -> np.ndarray: ...
+    def spher(self) -> npt.NDArray[np.floating]: ...
 
     @validate_call(config=DEFAULT_CONFIG)
-    def __rmatmul__(self, matrix: TransformT | np.ndarray) -> Self | np.ndarray:
+    def __rmatmul__(self, matrix: TransformT | npt.NDArray[np.floating]) -> Self | npt.NDArray[np.floating]:
         if isinstance(matrix, TransformT):
             matrix: np.ndarray = matrix.arr
 
@@ -77,7 +77,7 @@ class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates):
         return temp
 
     @validate_call(config=DEFAULT_CONFIG)
-    def __imatmul__(self, transpose_matrix: TransformT | np.ndarray) -> Self | np.ndarray:
+    def __imatmul__(self, transpose_matrix: TransformT | npt.NDArray[np.floating]) -> Self | npt.NDArray[np.floating]:
         raise NotImplementedError(
             "In place matrix multiplication not supported due to ambiguity between left and right multiplication.\n\n"
             "For 3D coordinates follow the right matrix multiplication formula of:"
@@ -91,56 +91,56 @@ class CartesianCoordinates(Abstract3dCoordinates):
     arr: Array_Nx3_T = Field(alias="xyz")
 
     @property
-    def x(self) -> np.ndarray:
+    def x(self) -> npt.NDArray[np.floating]:
         return self.arr[:, 0]
 
     @property
-    def y(self) -> np.ndarray:
+    def y(self) -> npt.NDArray[np.floating]:
         return self.arr[:, 1]
 
     @property
-    def z(self) -> np.ndarray:
+    def z(self) -> npt.NDArray[np.floating]:
         return self.arr[:, 2]
 
     @property
-    def xyz(self) -> np.ndarray:
+    def xyz(self) -> npt.NDArray[np.floating]:
         return self.arr
 
     @xyz.setter
-    def xyz(self, value: np.array):
+    def xyz(self, value: npt.NDArray[np.floating]):
         # if self.model_config['frozen']:
         #     raise ValueError('Cannot edit XYZ coordinates of frozen object')
         self.arr = value
 
     @property
-    def yxz(self) -> np.ndarray:
+    def yxz(self) -> npt.NDArray[np.floating]:
         return self.xyz[:, [1, 0, 2]]
 
     @cached_property
-    def spher(self) -> np.ndarray:
+    def spher(self) -> npt.NDArray[np.floating]:
         if self.socs_origin is None:
             warnings.warn("Scan center of point cloud is ambiguous and results can not be guaranteed")
             return xyz2rhv(self.arr, np.zeros(3, dtype=np.float32))
         return xyz2rhv(self.arr, self.socs_origin)
 
     @property
-    def r(self):
+    def r(self) -> npt.NDArray[np.floating]:
         return self.spher[:, 0]
 
     @property
-    def hz(self):
+    def hz(self) -> npt.NDArray[np.floating]:
         return self.spher[:, 1]
 
     @property
-    def v(self):
+    def v(self) -> npt.NDArray[np.floating]:
         return self.spher[:, 2]
 
     @property
-    def rhv(self):
+    def rhv(self) -> npt.NDArray[np.floating]:
         return self.spher
 
     @property
-    def _hz_v(self) -> np.ndarray:
+    def _hz_v(self) -> npt.NDArray[np.floating]:
         return self.rhv[:, 1:]
 
     @property
@@ -153,13 +153,17 @@ class CartesianCoordinates(Abstract3dCoordinates):
         return spherical
 
     @classmethod
-    def from_spherical(cls, spherical: SphericalCoordinates):
+    def from_spherical(cls, spherical: SphericalCoordinates) -> Self:
         cartesian = cls(**spherical.model_dump(exclude={"arr"}) | {"arr": spherical.xyz})
         delattr(spherical, "xyz")
         return cartesian
 
     # TODO must define on the transformation handling -> Incl. support for the scipy.spatial.transform.rotation
-    def transform(self, affine=None, rotation=None, translation=None, scale=None):
+    def transform(self,
+                  affine: Array_4x4_T = None,
+                  rotation: Array_3x3_T = None,
+                  translation: Vector_3_T = None,
+                  scale: Vector_3_T = None) -> None:
         affine = Transform.from_matrix(affine) if affine else np.eye(4)
 
         if rotation is not None:
@@ -176,19 +180,19 @@ class SphericalCoordinates(Abstract3dCoordinates):
     arr: Annotated[Array_Nx3_T, Field(validation_alias="spher"), BeforeValidator(validate_spherical_angles)]
 
     @property
-    def fov(self):
+    def fov(self) -> Fov:
         raise NotImplementedError
 
     @property
-    def spher(self) -> np.ndarray:
+    def spher(self) -> npt.NDArray[np.floating]:
         return self.arr
 
     @property
-    def rhv(self) -> np.ndarray:
+    def rhv(self) -> npt.NDArray[np.floating]:
         return self.arr
 
     @property
-    def r(self) -> np.ndarray:
+    def r(self) -> npt.NDArray[np.floating]:
         return self.rhv[:, 0]
 
     @property
@@ -196,30 +200,30 @@ class SphericalCoordinates(Abstract3dCoordinates):
         return self.rhv[:, 1]
 
     @property
-    def v(self) -> np.ndarray:
+    def v(self) -> npt.NDArray[np.floating]:
         return self.rhv[:, 2]
 
     @property
-    def _hz_v(self) -> np.ndarray:
+    def _hz_v(self) -> npt.NDArray[np.floating]:
         return self.rhv[:, 1:]
 
     @cached_property
-    def xyz(self) -> np.ndarray:
+    def xyz(self) -> npt.NDArray[np.floating]:
         if self.socs_origin is None:
             warnings.warn("Spherical origin was not defined, so coordinates assumed to be at scan origin")
             return rhv2xyz(self.arr, np.zeros(3, dtype=np.float32))
         return rhv2xyz(self.arr, self.socs_origin)
 
     @property
-    def x(self) -> np.ndarray:
+    def x(self) -> npt.NDArray[np.floating]:
         return self.xyz[:, 0]
 
     @property
-    def y(self) -> np.ndarray:
+    def y(self) -> npt.NDArray[np.floating]:
         return self.xyz[:, 1]
 
     @property
-    def z(self) -> np.ndarray:
+    def z(self) -> npt.NDArray[np.floating]:
         return self.xyz[:, 2]
 
     def to_cartesian(self) -> CartesianCoordinates:
@@ -228,7 +232,7 @@ class SphericalCoordinates(Abstract3dCoordinates):
         return cartesian
 
     @classmethod
-    def from_cartesian(cls, cartesian: CartesianCoordinates):
+    def from_cartesian(cls, cartesian: CartesianCoordinates) -> Self:
         spherical = cls(**cartesian.model_dump(exclude={"arr"}) | {"arr": cartesian.spher})
         delattr(cartesian, "spher")
         return spherical
@@ -244,7 +248,7 @@ class SphericalCoordinates(Abstract3dCoordinates):
 
 
 @validate_call(config=DEFAULT_CONFIG)
-def rhv2xyz(spher: npt.ArrayLike, origin_shift: Vector_3_T | None = None) -> np.ndarray:
+def rhv2xyz(spher: npt.ArrayLike|npt.NDArray[np.floating], origin_shift: Vector_3_T | None = None) -> np.ndarray:
     xyz: np.ndarray = np.zeros_like(spher)
     xyz[:, 0] = spher[:, 0] * np.sin(spher[:, 2]) * np.cos(spher[:, 1])
     xyz[:, 1] = spher[:, 0] * np.sin(spher[:, 2]) * np.sin(spher[:, 1])
@@ -255,7 +259,7 @@ def rhv2xyz(spher: npt.ArrayLike, origin_shift: Vector_3_T | None = None) -> np.
 
 # TODO fix this to support the optimal shifts (e.g. remove origin shift)
 @validate_call(config=DEFAULT_CONFIG)
-def xyz2rhv(cart: npt.ArrayLike, origin_shift: Optional[Vector_3_T] = np.zeros(3)) -> np.ndarray:
+def xyz2rhv(cart: npt.ArrayLike|npt.NDArray[np.floating], origin_shift: Optional[Vector_3_T] = np.zeros(3)) -> np.ndarray:
     spher: np.ndarray = np.zeros_like(cart)
 
     # Apply the shift in place to avoid creating additional copies

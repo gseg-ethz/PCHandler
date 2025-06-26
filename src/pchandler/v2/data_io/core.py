@@ -5,11 +5,13 @@ from abc import ABC, abstractmethod
 from enum import IntEnum, auto
 from pathlib import Path
 
-from typing import Mapping, TypedDict, Iterable, Unpack, Optional, NotRequired, Annotated, Sequence
+from typing import Mapping, TypedDict, Iterable, Unpack, Optional, NotRequired, Annotated, Sequence, Any, Collection, Generator
 
 import numpy as np
+import numpy.typing as npt
 from pydantic import BaseModel, ConfigDict, Field, BeforeValidator
 
+from ..base_types import Array_Nx3_T
 from ..constants import (
     INTENSITY_POTENTIAL_NAMES,
     REFLECTANCE_POTENTIAL_NAMES,
@@ -28,6 +30,7 @@ from ..constants import (
 from ..geometry.core import PointCloudData
 from ..geometry.scalar_fields import (
     ScalarField,
+    ScalarFieldTriplet,
     RGBFields,
     NormalFields,
     DtypeState,
@@ -37,7 +40,7 @@ from ..geometry.scalar_fields import (
 
 logger = logging.getLogger(__name__.split(".")[0])
 
-BaseDataT =  Mapping[str, np.ndarray] | np.ndarray
+BaseDataT =  Mapping[str, npt.NDArray[Any]] | npt.NDArray[Any]
 SUPPORTED_TYPES = (".ply", ".las", ".laz", ".txt", ".csv", ".ply", ".e57")
 
 
@@ -47,7 +50,7 @@ class NormaliseEnum(IntEnum):
     DTYPE = auto()
     MAPPING = auto()
 
-def find_pcd_in_directory(directory_path, pcd_file_types: list[str], include_subdirectories: bool = True) -> list[Path]:
+def find_pcd_in_directory(directory_path: Path, pcd_file_types: list[str], include_subdirectories: bool = True) -> list[Path]:
     """
     (Recursively) searches a directory for point cloud files with specific extensions.
 
@@ -76,7 +79,7 @@ def find_pcd_in_directory(directory_path, pcd_file_types: list[str], include_sub
     return file_list
 
 
-def skip_main_fields(field_names: Sequence[str]|set[str]):
+def skip_main_fields(field_names: Sequence[str]|set[str]) -> set[str]:
     return set(field_names).difference({RGB_FIELD, INTENSITY_FIELD, NORMALS_FIELD, REFLECTANCE_FIELD})
 
 
@@ -85,61 +88,63 @@ class _BaseConfigType(TypedDict):
     keep_rgb: NotRequired[bool]
     keep_intensity: NotRequired[bool]
     keep_reflectance: NotRequired[bool]
-    keep_extra_scalar_fields: NotRequired[Iterable[str]]
+    keep_extra_scalar_fields: NotRequired[set[str]]
     cloud_compare_exported: NotRequired[bool]
 
 
-class _BaseLoadConfigType(_BaseConfigType):
+class _LoadConfigType(_BaseConfigType):
     pass
 
 
-class _BaseSaveConfigType(_BaseConfigType):
+class _SaveConfigType(_BaseConfigType):
     revert_sf_types: NotRequired[bool]
 
 
 class _BaseConfig(BaseModel):
-    model_config = ConfigDict(extra='ignore')
-    keep_rgb: Optional[bool] = True
-    keep_normals: Optional[bool] = True
-    keep_intensity: Optional[bool] = True
-    keep_reflectance: Optional[bool] = True
+    model_config = ConfigDict(extra='ignore', arbitrary_types_allowed=True)
+    keep_rgb: bool = True
+    keep_normals: bool = True
+    keep_intensity: bool = True
+    keep_reflectance: bool = True
     keep_extra_scalar_fields: Annotated[set[str], BeforeValidator(skip_main_fields), Field(default_factory=set)]
     cloud_compare_exported: bool = False
 
 
-class BaseLoadConfig(_BaseConfig):
-    pass
+class LoadConfig(_BaseConfig):
+    comment: str = '//'
+    skip_rows: Optional[int] = None
+    delimiter: Optional[str] = None
+    num_points_line: Optional[bool] = None
+    column_names: Collection[str] = Field(default_factory=list)
+    column_names_row: int = Field(default=-1, le=-1, ge=100)
+    ignore_missing_fields: bool = True
+    pcd_index: int = 0
 
 
-class BaseSaveConfig(_BaseConfig):
+class SaveConfig(_BaseConfig):
     revert_sf_types: bool = False
+    delimiter: str = ' '
+    number_points_line: bool = False
+    header_lines: Collection[str] = Field(default_factory=list)
 
 
 class AbstractIOHandler(ABC):
-    FORMATS: list[str] = None
-    LOAD_CONFIG: type[BaseLoadConfig] = BaseLoadConfig
-    SAVE_CONFIG: type[BaseSaveConfig] = BaseSaveConfig
+    FORMATS: list[str] = []
 
     @classmethod
     @abstractmethod
-    def load(cls, /, path: str|Path, **config: Unpack[_BaseLoadConfigType]): ...
+    def load(cls, /, path: str|Path, **config: Unpack[_LoadConfigType]) -> PointCloudData | Generator[PointCloudData, None, None]: ...
 
     @classmethod
     @abstractmethod
-    def save(cls, /, pcd: PointCloudData, path: str | Path, **config: Unpack[_BaseSaveConfigType]): ...
+    def save(cls, /, pcd: PointCloudData, path: str | Path, **config: Unpack[_SaveConfigType]) -> None: ...
 
     @classmethod
-    def get_config(cls, load=True, **kwargs):
-        if load:
-            return cls.LOAD_CONFIG(**kwargs)
-        return cls.SAVE_CONFIG(**kwargs)
+    def find_pcds_in_directory(cls, directory_path: str|Path, include_subdirectories: bool = True) -> list[Path]:
+        return find_pcd_in_directory(Path(directory_path), cls.FORMATS, include_subdirectories)
 
     @classmethod
-    def find_pcds_in_directory(cls, directory_path: str|Path, include_subdirectories: bool = True):
-        return find_pcd_in_directory(directory_path, cls.FORMATS, include_subdirectories)
-
-    @classmethod
-    def _extract_xyz(cls, data: BaseDataT, num_points: int, field_names: set[str]):
+    def _extract_xyz(cls, data: BaseDataT, num_points: int, field_names: set[str]) -> Array_Nx3_T:
         xyz = np.empty((num_points, 3), dtype=data["x"].dtype)
         xyz[:, 0] = data["x"]
         xyz[:, 1] = data["y"]
@@ -153,7 +158,7 @@ class AbstractIOHandler(ABC):
     def extract_common_fields(cls,
                               pcd: PointCloudData,
                               data: BaseDataT,
-                              cfg: BaseLoadConfig,
+                              cfg: LoadConfig,
                               num_points: int,
                               field_names: set[str]) -> None:
 
@@ -166,7 +171,7 @@ class AbstractIOHandler(ABC):
                         setattr(pcd, name, getattr(cls, f"extract_{name}")(data))
 
     @classmethod
-    def extract_extra_fields(cls, pcd: PointCloudData, data: BaseDataT, cfg: BaseLoadConfig, field_names: set[str]):
+    def extract_extra_fields(cls, pcd: PointCloudData, data: BaseDataT, cfg: LoadConfig, field_names: set[str]) -> None:
         field_names &= cfg.keep_extra_scalar_fields
 
         for name in field_names:
@@ -208,25 +213,27 @@ class AbstractIOHandler(ABC):
         return cls._extract_reflectance_or_intensity(data, REFLECTANCE_FIELD)
 
     @staticmethod
-    def remove_field_names(field_names: set[str], *args):
+    def remove_field_names(field_names: set[str], *args: str) -> None:
         for name in args:
             field_names.remove(name)
 
     @staticmethod
-    def _get_sf_dtype(cfg: BaseSaveConfig, scalar_field: ScalarField) -> str:
-        if cfg.revert_sf_types:
-            return scalar_field.origin_dtype.dtype.str
-        return scalar_field.dtype.str
+    def _get_sf_dtype(cfg: SaveConfig, scalar_field: ScalarField|ScalarFieldTriplet) -> str:
+        if scalar_field.origin_dtype is not None:
+            dt: npt.DTypeLike = scalar_field.origin_dtype
+            if cfg.revert_sf_types:
+                return dt.str
+            return scalar_field.dtype.str
+        else:
+            raise ValueError('')
 
     @classmethod
-    def generate_struct_dtype(cls, pcd: PointCloudData, cfg: BaseSaveConfig):
+    def generate_struct_dtype(cls, pcd: PointCloudData, cfg: SaveConfig) -> tuple[npt.DTypeLike, list[str]]:
         xyz_dtype = np.dtype(np.float64).str if pcd.optimized is not None else pcd.xyz.dtype.str
         dtype_list = [(name, str(xyz_dtype)) for name in ('x', 'y', 'z')]
 
         pcd_scalar_fields = set(pcd.scalar_fields.keys()).difference(
             {RGB_FIELD, NORMALS_FIELD, INTENSITY_FIELD, REFLECTANCE_FIELD})
-
-        # TODO try to fix this and make more concise
 
         if cfg.keep_rgb and pcd.rgb is not None:
             dtype_list.extend(
@@ -258,7 +265,7 @@ class AbstractIOHandler(ABC):
         return dtype_list, extra_fields
 
     @classmethod
-    def generate_structured_array(cls, pcd: PointCloudData, cfg: BaseSaveConfig):
+    def generate_structured_array(cls, pcd: PointCloudData, cfg: SaveConfig) -> npt.NDArray[Any]:
         dtype_list, extra_fields = cls.generate_struct_dtype(pcd, cfg)
         array = np.empty((len(pcd),), dtype=dtype_list)
 
@@ -342,9 +349,9 @@ class AbstractIOHandler(ABC):
         return matched_names
 
     @classmethod
-    def _get_intensity_field_names(cls, field_names) -> list[str] | None:
+    def _get_intensity_field_names(cls, field_names: set[str]) -> list[str] | None:
         return cls._get_intensity_or_reflectance_field_name(field_names, INTENSITY_POTENTIAL_NAMES)
 
     @classmethod
-    def _get_reflectance_field_names(cls, field_names) -> list[str] | None:
+    def _get_reflectance_field_names(cls, field_names: set[str]) -> list[str] | None:
         return cls._get_intensity_or_reflectance_field_name(field_names, REFLECTANCE_POTENTIAL_NAMES)

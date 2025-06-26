@@ -1,42 +1,44 @@
 from __future__ import annotations
 
-from typing import Any, Mapping, Optional, Self, Annotated
+from typing import Any, Mapping, Optional, Self, Annotated, MutableMapping, Union, Type
 
 import numpy as np
 import numpy.typing as npt
+import open3d as o3d
 from pydantic import Field, field_validator, model_validator, BeforeValidator
 
-from ..base_types import Array_4x4_T, Array_Nx3_T, Vector_3_T
+from ..base_types import Array_4x4_T, Array_Nx3_T, Vector_3_T, IndexLike
 from ..validators import extract_array
 from .coordinates import CartesianCoordinates
 from .optimal_shift import OptimizedShift
 
 from .scalar_field_manager import ScalarFieldManager
-from .scalar_fields import NormalFields, RGBFields, ScalarField
+from .scalar_fields import NormalFields, RGBFields, ScalarField, SF_T, NormalisedInt16ScalarField, ScalarFieldTriplet
 from .transforms import Transform, TransformLedger
 
 # TODO check for a better converter - TypeAdapter?
 
+
 class PointCloudData(CartesianCoordinates):
     transform_ledger: Annotated[
-        TransformLedger[str, [Transform]],
+        TransformLedger,
         Field(default_factory=TransformLedger),
         BeforeValidator(lambda value: value if not isinstance(value, TransformLedger) else TransformLedger(**value))
     ]
-    scalar_fields: ScalarFieldManager | dict[str, ScalarField] = Field(default_factory=ScalarFieldManager)
+    scalar_fields: ScalarFieldManager[ScalarField | ScalarFieldTriplet] = Field(default_factory=ScalarFieldManager)
     optimized_shift: Optional[OptimizedShift]
 
     def __init__(
         self,
         xyz: npt.NDArray[np.floating] | Array_Nx3_T | CartesianCoordinates,
         *,
-        rgb: Optional[npt.NDArray[Any, np.uint8] | RGBFields] = None,
-        normals: Optional[npt.NDArray[Any, np.float32] | NormalFields] = None,
-        intensity: Optional[npt.NDArray | ScalarField] = None,
-        reflectance: Optional[npt.NDArray | ScalarField] = None,
+        rgb: Optional[npt.NDArray[np.uint8|np.float32|np.float64] | RGBFields] = None,
+        normals: Optional[npt.NDArray[np.float32|np.float64] | NormalFields] = None,
+        intensity: Optional[npt.NDArray[np.uint16|np.float32|np.float64] | ScalarField] = None,
+        reflectance: Optional[npt.NDArray[np.uint16|np.float32|np.float64] | ScalarField] = None,
         optimized_shift: Optional[OptimizedShift | ellipsis] = Ellipsis,
-        socs_origin: Optional[np.ndarray] = None,
-        scalar_fields: Optional[ScalarFieldManager | dict] = None,
+        socs_origin: Optional[npt.NDArray[np.float64]] = None,
+        scalar_fields: Optional[ScalarFieldManager[ScalarField | ScalarFieldTriplet] | dict[str, SF_T]] = None,
         project_transformation: Optional[Array_4x4_T] = None,
         transform_ledger: Optional[TransformLedger] = None,
         frozen: bool = False
@@ -44,7 +46,7 @@ class PointCloudData(CartesianCoordinates):
         if scalar_fields is None:
             scalar_fields = {}
 
-        scalar_fields = ScalarFieldManager(None, fields=scalar_fields)
+        sfm: ScalarFieldManager[ScalarField | ScalarFieldTriplet] = ScalarFieldManager(None, fields=scalar_fields)
 
         if isinstance(rgb, np.ndarray):
             rgb = RGBFields(rgb)
@@ -60,7 +62,7 @@ class PointCloudData(CartesianCoordinates):
 
         for field in (rgb, normals, intensity, reflectance):
             if field is not None:
-                scalar_fields.add_field(field)
+                sfm.add_field(field)
 
         # TODO implement post v2.0
         # if transform_ledger is not None:
@@ -77,27 +79,24 @@ class PointCloudData(CartesianCoordinates):
 
         super().__init__(
             xyz=xyz,
-            scalar_fields = scalar_fields,
+            scalar_fields = sfm,
             optimized_shift = optimized_shift,
             socs_origin = socs_origin,
             project_transformation = project_transformation,
             transform_ledger = transform_ledger if transform_ledger else TransformLedger(),
         )
 
-        if optimized_shift is not None:
-            optimized_shift = optimized_shift.register(self, xyz)
-
-        if optimized_shift:
-            self.update_shift(optimized_shift.optimal_shift)
-
-        self.optimized_shift = optimized_shift
+        if isinstance(optimized_shift, OptimizedShift):
+            final_shift: OptimizedShift = optimized_shift.register(self, xyz)
+            self.update_shift(final_shift.optimal_shift)
+            self.optimized_shift = final_shift
 
 
     def __hash__(self) -> int:
         return id(self)
 
 
-    def update_shift(self, delta_shift: Vector_3_T):
+    def update_shift(self: Self, delta_shift: Vector_3_T) -> None:
         self.xyz = self.xyz + delta_shift
 
 
@@ -116,49 +115,48 @@ class PointCloudData(CartesianCoordinates):
         return self
 
     @property
-    def normals(self):
+    def normals(self: Self) -> Optional[NormalFields]:
         return self.scalar_fields.normals
 
     @normals.setter
-    def normals(self, value: np.ndarray|NormalFields):
+    def normals(self, value: np.ndarray|NormalFields) -> None:
         self.scalar_fields.normals = value
 
     @property
-    def rgb(self):
+    def rgb(self) -> Optional[RGBFields]:
         return self.scalar_fields.rgb
 
     @rgb.setter
-    def rgb(self, value: np.ndarray|RGBFields):
+    def rgb(self, value: npt.NDArray[Any]|RGBFields) -> None:
         self.scalar_fields.rgb = value
 
     @property
-    def intensity(self):
+    def intensity(self) -> Optional[NormalisedInt16ScalarField]:
         return self.scalar_fields.intensity
 
     @intensity.setter
-    def intensity(self, value: np.ndarray|ScalarField):
+    def intensity(self, value: npt.NDArray[np.uint16]|ScalarField) -> None:
         self.scalar_fields.intensity = value
 
     @property
-    def reflectance(self):
+    def reflectance(self: Self) -> Optional[NormalisedInt16ScalarField]:
         return self.scalar_fields.reflectance
 
     @reflectance.setter
-    def reflectance(self, value: np.ndarray|ScalarField):
+    def reflectance(self, value: np.ndarray|ScalarField) -> None:
         self.scalar_fields.reflectance = value
 
-    def __setitem__(self, key, value: PointCloudData):
+    def __setitem__(self, key: IndexLike, value: npt.NDArray[Any] | PointCloudData) -> None:
         raise IndexError(
             f"Setting items in PointCloudData is not supported. Consider using the copy or "
             f"dump data to a dict and reinstantiate."
         )
 
-
     def copy(self,
-             array: npt.NDArray | Self | None = None,
+             array: npt.NDArray[np.floating] | Self | None = None,
              *,
-             update: Mapping[str, Any] = None,
-             **kwargs) -> Self:
+             update: Optional[MutableMapping[str, Any]] = None,
+             **kwargs: dict[str, Any]) -> Self:
         """
         Produce a deep or shallow copy of the model. Updates the model also if parameter is parsed.
         """
@@ -179,20 +177,20 @@ class PointCloudData(CartesianCoordinates):
 
         return type(self)(update.pop('xyz'), **update)
 
-    def sample(self, mask) -> PointCloudData:
+    def sample(self, mask: npt.NDArray[np.bool_|np.integer]) -> PointCloudData:
         mask = self.create_mask(mask)
         return self.copy(self.arr[mask, :], update={"scalar_fields": self.scalar_fields.sample(mask)})
 
-    def reduce(self, mask):
+    def reduce(self, mask: npt.NDArray[np.bool_|np.integer]) -> None:
         super().reduce(mask)
         self.scalar_fields.reduce(mask)
 
-    def extract(self, mask):
-        extracted = super().extract(mask)
+    def extract(self, mask: npt.NDArray[np.bool_|np.integer]) -> PointCloudData:
+        extracted: PointCloudData = super().extract(mask)
         return extracted
 
     @staticmethod
-    def merge(*pcds: PointCloudData):
+    def merge(*pcds: PointCloudData) -> PointCloudData:
         scalar_fields = ScalarFieldManager.merge([pcd.scalar_fields for pcd in pcds])
         if not all([pcds[0].optimized == pcd.optimized for pcd in pcds[1:]]):
             raise ValueError('Can only merge point clouds if they are all optimized or unoptimized.')
@@ -219,7 +217,7 @@ class PointCloudData(CartesianCoordinates):
 
         return PointCloudData(xyz, scalar_fields=scalar_fields)
 
-    def to_o3d(self):
+    def to_o3d(self) -> o3d.geometry.PointCloud | o3d.t.geometry.PointCloud:
         """
             Converts the point cloud to an Open3D `PointCloud` object.
 
@@ -239,7 +237,7 @@ class PointCloudData(CartesianCoordinates):
 
 
     @classmethod
-    def from_o3d(cls, o3d):
+    def from_o3d(cls, pcd_o3d: o3d.geometry.PointCloud | o3d.t.geometry.PointCloud) -> None:
         """
             @classmethod
             def from_o3d(cls, pcd_o3d: o3d.geometry.PointCloud, scan_center: Optional[NDArray[np.float_]] = None) -> Self:
@@ -247,7 +245,7 @@ class PointCloudData(CartesianCoordinates):
 
                 Parameters
                 ----------
-                pcd_o3d : o3d.geometry.PointCloud
+                pcd_o3d : o3d.geometry.PointCloud | o3d.t.geometry.PointCloud
                     An Open3D `PointCloud` object.
                 scan_center : np.ndarray, optional
                     The scan center for spherical coordinate calculations.
