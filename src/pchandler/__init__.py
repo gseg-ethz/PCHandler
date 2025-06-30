@@ -134,6 +134,7 @@ from .v2 import data_io, geometry, util
 from ._version import __version__
 
 logger = logging.getLogger(__name__.split(".")[0])
+logging.captureWarnings(True)
 
 if not logging.getLogger().hasHandlers():
     config = {

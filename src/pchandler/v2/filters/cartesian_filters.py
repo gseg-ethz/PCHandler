@@ -1,5 +1,5 @@
 import logging
-from typing import Tuple, Annotated, Literal
+from typing import Tuple, Annotated, Literal, Any, Sequence
 
 import numpy as np
 import numpy.typing as npt
@@ -9,11 +9,11 @@ from shapely.geometry import Polygon    # type: ignore[import-untyped]
 
 from pydantic import PositiveFloat, BeforeValidator, model_validator
 
-from ..constants import DEFAULT_CONFIG
+from ..constants import validate_variables
 
 from ..geometry.core import PointCloudData
 from .core import PointCloudFilter
-from ..base_types import Array_Nx3_T, Vector_3_T
+from ..base_types import Array_Nx3_T, Vector_3_T, ValidatedPolygonT
 
 
 logger = logging.getLogger(__name__.split(".")[0])
@@ -23,17 +23,14 @@ PlaneStrings = Literal["xy", "xz", "yz"]
 
 
 class BoxFilter(PointCloudFilter):
-    minimum: Vector_3_T
-    maximum: Vector_3_T
-
+    @validate_variables
     def __init__(self, minimum: Vector_3_T, maximum: Vector_3_T):
-        super().__init__(minimum=minimum, maximum=maximum)
-
-    @model_validator(mode="after")
-    def post_validation(self) -> None:
-        if np.any(self.minimum >= self.maximum):
+        if np.any(minimum >= maximum):
             raise ValueError(f"Cannot create box filter where minimum corner is greater than the maximum corner"
-                             f"\n {self.minimum=} vs {self.maximum=}")
+                             f"\n {minimum=} vs {maximum=}")
+
+        self.minimum = minimum
+        self.maximum = maximum
 
     @property
     def extents(self) -> Vector_3_T:
@@ -54,11 +51,10 @@ class BoxFilter(PointCloudFilter):
 
 
 class SphereFilter(PointCloudFilter):
-    sphere_center: Vector_3_T
-    radius: PositiveFloat
-
-    def __init__(self, sphere_center: Vector_3_T, radius: float) -> None:
-        super().__init__(sphere_center=sphere_center, radius=radius)
+    @validate_variables
+    def __init__(self, sphere_center: Vector_3_T, radius: PositiveFloat) -> None:
+        self.sphere_center = sphere_center
+        self.radius = radius
 
     def mask(self, pcd: PointCloudData) -> npt.NDArray[np.bool_]:
         point = (
@@ -72,11 +68,10 @@ class SphereFilter(PointCloudFilter):
 
 
 class PolygonFilter(PointCloudFilter):
-    polygon: Annotated[Polygon, BeforeValidator(lambda x: Polygon(x))]
-    plane: PlaneStrings
-
-    def __init__(self, polygon: Polygon, plane: str = "xy") -> None:
-        super().__init__(polygon=polygon, plane=plane)
+    @validate_variables
+    def __init__(self, polygon: ValidatedPolygonT, plane: PlaneStrings = "xy") -> None:
+        self.polygon: Polygon = polygon
+        self.plane = plane
 
     def mask(self, pcd: PointCloudData) -> npt.NDArray[np.bool_]:
         if self.plane == "xy":

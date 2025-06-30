@@ -4,24 +4,20 @@ from typing import Callable, Any
 
 import numpy as np
 import numpy.typing as npt
-from pydantic import BaseModel
 
-from ..constants import DEFAULT_CONFIG
+from ..constants import validate_variables
 from ..geometry.core import PointCloudData
 
 logger = logging.getLogger(__name__.split(".")[0])
 
 
-class PointCloudFilter(ABC, BaseModel):
-    model_config = DEFAULT_CONFIG
+class PointCloudFilter(ABC):
     """
     Abstract base class for filters on a PointCloudData.
 
     Subclasses should implement the mask() method to return a boolean mask
     that selects the desired points.
     """
-    def __init__(self, **kwargs: dict[str, Any]) -> None:
-        super().__init__(**kwargs)
 
     @abstractmethod
     def mask(self, pcd: PointCloudData) -> npt.NDArray[np.bool_]:
@@ -36,6 +32,7 @@ class PointCloudFilter(ABC, BaseModel):
         """
         pass
 
+    @validate_variables
     def reduce(self, pcd: PointCloudData) -> None:
         """
         Reduces the point cloud in-place to only the points where mask() is True.
@@ -49,6 +46,7 @@ class PointCloudFilter(ABC, BaseModel):
         m = self.mask(pcd)
         pcd.reduce(m)
 
+    @validate_variables
     def extract(self, pcd: PointCloudData) -> PointCloudData:
         """
         Extracts points where mask() is True: returns a new point cloud with those points,
@@ -64,6 +62,7 @@ class PointCloudFilter(ABC, BaseModel):
         new_pcd = pcd.extract(m)
         return new_pcd
 
+    @validate_variables
     def sample(self, pcd: PointCloudData) -> PointCloudData:
         """
         Returns a new point cloud with only the points where mask() is True, leaving
@@ -88,11 +87,10 @@ class GenericFieldFilter(PointCloudFilter):
         field_label: The field (attribute or scalar field key) on which to operate.
         filter_func: A callable that takes the field data and returns a boolean mask.
     """
-    field_label: str
-    filter_func: Callable
-
-    def __init__(self, field_label, filter_func):
-        super().__init__(field_label=field_label, filter_func=filter_func)
+    @validate_variables
+    def __init__(self, field_label: str, filter_func: Callable) -> None:
+        self.field_label = field_label
+        self.filter_func = filter_func
 
     def mask(self, pcd: PointCloudData) -> npt.NDArray[np.bool_]:
         """

@@ -1,5 +1,5 @@
 from numpy import finfo, float32, pi
-from pydantic import ConfigDict
+from pydantic import ConfigDict, validate_call
 
 EPS = finfo(float32).eps
 
@@ -23,5 +23,8 @@ NORMAL_PARTIAL_NAMES = NORMALS_CHAR + NORMALS_WORD
 NORMAL_POTENTIAL_NAMES = (NORMALS_FIELD, "normal", "normal_fields") + NORMAL_PARTIAL_NAMES
 INTENSITY_POTENTIAL_NAMES = (INTENSITY_FIELD, "intensities", "i")
 REFLECTANCE_POTENTIAL_NAMES = (REFLECTANCE_FIELD, )
+# TODO determine if str_to_lower should be in default config for validation functions/method
+DEFAULT_CONFIG = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True, str_to_lower=True)
+VALIDATE_RETURN_CONFIG = DEFAULT_CONFIG | {'validate_return': True}
 
-DEFAULT_CONFIG = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True)
+validate_variables = validate_call(config=VALIDATE_RETURN_CONFIG)

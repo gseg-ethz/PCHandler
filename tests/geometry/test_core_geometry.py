@@ -3,6 +3,7 @@ import copy
 import numpy as np
 import pytest
 
+import open3d as o3d
 from pydantic import ValidationError
 from pchandler.v2.geometry import PointCloudData
 from pchandler.v2.geometry.scalar_fields import ScalarField, RGBFields, NormalFields, NormalisedInt16ScalarField
@@ -488,6 +489,15 @@ class TestPointCloudData:
 
 class TestOpen3DSupport:
     def test_to_o3d(self, pcd):
+
+        obj = pcd.to_o3d(as_tensor=True)
+
+        assert isinstance(obj, o3d.t.geometry.PointCloud)
+        assert np.allclose(pcd.xyz, obj.point.positions)
+        for attr in ('normals', 'rgb', 'reflectance', 'intensity'):
+            assert hasattr(obj.point, 'normals')
+            assert np.allclose(getattr(pcd, attr), getattr(obj, attr).numpy())
+        assert hasattr(obj.point, 'normals')
         raise NotImplementedError('')
 
 

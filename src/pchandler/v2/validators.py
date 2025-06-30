@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional, Any
+from typing import Optional, Any, TypeVar, TYPE_CHECKING
 
 import numpy as np
 from numpy import typing as npt
 
 from .constants import HALF_PI, PI, TWO_PI
 
+if TYPE_CHECKING:
+    from .geometry.scalar_fields import AbstractScalarField
+
 logger = logging.getLogger(__name__.split(".")[0])
+
+T = TypeVar('T', bound=npt.DTypeLike)
 
 
 def validate_spherical_angles(array: npt.NDArray[np.floating]) -> npt.NDArray[np.floating]:
@@ -171,12 +176,12 @@ def check_in_range(value: npt.ArrayLike|npt.NDArray[Any], target_min: float, tar
         raise ValueError(f"Max value {val_max} exceeds upper limit {target_max}.")
 
 
-def normalize_min_max(array: npt.NDArray[Any],
+def normalize_min_max(array: npt.NDArray[Any]|AbstractScalarField,
                       lower: float|int|np.number,
                       upper: float|int|np.number,
-                      target_dtype: npt.DTypeLike,
+                      target_dtype: T,
                       v_min: Optional[float|int] = None,
-                      v_max: Optional[float|int] = None) -> npt.NDArray[Any]:
+                      v_max: Optional[float|int] = None) -> npt.NDArray[T]:
 
     if (not np.issubdtype(array.dtype, np.floating) and
             not np.issubdtype(array.dtype, np.integer) and

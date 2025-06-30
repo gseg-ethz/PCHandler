@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from typing import Any, Mapping, Optional, Self, Annotated, MutableMapping, Union, Type
 
 import numpy as np
@@ -217,7 +218,7 @@ class PointCloudData(CartesianCoordinates):
 
         return PointCloudData(xyz, scalar_fields=scalar_fields)
 
-    def to_o3d(self) -> o3d.geometry.PointCloud | o3d.t.geometry.PointCloud:
+    def to_o3d(self, as_tensor: bool = True) -> o3d.geometry.PointCloud | o3d.t.geometry.PointCloud:
         """
             Converts the point cloud to an Open3D `PointCloud` object.
 
@@ -232,12 +233,49 @@ class PointCloudData(CartesianCoordinates):
                 pcd_o3d.points = o3d.utility.Vector3dVector((self.xyz + self.global_coordinate_shift).astype(np.float64))
             return pcd_o3d
         """
-        raise NotImplementedError
+
+        if as_tensor:
+            pcd_o3d = o3d.t.geometry.PointCloud()
+            if self.optimized_shift is None:
+                pcd_o3d.point.positions = o3d.utility.Vector3dVector(self.xyz)
+            else:
+                pcd_o3d.point.positions = o3d.utility.Vector3dVector(
+                    (self.xyz.astype(np.float64) + self.optimized_shift.optimal_shift.astype(np.float64))
+                )
+
+            if 'rgb' in self.scalar_fields:
+                pcd_o3d.point.colors = o3d.utility.Vector3dVector(self.rgb.as_normalised_float32())
+
+            if 'normals' in self.scalar_fields:
+                pcd_o3d.point.normals = o3d.utility.Vector3dVector(self.normals)
+
+            for sf_name in set(self.scalar_fields.keys()).difference({'rgb', 'normals'}):
+                setattr(pcd_o3d.point, self.scalar_fields[sf_name])
+
+        else:
+            pcd_o3d = o3d.geometry.PointCloud()
+            if self.optimized_shift is None:
+                pcd_o3d.points = o3d.utility.Vector3dVector(self.xyz)
+            else:
+                pcd_o3d.points = o3d.utility.Vector3dVector(
+                    (self.xyz.astype(np.float64) + self.optimized_shift.optimal_shift.astype(np.float64))
+                )
+
+            if 'rgb' in self.scalar_fields:
+                pcd_o3d.colors = o3d.utility.Vector3dVector(self.rgb.as_normalised_float32())
+
+            if 'normals' in self.scalar_fields:
+                pcd_o3d.normals = o3d.utility.Vector3dVector(self.normals)
+
+            for sf_name in set(self.scalar_fields.keys()).difference({'rgb', 'normals'}):
+                warnings.warn(f"Cannot add scalar field '{sf_name}' to the pcd_o3d object")
+
+        return pcd_o3d
 
 
 
     @classmethod
-    def from_o3d(cls, pcd_o3d: o3d.geometry.PointCloud | o3d.t.geometry.PointCloud) -> None:
+    def from_o3d(cls, pcd_o3d: o3d.geometry.PointCloud | o3d.t.geometry.PointCloud) -> PointCloudData:
         """
             @classmethod
             def from_o3d(cls, pcd_o3d: o3d.geometry.PointCloud, scan_center: Optional[NDArray[np.float_]] = None) -> Self:
@@ -256,7 +294,25 @@ class PointCloudData(CartesianCoordinates):
                     A new instance of the `PointCloudData` class.
                 return cls(np.asarray(pcd_o3d.points), spherical_coordinates_origin=scan_center)
         """
-        raise NotImplementedError
+
+        if isinstance(pcd_o3d, o3d.t.geometry.PointCloud):
+            pcd = PointCloudData(np.asarray(pcd_o3d.point.positions))
+
+            for name, value in pcd_o3d.point:
+                pcd[name] = value
+
+        elif isinstance(pcd_o3d, o3d.geometry.PointCloud):
+            pcd = PointCloudData(np.asarray(pcd_o3d.points))
+            if len(pcd_o3d.colors):
+                pcd.rgb = pcd_o3d.colors
+
+            if len(pcd_o3d.normals):
+                pcd.normals = pcd_o3d.normals
+
+        else:
+            raise TypeError(f"Input point cloud is not an open 3d type but {type(pcd_o3d)=}")
+
+        return pcd
 
     # # DECIDE Implement in PCHandler or in pc2image
     # @classmethod

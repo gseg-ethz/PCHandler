@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated, Union
+from typing import Annotated, Union, Sequence
 
 import numpy as np
 import numpy.typing as npt
@@ -17,6 +17,8 @@ from numpydantic.dtype import (
     UInt16,
 ) # type: ignore
 from pydantic import BeforeValidator
+
+from shapely import Polygon
 
 from .validators import (
     extract_array,
@@ -54,3 +56,5 @@ VectorT_Float32 = Annotated[NDArray[Shape["*"], Float32], TransposedVector, Arra
 VectorT_Bool = Annotated[NDArray[Shape["*"], Bool], TransposedVector, ArrayValidator]  # Mask or boolean vector
 Vector_2_T = Annotated[NDArray[Shape["2"], ArrayDtypes], ArrayValidator]  # Image coordinate
 Vector_3_T = Annotated[NDArray[Shape["3"], ArrayDtypes], ArrayValidator]  # 3D coordinate
+
+ValidatedPolygonT = Annotated[Sequence | npt.NDArray[np.floating | np.integer] | Polygon, BeforeValidator(lambda x: Polygon(x))]

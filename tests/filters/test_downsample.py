@@ -120,9 +120,4 @@ class TestAngleBinDownsample:
     def test_mask(self, angle_bin_downsample, pcd_all):
         pcd = angle_bin_downsample.sample(pcd_all)
 
-
-        #
-        # assert mask.shape == (pcd_all.shape[0],)
-        # assert mask.dtype == np.bool_
-        # assert isinstance(mask, np.ndarray)
-        # assert np.all(mask == np.array([False, False, False, True, False]))
+        raise NotImplementedError("Need to finish angle bin tests - e.g. meshgrid values")

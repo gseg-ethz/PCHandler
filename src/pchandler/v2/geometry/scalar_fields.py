@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Annotated, NamedTuple, Self, TypeVar, Union, Optional, Any, TypedDict, NotRequired, Unpack
+from typing import Annotated, NamedTuple, Self, TypeVar, Optional, Any, TypedDict, NotRequired, Unpack
 
 import numpy as np
 import numpy.typing as npt
@@ -129,6 +129,9 @@ class RGBFields(ScalarFieldTriplet):
     @property
     def b(self) -> VectorT_Uint8:
         return self.arr[:, 2]
+
+    def as_normalised_float32(self) -> npt.NDArray[np.float32]:
+        return normalize_min_max(self, 0, 1, np.float32)
 
 
 class NormalFields(ScalarFieldTriplet):
