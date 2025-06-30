@@ -92,8 +92,8 @@ class AbstractScalarField(FixedLengthArray):
 
 
 class ScalarField(BaseVector, AbstractScalarField):
-    def __init__(self, arr: Self|npt.NDArray[np.generic], name: str, **kwargs: Unpack[ScalarKwargT]):
-        kwargs['name'] = name
+    def __init__(self, arr: Self|npt.NDArray[np.generic], **kwargs: Unpack[ScalarKwargT]):
+        kwargs['name'] = kwargs.get('name', None)
         super().__init__(arr=arr, **kwargs)
 
 

@@ -47,6 +47,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__.split(".")[0])
 
+from .base_arrays import BaseArray
+
 """
 The smallest positive number such that `1.0 + EPS != 1.0` for 32-bit floating-point values.
 
