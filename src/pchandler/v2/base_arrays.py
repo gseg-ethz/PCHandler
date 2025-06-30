@@ -88,7 +88,7 @@ class BaseArray(ABC, BaseModel):
         return self.arr.shape
 
     @property
-    def dtype(self) -> npt.DTypeLike:
+    def dtype(self) -> npt.DTypeLike[Any]:
         return self.arr.dtype
 
     @property
