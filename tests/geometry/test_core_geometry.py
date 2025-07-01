@@ -488,18 +488,30 @@ class TestPointCloudData:
 
 
 class TestOpen3DSupport:
-    def test_to_o3d(self, pcd):
+    def test_to_o3d(self, pcd: PointCloudData) -> None:
+        obj = pcd.to_o3d(as_tensor=False)
+        assert isinstance(obj, o3d.geometry.PointCloud)
+        for name in ('points', 'colors', 'normals'):
+            assert hasattr(obj, name)
 
+        assert np.allclose(np.asarray(obj.points), pcd.xyz)
+        assert np.allclose(np.asarray(obj.normals), pcd.normals)
+        assert np.allclose(np.asarray(obj.colors), pcd.rgb.as_normalised_float32())
+
+        assert not hasattr(obj, 'intensity')
+        assert not hasattr(obj, 'reflectance')
+
+    def test_to_o3d_tensor(self, pcd: PointCloudData) -> None:
         obj = pcd.to_o3d(as_tensor=True)
 
         assert isinstance(obj, o3d.t.geometry.PointCloud)
-        assert np.allclose(pcd.xyz, obj.point.positions)
+        assert np.allclose(pcd.xyz, obj.point.positions.numpy())
         for attr in ('normals', 'rgb', 'reflectance', 'intensity'):
-            assert hasattr(obj.point, 'normals')
-            assert np.allclose(getattr(pcd, attr), getattr(obj, attr).numpy())
-        assert hasattr(obj.point, 'normals')
-        raise NotImplementedError('')
+            assert hasattr(obj.point, attr)
+            assert np.allclose(getattr(pcd, attr), getattr(obj.point, attr).numpy())
 
+    def test_from_o3d(self, pcd_o3d: o3d.geometry.PointCloud):
+        raise NotImplementedError()
 
-    def test_from_o3d(self, pcd):
+    def test_from_o3d_tensor(self, pcd_o3d: o3d.t.geometry.PointCloud) -> None:
         raise NotImplementedError('')

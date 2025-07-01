@@ -176,7 +176,7 @@ def check_in_range(value: npt.ArrayLike|npt.NDArray[Any], target_min: float, tar
         raise ValueError(f"Max value {val_max} exceeds upper limit {target_max}.")
 
 
-def normalize_min_max(array: npt.NDArray[Any]|AbstractScalarField,
+def normalize_min_max(array: npt.NDArray[Any],
                       lower: float|int|np.number,
                       upper: float|int|np.number,
                       target_dtype: T,

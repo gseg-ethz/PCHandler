@@ -237,20 +237,21 @@ class PointCloudData(CartesianCoordinates):
         if as_tensor:
             pcd_o3d = o3d.t.geometry.PointCloud()
             if self.optimized_shift is None:
-                pcd_o3d.point.positions = o3d.utility.Vector3dVector(self.xyz)
+                pcd_o3d.point.positions = o3d.core.Tensor(self.xyz)
             else:
-                pcd_o3d.point.positions = o3d.utility.Vector3dVector(
+                pcd_o3d.point.positions = o3d.core.Tensor(
                     (self.xyz.astype(np.float64) + self.optimized_shift.optimal_shift.astype(np.float64))
                 )
 
-            if 'rgb' in self.scalar_fields:
-                pcd_o3d.point.colors = o3d.utility.Vector3dVector(self.rgb.as_normalised_float32())
+            # if self.scalar_fields.rgb:
+            #     pcd_o3d.point.colors = o3d.core.Tensor(self.scalar_fields.rgb.as_normalised_float32())
+            #
+            # if self.scalar_fields.normals:
+            #     pcd_o3d.point.normals = o3d.core.Tensor(self.scalar_fields.normals)
 
-            if 'normals' in self.scalar_fields:
-                pcd_o3d.point.normals = o3d.utility.Vector3dVector(self.normals)
-
-            for sf_name in set(self.scalar_fields.keys()).difference({'rgb', 'normals'}):
-                setattr(pcd_o3d.point, self.scalar_fields[sf_name])
+            # for sf_name in set(self.scalar_fields.keys()).difference({'rgb', 'normals'}):
+            for sf_name in set(self.scalar_fields.keys()):
+                setattr(pcd_o3d.point, sf_name, o3d.core.Tensor(self.scalar_fields[sf_name].arr))
 
         else:
             pcd_o3d = o3d.geometry.PointCloud()
