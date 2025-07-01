@@ -190,8 +190,11 @@ def normalize_min_max(array: npt.NDArray[Any],
 
     array = array.astype(np.float64)
 
-    v_min = v_min or array.min()
-    v_max = v_max or array.max()
+    if v_min is None:
+        v_min = array.min()
+
+    if v_max is None:
+        v_max = array.max()
 
     array = (array - v_min) / (v_max - v_min)
     array = np.add(array * (upper - lower), lower)
@@ -237,9 +240,6 @@ def normalize_self(array: npt.NDArray[Any]) -> npt.NDArray[Any]:
     return normalize_min_max(array, lower, upper, array.dtype)
 
 
-# TODO implement more advanced array data detection
-#  e.g. integer values in np.float
-#  e.g. minimum dtype required
 def _normalize_base(array: npt.NDArray[Any], dtype: npt.DTypeLike) -> npt.NDArray[Any]:
     if hasattr(array, 'arr'):
         array = array.arr
@@ -247,6 +247,8 @@ def _normalize_base(array: npt.NDArray[Any], dtype: npt.DTypeLike) -> npt.NDArra
     if array.dtype != dtype:
         if np.issubdtype(dtype, np.floating):
             return normalize_min_max(array, 0, 1, dtype)
+        if 0 <= array.min() <= array.max() <= 1:
+            return normalize_min_max(array, np.iinfo(dtype).min, np.iinfo(dtype).max, dtype, 0, 1)
         return normalize_min_max(array, np.iinfo(dtype).min, np.iinfo(dtype).max, dtype)
     return array
 
