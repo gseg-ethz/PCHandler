@@ -196,7 +196,7 @@ class TestPointCloudData:
         def test_xyz(self, rgb_, normals_, sfs_):
             # XYZ non_array object
             with pytest.raises(TypeError):
-                PointCloudData({"asb": 123}, rgb=rgb_, normals=normals_, sfm=sfs_)
+                PointCloudData({"asb": 123}, rgb=rgb_, normals=normals_, scalar_fields=sfs_)
 
             # Too many columns
             with pytest.raises(ValueError):
@@ -245,7 +245,7 @@ class TestPointCloudData:
                     rgb=rgb_,
                     normals=normals_,
                     scalar_fields=sfs_,
-                    socs_origin="NotAnOrigin",
+                    socs_origin="NotAnOrigin",  #type: ignore
                 )
             assert type(e.value) in (ValueError, TypeError, AttributeError, ValidationError)
 
@@ -365,14 +365,14 @@ class TestPointCloudData:
             def test_invalid_float_array(self, pcd):
                 bad_mask = np.random.rand(len(pcd))
                 with pytest.raises(Exception) as e:
-                    pcd.create_mask(bad_mask)
+                    pcd.create_mask(bad_mask)   #type: ignore
 
                 assert type(e.value) in (TypeError, IndexError, ValueError)
 
             def test_invalid_selection_type(self, pcd):
                 bad_index_type = "NotAMask"
                 with pytest.raises(Exception) as e:
-                    pcd.create_mask(bad_index_type)
+                    pcd.create_mask(bad_index_type) #type: ignore
 
                 assert type(e.value) in (TypeError, IndexError, ValueError)
 

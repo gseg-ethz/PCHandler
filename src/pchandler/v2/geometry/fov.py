@@ -78,9 +78,9 @@ from typing import Iterable, Optional, cast, Self, Annotated, NamedTuple, TYPE_C
 
 import numpy as np
 import numpy.typing as npt
-from pydantic import Field
+from pydantic import Field, NonNegativeFloat, PositiveFloat, validate_call
 
-from ..constants import EPS, TWO_PI, PI, HALF_PI
+from ..constants import EPS, TWO_PI, PI, HALF_PI, validate_variables, DEFAULT_CONFIG
 from ..util import AngleUnit, convert_angles
 
 if TYPE_CHECKING:
@@ -88,81 +88,72 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__.split(".")[0])
 
-NumT = float|int|np.number|npt.NDArray
+HzAngleT = Annotated[float, Field(ge=-PI, le=PI)]
+MaxWidthT = Annotated[float, Field(ge=0, le=TWO_PI)]
+VAngleT = Annotated[float, Field(ge=0, le=PI)]
 
-HzAngleT = Annotated[NumT, Field(ge=0, le=TWO_PI)]
-ElevAngleT = Annotated[NumT, Field(ge=0, le=PI)]
 
-
-# DISCUSS - do we want to keep angular units or use radians? Distance is also arbitrary
-# DISCUSS - should this be a pydantic model and validate the fields?
 class FoV(NamedTuple):
-    top: ElevAngleT
-    bottom: ElevAngleT
-    left: HzAngleT
-    right: HzAngleT
+    """
+    Field of View is defined by the spherical angles from the scan origin coordinate system (SOCS).
 
-    def __iter__(self) -> Iterable[HzAngleT|ElevAngleT]:
-        yield self.right
-        yield self.top
+    Azimuths or Horizontal angles are in the range of [-PI, +PI] with +PI being a right rotation from the X-axis
+    Zenith / Vertical angles are in the range of [0, +PI] with 0 being at the zenith
+
+    This is designed to be more compatible with spherical angle projections to image coordinate systems.
+
+    """
+    left: HzAngleT
+    top: VAngleT
+    right: HzAngleT
+    bottom: VAngleT
+
+    def __iter__(self) -> Iterable[HzAngleT | VAngleT]:
         yield self.left
+        yield self.top
+        yield self.right
         yield self.bottom
 
     # DISCUSS Would a change to left/right create a clash with previous logic based on min/max values -
     #  especially where it wraps at TWO_PI?
     @property
     def crosses_pi(self):
-        return self.right > self.left
+        return self.left > self.right
 
-    @classmethod
-    def from_spherical(cls, coordinates: SphericalCoordinates|CartesianCoordinates|np.ndarray) -> Self:
-        # TODO add function that more robustly determines this to catch where field of view crosses pi
-        logger.warning("Field of view may be incorrect if the view is narrow and passes over PI/-PI")
-
-        if isinstance(coordinates, np.ndarray):
-            logger.warning(f"Numpy array passed, assuming an Nx3 set of spherical coordinates in rhv order")
-
-            return cls(left=coordinates[:,1].max(),
-                       right=coordinates[:,1].min(),
-                       top=coordinates[:, 2].min(),
-                       bottom=coordinates[:, 2].max())
-
-        return cls(left=coordinates.hz.max(),
-                   right=coordinates.hz.min(),
-                   top=coordinates.v.min(),
-                   bottom=coordinates.v.max())
-
-    # Insert check on values?
-    def width(self) -> HzAngleT:
+    @validate_variables
+    def width(self) -> MaxWidthT:
         if self.crosses_pi:
-            return TWO_PI - (self.right - self.left)
-        return self.left - self.right
+            return TWO_PI - (self.left - self.right)
+        return self.right - self.left
 
-    def height(self) -> ElevAngleT:
+    @validate_variables
+    def height(self) -> VAngleT:
         return self.bottom - self.top
 
-    # DISCUSS FoV extents should be accessible via name? Would make the next functions clearer
-    def extent(self) -> tuple[HzAngleT, ElevAngleT]:
+    @validate_variables
+    def extent(self) -> tuple[MaxWidthT, VAngleT]:
         return self.width(), self.height()
 
-    def center(self) -> tuple[HzAngleT, ElevAngleT]:
+    @validate_variables
+    def center(self) -> tuple[HzAngleT, VAngleT]:
         horizontal_center = (self.left + self.right) / 2
         elevation_center = (self.top + self.bottom) / 2
+        if self.crosses_pi:
+            horizontal_center = (horizontal_center + PI) % PI
         return horizontal_center, elevation_center
 
     @classmethod
-    def from_center_with_extent(cls, centerpoint: tuple[float, float], extent: tuple[float, float]) -> Self:
+    @validate_call(config=DEFAULT_CONFIG)
+    def from_center_with_extent(cls, centerpoint: tuple[HzAngleT, VAngleT], extent: tuple[MaxWidthT, VAngleT]) -> Self:
         """
         Creates an FoV instance from a center point and angular extent.
 
         Parameters
         ----------
         centerpoint : tuple[float, float]
-            The (horizontal, elevation) center of the FoV in the specified unit.
+            The (horizontal_angle, vertical_angle) center of the FoV in the specified unit.
         extent : tuple[float, float]
             The angular extent (width, height) of the FoV in the specified unit.
-        unit : str or AngleUnit, default="rad"
-            The angular unit of the input values ("rad", "gon", or "deg").
 
         Returns
         -------
@@ -171,7 +162,10 @@ class FoV(NamedTuple):
         """
         fov_min = np.array(centerpoint) - np.array(extent) / 2
         fov_max = np.array(centerpoint) + np.array(extent) / 2
-        return cls(left=fov_max[0], right=fov_min[0], top=fov_min[1], bottom=fov_max[1] )
+        return cls(left=float(fov_min[0]),
+                   right=float(fov_max[0]),
+                   top=float(fov_min[1]),
+                   bottom=float(fov_max[1]))
 
     def union(self, fov2: Self) -> Self:
         """
@@ -188,10 +182,10 @@ class FoV(NamedTuple):
             The smallest FoV enclosing both.
         """
         return FoV(
-            right=min(self.right, fov2.right),
-            left=max(self.left, fov2.left),
-            bottom=max(self.bottom, fov2.bottom),
+            left=min(self.left, fov2.left),
             top=min(self.top, fov2.top),
+            right=max(self.right, fov2.right),
+            bottom=max(self.bottom, fov2.bottom)
         )
 
     def intersect(self, fov2: Self) -> Self:
@@ -209,13 +203,14 @@ class FoV(NamedTuple):
             The largest FoV contained within both.
         """
         return FoV(
-            left=min(self.left, fov2.left),
+            left=max(self.left, fov2.left),
             top=max(self.top, fov2.top),
-            right=max(self.right, fov2.right),
+            right=min(self.right, fov2.right),
             bottom=min(self.bottom, fov2.bottom),
         )
 
-    def ratio(self) -> float:
+    @validate_variables
+    def ratio(self) -> NonNegativeFloat:
         """
         Computes the width-to-height ratio of the FoV.
 
@@ -228,10 +223,11 @@ class FoV(NamedTuple):
 
     def __repr__(self):
         return (
-            f"({self.left:0.4f}, {self.right:0.4f}, "
-            f"{self.top:0.4f}, {self.right:0.4f})"
+            f"({self.left:0.4f}, {self.top:0.4f}, "
+            f"{self.right:0.4f}, {self.bottom:0.4f})"
         )
 
+    @validate_call(config=DEFAULT_CONFIG)
     def extend_to_ratio(self, ratio: float) -> Self:
         # FIXME no handling for wrapping FoV
         if self.ratio() - ratio > EPS:
@@ -245,9 +241,9 @@ class FoV(NamedTuple):
         elif ratio - self.ratio() > EPS:
             target_horizontal_extent = self.extent()[1] * ratio
             new_fov = FoV(
-                left=self.right + target_horizontal_extent,
+                left=self.left,
                 top=self.top,
-                right=self.right,
+                right=self.left + target_horizontal_extent,
                 bottom=self.bottom,
             )
         else:
@@ -255,6 +251,7 @@ class FoV(NamedTuple):
 
         return new_fov
 
+    validate_call(config=DEFAULT_CONFIG)
     def split(self, shape: tuple[int, int]) -> list[Self]:
         """
         Splits the FoV into smaller FoVs based on a grid shape.
@@ -274,22 +271,30 @@ class FoV(NamedTuple):
             return [self]
 
         horizontal_borders = np.linspace(
-            start=self.right, stop=self.left, num=shape[0] + 1, endpoint=True, retstep=False
+            start=self.left,
+            stop=self.right,
+            num=shape[0] + 1,
+            endpoint=True,
+            retstep=False
         )
-        elevation_borders = np.linspace(
-            start=self.top, stop=self.bottom, num=shape[1] + 1, endpoint=True, retstep=False
+        vertical_borders = np.linspace(
+            start=self.top,
+            stop=self.bottom,
+            num=shape[1] + 1,
+            endpoint=True,
+            retstep=False
         )
 
         fov_splits = [
-            FoV(right=hor_min, top=elev_min, left=hor_max, bottom=elev_max)
+            FoV(left=hor_min, top=elev_min, right=hor_max, bottom=elev_max)
             for hor_min, hor_max in zip(horizontal_borders[:-1], horizontal_borders[1:])
-            for elev_min, elev_max in zip(elevation_borders[:-1], elevation_borders[1:])
+            for elev_min, elev_max in zip(vertical_borders[:-1], vertical_borders[1:])
         ]
 
         return fov_splits
 
-    # DISCUSS Is this the correct implementation
-    def equal_tiles(self, width: float, height: float) -> list[Self]:
+    @validate_call(config=DEFAULT_CONFIG)
+    def equal_tiles(self, width: MaxWidthT, height: VAngleT) -> list[Self]:
         assert width > 0 and height
         # assert any(target < own for target, own in zip(target_extent[0], self.extent(target_extent[1])))
 
@@ -301,7 +306,6 @@ class FoV(NamedTuple):
         )
 
     def tile(self, target_extent: Self) -> list[list[Self]]:
-
         horizontal_steps = np.append(
             np.arange(self.horizontal_min, self.horizontal_max, target_extent.width()), self.horizontal_max
         )
@@ -311,21 +315,21 @@ class FoV(NamedTuple):
         )
 
         horizontal_bins = list(zip(horizontal_steps[:-1], horizontal_steps[1:]))
-        elevation_bins = list(zip(elevation_steps[:-1], elevation_steps[1:]))
+        vertical_bins = list(zip(elevation_steps[:-1], elevation_steps[1:]))
 
         tiles = []
         for hor_bin in horizontal_bins:
             if hor_bin[-1] - hor_bin[0] <= 0:
                 continue
             horizontal_tiles = []
-            for elev_bin in elevation_bins:
-                if elev_bin[-1] - elev_bin[0] <= 0:
+            for vert_bin in vertical_bins:
+                if vert_bin[-1] - vert_bin[0] <= 0:
                     continue
                 new_fov = FoV(
-                    right=hor_bin[0],
-                    top=elev_bin[0],
-                    left=hor_bin[1],
-                    bottom=elev_bin[1],
+                    left=hor_bin[0],
+                    top=vert_bin[0],
+                    right=hor_bin[1],
+                    bottom=vert_bin[1],
                 )
                 if all(e > EPS for e in new_fov.extent()):
                     horizontal_tiles.append(new_fov)
@@ -333,45 +337,46 @@ class FoV(NamedTuple):
                 tiles.append(horizontal_tiles)
         return tiles
 
-    def quadrants(self):
+    @validate_call(config=DEFAULT_CONFIG)
+    def quadrants(self) -> tuple[Self, ...]:
         # Keep for legacy
         return tuple(self.split(shape=(2, 2)))
 
     @classmethod
     def merge(cls, fovs: Iterable[Self]) -> Self:
-        fov1 = copy.deepcopy(fovs[0])
-        left = max(fovs, key=lambda fov: fov.left).left
-        top = min(fovs, key=lambda fov: fov.top).top
-        right = min(fovs, key=lambda fov: fov.right).right
-        bottom = max(fovs, key=lambda fov: fov.bottom).bottom
-
         return cls(
-            left=left,
-            top=top,
-            right=right,
-            bottom=bottom,
+            left=min(fovs, key=lambda fov: fov.left).left,
+            top=min(fovs, key=lambda fov: fov.top).top,
+            right=max(fovs, key=lambda fov: fov.right).right,
+            bottom=max(fovs, key=lambda fov: fov.bottom).bottom,
         )
 
     @property
     def horizontal_min(self):
-        # TODO
-        warnings.deprecated("To change to ... ")
-        return self.right
-
-    @property
-    def horizontal_max(self):
+        warnings.warn("elevation_min property has been deprecated. Please use the 'top' property",
+                      DeprecationWarning, stacklevel=2)
         return self.left
 
     @property
+    def horizontal_max(self):
+        warnings.warn("horizontal_max property has been deprecated. Please use the 'top' property",
+                      DeprecationWarning, stacklevel=2)
+        return self.right
+
+    @property
     def elevation_min(self):
+        warnings.warn("elevation_min property has been deprecated. Please use the 'top' property",
+                      DeprecationWarning, stacklevel=2)
         return self.top
 
     @property
     def elevation_max(self):
+        warnings.warn("elevation_max property has been deprecated. Please use the 'bottom' property",
+                      DeprecationWarning, stacklevel=2)
         return self.bottom
 
 @dataclass(init=False, frozen=True)
-class OldFoV:
+class _OldFoV:
     """
     Represents a rectangular angular region in 3D space with defined horizontal and elevation bounds.
 
@@ -582,7 +587,7 @@ class OldFoV:
         FoV
             The smallest FoV enclosing both.
         """
-        return FoV(
+        return type(self)(
             horizontal_min=min(self.horizontal_min, fov2.horizontal_min),
             elevation_min=min(self.elevation_min, fov2.elevation_min),
             horizontal_max=max(self.horizontal_max, fov2.horizontal_max),
@@ -603,7 +608,7 @@ class OldFoV:
         FoV
             The largest FoV contained within both.
         """
-        return FoV(
+        return type(self)(
             horizontal_min=max(self.horizontal_min, fov2.horizontal_min),
             elevation_min=max(self.elevation_min, fov2.elevation_min),
             horizontal_max=min(self.horizontal_max, fov2.horizontal_max),
@@ -622,16 +627,15 @@ class OldFoV:
         return self.extent()[0] / self.extent()[1]
 
     def __repr__(self):
-        values = self.as_dict(unit=AngleUnit.GON)
         return (
-            f"({values['horizontal_min']:0.4f}, {values['elevation_min']:0.4f}, "
-            f"{values['horizontal_max']:0.4f}, {values['elevation_max']:0.4f})"
+            f"({self.horizontal_min:0.4f}, {self.elevation_min:0.4f}, "
+            f"{self.horizontal_max:0.4f}, {self.elevation_max:0.4f})"
         )
 
     def extend_to_ratio(self, ratio: float) -> Self:
         if self.ratio() - ratio > EPS:
             target_vertical_extent = self.extent()[0] / ratio
-            new_fov = FoV(
+            new_fov = type(self)(
                 horizontal_min=self.horizontal_min,
                 elevation_min=self.elevation_min,
                 horizontal_max=self.horizontal_max,
@@ -639,7 +643,7 @@ class OldFoV:
             )
         elif ratio - self.ratio() > EPS:
             target_horizontal_extent = self.extent()[1] * ratio
-            new_fov = FoV(
+            new_fov = type(self)(
                 horizontal_min=self.horizontal_min,
                 elevation_min=self.elevation_min,
                 horizontal_max=self.horizontal_min + target_horizontal_extent,
@@ -676,7 +680,7 @@ class OldFoV:
         )
 
         fov_splits = [
-            FoV(horizontal_min=hor_min, elevation_min=elev_min, horizontal_max=hor_max, elevation_max=elev_max)
+            type(self)(horizontal_min=hor_min, elevation_min=elev_min, horizontal_max=hor_max, elevation_max=elev_max)
             for hor_min, hor_max in zip(horizontal_borders[:-1], horizontal_borders[1:])
             for elev_min, elev_max in zip(elevation_borders[:-1], elevation_borders[1:])
         ]
@@ -745,7 +749,7 @@ class OldFoV:
             for elev_bin in elevation_bins:
                 if elev_bin[-1] - elev_bin[0] <= 0:
                     continue
-                new_fov = FoV(
+                new_fov = type(self)(
                     horizontal_min=hor_bin[0],
                     elevation_min=elev_bin[0],
                     horizontal_max=hor_bin[1],

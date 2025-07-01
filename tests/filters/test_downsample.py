@@ -69,7 +69,7 @@ class TestVoxelDownsampleFilter:
             voxel_downsample('abc')
 
         with pytest.raises(ValidationError):
-            VoxelDownsample(0.1, 'asdasd')
+            VoxelDownsample(0.1, 'asdasd')  #type: ignore
 
         with pytest.raises(ValueError):
             VoxelDownsample(0, 'constant')
@@ -78,7 +78,7 @@ class TestVoxelDownsampleFilter:
             VoxelDownsample(-1.3, 'constant')
 
         with pytest.raises(ValueError):
-            VoxelDownsample(1.3, True)
+            VoxelDownsample(1.3, True)  #type: ignore
 
     def test_mask(self, voxel_downsample, pcd_all):
         expected_size = ((1 / voxel_downsample.voxel_size)+1) ** 3
@@ -106,7 +106,7 @@ class TestAngleBinDownsample:
             angle_bin_downsample('abc')
 
         with pytest.raises(ValidationError):
-            AngleBinDownsample(0.1, 'asdasd')
+            AngleBinDownsample(0.1, 'asdasd')   #type: ignore
 
         with pytest.raises(ValueError):
             AngleBinDownsample(0, 'constant')
@@ -115,9 +115,17 @@ class TestAngleBinDownsample:
             AngleBinDownsample(-1.3, 'constant')
 
         with pytest.raises(ValueError):
-            AngleBinDownsample(1.3, True)
+            AngleBinDownsample(1.3, True)   #type: ignore
 
     def test_mask(self, angle_bin_downsample, pcd_all):
         pcd = angle_bin_downsample.sample(pcd_all)
 
-        raise NotImplementedError("Need to finish angle bin tests - e.g. meshgrid values")
+        bin_size = angle_bin_downsample.angle_bin_size
+
+        max_bins = (np.pi/bin_size) * np.pi / bin_size
+
+        assert len(pcd) <= max_bins
+
+        assert len(pcd) < len(pcd_all)
+        assert len(np.unique(pcd.hz)) == len(pcd.hz)
+        assert len(np.unique(pcd.v)) == len(pcd.v)
