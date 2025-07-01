@@ -1,6 +1,7 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import Callable, Any
+from typing import Callable, Any, Optional
+import warnings
 
 import numpy as np
 import numpy.typing as npt
@@ -44,9 +45,12 @@ class PointCloudFilter(ABC):
             The modified point cloud.
         """
         m = self.mask(pcd)
-        pcd.reduce(m)
+        if np.sum(m) == 0:
+            warnings.warn('Filter produced no values to index, thus returning full point cloud')
+        else:
+            pcd.reduce(m)
 
-    def extract(self, pcd: PointCloudData) -> PointCloudData:
+    def extract(self, pcd: PointCloudData) -> Optional[PointCloudData]:
         """
         Extracts points where mask() is True: returns a new point cloud with those points,
         and removes them from the original.
@@ -58,10 +62,14 @@ class PointCloudFilter(ABC):
             A new PointCloudData instance containing the extracted points.
         """
         m = self.mask(pcd)
+
+        if np.sum(m) == 0:
+            warnings.warn('Filter produced no values to index, thus nothing has been extracted')
+            return None
         new_pcd = pcd.extract(m)
         return new_pcd
 
-    def sample(self, pcd: PointCloudData) -> PointCloudData:
+    def sample(self, pcd: PointCloudData) -> Optional[PointCloudData]:
         """
         Returns a new point cloud with only the points where mask() is True, leaving
         the original point cloud untouched.
@@ -73,6 +81,9 @@ class PointCloudFilter(ABC):
             A new PointCloudData instance containing only the sampled points.
         """
         m = self.mask(pcd)
+        if np.sum(m) == 0:
+            warnings.warn('Filter produced no values to index, thus nothing has been sampled')
+            return None
         return pcd.sample(m)
 
 

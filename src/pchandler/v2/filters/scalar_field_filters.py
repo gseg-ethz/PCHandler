@@ -28,7 +28,7 @@ class ScalarFieldFilter(PointCloudFilter):
     def mask(self, pcd: PointCloudData) -> NDArray[np.bool_]:
         if self.field_label not in pcd.scalar_fields.keys():
             raise KeyError(f"Scalar field '{self.field_label}' is not defined.")
-        scalar_field_data = pcd.scalar_fields[self.field_label].data
+        scalar_field_data = pcd.scalar_fields[self.field_label]
 
         return np.logical_and(scalar_field_data >= self.lower_bound, scalar_field_data <= self.upper_bound)
 
