@@ -270,7 +270,7 @@ class AbstractIOHandler(ABC):
         array = np.empty((len(pcd),), dtype=dtype_list)
 
         if pcd.optimized_shift:
-            shift = pcd.optimized_shift.optimal_shift
+            shift = pcd.optimized_shift.value
 
             array["x"] = pcd.x + shift[0]
             array["y"] = pcd.y + shift[1]

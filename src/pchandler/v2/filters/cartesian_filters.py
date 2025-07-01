@@ -38,8 +38,8 @@ class BoxFilter(PointCloudFilter):
 
     def mask(self, pcd: PointCloudData) -> npt.NDArray[np.bool_]:
         if pcd.optimized_shift is not None:
-            min_corner = self.minimum - pcd.optimized_shift.optimal_shift
-            max_corner = self.maximum - pcd.optimized_shift.optimal_shift
+            min_corner = self.minimum - pcd.optimized_shift.value
+            max_corner = self.maximum - pcd.optimized_shift.value
         else:
             min_corner = self.minimum
             max_corner = self.maximum
@@ -60,7 +60,7 @@ class SphereFilter(PointCloudFilter):
         point = (
             self.sphere_center
             if pcd.optimized_shift is None
-            else self.sphere_center - pcd.optimized_shift.optimal_shift
+            else self.sphere_center - pcd.optimized_shift.value
         )
 
         distances_to_point: npt.NDArray[np.float64|np.float32] = np.linalg.norm(pcd.xyz - point, axis=1)
@@ -84,7 +84,7 @@ class PolygonFilter(PointCloudFilter):
         polygon = (
             self.polygon
             if pcd.optimized_shift is None
-            else (translate(self.polygon, *(-1 * pcd.optimized_shift.optimal_shift[dims])))
+            else (translate(self.polygon, *(-1 * pcd.optimized_shift.value[dims])))
         )
 
         mask: npt.NDArray[np.bool_] = contains_xy(polygon, pcd.xyz[:, dims[0]], pcd.xyz[:, dims[1]])

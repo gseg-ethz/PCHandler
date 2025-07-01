@@ -121,12 +121,12 @@ class TestPointCloudData:
 
     class TestInitialisation:
         def test_positional_coordinate_arg(self, xyz_):
-            pcd = PointCloudData(xyz_)
+            pcd = PointCloudData(xyz_, optimized_shift=None)
             assert np.all(pcd == xyz_)
             assert np.all(pcd.arr == xyz_)
 
         def test_keyword_coordinate_arg(self, xyz_):
-            pcd = PointCloudData(xyz=xyz_)
+            pcd = PointCloudData(xyz=xyz_, optimized_shift=None)
             assert np.all(pcd == xyz_)
             assert np.all(pcd.arr == xyz_)
 

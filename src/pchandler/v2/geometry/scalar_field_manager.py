@@ -14,13 +14,13 @@ if TYPE_CHECKING:
     from .core import PointCloudData
 
 from ..base_types import (
-    Array_Nx3_float32_T,
+    Array_Nx3_Float32_T,
     Array_Nx3_T,
-    Array_Nx3_uint8_T,
+    Array_Nx3_Uint8_T,
     IndexLike,
     VectorT,
-    VectorT_Float32,
-    VectorT_Uint8,
+    Vector_Float32_T,
+    Vector_Uint8_T,
 )
 from ..constants import (
     DEFAULT_CONFIG,
@@ -219,7 +219,7 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
     def _handle_rgb(
             self,
             name: LowerStr,
-            value: VectorT_Uint8 | Array_Nx3_uint8_T,
+            value: Vector_Uint8_T | Array_Nx3_Uint8_T,
             origin_dtype: Optional[DtypeState] = None) -> None:
 
         # Set the whole field
@@ -250,7 +250,7 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
     def _handle_normal(
             self,
             name: LowerStr,
-            value: VectorT_Float32 | Array_Nx3_float32_T,
+            value: Vector_Float32_T | Array_Nx3_Float32_T,
             origin_dtype: Optional[DtypeState] = None) -> None:
         # Set the whole field
         if name in ("nxnynz", "normals", "normal"):

@@ -76,7 +76,17 @@ class PointCloudData(CartesianCoordinates):
         # self.model_config["frozen"] = frozen
 
         if optimized_shift is Ellipsis:
+            # TODO should this grab / try the last optimal shift by default?
+            #  if len(OptimizedShiftManager):
+            #      optimized_shift = OptimizedShiftManager._optimized_shifts[-1]
+            #  else:
+            #      optimized_shift = OptimizedShift(np.zeros(3, dtype=np.float32))
             optimized_shift = OptimizedShift(np.zeros(3, dtype=np.float32))
+
+        if optimized_shift is not None:
+            optimized_shift = optimized_shift.register(self, xyz)
+
+        xyz = (xyz - optimized_shift.value).astype(np.float32) if optimized_shift is not None else xyz
 
         super().__init__(
             xyz=xyz,
@@ -87,10 +97,10 @@ class PointCloudData(CartesianCoordinates):
             transform_ledger = transform_ledger if transform_ledger else TransformLedger(),
         )
 
-        if isinstance(optimized_shift, OptimizedShift):
-            final_shift: OptimizedShift = optimized_shift.register(self, xyz)
-            self.update_shift(final_shift.optimal_shift)
-            self.optimized_shift = final_shift
+        # if isinstance(optimized_shift, OptimizedShift):
+        #     final_shift: OptimizedShift = optimized_shift.register(self, xyz)
+        #     self.update_shift(final_shift.value)
+        #     self.optimized_shift = final_shift
 
 
     def __hash__(self) -> int:
@@ -98,7 +108,7 @@ class PointCloudData(CartesianCoordinates):
 
 
     def update_shift(self: Self, delta_shift: Vector_3_T) -> None:
-        self.xyz = self.xyz + delta_shift
+        self.xyz = (self.xyz + delta_shift).astype(np.float32)
 
 
     @model_validator(mode="after")
@@ -241,7 +251,7 @@ class PointCloudData(CartesianCoordinates):
                 pcd_o3d.point.positions = o3d.core.Tensor(self.xyz)
             else:
                 pcd_o3d.point.positions = o3d.core.Tensor(
-                    (self.xyz.astype(np.float64) + self.optimized_shift.optimal_shift.astype(np.float64))
+                    (self.xyz.astype(np.float64) + self.optimized_shift.value.astype(np.float64))
                 )
 
             for sf_name in set(self.scalar_fields.keys()):
@@ -253,7 +263,7 @@ class PointCloudData(CartesianCoordinates):
                 pcd_o3d.points = o3d.utility.Vector3dVector(self.xyz)
             else:
                 pcd_o3d.points = o3d.utility.Vector3dVector(
-                    (self.xyz.astype(np.float64) + self.optimized_shift.optimal_shift.astype(np.float64))
+                    (self.xyz.astype(np.float64) + self.optimized_shift.value.astype(np.float64))
                 )
 
             if 'rgb' in self.scalar_fields:

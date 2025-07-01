@@ -77,11 +77,11 @@ def get_outline_polygon(pcd: PointCloudData, plane: str, alpha_value: float = 10
     if pcd.optimized_shift is not None:
         match plane:
             case "xy":
-                gs = pcd.optimized_shift.optimal_shift[:2]
+                gs = pcd.optimized_shift.value[:2]
             case "xz":
-                gs = pcd.optimized_shift.optimal_shift[[0, 2]]
+                gs = pcd.optimized_shift.value[[0, 2]]
             case "yz":
-                gs = pcd.optimized_shift.optimal_shift[1:]
+                gs = pcd.optimized_shift.value[1:]
             case _:
                 raise ValueError
         als = translate(als, *gs)

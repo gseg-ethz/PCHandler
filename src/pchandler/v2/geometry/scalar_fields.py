@@ -10,13 +10,13 @@ from pydantic import StringConstraints, model_validator, BeforeValidator
 from ..validators import normalize_min_max, normalize_uint8, ensure_unit_vector, normalize_int16
 from ..base_arrays import BaseVector, ArrayNx3, FixedLengthArray
 from ..base_types import (
-    Array_Nx3_float32_T,
-    Array_Nx3_uint8_T,
-    VectorT_Bool,
-    VectorT_Float32,
-    VectorT_Int16,
-    VectorT_Uint8,
-    VectorT_Uint16,
+    Array_Nx3_Float32_T,
+    Array_Nx3_Uint8_T,
+    Vector_Bool_T,
+    Vector_Float32_T,
+    Vector_Int16_T,
+    Vector_Uint8_T,
+    Vector_Uint16_T,
 )
 from ..constants import NORMALS_FIELD, RGB_FIELD
 
@@ -103,7 +103,7 @@ class ScalarFieldTriplet(ArrayNx3, AbstractScalarField):
         super().__init__(arr=arr, **kwargs)
 
     @classmethod
-    def initialize(cls, size: int, value: Array_Nx3_float32_T | Array_Nx3_uint8_T | None = None, name: str = "") -> Self:
+    def initialize(cls, size: int, value: Array_Nx3_Float32_T | Array_Nx3_Uint8_T | None = None, name: str = "") -> Self:
         dtype = cls.model_fields['arr'].annotation.__dict__['__args__'][1]
         if value is None:
             value = np.zeros((size, 3), dtype=dtype)
@@ -111,7 +111,7 @@ class ScalarFieldTriplet(ArrayNx3, AbstractScalarField):
 
 
 class RGBFields(ScalarFieldTriplet):
-    arr: Annotated[Array_Nx3_uint8_T, BeforeValidator(normalize_uint8)]
+    arr: Annotated[Array_Nx3_Uint8_T, BeforeValidator(normalize_uint8)]
     name: LowerStr = RGB_FIELD
 
     def __init__(self, arr: Self|npt.NDArray[np.uint8|np.float32], **kwargs: Unpack[ScalarKwargT]):
@@ -119,15 +119,15 @@ class RGBFields(ScalarFieldTriplet):
         super().__init__(arr, **kwargs)
 
     @property
-    def r(self) -> VectorT_Uint8:
+    def r(self) -> Vector_Uint8_T:
         return self.arr[:, 0]
 
     @property
-    def g(self) -> VectorT_Uint8:
+    def g(self) -> Vector_Uint8_T:
         return self.arr[:, 1]
 
     @property
-    def b(self) -> VectorT_Uint8:
+    def b(self) -> Vector_Uint8_T:
         return self.arr[:, 2]
 
     def as_normalised_float32(self) -> npt.NDArray[np.float32]:
@@ -135,7 +135,7 @@ class RGBFields(ScalarFieldTriplet):
 
 
 class NormalFields(ScalarFieldTriplet):
-    arr: Annotated[Array_Nx3_float32_T, BeforeValidator(ensure_unit_vector)]
+    arr: Annotated[Array_Nx3_Float32_T, BeforeValidator(ensure_unit_vector)]
     name: LowerStr = NORMALS_FIELD
 
     def __init__(self, arr: Self|npt.NDArray[np.floating], **kwargs: Unpack[ScalarKwargT]):
@@ -143,20 +143,20 @@ class NormalFields(ScalarFieldTriplet):
         super().__init__(arr=arr, **kwargs)
 
     @property
-    def nx(self) -> VectorT_Float32:
+    def nx(self) -> Vector_Float32_T:
         return self.arr[:, 0]
 
     @property
-    def ny(self) -> VectorT_Float32:
+    def ny(self) -> Vector_Float32_T:
         return self.arr[:, 1]
 
     @property
-    def nz(self) -> VectorT_Float32:
+    def nz(self) -> Vector_Float32_T:
         return self.arr[:, 2]
 
 
 class SegmentationMap(ScalarField):
-    arr: VectorT_Uint8 | VectorT_Uint16
+    arr: Vector_Uint8_T | Vector_Uint16_T
 
     def __init__(self, arr: Self|npt.NDArray[Any], **kwargs: Unpack[ScalarKwargT]):
         super().__init__(arr=arr, **kwargs)
@@ -176,7 +176,7 @@ class SegmentationMap(ScalarField):
         return cls(arr, name=name)
 
 class ScalarFieldUint8(ScalarField):
-    arr: VectorT_Uint8
+    arr: Vector_Uint8_T
 
     def __init__(self, arr: Self|npt.NDArray[np.uint8], **kwargs: Unpack[ScalarKwargT]):
         super().__init__(arr=arr, **kwargs)
@@ -185,17 +185,17 @@ class NormalisedInt16ScalarField(ScalarField):
     """
     Class to support importing reflectance or intensity values as they are often in a range larger than Uint8
     """
-    arr: Annotated[VectorT_Int16, BeforeValidator(normalize_int16)]
+    arr: Annotated[Vector_Int16_T, BeforeValidator(normalize_int16)]
 
     def __init__(self, arr: Self|npt.NDArray[np.int16], **kwargs: Unpack[ScalarKwargT]):
         super().__init__(arr=arr, **kwargs)
 
-    def to_uint8(self) -> VectorT_Uint8:
+    def to_uint8(self) -> Vector_Uint8_T:
         return ScalarFieldUint8(normalize_uint8(self.arr), name=self.name, origin_dtype=self.origin_dtype)
 
 
 class BooleanScalarField(ScalarField):
-    arr: VectorT_Bool
+    arr: Vector_Bool_T
 
     def __init__(self, arr: Self|npt.NDArray[np.bool_], **kwargs: Unpack[ScalarKwargT]):
         super().__init__(arr=arr, **kwargs)

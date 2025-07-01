@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
 from .util import MinMaxPoints
 from ..base_types import Vector_3_T, Array_Nx3_T
+from ..constants import validate_variables
 
 class SingletonMeta(type):
     _instances: ClassVar[dict[type, object]] = {}
@@ -41,7 +42,6 @@ class OptimizedShiftManager(metaclass=SingletonMeta):
     def __len__(self):
         return len(self._optimized_shifts)
 
-    # FIXME: Has no usages?
     @staticmethod
     def new_shift() -> OptimizedShift:
         return OptimizedShift()
@@ -58,20 +58,16 @@ class OptimizedShiftManager(metaclass=SingletonMeta):
     def maximum_decimal_places(self, maximum_decimal_places: int) -> None:
         pass # Todo: Should probably check all registered GlobalShifts and their pcds if they conform to new limit
 
-    def is_shift_needed(self, values: NDArray[np.floating] | Array_Nx3_T | PointCloudData) -> bool:
+    def is_shift_needed(self, values: Array_Nx3_T | PointCloudData) -> bool:
         return np.any(np.abs(values) >= 10 ** self._maximum_decimal_places)
 
-    def is_shift_possible(self, values: NDArray[np.floating] | Array_Nx3_T | PointCloudData) -> bool:
+    def is_shift_possible(self, values: Array_Nx3_T | PointCloudData) -> bool:
         return np.all(np.subtract(np.max(values, axis=0), np.min(values, axis=0)) < 10 ** self._maximum_decimal_places)
 
 class OptimizedShift:
-
-    _optimal_shift: Vector_3_T
-    _member_pcds: weakref.WeakSet[PointCloudData]
-    _member_pcds_unshifted_bbox: weakref.WeakKeyDictionary[PointCloudData, MinMaxPoints]
-
-    def __init__(self, optimal_shift: Optional[NDArray[np.floating] | Vector_3_T] = None) -> None:
-        self._optimal_shift = Vector_3_T(np.zeros(3)) if optimal_shift is None else optimal_shift
+    @validate_variables
+    def __init__(self, optimal_shift: Optional[Vector_3_T] = None) -> None:
+        self._shift = np.zeros(3).astype(np.float64) if optimal_shift is None else optimal_shift
         self._member_pcds = weakref.WeakSet()
         self._member_pcds_unshifted_bbox = weakref.WeakKeyDictionary()
         OptimizedShiftManager().register(self)
@@ -80,10 +76,10 @@ class OptimizedShift:
         return len(self._member_pcds)
 
     @property
-    def optimal_shift(self) -> NDArray[np.float64]:
-        return self._optimal_shift
+    def value(self) -> NDArray[np.float64]:
+        return self._shift
 
-    def register(self, pcd: PointCloudData, points: Array_Nx3_T) -> Self:
+    def register(self, pcd: PointCloudData, points: Array_Nx3_T) -> Optional[Self]:
         """
         Try to add `pcd` (with its point‐cloud `points`) into this shift.
         Returns self if successful;
@@ -100,7 +96,7 @@ class OptimizedShift:
             return self._restart_or_fail(pcd, points)
 
     def _can_add_without_change(self, pts: Array_Nx3_T) -> bool:
-        shifted = np.subtract(pts, self._optimal_shift)
+        shifted = np.subtract(pts, self._shift)
         return not OptimizedShiftManager().is_shift_needed(shifted)
 
     def _add_member(self, pcd, pts):
@@ -116,14 +112,14 @@ class OptimizedShift:
         """
         new_shift = self._compute_new_shift(pts)
         self._apply_shift_delta(new_shift)
-        self._optimal_shift = new_shift
+        self._shift = new_shift
         return self._add_member(pcd, pts)
 
     def _compute_new_shift(self, pts: Array_Nx3_T) -> Vector_3_T:
         # build up the combined bounding‐box
-        all_boxes = list(self._member_pcds_unshifted_bbox.values())
-        all_boxes.append(MinMaxPoints.from_points(pts))
-        combined = MinMaxPoints.from_minmax_points(all_boxes)
+        all_bboxes = list(self._member_pcds_unshifted_bbox.values())
+        all_bboxes.append(MinMaxPoints.from_points(pts))
+        combined = MinMaxPoints.from_minmax_points(all_bboxes)
 
         if not OptimizedShiftManager().is_shift_possible(np.vstack((combined.minimum, combined.maximum))):
             raise OptimizedShiftManager.ShiftNotFeasibleError()
@@ -133,7 +129,7 @@ class OptimizedShift:
 
     def _apply_shift_delta(self, new_shift):
         """Move every registered PCD by the change from old→new shift."""
-        delta = self._optimal_shift - new_shift
+        delta = self._shift - new_shift
         for pcd in self._member_pcds:
             pcd.update_shift(delta)
 

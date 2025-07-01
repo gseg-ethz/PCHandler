@@ -259,7 +259,7 @@ def save_ply(
 
     pcd_np_st = np.empty((len(pcd),), dtype=dtype_list)
 
-    base_shift = np.zeros(3, dtype=np.float32) if pcd.optimal_shift is None else pcd.optimal_shift._optimal_shift
+    base_shift = np.zeros(3, dtype=np.float32) if pcd.optimal_shift is None else pcd.optimal_shift._shift
 
     pcd_np_st["x"] = pcd.x + base_shift[0]
     pcd_np_st["y"] = pcd.y + base_shift[1]
