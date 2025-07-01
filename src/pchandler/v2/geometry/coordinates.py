@@ -88,7 +88,7 @@ class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates):
 
 
 class CartesianCoordinates(Abstract3dCoordinates):
-    arr: Array_Nx3_T = Field(alias="xyz")
+    arr: Array_Nx3_T
 
     @property
     def x(self) -> npt.NDArray[np.floating]:
@@ -180,7 +180,7 @@ class SphericalCoordinates(Abstract3dCoordinates):
     arr: Annotated[Array_Nx3_T, Field(validation_alias="spher"), BeforeValidator(validate_spherical_angles)]
 
     @property
-    def fov(self) -> Fov:
+    def fov(self) -> Any:
         raise NotImplementedError
 
     @property

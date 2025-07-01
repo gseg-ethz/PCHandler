@@ -352,15 +352,10 @@ class TestOptimizedShiftManager:
         assert not osm.is_shift_possible(coords_unshiftable)
         assert not osm.is_shift_possible(coords_unshiftable2)
 
-    @pytest.mark.parametrize('array_type', (CartesianCoordinates, PointCloudData))
-    def test_checks_on_array_like(self, osm, coords_shift: CartesianCoordinates, array_type):
-        obj = array_type(xyz=coords_shift)
+    def test_checks_on_pointclouddata_object(self, osm, coords_shift: CartesianCoordinates):
+        obj = PointCloudData(coords_shift)
         assert osm.is_shift_possible(obj)
-        # Case where optimized shift is on the PointCloudData object
-        if array_type is PointCloudData:
-            assert not osm.is_shift_needed(obj)
-        else:
-            assert osm.is_shift_needed(obj)
+        assert not osm.is_shift_needed(obj)
 
 
 def test_pcd_optimized_shift_general(osm):

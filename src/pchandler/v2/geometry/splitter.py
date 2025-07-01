@@ -1,24 +1,45 @@
 import logging
 from abc import ABC, abstractmethod
+from typing import Literal, Annotated
+import warnings
 
 import numpy as np
-from joblib import Parallel, delayed, parallel_config
+from joblib import Parallel, delayed, parallel_config, cpu_count
+from pydantic import Field, BeforeValidator
 
 from ..filters.spherical_coordinate_filters import FoVFilter
-from ..geometry.fov import FoV, FoVTree
+from .fov import FoV, FoVTree
 from .core import PointCloudData
+from ..constants import validate_variables
 
 logger = logging.getLogger(__name__.split(".")[0])
+
+def check_number_jobs(n_jobs: int):
+    if n_jobs == 0:
+        raise ValueError("n_jobs must be -1 or a positive integer value. Zero is not valid.")
+
+    if n_jobs > cpu_count():
+        warnings.warn(f"Maximum number of jobs entered [{n_jobs}] is greater than the number of cores. "
+                      f"Using the maximum available CPU count instead = {cpu_count()}", stacklevel=2)
+
+
+FoVSplitMethodT = Literal['iterative'] | Literal['direct']
+NumberJobsT = Annotated[int, Field(ge=-1, le=cpu_count()), BeforeValidator(check_number_jobs)]
+
 
 
 class PointCloudSplitter(ABC):
     @abstractmethod
-    def split(self):
+    def split(self, pcd: PointCloudData) -> dict[str, PointCloudData]:
         pass
 
 
 class FoVTreePointCloudSplitter(PointCloudSplitter):
-    def __init__(self, fov_tree: FoVTree, remove_empty: bool = True, n_jobs: int = -1, method: str = "iterative"):
+    @validate_variables
+    def __init__(self, fov_tree: FoVTree,
+                 remove_empty: bool = True,
+                 n_jobs: NumberJobsT = -1,
+                 method: FoVSplitMethodT = "iterative"):
         """
         Initialize the splitter with configuration options.
 
@@ -53,6 +74,8 @@ class FoVTreePointCloudSplitter(PointCloudSplitter):
                 splits = self._iterative_split(pcd, self.fov_tree)
             case "direct":
                 splits = self._direct_split(pcd, self.fov_tree)
+            case _:
+                raise ValueError(f'Invalid method passed for the splitting: {self.method}')
 
         return splits
 
@@ -66,7 +89,7 @@ class FoVTreePointCloudSplitter(PointCloudSplitter):
         else:
             splits = [self._process_direct_task(pcd, fov_list[0][0], fov_list[0][1])]
 
-        pcd.reduce(np.zeros(pcd.nbPoints, dtype=np.bool_))
+        pcd.reduce(np.zeros(len(pcd), dtype=np.bool_))
         return dict(splits)
 
     def _process_direct_task(self, pcd: PointCloudData, fov_id: str, fov: FoV) -> tuple[str, PointCloudData]:
@@ -135,14 +158,14 @@ class FoVTreePointCloudSplitter(PointCloudSplitter):
         for child in fov_tree.children.values():
             child_pcd = FoVFilter(child.node).extract(pcd)
             # child_pcd = pcd.extract_angles(child.node)
-            if self.remove_empty and child_pcd.nbPoints == 0:
+            if self.remove_empty and len(child_pcd) == 0:
                 continue
             child_tasks.append((child_pcd, child))
         return {}, child_tasks
 
 
 def split_pc_with_fov_tree(
-    pcd: PointCloudData, fov_tree: FoVTree, remove_empty: bool = True, n_jobs: int = -1
+    pcd: PointCloudData, fov_tree: FoVTree, remove_empty: bool = True, n_jobs: NumberJobsT = -1
 ) -> dict[str, PointCloudData]:
     # -> list[tuple[str, FoV, PointCloudData]]:
 
@@ -174,13 +197,13 @@ def split_pc_with_fov_tree(
     # Setup arguments for call
     if fov_tree.children is not None:
         split_packages = [
-            (pcd.extract_angles(child.node), child, remove_empty, n_jobs) for child in fov_tree.children.values()
+            (FoVFilter(child.node).extract(pcd), child, remove_empty, n_jobs) for child in fov_tree.children.values()
         ]
     else:
         split_packages = []
 
     if remove_empty:
-        split_packages = [sp for sp in split_packages if sp[0].nbPoints]
+        split_packages = [sp for sp in split_packages if len(sp[0])]
     # print(*[FoV(**sp[0].fov, unit="rad") for sp in split_packages], sep='\n')
 
     split = Parallel(n_jobs=n_jobs, prefer="processes", verbose=50, timeout=10 * 60)(

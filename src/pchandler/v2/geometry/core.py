@@ -31,7 +31,7 @@ class PointCloudData(CartesianCoordinates):
 
     def __init__(
         self,
-        xyz: npt.NDArray[np.floating] | Array_Nx3_T | CartesianCoordinates,
+        xyz: Array_Nx3_T | CartesianCoordinates,
         *,
         rgb: Optional[npt.NDArray[np.uint8|np.float32|np.float64] | RGBFields] = None,
         normals: Optional[npt.NDArray[np.float32|np.float64] | NormalFields] = None,
@@ -89,7 +89,7 @@ class PointCloudData(CartesianCoordinates):
         xyz = (xyz - optimized_shift.value).astype(np.float32) if optimized_shift is not None else xyz
 
         super().__init__(
-            xyz=xyz,
+            arr=xyz,
             scalar_fields = sfm,
             optimized_shift = optimized_shift,
             socs_origin = socs_origin,
@@ -177,16 +177,16 @@ class PointCloudData(CartesianCoordinates):
         # array is passed when sampling and advanced indexing automatically makes a copy
         if array is not None:
             if isinstance(array, CartesianCoordinates):
-                update["xyz"] = array.arr
+                update["arr"] = array.arr
             elif isinstance(array, np.ndarray):
-                update["xyz"] = array
+                update["arr"] = array
             else:
                 raise TypeError(f"Invalid type of array passed: {type(array)}. Should be PointCloudData or np.ndarray")
 
         # Create a copy of the rest of the fields
         update = self.model_dump(exclude=(set(update.keys()))) | update
 
-        return type(self)(update.pop('xyz'), **update)
+        return type(self)(update.pop('arr'), **update)
 
     def sample(self, mask: npt.NDArray[np.bool_|np.integer]) -> PointCloudData:
         mask = self.create_mask(mask)
@@ -195,9 +195,13 @@ class PointCloudData(CartesianCoordinates):
     def reduce(self, mask: npt.NDArray[np.bool_|np.integer]) -> None:
         super().reduce(mask)
         self.scalar_fields.reduce(mask)
+        if 'spher' in self.__dict__:
+            self.__dict__['spher'] = self.__dict__['spher'][mask]
 
-    def extract(self, mask: npt.NDArray[np.bool_|np.integer]) -> PointCloudData:
-        extracted: PointCloudData = super().extract(mask)
+    def extract(self, mask: npt.NDArray[np.bool_|np.integer]) -> Self:
+        extracted = super().extract(mask)
+        if 'spher' in extracted.__dict__:
+            extracted.__dict__['spher'] = extracted.__dict__['spher'][mask]
         return extracted
 
     @staticmethod

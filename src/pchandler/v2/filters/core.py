@@ -46,7 +46,6 @@ class PointCloudFilter(ABC):
         m = self.mask(pcd)
         pcd.reduce(m)
 
-    @validate_variables
     def extract(self, pcd: PointCloudData) -> PointCloudData:
         """
         Extracts points where mask() is True: returns a new point cloud with those points,
@@ -62,7 +61,6 @@ class PointCloudFilter(ABC):
         new_pcd = pcd.extract(m)
         return new_pcd
 
-    @validate_variables
     def sample(self, pcd: PointCloudData) -> PointCloudData:
         """
         Returns a new point cloud with only the points where mask() is True, leaving

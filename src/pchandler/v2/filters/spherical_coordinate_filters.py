@@ -18,15 +18,9 @@ class FoVFilter(PointCloudFilter):
         self.fov = fov
 
     def mask(self, pcd: PointCloudData) -> NDArray[np.bool_]:
-        spc = pcd.spherical_coordinates
-        el_min = self.fov.elevation_min
-        el_max = self.fov.elevation_max
-        hor_min = self.fov.horizontal_min
-        hor_max = self.fov.horizontal_max
-
         mask = np.logical_and(
-            np.logical_and(spc[:, 1] >= el_min, spc[:, 1] <= el_max),
-            np.logical_and(spc[:, 2] >= hor_min, spc[:, 2] <= hor_max),
+            np.logical_and(pcd.v >= self.fov.top, pcd.v <= self.fov.bottom),
+            np.logical_and(pcd.hz >= self.fov.left, pcd.hz <= self.fov.right),
         )
 
         return mask
@@ -38,8 +32,7 @@ class RangeFilter(PointCloudFilter):
         self.high = high
 
     def mask(self, pcd: PointCloudData) -> NDArray[np.bool_]:
-        spc = pcd.spherical_coordinates
-        mask = np.logical_and(spc[:, 0] >= self.low, spc[:, 0] <= self.high)
+        mask = np.logical_and(pcd.r >= self.low, pcd.r <= self.high)
         return mask
 
 
@@ -48,5 +41,5 @@ class SphericalPolygonFilter(PointCloudFilter):
         self.polygon = polygon
 
     def mask(self, pcd: PointCloudData) -> NDArray[np.bool_]:
-        mask = contains_xy(self.polygon, pcd.spherical_coordinates[:, 1], pcd.spherical_coordinates[:, 2])
+        mask = contains_xy(self.polygon, pcd.hz, pcd.v)
         return mask
