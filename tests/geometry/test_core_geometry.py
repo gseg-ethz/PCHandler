@@ -85,6 +85,37 @@ def pcd3(rgb_, normals_, reflectance_) -> PointCloudData:
         normals=normals_,
         reflectance=reflectance_)
 
+@pytest.fixture(scope="function")
+def pcd_o3d():
+    xyz = np.random.rand(10,3)
+    rgb = np.ones((10,3))
+    normals = np.random.rand(10,3)
+    normals /= np.linalg.norm(normals, axis=1)[:, None]
+
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(xyz)
+    pcd.colors = o3d.utility.Vector3dVector(rgb)
+    pcd.normals = o3d.utility.Vector3dVector(normals)
+
+    return pcd
+
+
+@pytest.fixture(scope="function")
+def pcd_o3d_tensor():
+    xyz = (np.random.rand(10, 3) -0.5) * 50 + 20
+    rgb = np.ones((10, 3)).astype(np.float32)
+    intensity = np.random.rand(10) * 255
+    normals = np.random.rand(10, 3)
+    normals /= np.linalg.norm(normals, axis=1)[:, None]
+
+    pcd = o3d.t.geometry.PointCloud()
+    pcd.point.positions = o3d.core.Tensor(xyz)
+    pcd.point.rgb = o3d.core.Tensor(rgb)
+    pcd.point.normals = o3d.core.Tensor(normals)
+    pcd.point.intensity = o3d.core.Tensor(intensity)
+
+    return pcd
+
 
 class TestPointCloudData:
 
@@ -476,15 +507,15 @@ class TestPointCloudData:
             assert 'intensity' not in merged_1.scalar_fields
             assert 'reflectance' not in merged_1.scalar_fields
 
-    def test_immutability(self, xyz_, rgb_, normals_, intensity_):
-        pcd = PointCloudData(xyz=xyz_, rgb=rgb_, normals=normals_, scalar_fields={"intensity": intensity_}, frozen=True)
-
-        with pytest.raises(Exception) as e:
-            pcd.xyz = np.random.rand(N, 3)
-
-        assert type(e.value) in (AttributeError, ValidationError, TypeError, ValueError)
-
-        # TODO add future feature to have a READ ONLY point cloud object where no fields or attributes can be changed
+    # def test_immutability(self, xyz_, rgb_, normals_, intensity_):
+    #     pcd = PointCloudData(xyz=xyz_, rgb=rgb_, normals=normals_, scalar_fields={"intensity": intensity_}, frozen=True)
+    #
+    #     with pytest.raises(Exception) as e:
+    #         pcd.xyz = np.random.rand(N, 3)
+    #
+    #     assert type(e.value) in (AttributeError, ValidationError, TypeError, ValueError)
+    #
+    #     # TODO add future feature to have a READ ONLY point cloud object where no fields or attributes can be changed
 
 
 class TestOpen3DSupport:
@@ -511,7 +542,28 @@ class TestOpen3DSupport:
             assert np.allclose(getattr(pcd, attr), getattr(obj.point, attr).numpy())
 
     def test_from_o3d(self, pcd_o3d: o3d.geometry.PointCloud):
-        raise NotImplementedError()
+        pcd = PointCloudData.from_o3d(pcd_o3d)
+        assert isinstance(pcd, PointCloudData)
+        assert pcd.intensity is None
+        assert pcd.reflectance is None
+        assert hasattr(pcd, 'rgb')
+        assert hasattr(pcd, 'normals')
 
-    def test_from_o3d_tensor(self, pcd_o3d: o3d.t.geometry.PointCloud) -> None:
-        raise NotImplementedError('')
+        assert np.allclose(pcd.rgb, 255)
+        assert np.allclose(pcd.xyz, np.asarray(pcd_o3d.points))
+        assert np.allclose(pcd.normals, np.asarray(pcd_o3d.normals))
+
+    def test_from_o3d_tensor(self, pcd_o3d_tensor: o3d.t.geometry.PointCloud) -> None:
+        pcd = PointCloudData.from_o3d(pcd_o3d_tensor)
+        assert isinstance(pcd, PointCloudData)
+        assert hasattr(pcd, 'intensity')
+        assert hasattr(pcd, 'reflectance')
+        assert hasattr(pcd, 'rgb')
+        assert hasattr(pcd, 'normals')
+
+        assert np.allclose(pcd.rgb, 255)
+        assert pcd.intensity.max() <= 2**15
+        assert pcd.intensity.min() >= -2**15
+        assert np.allclose(pcd.intensity.get_original_data(), pcd_o3d_tensor.point.intensity.numpy(), atol=1/255)
+        assert np.allclose(pcd.xyz, pcd_o3d_tensor.point.positions.numpy())
+        assert np.allclose(pcd.normals, pcd_o3d_tensor.point.normals.numpy())

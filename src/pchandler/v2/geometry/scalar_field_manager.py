@@ -174,7 +174,10 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
         return self.fields.get(RGB_FIELD, None)
 
     @rgb.setter
-    def rgb(self, value: npt.NDArray[Any] | RGBFields) -> None:
+    def rgb(self, value: npt.NDArray[np.floating|np.uint8] | RGBFields) -> None:
+        if not isinstance(value, (np.ndarray, RGBFields)):
+            value: npt.NDArray[np.floating|np.uint8] = np.asarray(value)
+
         if isinstance(value, np.ndarray):
             value: RGBFields = RGBFields(value)
         self.add_field(value)
@@ -185,6 +188,9 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
 
     @normals.setter
     def normals(self, value: np.ndarray | NormalFields):
+        if not isinstance(value, (np.ndarray, NormalFields)):
+            value = np.asarray(value)
+
         if isinstance(value, np.ndarray):
             value = NormalFields(value)
         self.add_field(value)

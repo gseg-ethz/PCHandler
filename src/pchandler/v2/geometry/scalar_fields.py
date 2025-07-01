@@ -138,7 +138,7 @@ class NormalFields(ScalarFieldTriplet):
     arr: Annotated[Array_Nx3_float32_T, BeforeValidator(ensure_unit_vector)]
     name: LowerStr = NORMALS_FIELD
 
-    def __init__(self, arr: Self|npt.NDArray[np.float32], **kwargs: Unpack[ScalarKwargT]):
+    def __init__(self, arr: Self|npt.NDArray[np.floating], **kwargs: Unpack[ScalarKwargT]):
         kwargs['name'] = NORMALS_FIELD
         super().__init__(arr=arr, **kwargs)
 

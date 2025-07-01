@@ -42,7 +42,7 @@ class PointCloudData(CartesianCoordinates):
         scalar_fields: Optional[ScalarFieldManager[ScalarField | ScalarFieldTriplet] | dict[str, SF_T]] = None,
         project_transformation: Optional[Array_4x4_T] = None,
         transform_ledger: Optional[TransformLedger] = None,
-        frozen: bool = False
+        # frozen: bool = False
     ):
         if scalar_fields is None:
             scalar_fields = {}
@@ -72,8 +72,8 @@ class PointCloudData(CartesianCoordinates):
 
         # TODO Add an easy accessor to the original point cloud data (e.g. at_socs)
 
-        # TODO Propagate this through to scalar_fields (ScalarField should set this if the parent has it)
-        self.model_config["frozen"] = frozen
+        # DECISION - Not to have frozen in
+        # self.model_config["frozen"] = frozen
 
         if optimized_shift is Ellipsis:
             optimized_shift = OptimizedShift(np.zeros(3, dtype=np.float32))
@@ -128,7 +128,7 @@ class PointCloudData(CartesianCoordinates):
         return self.scalar_fields.rgb
 
     @rgb.setter
-    def rgb(self, value: npt.NDArray[Any]|RGBFields) -> None:
+    def rgb(self, value: npt.NDArray[np.floating|np.uint8]|RGBFields) -> None:
         self.scalar_fields.rgb = value
 
     @property
@@ -236,6 +236,7 @@ class PointCloudData(CartesianCoordinates):
 
         if as_tensor:
             pcd_o3d = o3d.t.geometry.PointCloud()
+
             if self.optimized_shift is None:
                 pcd_o3d.point.positions = o3d.core.Tensor(self.xyz)
             else:
@@ -243,13 +244,6 @@ class PointCloudData(CartesianCoordinates):
                     (self.xyz.astype(np.float64) + self.optimized_shift.optimal_shift.astype(np.float64))
                 )
 
-            # if self.scalar_fields.rgb:
-            #     pcd_o3d.point.colors = o3d.core.Tensor(self.scalar_fields.rgb.as_normalised_float32())
-            #
-            # if self.scalar_fields.normals:
-            #     pcd_o3d.point.normals = o3d.core.Tensor(self.scalar_fields.normals)
-
-            # for sf_name in set(self.scalar_fields.keys()).difference({'rgb', 'normals'}):
             for sf_name in set(self.scalar_fields.keys()):
                 setattr(pcd_o3d.point, sf_name, o3d.core.Tensor(self.scalar_fields[sf_name].arr))
 
@@ -297,10 +291,11 @@ class PointCloudData(CartesianCoordinates):
         """
 
         if isinstance(pcd_o3d, o3d.t.geometry.PointCloud):
-            pcd = PointCloudData(np.asarray(pcd_o3d.point.positions))
+            pcd = PointCloudData(pcd_o3d.point.positions.numpy())
 
-            for name, value in pcd_o3d.point:
-                pcd[name] = value
+            for name, value in pcd_o3d.point.items():
+                if name != 'positions':
+                    setattr(pcd, name, value.numpy())
 
         elif isinstance(pcd_o3d, o3d.geometry.PointCloud):
             pcd = PointCloudData(np.asarray(pcd_o3d.points))
