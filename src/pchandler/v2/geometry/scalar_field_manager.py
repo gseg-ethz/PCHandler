@@ -121,11 +121,11 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
             value = value.arr
 
         if name == INTENSITY_FIELD:
-            self.fields[name] = NormalisedInt16ScalarField(value, name=INTENSITY_FIELD, origin_dtype=origin_dtype)
+            self.fields[name] = ScalarField(value, name=INTENSITY_FIELD, origin_dtype=origin_dtype)
             return None
 
         if name == REFLECTANCE_FIELD:
-            self.fields[name] = NormalisedInt16ScalarField(value, name=REFLECTANCE_FIELD, origin_dtype=origin_dtype)
+            self.fields[name] = ScalarField(value, name=REFLECTANCE_FIELD, origin_dtype=origin_dtype)
             return None
 
         if name in RGB_ALL_POTENTIAL_NAMES:
@@ -202,7 +202,7 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
     @intensity.setter
     def intensity(self, value: np.ndarray | ScalarField):
         if isinstance(value, np.ndarray):
-            value = NormalisedInt16ScalarField(value, name=INTENSITY_FIELD)
+            value = ScalarField(value, name=INTENSITY_FIELD)
         self.add_field(value)
 
     @property
@@ -212,7 +212,7 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
     @reflectance.setter
     def reflectance(self, value: np.ndarray | ScalarField):
         if isinstance(value, np.ndarray):
-            value = NormalisedInt16ScalarField(value, name=REFLECTANCE_FIELD)
+            value = ScalarField(value, name=REFLECTANCE_FIELD)
         self.add_field(value)
 
     @validate_call(config=DEFAULT_CONFIG)

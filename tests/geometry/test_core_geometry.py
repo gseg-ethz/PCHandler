@@ -29,17 +29,12 @@ def normals_() -> np.ndarray:
 
 @pytest.fixture(scope="function", autouse=True)
 def intensity_() -> np.ndarray:
-    return np.random.rand(N)
+    return np.random.rand(N).astype(np.float32)
 
 
 @pytest.fixture(scope="function", autouse=True)
 def reflectance_() -> np.ndarray:
-    return np.random.rand(N)
-
-
-@pytest.fixture(scope="function", autouse=True)
-def intensities_() -> np.ndarray:
-    return np.random.rand(100).astype(np.float32)
+    return np.random.rand(N).astype(np.float32)
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -142,14 +137,14 @@ class TestPointCloudData:
 
         def test_intensity_keyword(self, xyz_, intensity_):
             pcd = PointCloudData(xyz_, intensity=intensity_)
-            vals = NormalisedInt16ScalarField(intensity_, name='test')
+            vals = ScalarField(intensity_, name='test')
             assert "intensity" in pcd.scalar_fields
             assert np.allclose(pcd.intensity, vals)
 
         def test_reflectance_keyword(self, xyz_, intensity_):
             pcd = PointCloudData(xyz_, reflectance=intensity_)
 
-            vals = NormalisedInt16ScalarField(intensity_, name='test')
+            vals = ScalarField(intensity_, name='test')
             assert "reflectance" in pcd.scalar_fields
             assert np.allclose(pcd.reflectance, vals)
 
@@ -263,12 +258,12 @@ class TestPointCloudData:
         def test_intensity_getter(self, pcd):
             assert isinstance(pcd.intensity, ScalarField)
             assert pcd.intensity.ndim == 1
-            assert pcd.intensity.dtype == np.int16
+            assert pcd.intensity.dtype == np.float32
 
         def test_reflectance_getter(self, pcd):
             assert isinstance(pcd.reflectance, ScalarField)
             assert pcd.reflectance.ndim == 1
-            assert pcd.reflectance.dtype == np.int16
+            assert pcd.reflectance.dtype == np.float32
 
         def test_rgb_setter(self, pcd):
             new_data = np.random.randint(0, 255, (N, 3), dtype=np.uint8)
@@ -287,19 +282,19 @@ class TestPointCloudData:
             assert np.all(pcd.normals == new_data)
 
         def test_intensity_setter(self, pcd):
-            new_data = np.random.rand(N)
+            new_data = np.random.rand(N).astype(np.float32)
             pcd.intensity = new_data
             assert isinstance(pcd.intensity, ScalarField)
             assert pcd.intensity.ndim == 1
-            assert pcd.intensity.dtype == np.int16
+            assert pcd.intensity.dtype == np.float32
             assert np.allclose(pcd.intensity.get_original_data(), new_data, atol=1/2**16)
 
         def test_reflectance_setter(self, pcd):
             new_data = np.random.rand(N)
-            pcd.reflectance = new_data
+            pcd.reflectance = new_data.astype(np.float32)
             assert isinstance(pcd.reflectance, ScalarField)
             assert pcd.reflectance.ndim == 1
-            assert pcd.reflectance.dtype == np.int16
+            assert pcd.reflectance.dtype == np.float32
             assert np.allclose(pcd.reflectance.get_original_data(), new_data, atol=1/2**16)
 
         def test_sf_input_as_scalar_fields(self, xyz_, rgb_, normals_):

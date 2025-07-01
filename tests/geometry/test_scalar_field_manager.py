@@ -259,19 +259,17 @@ class TestNamedFieldPropertyGetters:
         array = np.random.rand(N)
         empty_sfm.intensity = array
 
-        assert np.all(empty_sfm.intensity != array)
         assert hasattr(empty_sfm, "intensity")
-        assert np.allclose(empty_sfm.intensity.get_original_data(), array, atol=1/2**16)
-        assert empty_sfm.intensity.dtype == np.int16
+        assert np.allclose(empty_sfm.intensity, array)
+        assert empty_sfm.intensity.dtype == array.dtype
 
     def test_reflectance_setter(self, empty_sfm):
         array = np.random.rand(N)
         empty_sfm.reflectance = array
 
         assert hasattr(empty_sfm, "reflectance")
-        assert np.all(empty_sfm.reflectance != array)
-        assert np.allclose(empty_sfm.reflectance.get_original_data(), array, atol=1/2**16)
-        assert empty_sfm.reflectance.dtype == np.int16
+        assert np.allclose(empty_sfm.reflectance, array)
+        assert empty_sfm.reflectance.dtype == array.dtype
 
 
 class TestShapeHelpers:

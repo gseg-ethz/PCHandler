@@ -175,11 +175,13 @@ class SegmentationMap(ScalarField):
 
         return cls(arr, name=name)
 
+
 class ScalarFieldUint8(ScalarField):
     arr: Vector_Uint8_T
 
     def __init__(self, arr: Self|npt.NDArray[np.uint8], **kwargs: Unpack[ScalarKwargT]):
         super().__init__(arr=arr, **kwargs)
+
 
 class NormalisedInt16ScalarField(ScalarField):
     """
