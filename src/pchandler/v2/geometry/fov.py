@@ -74,7 +74,7 @@ import warnings
 from dataclasses import dataclass, field
 from fractions import Fraction
 from itertools import chain
-from typing import Iterable, Optional, cast, Self, Annotated, NamedTuple, TYPE_CHECKING
+from typing import Iterable, Optional, cast, Self, Annotated, NamedTuple, TYPE_CHECKING, Any
 
 import numpy as np
 import numpy.typing as npt
@@ -307,11 +307,11 @@ class FoV(NamedTuple):
 
     def tile(self, target_extent: Self) -> list[list[Self]]:
         horizontal_steps = np.append(
-            np.arange(self.horizontal_min, self.horizontal_max, target_extent.width()), self.horizontal_max
+            np.arange(self.left, self.right, target_extent.width()), self.right
         )
 
         elevation_steps = np.append(
-            np.arange(self.elevation_min, self.elevation_max, target_extent.height()), self.elevation_max
+            np.arange(self.top, self.bottom, target_extent.height()), self.bottom
         )
 
         horizontal_bins = list(zip(horizontal_steps[:-1], horizontal_steps[1:]))
@@ -374,6 +374,198 @@ class FoV(NamedTuple):
         warnings.warn("elevation_max property has been deprecated. Please use the 'bottom' property",
                       DeprecationWarning, stacklevel=2)
         return self.bottom
+
+
+@dataclass(init=True, frozen=True)
+class FoVTree:
+    """
+    Represents a hierarchical tree structure for spatial partitioning of FoVs.
+
+    Attributes
+    ----------
+    identifier : str
+        A unique identifier for this tree node.
+    node : FoV
+        The FoV associated with this tree node.
+    children : Optional[dict[str, FoVTree]]
+        A dictionary of child nodes, if any.
+    """
+
+    identifier: str
+    node: FoV
+    children: Optional[dict[str, Self]] = field(default_factory=dict)
+
+    @staticmethod
+    def add_identifier(fovs: list[FoV], shape: tuple[int, int]) -> tuple[tuple[str | Any, FoV], ...]:
+        identifier_length = np.ceil(math.log(shape[0] * shape[1], 16)).astype(int)
+        return tuple(
+            [(((identifier_length - len(hex_str := f"{i:x}")) * "0" + hex_str), fov) for i, fov in enumerate(fovs)]
+        )
+
+    def depth(self) -> int:
+        if not self.children:
+            return 1
+        return max([c.depth() for c in self.children.values()]) + 1
+
+    def to_list(self) -> list[tuple[str, FoV]]:
+        if self.is_leaf():
+            return [(self.identifier, self.node)]
+
+        children_lists = [c.to_list() for c in self.children.values()]
+
+        return list(chain.from_iterable(children_lists))
+
+    # @classmethod
+    # def build_by_splitting(cls, fov: FoV, target_ratio: float, target_fov_extent: tuple[tuple[float, float], str],
+    #                        max_denominator: int, identifier: str = "") -> Self:
+    #     # TODO: Rework stopping criteria
+    #     assert target_fov_extent[1] in ("rad", "gon", "deg")
+    #
+    #     target_extent = target_fov_extent[0]
+    #     angle_unit = target_fov_extent[1]
+    #
+    #     shape = cls.calculate_optimal_shape(fov, target_ratio, target_fov_extent, max_denominator)
+    #
+    #     if (fov.extent(unit=angle_unit)[0] < target_extent[0] * shape[0] or
+    #             fov.extent(unit=angle_unit)[1] < target_extent[1] * shape[1]):
+    #         fov_tiles = fov.equal_tiles(target_fov_extent)
+    #         shape = (len(fov_tiles), 1)
+    #         fov_children = {child_identifier: cls(identifier + child_identifier, child, {})
+    #                         for child_identifier, child in cls.add_identifier(fov_tiles, shape)}
+    #     else:
+    #         fov_splits = fov.split(shape)
+    #         fov_children = {child_identifier: cls.build_by_splitting(child, target_ratio, target_fov_extent,
+    #                                                                  max_denominator * 2, identifier + child_identifier)
+    #                         for child_identifier, child in cls.add_identifier(fov_splits, shape)}
+    #
+    #     return cls(identifier, fov, fov_children)
+
+    # @classmethod
+    # def build_by_tiling(cls, fov: FoV, target_fov_extent: tuple[tuple[float, float], str],
+    #                     identifier: str = "") -> Self:
+    #     fov_tiles = fov.equal_tiles(target_fov_extent)
+    #
+    #     identifier_length = np.ceil(math.log(len(fov_tiles), 16)).astype(int)
+    #     fov_with_identifier = tuple([(((identifier_length - len(hex_str := f"{i:x}")) * "0" + hex_str), fov)
+    #                                  for i, fov in enumerate(fov_tiles)])
+    #
+    #     fov_children = {child_identifier: cls(identifier + child_identifier, child, {})
+    #                     for child_identifier, child in fov_with_identifier}
+    #
+    #     return cls(identifier, fov, fov_children)
+
+    # @classmethod
+    # def build(cls, fov: FoV, target_fov_extent: FoV):
+    #     tiles = fov.tile((target_fov_extent.extent("rad"), "rad"))
+    #     pass
+
+    @classmethod
+    def build_from_tiles(cls, tiles: list[list[FoV]], min_children: int = 4, identifier: str = "") -> Self:
+        """
+        Constructs a tree from a grid of FoVs.
+
+        Parameters
+        ----------
+        tiles : list[list[FoV]]
+            A grid of FoVs to organize into a tree.
+        min_children : int, default=4
+            The minimum number of children to avoid further splitting.
+        identifier : str, default=""
+            The identifier for the root node.
+
+        Returns
+        -------
+        FoVTree
+            The root of the constructed tree.
+        """
+        assert min_children > 1
+        if not tiles or not tiles[0]:
+            return None
+
+        # Todo: Check this logic!
+        if len(tiles) == 1 and len(tiles[0]) == 1:
+            if identifier == "":
+                return cls("root", tiles[0][0], None)
+            return cls(identifier, tiles[0][0], None)
+
+        fov = FoV(
+            left=tiles[0][0].left,
+            top=tiles[0][0].top,
+            right=tiles[-1][-1].right,
+            bottom=tiles[-1][-1].bottom,
+        )
+
+        if len(tiles) * len(tiles[0]) <= min_children:
+            flat_tiles = [tile for row in tiles for tile in row]
+            fov_children = {str(i): cls(identifier + str(i), tile, {}) for i, tile in enumerate(flat_tiles)}
+            return cls(identifier, fov, fov_children)  # TODO: BUG! Rebuild identifier function to work 2D
+
+        q0 = tiles[: len(tiles) // 2]
+        q1 = tiles[len(tiles) // 2 :]
+        q00 = [row[: len(row) // 2] for row in q0]
+        q01 = [row[len(row) // 2 :] for row in q0]
+        q10 = [row[: len(row) // 2] for row in q1]
+        q11 = [row[len(row) // 2 :] for row in q1]
+
+        fov_children = {
+            "0": cls.build_from_tiles(q00, min_children, identifier=(identifier + "0")),
+            "1": cls.build_from_tiles(q01, min_children, identifier=(identifier + "1")),
+            "2": cls.build_from_tiles(q10, min_children, identifier=(identifier + "2")),
+            "3": cls.build_from_tiles(q11, min_children, identifier=(identifier + "3")),
+        }
+
+        fov_children = {k: v for k, v in fov_children.items() if v is not None}
+
+        return cls(identifier, fov, fov_children)
+
+    # @staticmethod
+    # def quadrant_split(tiles: list[list[FoV]]):
+    #     # q1 = tiles[:len(tiles) // 2]
+    #     # q2 = tiles[len(tiles) // 2:]
+    #     # q11 = [row[:len(row)//2] for row in q1]
+    #     # q12 = [row[len(row)//2:] for row in q1]
+    #     # q21 = [row[:len(row) // 2] for row in q2]
+    #     # q22 = [row[len(row) // 2:] for row in q2]
+    #     # quadrant_FoV = FoV(horizontal_min=q11[0][0].horizontal_min,
+    #     #                    elevation_min=q11[0][0].elevation_min,
+    #     #                    horizontal_max=q22[-1][-1].horizontal_max,
+    #     #                    elevation_max=q22[-1][-1].elevation_max)
+    #
+    #     FoVTree.quadrant_split(q11)
+    #     FoVTree.quadrant_split(q12)
+    #     FoVTree.quadrant_split(q21)
+    #     FoVTree.quadrant_split(q22)
+    #
+    #     pass
+
+    def __getitem__(self, identifier: str) -> Self:
+        # TODO: extend to complete for full string
+        if not identifier or identifier == "root":
+            return self
+        child_identifier_length = np.ceil(math.log(len(self.children), 16)).astype(int)
+        if len(identifier) > child_identifier_length:
+            return self.children[identifier[:child_identifier_length]][identifier[child_identifier_length:]]
+
+        return self.children[identifier]
+
+    def is_leaf(self):
+        return not self.children
+
+    @staticmethod
+    def calculate_optimal_shape(
+        fov: FoV, target_ratio: float, max_denominator: float
+    ) -> tuple[int, int]:
+
+        shape = Fraction(fov.ratio() / target_ratio).limit_denominator(np.round(max_denominator).astype(int))
+        shape = (
+            shape.numerator,
+            shape.denominator,
+        )
+        if shape[0] == shape[1] == 1:
+            shape = (2, 2)
+
+        return shape
+
 
 @dataclass(init=False, frozen=True)
 class _OldFoV:
@@ -780,9 +972,8 @@ class _OldFoV:
         )
 
 
-
 @dataclass(init=True, frozen=True)
-class FoVTree:
+class _OldFoVTree:
     """
     Represents a hierarchical tree structure for spatial partitioning of FoVs.
 
@@ -893,7 +1084,7 @@ class FoVTree:
                 return cls("root", tiles[0][0], None)
             return cls(identifier, tiles[0][0], None)
 
-        fov = FoV(
+        fov = _OldFoV(
             horizontal_min=tiles[0][0].horizontal_min,
             elevation_min=tiles[0][0].elevation_min,
             horizontal_max=tiles[-1][-1].horizontal_max,
@@ -958,7 +1149,7 @@ class FoVTree:
 
     @staticmethod
     def calculate_optimal_shape(
-        fov: FoV, target_ratio: float, target_extent: tuple[tuple[float, float], str], max_denominator: float
+        fov: FoV, target_ratio: float, target_extent: tuple[float, float], max_denominator: float
     ) -> tuple[int, int]:
 
         shape = Fraction(fov.ratio() / target_ratio).limit_denominator(np.round(max_denominator).astype(int))

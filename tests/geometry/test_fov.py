@@ -4,7 +4,7 @@ import numpy as np
 import math
 
 from src.pchandler.v2.geometry.core import PointCloudData
-from src.pchandler.v2.geometry.fov import FoV, _OldFoV
+from src.pchandler.v2.geometry.fov import FoV, _OldFoV, FoVTree, _OldFoVTree
 from src.pchandler.v2.constants import PI
 
 
@@ -216,9 +216,6 @@ class TestFov:
         assert fov.elevation_max == fov.bottom
 
 
-class TestFoVTree:
-    def test_initialisation(self):
-        raise NotImplementedError
 
 @pytest.fixture(scope='function')
 def new_fov() -> FoV:
@@ -310,3 +307,20 @@ class TestCompareOldVsNew:
         merged_old = _OldFoV.merge([old_fov2, old_fov])
 
         assert tuple(merged_new) == merged_old.as_tuple()
+
+
+class TestFoVTree:
+    def test_initialisation(self, new_fov: FoV):
+        new_tree = FoVTree.build_from_tiles(new_fov.tile(FoV(left=0, right=0.1, top=1.3, bottom=1.4)))
+        assert isinstance(new_tree, FoVTree)
+        assert len(new_tree.children) == 4
+
+    def test_compare_w_old(self, new_fov: FoV, old_fov: _OldFoV):
+        new_tree = FoVTree.build_from_tiles(new_fov.tile(FoV(left=0, right=0.1, top=1.3, bottom=1.4)))
+        old_tree = _OldFoVTree.build_from_tiles(new_fov.tile(_OldFoV(horizontal_min=0, horizontal_max=0.1, elevation_min=1.3, elevation_max=1.4, unit='rad')))
+
+        assert len(new_tree.children) == len(old_tree.children)
+        assert new_tree.depth() == old_tree.depth()
+
+        for i, node in enumerate(new_tree.to_list()):
+            assert node == new_tree.to_list()[i]
