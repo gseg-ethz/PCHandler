@@ -20,7 +20,7 @@ def pcd():
 
 
 class TestLasHandler:
-    rgb_file = Path(r"D:\Python\pchandler\tests\data\test_target_intensity_normals_rgb.las")
+    rgb_file = Path(r"data\test_target_intensity_normals_rgb.las")
 
     def test_load(self):
         pcd = LAS.load(self.rgb_file)
@@ -30,7 +30,7 @@ class TestLasHandler:
         assert 'rgb' in pcd.scalar_fields
 
     def test_save(self):
-        out_path = Path(r"D:\Python\pchandler\tests\data\test_target_rgb_temp.las")
+        out_path = Path(r"data\test_target_rgb_temp.las")
         original_pcd = LAS.load(self.rgb_file)
         LAS.save(original_pcd, out_path)
         new_pcd = LAS.load(out_path)

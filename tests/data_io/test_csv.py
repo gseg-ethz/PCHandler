@@ -8,7 +8,7 @@ from pchandler.v2.data_io.csv import CsvHandler
 
 
 class TestCsvHandler:
-    rgb_file = Path(r"D:\Python\pchandler\tests\data\test_target_intensity_normals_rgbfloat.txt")
+    rgb_file = Path(r"data\test_target_intensity_normals_rgbfloat.txt")
 
     def test_load(self):
         pcd = CsvHandler.load(self.rgb_file)
@@ -17,7 +17,7 @@ class TestCsvHandler:
         assert pcd.rgb.dtype == np.uint8
 
     def test_save(self):
-        out_path = Path(r"D:\Python\pchandler\tests\data\test_target_rgb_temp.csv")
+        out_path = Path(r"data\test_target_rgb_temp.csv")
         original_pcd = CsvHandler.load(self.rgb_file)
         CsvHandler.save(original_pcd, out_path)
         new_pcd = CsvHandler.load(out_path)

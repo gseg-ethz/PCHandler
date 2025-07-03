@@ -6,8 +6,8 @@ import numpy as np
 from pchandler.v2.data_io.ply import PlyHandler
 
 
-FILE_BINARY = Path(r"D:\Python\pchandler\tests\data\test_target_intensity_normals_rgb.ply")
-FILE_ASCII = Path(r"D:\Python\pchandler\tests\data\test_target_intensity_normals_rgb_ascii.ply")
+FILE_BINARY = Path(r"data\test_target_intensity_normals_rgb.ply")
+FILE_ASCII = Path(r"data\test_target_intensity_normals_rgb_ascii.ply")
 
 class TestPlyHandler:
 
@@ -23,7 +23,7 @@ class TestPlyHandler:
 
     @pytest.mark.parametrize('file', (FILE_BINARY, FILE_ASCII))
     def test_save(self, file):
-        out_path = Path(r"D:\Python\pchandler\tests\data\test_target_rgb_temp.ply")
+        out_path = Path(r"data\test_target_rgb_temp.ply")
         original_pcd = PlyHandler.load(file, keep_rgb=True, keep_normals=True, keep_intensity=True)
         PlyHandler.save(original_pcd, out_path, keep_rgb=True, keep_normals=True, keep_intensity=True)
         new_pcd = PlyHandler.load(out_path, keep_rgb=True, keep_normals=True, keep_intensity=True)

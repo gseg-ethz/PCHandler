@@ -8,7 +8,7 @@ from pchandler.v2.data_io.e57 import E57Handler
 
 
 class TestE57Handler:
-    file_1 = Path(r"D:\Python\pchandler\tests\data\test_target_intensity_normals_rgb.e57")
+    file_1 = Path(r"data\test_target_intensity_normals_rgb.e57")
 
     def test_load(self):
         pcd = E57Handler.load(self.file_1)
@@ -16,7 +16,7 @@ class TestE57Handler:
         assert 'intensity' in pcd.scalar_fields
 
     def test_save(self):
-        out_path = Path(r"D:\Python\pchandler\tests\data\test_target_rgb_temp" + E57Handler.FORMATS[0])
+        out_path = Path(r"data\test_target_rgb_temp" + E57Handler.FORMATS[0])
         original_pcd = E57Handler.load(self.file_1)
         E57Handler.save(original_pcd, out_path)
         new_pcd = E57Handler.load(out_path)
