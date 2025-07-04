@@ -9,6 +9,7 @@ import numpy as np
 import numpy.typing as npt
 from pydantic import BeforeValidator, ConfigDict, Field, validate_call
 
+from .fov import FoV
 from ..base_arrays import ArrayNx2, ArrayNx3, FixedLengthArray
 from ..base_types import Array_4x4_T, Vector_3_T, Array_Nx3_T, Array_3x3_T
 from ..constants import HALF_PI, PI, TWO_PI, DEFAULT_CONFIG
@@ -143,9 +144,9 @@ class CartesianCoordinates(Abstract3dCoordinates):
     def _hz_v(self) -> npt.NDArray[np.floating]:
         return self.rhv[:, 1:]
 
-    @property
-    def fov(self):  # TODO must implement this
-        raise NotImplementedError
+    @cached_property
+    def fov(self) -> FoV:
+        return FoV.from_angles(self.hz, self.v)
 
     def to_spherical(self) -> SphericalCoordinates:
         spherical = SphericalCoordinates(**self.model_dump(exclude={"arr"}) | {"arr": self.spher})
@@ -179,9 +180,9 @@ class CartesianCoordinates(Abstract3dCoordinates):
 class SphericalCoordinates(Abstract3dCoordinates):
     arr: Annotated[Array_Nx3_T, Field(validation_alias="spher"), BeforeValidator(validate_spherical_angles)]
 
-    @property
-    def fov(self) -> Any:
-        raise NotImplementedError
+    @cached_property
+    def fov(self) -> FoV:
+        return FoV.from_angles(self.hz, self.v)
 
     @property
     def spher(self) -> npt.NDArray[np.floating]:

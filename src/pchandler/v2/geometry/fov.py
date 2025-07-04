@@ -74,6 +74,7 @@ import warnings
 from dataclasses import dataclass, field
 from fractions import Fraction
 from itertools import chain
+from functools import partial
 from typing import Iterable, Optional, cast, Self, Annotated, NamedTuple, TYPE_CHECKING, Any
 
 import numpy as np
@@ -85,6 +86,7 @@ from ..util import AngleUnit, convert_angles
 
 if TYPE_CHECKING:
     from .coordinates import SphericalCoordinates, CartesianCoordinates
+    from ..base_types import Vector_3_T
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -107,6 +109,39 @@ class FoV(NamedTuple):
     top: VAngleT
     right: HzAngleT
     bottom: VAngleT
+
+    # def __new__(
+    #         cls,
+    #         *,
+    #         left: HzAngleT,
+    #         top: VAngleT,
+    #         right: HzAngleT,
+    #         bottom: VAngleT,
+    #         input_unit: AngleUnit = AngleUnit.RAD
+    # ):
+    #     values = np.array([left, top, right, bottom], dtype=float)
+    #     convert_angles(values, source_unit=input_unit, target_unit=AngleUnit.RAD, out=values)
+    #     super(FoV, cls).__new__(cls, values[0], values[1], values[2], values[3])
+
+
+    @classmethod
+    def from_unit(
+            cls,
+            *,
+            left: HzAngleT,
+            top: VAngleT,
+            right: HzAngleT,
+            bottom: VAngleT,
+            input_unit: AngleUnit = AngleUnit.RAD
+    ) -> Self:
+        values = np.array([left, top, right, bottom], dtype=float)
+        l, t, r, b = convert_angles(values, source_unit=input_unit, target_unit=AngleUnit.RAD).tolist()
+        return cls(left = l, top = t, right = r, bottom = b)
+
+    @classmethod
+    def from_angles(cls, horizontal: Vector_3_T, vertical: Vector_3_T) -> Self:
+        return cls(left=horizontal.min(), top=vertical.min(), right=horizontal.max(), bottom=vertical.max())
+
 
     def __iter__(self) -> Iterable[HzAngleT | VAngleT]:
         yield self.left
@@ -222,9 +257,14 @@ class FoV(NamedTuple):
         return self.extent()[0] / self.extent()[1]
 
     def __repr__(self):
+        # return (
+        #     f"({self.left:0.4f}, {self.top:0.4f}, "
+        #     f"{self.right:0.4f}, {self.bottom:0.4f})"
+        # )
+
+        left, top, right, bottom = tuple(map(partial(convert_angles, source_unit = AngleUnit.RAD, target_unit = AngleUnit.GON), self))
         return (
-            f"({self.left:0.4f}, {self.top:0.4f}, "
-            f"{self.right:0.4f}, {self.bottom:0.4f})"
+            f"({left=:0.4f}, {right=:0.4f}, {top=:0.4f},{bottom=:0.4f}; in {AngleUnit.GON})"
         )
 
     @validate_call(config=DEFAULT_CONFIG)
