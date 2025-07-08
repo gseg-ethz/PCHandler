@@ -53,7 +53,7 @@ class BaseArray(ABC, BaseModel):
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
         validate_assignment=True,
-        revalidate_instances="always",
+        revalidate_instances="never",
         validate_default=True,
         strict=True,
         frozen=False,

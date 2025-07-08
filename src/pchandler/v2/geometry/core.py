@@ -27,7 +27,8 @@ class PointCloudData(CartesianCoordinates):
         BeforeValidator(lambda value: value if not isinstance(value, TransformLedger) else TransformLedger(**value))
     ]
     scalar_fields: ScalarFieldManager[ScalarField | ScalarFieldTriplet] = Field(default_factory=ScalarFieldManager)
-    optimized_shift: Optional[OptimizedShift]
+    # optimized_shift: Optional[OptimizedShift]
+
 
     def __init__(
         self,
@@ -37,7 +38,7 @@ class PointCloudData(CartesianCoordinates):
         normals: Optional[npt.NDArray[np.float32|np.float64] | NormalFields] = None,
         intensity: Optional[npt.NDArray[np.uint16|np.float32|np.float64] | ScalarField] = None,
         reflectance: Optional[npt.NDArray[np.uint16|np.float32|np.float64] | ScalarField] = None,
-        optimized_shift: Optional[OptimizedShift | ellipsis] = Ellipsis,
+        numerical_optimization_shift: Optional[OptimizedShift | ellipsis] = Ellipsis,
         socs_origin: Optional[npt.NDArray[np.float64]] = None,
         scalar_fields: Optional[ScalarFieldManager[ScalarField | ScalarFieldTriplet] | dict[str, SF_T]] = None,
         project_transformation: Optional[Array_4x4_T] = None,
@@ -75,23 +76,25 @@ class PointCloudData(CartesianCoordinates):
         # DECISION - Not to have frozen in
         # self.model_config["frozen"] = frozen
 
-        if optimized_shift is Ellipsis:
-            # TODO should this grab / try the last optimal shift by default?
-            #  if len(OptimizedShiftManager):
-            #      optimized_shift = OptimizedShiftManager._optimized_shifts[-1]
-            #  else:
-            #      optimized_shift = OptimizedShift(np.zeros(3, dtype=np.float32))
-            optimized_shift = OptimizedShift(np.zeros(3, dtype=np.float32))
+        # if optimized_shift is Ellipsis:
+        #     # TODO should this grab / try the last optimal shift by default?
+        #     #  if len(OptimizedShiftManager):
+        #     #      optimized_shift = OptimizedShiftManager._optimized_shifts[-1]
+        #     #  else:
+        #     #      optimized_shift = OptimizedShift(np.zeros(3, dtype=np.float32))
+        #     optimized_shift = OptimizedShift(np.zeros(3, dtype=np.float32))
 
-        if optimized_shift is not None:
-            optimized_shift = optimized_shift.register(self, xyz)
+        # if optimized_shift is not None:
+        #     optimized_shift = optimized_shift.register(self, xyz)
 
-        xyz = (xyz - optimized_shift.value).astype(np.float32) if optimized_shift is not None else xyz
+        # xyz = (xyz - optimized_shift.value).astype(np.float32) if optimized_shift is not None else xyz
+        # if optimized_shift is not None and socs_origin is not None:
+        #     socs_origin -= optimized_shift.value
 
         super().__init__(
             arr=xyz,
             scalar_fields = sfm,
-            optimized_shift = optimized_shift,
+            numerical_optimization_shift = numerical_optimization_shift,
             socs_origin = socs_origin,
             project_transformation = project_transformation,
             transform_ledger = transform_ledger if transform_ledger else TransformLedger(),
@@ -105,11 +108,6 @@ class PointCloudData(CartesianCoordinates):
 
     def __hash__(self) -> int:
         return id(self)
-
-
-    def update_shift(self: Self, delta_shift: Vector_3_T) -> None:
-        self.xyz = (self.xyz + delta_shift).astype(np.float32)
-
 
     @model_validator(mode="after")
     def update_parent_weakref(self) -> Self:
