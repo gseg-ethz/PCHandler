@@ -79,6 +79,7 @@ def find_pcd_in_directory(directory_path: Path, pcd_file_types: list[str], inclu
     return file_list
 
 
+
 def skip_main_fields(field_names: Sequence[str]|set[str]) -> set[str]:
     return set(field_names).difference({RGB_FIELD, INTENSITY_FIELD, NORMALS_FIELD, REFLECTANCE_FIELD})
 

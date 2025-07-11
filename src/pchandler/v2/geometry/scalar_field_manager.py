@@ -13,6 +13,8 @@ from pydantic import validate_call
 if TYPE_CHECKING:
     from .core import PointCloudData
 
+from ..base_arrays import BaseArray
+
 from ..base_types import (
     Array_Nx3_Float32_T,
     Array_Nx3_T,
@@ -51,10 +53,14 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
     number of data points. Also provides a mechanism to select subsets of the fields.
     """
 
+    _parent: Optional[weakref.ReferenceType[PointCloudData]]
+    fields: MutableMapping[str, ScalarField]
+
+
     def __init__(
-        self, parent: PointCloudData | None = None, fields: dict[str, SF_T | np.ndarray] | Self | None = None
+        self, parent: Optional[PointCloudData] = None, fields: Optional[dict[str, SF_T | npt.NDArray] | Self] = None
     ) -> None:
-        self._parent: weakref.ReferenceType[PointCloudData] | None = weakref.ref(parent) if parent is not None else None
+        self._parent = weakref.ref(parent) if parent is not None else None
 
         if isinstance(fields, dict):
             for key, value in fields.items():
@@ -75,6 +81,26 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
             self.fields = fields.fields
         else:
             raise TypeError(f"Unknown fields type: {type(fields)}")
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["_parent"] = None
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+
+    @property
+    def parent(self) -> Optional[PointCloudData]:
+        return self._parent() if not None else None
+
+    @parent.setter
+    def parent(self, parent: PointCloudData):
+        if self._parent is not None and self._parent() is not parent:
+            logger.warning(f"Parent already set as {self._parent()}. Will be overwritten by {parent}!", stack_info=True,
+                           stacklevel=1)
+        self._parent = weakref.ref(parent)
+
 
     def __iter__(self) -> Iterator[str]:
         return iter(self.fields)
@@ -110,14 +136,20 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
 
         return self.sample(key)
 
-    def __setitem__(self, name: LowerStr, value: SF_T) -> None:
+    def __setitem__(self, name: LowerStr, value: Optional[SF_T]) -> None:
+        if value is None and name in self:
+            del self[name]
+
+        if value is None:
+            return
+
         origin_dtype = None
 
         if isinstance(value, AbstractScalarField):
             origin_dtype = value.origin_dtype
             value = value.arr
 
-        if not isinstance(value, np.ndarray):
+        if isinstance(value, BaseArray):
             value = value.arr
 
         if name == INTENSITY_FIELD:
@@ -175,45 +207,45 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
 
     @rgb.setter
     def rgb(self, value: npt.NDArray[np.floating|np.uint8] | RGBFields) -> None:
-        if not isinstance(value, (np.ndarray, RGBFields)):
+        if value is not None and not isinstance(value, (np.ndarray, RGBFields)):
             value: npt.NDArray[np.floating|np.uint8] = np.asarray(value)
 
         if isinstance(value, np.ndarray):
             value: RGBFields = RGBFields(value)
-        self.add_field(value)
+        self[RGB_FIELD] = value
 
     @property
     def normals(self) -> NormalFields | None:
         return self.fields.get(NORMALS_FIELD, None)
 
     @normals.setter
-    def normals(self, value: np.ndarray | NormalFields):
-        if not isinstance(value, (np.ndarray, NormalFields)):
+    def normals(self, value: Optional[npt.NDArray | NormalFields]):
+        if value is not None and not isinstance(value, (np.ndarray, NormalFields)):
             value = np.asarray(value)
 
         if isinstance(value, np.ndarray):
             value = NormalFields(value)
-        self.add_field(value)
+        self[NORMALS_FIELD] = value
 
     @property
     def intensity(self):
-        return self.fields.get("intensity", None)
+        return self.fields.get(INTENSITY_FIELD, None)
 
     @intensity.setter
-    def intensity(self, value: np.ndarray | ScalarField):
+    def intensity(self, value: Optional[npt.NDArray[np.uint16|np.floating] | ScalarField]):
         if isinstance(value, np.ndarray):
             value = ScalarField(value, name=INTENSITY_FIELD)
-        self.add_field(value)
+        self[INTENSITY_FIELD] = value
 
     @property
     def reflectance(self):
-        return self.fields.get("reflectance", None)
+        return self.fields.get(REFLECTANCE_FIELD, None)
 
     @reflectance.setter
     def reflectance(self, value: np.ndarray | ScalarField):
         if isinstance(value, np.ndarray):
             value = ScalarField(value, name=REFLECTANCE_FIELD)
-        self.add_field(value)
+        self[REFLECTANCE_FIELD] = value
 
     @validate_call(config=DEFAULT_CONFIG)
     def _handle_rgb(

@@ -35,7 +35,8 @@ class PointCloudSplitter(ABC):
 
 
 class FoVTreePointCloudSplitter(PointCloudSplitter):
-    @validate_variables
+    # Todo: Check how validate_variables interacts with initializers...got weird errors
+    # @validate_variables
     def __init__(self, fov_tree: FoVTree,
                  remove_empty: bool = True,
                  n_jobs: NumberJobsT = -1,

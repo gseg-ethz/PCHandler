@@ -100,7 +100,7 @@ class CartesianCoordinates(Abstract3dCoordinates):
         default=Ellipsis,
         exclude=False
     )
-    optimized: bool = Field(default=False, exclude=True)
+    # optimized: bool = Field(default=False, exclude=True)
 
     _shift_applied: bool = PrivateAttr(False)
 
@@ -115,7 +115,7 @@ class CartesianCoordinates(Abstract3dCoordinates):
     @classmethod
     def _reconstruct(cls, state: dict) -> Self:
         shift_flag = state.pop("_shift_applied", False)
-        obj: CartesianCoordinates = cls.model_construct(**state)
+        obj: Self = cls.model_construct(**state)
 
         obj._shift_applied = shift_flag
 
@@ -221,6 +221,10 @@ class CartesianCoordinates(Abstract3dCoordinates):
     @cached_property
     def fov(self) -> FoV:
         return FoV.from_angles(self.hz, self.v)
+
+    @property
+    def numerically_optimized(self) -> bool:
+        return not (self.numerical_optimization_shift is None or self.numerical_optimization_shift.value) #TODO close to zero
 
     def to_spherical(self) -> SphericalCoordinates:
         spherical = SphericalCoordinates(**self.model_dump(exclude={"arr"}) | {"arr": self.spher})

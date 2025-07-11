@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import Any, Mapping, Optional, Self, Annotated, MutableMapping, Union, Type
+from typing import Any, Mapping, Optional, Self, Annotated, MutableMapping, Union, Type, Callable, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -27,7 +27,7 @@ class PointCloudData(CartesianCoordinates):
         BeforeValidator(lambda value: value if not isinstance(value, TransformLedger) else TransformLedger(**value))
     ]
     scalar_fields: ScalarFieldManager[ScalarField | ScalarFieldTriplet] = Field(default_factory=ScalarFieldManager)
-    # optimized_shift: Optional[OptimizedShift]
+
 
 
     def __init__(
@@ -40,86 +40,57 @@ class PointCloudData(CartesianCoordinates):
         reflectance: Optional[npt.NDArray[np.uint16|np.float32|np.float64] | ScalarField] = None,
         numerical_optimization_shift: Optional[OptimizedShift | ellipsis] = Ellipsis,
         socs_origin: Optional[npt.NDArray[np.float64]] = None,
-        scalar_fields: Optional[ScalarFieldManager[ScalarField | ScalarFieldTriplet] | dict[str, SF_T]] = None,
+        scalar_fields: Optional[ScalarFieldManager[ScalarField | ScalarFieldTriplet] | dict[str, SF_T|npt.NDArray] ] = None,
         project_transformation: Optional[Array_4x4_T] = None,
         transform_ledger: Optional[TransformLedger] = None,
         # frozen: bool = False
     ):
-        if scalar_fields is None:
-            scalar_fields = {}
-
-        sfm: ScalarFieldManager[ScalarField | ScalarFieldTriplet] = ScalarFieldManager(None, fields=scalar_fields)
-
-        if isinstance(rgb, np.ndarray):
-            rgb = RGBFields(rgb)
-
-        if isinstance(normals, np.ndarray):
-            normals = NormalFields(normals)
-
-        if isinstance(intensity, np.ndarray):
-            intensity = ScalarField(intensity, name="intensity")
-
-        if isinstance(reflectance, np.ndarray):
-            reflectance = ScalarField(reflectance, name="reflectance")
-
-        for field in (rgb, normals, intensity, reflectance):
-            if field is not None:
-                sfm.add_field(field)
-
-        # TODO implement post v2.0
-        # if transform_ledger is not None:
-        #     kwargs['transform_ledger'] = TransformLedger()
-
-
-        # TODO Add an easy accessor to the original point cloud data (e.g. at_socs)
-
-        # DECISION - Not to have frozen in
-        # self.model_config["frozen"] = frozen
-
-        # if optimized_shift is Ellipsis:
-        #     # TODO should this grab / try the last optimal shift by default?
-        #     #  if len(OptimizedShiftManager):
-        #     #      optimized_shift = OptimizedShiftManager._optimized_shifts[-1]
-        #     #  else:
-        #     #      optimized_shift = OptimizedShift(np.zeros(3, dtype=np.float32))
-        #     optimized_shift = OptimizedShift(np.zeros(3, dtype=np.float32))
-
-        # if optimized_shift is not None:
-        #     optimized_shift = optimized_shift.register(self, xyz)
-
-        # xyz = (xyz - optimized_shift.value).astype(np.float32) if optimized_shift is not None else xyz
-        # if optimized_shift is not None and socs_origin is not None:
-        #     socs_origin -= optimized_shift.value
-
         super().__init__(
             arr=xyz,
-            scalar_fields = sfm,
             numerical_optimization_shift = numerical_optimization_shift,
             socs_origin = socs_origin,
             project_transformation = project_transformation,
             transform_ledger = transform_ledger if transform_ledger else TransformLedger(),
         )
 
-        # if isinstance(optimized_shift, OptimizedShift):
-        #     final_shift: OptimizedShift = optimized_shift.register(self, xyz)
-        #     self.update_shift(final_shift.value)
-        #     self.optimized_shift = final_shift
+        self.rgb = rgb
+        self.normals = normals
+        self.intensity = intensity
+        self.reflectance = reflectance
+
+        if scalar_fields is not None:
+            for key, value in scalar_fields:
+                self.scalar_fields[key] = value
 
 
     def __hash__(self) -> int:
         return id(self)
 
+    def __reduce__(self):
+        base_fn, base_args = super().__reduce__()
+
+        state_dict, = base_args
+        return (
+            PointCloudData._reconstruct_scalar_field_link,
+            (base_fn, state_dict),
+        )
+
+    @staticmethod
+    def _reconstruct_scalar_field_link(
+            base_fn: Callable[[dict], PointCloudData],
+            state: dict,
+      ):
+        obj = base_fn(state)
+
+        obj.scalar_fields.parent = obj
+        return obj
+
+
     @model_validator(mode="after")
-    def update_parent_weakref(self) -> Self:
+    def ensure_scalar_field_manager_pointer(self) -> Self:
         """Revalidate model to ensure that the weakref points to the correct object"""
-        if isinstance(self.scalar_fields, ScalarFieldManager):
-            self.scalar_fields.parent = self
 
-        elif isinstance(self.scalar_fields, dict):
-            self.scalar_fields = ScalarFieldManager(parent=self, fields=self.scalar_fields)
-
-        elif self.scalar_fields is None:
-            self.scalar_fields = ScalarFieldManager(parent=self)
+        self.scalar_fields.parent = self
 
         return self
 
@@ -128,7 +99,7 @@ class PointCloudData(CartesianCoordinates):
         return self.scalar_fields.normals
 
     @normals.setter
-    def normals(self, value: np.ndarray|NormalFields) -> None:
+    def normals(self, value: Optional[npt.NDArray | NormalFields]) -> None:
         self.scalar_fields.normals = value
 
     @property
@@ -136,7 +107,7 @@ class PointCloudData(CartesianCoordinates):
         return self.scalar_fields.rgb
 
     @rgb.setter
-    def rgb(self, value: npt.NDArray[np.floating|np.uint8]|RGBFields) -> None:
+    def rgb(self, value: Optional[npt.NDArray[np.floating|np.uint8] | RGBFields]) -> None:
         self.scalar_fields.rgb = value
 
     @property
@@ -144,7 +115,7 @@ class PointCloudData(CartesianCoordinates):
         return self.scalar_fields.intensity
 
     @intensity.setter
-    def intensity(self, value: npt.NDArray[np.uint16]|ScalarField) -> None:
+    def intensity(self, value: Optional[npt.NDArray[np.uint16|np.floating] | ScalarField]) -> None:
         self.scalar_fields.intensity = value
 
     @property
@@ -152,7 +123,7 @@ class PointCloudData(CartesianCoordinates):
         return self.scalar_fields.reflectance
 
     @reflectance.setter
-    def reflectance(self, value: np.ndarray|ScalarField) -> None:
+    def reflectance(self, value: Optional[npt.NDArray | ScalarField]) -> None:
         self.scalar_fields.reflectance = value
 
     def __setitem__(self, key: IndexLike, value: npt.NDArray[Any] | PointCloudData) -> None:
