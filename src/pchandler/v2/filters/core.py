@@ -45,10 +45,11 @@ class PointCloudFilter(ABC):
             The modified point cloud.
         """
         m = self.mask(pcd)
-        if np.sum(m) == 0:
-            warnings.warn('Filter produced no values to index, thus returning full point cloud')
-        else:
-            pcd.reduce(m)
+        # if np.sum(m) == 0:
+        #     warnings.warn('Filter produced no values to index, thus returning full point cloud')
+        # else:
+        #     pcd.reduce(m)
+        pcd.reduce(m)
 
     def extract(self, pcd: PointCloudData) -> Optional[PointCloudData]:
         """
@@ -63,9 +64,9 @@ class PointCloudFilter(ABC):
         """
         m = self.mask(pcd)
 
-        if np.sum(m) == 0:
-            warnings.warn('Filter produced no values to index, thus nothing has been extracted')
-            return None
+        # if np.sum(m) == 0:
+        #     warnings.warn('Filter produced no values to index, thus nothing has been extracted')
+        #     return None
         new_pcd = pcd.extract(m)
         return new_pcd
 
@@ -81,9 +82,9 @@ class PointCloudFilter(ABC):
             A new PointCloudData instance containing only the sampled points.
         """
         m = self.mask(pcd)
-        if np.sum(m) == 0:
-            warnings.warn('Filter produced no values to index, thus nothing has been sampled')
-            return None
+        # if np.sum(m) == 0:
+        #     warnings.warn('Filter produced no values to index, thus nothing has been sampled')
+        #     return None
         return pcd.sample(m)
 
 
