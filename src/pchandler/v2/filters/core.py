@@ -1,7 +1,7 @@
 import logging
-from abc import ABC, abstractmethod
-from typing import Callable, Any, Optional
 import warnings
+from abc import ABC, abstractmethod
+from typing import Any, Callable, Optional
 
 import numpy as np
 import numpy.typing as npt
@@ -97,6 +97,7 @@ class GenericFieldFilter(PointCloudFilter):
         field_label: The field (attribute or scalar field key) on which to operate.
         filter_func: A callable that takes the field data and returns a boolean mask.
     """
+
     @validate_variables
     def __init__(self, field_label: str, filter_func: Callable) -> None:
         self.field_label = field_label
