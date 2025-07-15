@@ -1,46 +1,45 @@
 import logging
 import warnings
+from abc import ABC, abstractmethod
+from typing import Literal, Annotated, Any
 
 import numpy as np
-from numpy.typing import NDArray
+import numpy.typing as npt
+from pydantic import BaseModel, Field, PositiveFloat
 
-from ..core import PointCloudData
-from ..scalar_field_manager import ScalarFieldManager
-from ...util import unique_rows_fast
+from pchandler.v2.util import unique_rows_fast
+from pchandler.v2.geometry.core import PointCloudData
+from pchandler.v2.geometry.scalar_field_manager import ScalarFieldManager
+
 from .core import PointCloudFilter
+from ..constants import validate_variables
+from ..geometry.coordinates import SphericalCoordinates
+from ..geometry.scalar_fields import AbstractScalarField
 
 logger = logging.getLogger(__name__.split(".")[0])
 
+WeightingMethods = Literal["nearest", "constant", "linear"]
+
 
 class RandomDownsampleFilter(PointCloudFilter):
-    def __init__(self, size: float | int):
+    @validate_variables
+    def __init__(self, size: Annotated[PositiveFloat, Field(lt=1)]):
         self.size = size
 
-    def mask(self, pcd: PointCloudData) -> NDArray[np.bool_]:
-        nb_points = pcd.nbPoints
-        size = self.size
-        if isinstance(size, float) and 0 < size < 1:
-            size = int(np.ceil(size * nb_points))
-        if size >= nb_points:
-            warnings.warn("Subsampling ratio above 1; returning original point cloud.")
-            return np.ones((nb_points,), dtype=np.bool_)
-        indices = np.sort(np.random.choice(np.arange(nb_points), size=size, replace=False))
-        mask = np.zeros(nb_points, dtype=np.bool_)
+    def mask(self, pcd: PointCloudData) -> npt.NDArray[np.bool_]:
+        indices = np.sort(np.random.choice(len(pcd), size=int(np.ceil(self.size * len(pcd))), replace=False))
+        mask = np.zeros(len(pcd), dtype=np.bool_)
         mask[indices] = True
         return mask
 
 
 class VoxelDownsample:
-    _possible_weighting_method: list[str] = ["nearest", "constant", "linear"]
-
-    def __init__(self, voxel_size: float, weigthing_method: str = "linear"):
-        if weigthing_method not in self._possible_weighting_method:
-            raise ValueError(f"Weighing method '{weigthing_method}' is not supported.")
-        if voxel_size <= 0:
-            raise ValueError(f"Voxel_size '{voxel_size}' must be positive.")
+    @validate_variables
+    def __init__(self, voxel_size: PositiveFloat, weighting_method: WeightingMethods = "linear"):
         self.voxel_size = voxel_size
-        self.weigthing_method = weigthing_method
+        self.weighting_method = weighting_method
 
+    # TODO remove duplication code
     def sample(self, pcd: PointCloudData) -> PointCloudData:
         unique, unique_inverse = np.unique(
             np.round(pcd.xyz / self.voxel_size).astype(np.int32), axis=0, return_inverse=True
@@ -55,7 +54,7 @@ class VoxelDownsample:
         centroids /= counts[:, None]  # Normalize to get centroids
 
         # Compute distances of points to their respective voxel centroids
-        match self.weigthing_method:
+        match self.weighting_method:
             case "nearest":
                 raise NotImplementedError
             case "constant":
@@ -67,14 +66,42 @@ class VoxelDownsample:
 
                 # Normalize weights per voxel
                 weights /= np.where(weight_sums[unique_inverse] > 0, weight_sums[unique_inverse], 1)  # Avoid NaNs
+            case _:
+                raise ValueError(f"Unrecognised 'weighting_method' passed = {self.weighting_method}")
 
+        weight_sum = np.bincount(unique_inverse, weights=weights, minlength=unique.shape[0])
         sfm = ScalarFieldManager()
+
         for field_name, field_values in pcd.scalar_fields.items():
             # Compute weighted sum of scalar values within each voxel
-            scalar_sum = np.bincount(unique_inverse, weights=field_values * weights, minlength=unique.shape[0])
-            weight_sum = np.bincount(unique_inverse, weights=weights, minlength=unique.shape[0])
-            sfm.create_field(field_name, scalar_sum / weight_sum)
+            if field_name in ('rgb', 'normals'):
+                scalar_sum = np.zeros((unique.shape[0],3))
+
+                for i in range(3):
+                    scalar_sum[:, i] = np.bincount(unique_inverse, weights=field_values.arr[:, i] * weights, minlength=unique.shape[0])
+
+                if len(weight_sum.shape) == 1:
+                    weight_sum = weight_sum[:, None]
+
+                if field_name == 'rgb':
+                    warnings.warn(f'RGB colours are not retained. '
+                                  f'A weighted value is taken using {self.weighting_method=}')
+
+                elif field_name == 'normals':
+                    warnings.warn(f'Normals are not retained. '
+                                  f'A weighted value is taken using {self.weighting_method=}'
+                                  f'These values may not be very representative of the data')
+
+            else:
+                scalar_sum = np.bincount(unique_inverse, weights=field_values * weights, minlength=unique.shape[0])
+                weight_sum = weight_sum[:, 0]
+
+            sfm[field_name] = type(field_values)(scalar_sum / weight_sum,
+                                                 name=field_name,
+                                                 origin_dtype=field_values.origin_dtype)
+
             # self.scalar_fields[field_name] = (scalar_sum / weight_sum).astype(field_values.dtype)
+
 
         # # Average scalar fields
         # averaged_scalar_fields = {}
@@ -98,38 +125,28 @@ class VoxelDownsample:
         # # self.scalar_fields.clear()
         #
         # return
-        warnings.warn("Normals, and colors are not retained during `voxel_downsample`!")
-        return PointCloudData(
-            centroids,
-            scalar_fields=sfm,
-            spherical_coordinates_origin=pcd.spherical_coordinates_origin,
-            global_coordinate_shift=pcd.global_coordinate_shift,
-            _global_shift_already_applied=True,
-        )
+
+        return PointCloudData(centroids, scalar_fields=sfm, optimized_shift=pcd.optimized_shift)
+
 
 class AngleBinDownsample:
-    _possible_weighting_method: list[str] = ["nearest", "constant", "linear"]
-
-    def __init__(self, angle_bin_size: float, weighting_method: str = "linear"):
-        if weighting_method not in self._possible_weighting_method:
-            raise ValueError(f"Weighing method '{weighting_method}' is not supported.")
-        if angle_bin_size <= 0:
-            raise ValueError(f"Voxel_size '{angle_bin_size}' must be positive.")
+    @validate_variables
+    def __init__(self, angle_bin_size: PositiveFloat, weighting_method: WeightingMethods = "linear"):
         self.angle_bin_size = angle_bin_size
         self.weighting_method = weighting_method
 
     def sample(self, pcd: PointCloudData) -> PointCloudData:
-        pcd_angles = pcd.spherical_coordinates[:,1:]
+        pcd_angles = pcd.spher[:, 1:]
         # unique, unique_inverse = np.unique(
         #     np.round(pcd_angles / self.angle_bin_size).astype(np.int32), axis=0, return_inverse=True
         # )
-        unique, unique_inverse = unique_rows_fast( #np.unique
-            ((pcd_angles + self.angle_bin_size/2) // self.angle_bin_size).astype(np.int32)
+        unique, unique_inverse = unique_rows_fast(  # np.unique
+            ((pcd_angles + self.angle_bin_size / 2) // self.angle_bin_size).astype(np.int32)
         )
 
         # Calculate centroids for each voxel
         centroids = np.zeros((unique.shape[0], 2), dtype=np.float32)
-        for i in range(2):  # x, y, z dimensions
+        for i in range(2):  # x, y dimensions
             centroids[:, i] = np.bincount(unique_inverse, weights=pcd_angles[:, i], minlength=unique.shape[0])
 
         counts = np.bincount(unique_inverse, minlength=unique.shape[0])
@@ -148,16 +165,44 @@ class AngleBinDownsample:
 
                 # Normalize weights per voxel
                 weights /= np.where(weight_sums[unique_inverse] > 0, weight_sums[unique_inverse], 1)  # Avoid NaNs
+            case _:
+                raise ValueError(f"Unrecognised 'weighting_method' passed = {self.weighting_method}")
 
         weight_sum = np.bincount(unique_inverse, weights=weights, minlength=unique.shape[0])
         sfm = ScalarFieldManager()
+
         for field_name, field_values in pcd.scalar_fields.items():
             # Compute weighted sum of scalar values within each voxel
-            scalar_sum = np.bincount(unique_inverse, weights=field_values * weights, minlength=unique.shape[0])
-            sfm.create_field(field_name, scalar_sum / weight_sum)
-            # self.scalar_fields[field_name] = (scalar_sum / weight_sum).astype(field_values.dtype)
+            if field_name in ('rgb', 'normals'):
+                scalar_sum = np.zeros((unique.shape[0],3))
 
-        ranges = np.bincount(unique_inverse, weights=pcd.spherical_coordinates[:,0] * weights, minlength=unique.shape[0]) / weight_sum
+                for i in range(3):
+                    scalar_sum[:, i] = np.bincount(unique_inverse, weights=field_values.arr[:, i] * weights, minlength=unique.shape[0])
+
+                if len(weight_sum.shape) == 1:
+                    weight_sum = weight_sum[:, None]
+
+                if field_name == 'rgb':
+                    warnings.warn(f'RGB colours are not retained. '
+                                  f'A weighted value is taken using {self.weighting_method=}')
+
+                elif field_name == 'normals':
+                    warnings.warn(f'Normals are not retained. '
+                                  f'A weighted value is taken using {self.weighting_method=}'
+                                  f'These values may not be very representative of the data')
+            else:
+                scalar_sum = np.bincount(unique_inverse, weights=field_values * weights, minlength=unique.shape[0])
+                weight_sum = weight_sum[:, 0]
+
+            sfm[field_name] = type(field_values)(scalar_sum / weight_sum,
+                                   name=field_name,
+                                   origin_dtype=field_values.origin_dtype)
+
+
+        ranges = (
+            np.bincount(unique_inverse, weights=pcd.spher[:, 0] * weights, minlength=unique.shape[0])
+            / weight_sum
+        )
 
         # # Average scalar fields
         # averaged_scalar_fields = {}
@@ -181,10 +226,6 @@ class AngleBinDownsample:
         # # self.scalar_fields.clear()
         #
         # return
-        warnings.warn("Normals, and colors are not retained during `voxel_downsample`!")
-        return PointCloudData.from_spherical_coordinates(
-            spherical_coordinates=np.hstack((ranges[:, np.newaxis], centroids)),
-            scalar_fields=sfm,
-            spherical_coordinates_origin=pcd.spherical_coordinates_origin,
-            global_coordinate_shift=pcd.global_coordinate_shift,
-        )
+
+        coords = SphericalCoordinates(arr=np.hstack((ranges[:, np.newaxis], centroids)))
+        return PointCloudData(coords.xyz, scalar_fields=sfm, optimized_shift=pcd.optimized_shift)

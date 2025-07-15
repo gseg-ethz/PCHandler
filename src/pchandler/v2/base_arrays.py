@@ -1,21 +1,26 @@
 from __future__ import annotations
 
+import copy
 from abc import ABC
-from functools import cached_property
-from typing import Any, Optional, Generator, Mapping, Self, Annotated
+from typing import Any, Generator, MutableMapping, Optional, Self
 
-# TODO there's a lot of importing of numpy or other common libraries - is there way to optimise this to __init__?
 import numpy as np
 import numpy.typing as npt
-from numpydantic import NDArray, Shape
-from numpydantic.dtype import Integer, Float, Bool, UInt8, Float32, UInt16
-from pydantic import BaseModel, ConfigDict, model_validator, field_validator, Field, BeforeValidator
+from numpydantic import NDArray, Shape  # type: ignore
+from pydantic import BaseModel, ConfigDict, model_validator
 
-from .custom_types import IndexLike
-from .validators import extract_array, validate_transposed_vector, validate_Nx2_transposed, validate_Nx3_transposed
+from .base_types import (
+    Array_Nx2_T,
+    Array_Nx3_T,
+    Array_NxM_3_T,
+    Array_NxM_T,
+    ArrayT,
+    IndexLike,
+    VectorT,
+)
 
 
-def make_ndarray_type(*args: Optional[int|str], dtype = None):
+def make_ndarray_type(*args: Optional[int | str], dtype: Optional[npt.DTypeLike] = None) -> NDArray[Any, Any]:
     """
     Helper function to generate the numpydantic type for a ndarray.
 
@@ -23,36 +28,11 @@ def make_ndarray_type(*args: Optional[int|str], dtype = None):
     of shape (N, 3) with dtype = np.float32 and would provide pydantic validation on this
     """
     if len(args) == 0:
-        shape_list = ['*', '...']
+        shape_list = ["*", "..."]
     else:
-        shape_list: list = [str(x) if x is not None else "*" for x in args]
+        shape_list = [str(x) if x is not None else "*" for x in args]
 
-    return NDArray[Shape[', '.join(shape_list)], dtype if dtype is not None else Any]
-
-ArrayDtypes = (Integer, Float, Bool)
-
-ArrayValidator = BeforeValidator(extract_array)
-TransposedVector = BeforeValidator(validate_transposed_vector)
-TransposedNx2 = BeforeValidator(validate_Nx2_transposed)
-TransposedNx3 = BeforeValidator(validate_Nx3_transposed)
-
-# DECIDE -> Should we shift this to custom types? For now this is a rather independent module
-Array_T = Annotated[NDArray[Shape['*, ...'], ArrayDtypes], ArrayValidator]
-Array_NxM_T = Annotated[NDArray[Shape['*, *'], ArrayDtypes], ArrayValidator]       # Intensity image, depth image
-Array_NxM_3_T = Annotated[NDArray[Shape['*, *, 3'], ArrayDtypes], ArrayValidator]  # RGB or normal image
-Array_Nx2_T = Annotated[NDArray[Shape['*, 2'], ArrayDtypes], TransposedNx2, ArrayValidator]       # Image coordinates
-Array_Nx3_T = Annotated[NDArray[Shape['*, 3'], ArrayDtypes], TransposedNx3, ArrayValidator]       # 3D Coordinates / normals
-Array_Nx3_f4_T = Annotated[NDArray[Shape['*, 3'], Float32],TransposedNx3,  ArrayValidator]        # Normals and optimised coords
-Array_Nx3_u1_T = Annotated[NDArray[Shape['*, 3'], UInt8], TransposedNx3, ArrayValidator]          # RGB
-Array_3x3_T = Annotated[NDArray[Shape['4, 4'], ArrayDtypes], ArrayValidator]       # Rotation Matrix
-Array_4x4_T = Annotated[NDArray[Shape['4, 4'], ArrayDtypes], ArrayValidator]       # Affine Transformation
-Vector_N_T = Annotated[NDArray[Shape['*'], ArrayDtypes], TransposedVector, ArrayValidator]
-Vector_N_u2_T = Annotated[NDArray[Shape['*'], UInt16], TransposedVector, ArrayValidator]             # Intensity Values
-Vector_N_u1_T = Annotated[NDArray[Shape['*'], UInt8], TransposedVector, ArrayValidator]              # Single RGB field
-Vector_N_f4_T = Annotated[NDArray[Shape['*'], Float32], TransposedVector, ArrayValidator]            # Normal vector field
-Vector_N_b_T = Annotated[NDArray[Shape['*'], Bool], TransposedVector, ArrayValidator]                # Mask or boolean vector
-Vector_2_T = Annotated[NDArray[Shape['2'], ArrayDtypes], ArrayValidator]           # Image coordinate / translation
-Vector_3_T = Annotated[NDArray[Shape['3'], ArrayDtypes], ArrayValidator]           # 3D coordinate / translation
+    return NDArray[Shape[", ".join(shape_list)], dtype if dtype is not None else Any]
 
 
 class BaseArray(ABC, BaseModel):
@@ -69,6 +49,7 @@ class BaseArray(ABC, BaseModel):
     Objects can also be easily extended to support other attribute information (e.g. lazy loading, image metadata).
     Objects can also be frozen absolutely -> e.g. a loaded read-only array's coordinates "never" change"
     """
+
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
         validate_assignment=True,
@@ -76,13 +57,21 @@ class BaseArray(ABC, BaseModel):
         validate_default=True,
         strict=True,
         frozen=False,
-        extra='ignore',
-        populate_by_name=True)
-    arr: Array_T
+        extra="ignore",
+        serialize_by_alias=True,
+        populate_by_name=True,
+    )
+    arr: ArrayT
+
+    @model_validator(mode="after")
+    def freeze(self) -> Self:
+        if self.model_config["frozen"]:
+            self.arr.setflags(write=False)
+        return self
 
     @property
-    def __array_interface__(self) -> dict:
-        """ Gives access for all numpy functions to the root array object
+    def __array_interface__(self) -> dict[Any, Any]:
+        """Gives access for all numpy functions to the root array object
 
         All objects will be converted to numpy arrays when processed with numpy functions.
         - __array__ will be deprecated in future -> more reason to use this
@@ -90,8 +79,8 @@ class BaseArray(ABC, BaseModel):
         """
         return self.arr.__array_interface__
 
-    @cached_property
-    def T(self) -> npt.NDArray:
+    @property
+    def T(self) -> npt.NDArray[Any]:
         return self.arr.T
 
     @property
@@ -99,102 +88,79 @@ class BaseArray(ABC, BaseModel):
         return self.arr.shape
 
     @property
-    def dtype(self) -> npt.DTypeLike:
+    def dtype(self) -> npt.DTypeLike[Any]:
         return self.arr.dtype
 
     @property
-    def ndim(self) -> int:
+    def ndim(self) -> Any:
         return self.arr.ndim
 
     @property
-    def base(self) -> npt.NDArray|None:
+    def base(self) -> Any:
         return self.arr.base
 
     @property
     def size(self) -> int:
         return self.arr.size
 
-    def min(self, **kwargs) -> np.number | npt.NDArray:
+    def min(self, **kwargs: dict[str, Any]) -> npt.NDArray[Any]:
         return self.arr.min(**kwargs)
 
-    def max(self, **kwargs) -> np.number | npt.NDArray:
+    def max(self, **kwargs: dict[str, Any]) -> npt.NDArray[Any]:
         return self.arr.max(**kwargs)
 
-    @field_validator('arr', mode='before')
-    @classmethod
-    def validate_ndarray(cls, arr: np.ndarray):
+    def model_dump(self, exclude: set[str]|None = None, **kwargs: dict[str, Any]) -> dict:
+        """Dumps the model as a serialised dict object"""
+        exclude = exclude or set()
+        exclude.add("spher")
+        return copy.deepcopy(super().model_dump(exclude=exclude))
 
-        if not isinstance(arr, np.ndarray|type(cls)):
-            raise TypeError(f'Invalid array type: {type(arr)}')
 
-        return arr
-
-    @model_validator(mode='after')
-    def freeze(self) -> Self:
-        if self.model_config['frozen']:
-            self.arr.setflags(write=False)
-        return self
-
-    def model_dump(self, *args, **kwargs) -> dict:
-        kwargs = kwargs | {'exclude': {'spher'}}
-        return super().model_dump(*args, **kwargs)
-
-    # TODO need to change this process to dump and then build new. This ensures cached properties are not copied
-    def update_copy(self,
-                    array: npt.NDArray|BaseArray|None = None, *,
-                    deep: bool = True,
-                    update: Mapping[str, Any] = None) -> Self:
-        """
-        This function is designed to be more efficient by not dumping the memory heavy array if it's to be updated in
-        the new instance.
-        E.g. if 'arr' is in the update dict {'arr': np.random.rand(10000, 3)}, don't dump the existing, just add this
-        new value.
-        """
-        update = update or {}
-
-        if array is not None:
-            update['arr'] = array.arr if isinstance(array, BaseArray) else array
-
-        return self.copy(deep=deep, update=update)
-
-    def copy(self, *, deep: bool = True, **kwargs) -> Self:
+    def copy(self,
+             array: npt.NDArray[Any] | BaseArray | None = None,
+             *,
+             deep: bool = True,
+             update: Optional[MutableMapping[str, Any]] = None,
+             **kwargs: dict[str, Any]) -> Self:
         """
         Produce a deep or shallow copy of the model. Updates the model also if parameter is parsed.
         """
         if not deep:
-            raise NotImplementedError(f'Shallow copy is not implemented on this class: {type(self)}')
+            raise NotImplementedError(f"Shallow copy is not implemented on this class: {type(self)}")
 
-        update = kwargs.get('update', {})
+        update = update or {}
 
-        result = self.model_copy(deep=deep, update=update)
+        if array is not None:
+            if isinstance(array, BaseArray):
+                update["arr"] = array.arr
+            elif isinstance(array, np.ndarray):
+                update["arr"] = array
+            else:
+                raise TypeError(f'Unknown type passed in for the array of {type(array)}')
 
-        # Delete excluded fields on the copy
-        for name, field_info in result.model_fields.items():
-            if field_info.exclude:
-                delattr(result, name)
+        update |= copy.deepcopy(self.model_dump(exclude=set(update.keys())))
 
-        return result.model_validate(result, strict=True)
+        update["arr"] = update["arr"].copy()
+
+        return type(self)(**update)
 
     def view(self, cls: Optional[type] = None) -> Self:
-        # This is a placeholder for the ability to subclass an array to act like a view
         raise NotImplementedError
 
     def __len__(self) -> int:
-        raise NotImplementedError('Length of an undefined array shape is not clear')
+        raise NotImplementedError("Length of an undefined array shape is not clear")
 
-    def __getitem__(self, key: IndexLike) -> np.ndarray|Self:
+    def __getitem__(self, key: IndexLike) -> npt.NDArray[Any] | Self:
         if isinstance(key, slice):
             key = [key]
 
-        if isinstance(key, int):
-            result = self.arr[key]
-        else:
-            result = self.arr[*key]
+        result = self.arr[key]
+
         if isinstance(result, np.ndarray):
-            return self.update_copy(result)
+            return self.copy(result)
         return result
 
-    def __setitem__(self, key: IndexLike, value: npt.NDArray|BaseArray) -> None:
+    def __setitem__(self, key: IndexLike, value: npt.NDArray[Any] | BaseArray) -> None:
         if isinstance(key, slice):
             key = [key]
         if isinstance(value, BaseArray):
@@ -202,16 +168,31 @@ class BaseArray(ABC, BaseModel):
         else:
             self.arr[*key] = value
 
-    def __lt__(self, other: Any) -> npt.NDArray[np.bool_]|bool: return self.arr < other
-    def __le__(self, other: Any) -> npt.NDArray[np.bool_]|bool: return self.arr <= other
-    def __eq__(self, other: Any) -> npt.NDArray[np.bool_]|bool: return self.arr == other
-    def __ne__(self, other: Any) -> npt.NDArray[np.bool_]|bool: return self.arr != other
-    def __ge__(self, other: Any) -> npt.NDArray[np.bool_]|bool: return self.arr >= other
-    def __gt__(self, other: Any) -> npt.NDArray[np.bool_]|bool: return self.arr > other
+    def __lt__(self, other: Any) -> npt.NDArray[np.bool_] | bool:
+        return self.arr < other
+
+    def __le__(self, other: Any) -> npt.NDArray[np.bool_] | bool:
+        return self.arr <= other
+
+    def __eq__(self, other: Any) -> npt.NDArray[np.bool_] | bool:
+        return self.arr == other
+
+    def __ne__(self, other: Any) -> npt.NDArray[np.bool_] | bool:
+        return self.arr != other
+
+    def __ge__(self, other: Any) -> npt.NDArray[np.bool_] | bool:
+        return self.arr >= other
+
+    def __gt__(self, other: Any) -> npt.NDArray[np.bool_] | bool:
+        return self.arr > other
 
 
-class _SampleArray(BaseArray):
-    def create_mask(self, selection: IndexLike, as_vector=False) -> Vector_N_T:
+class SampleArray(BaseArray):
+
+    def __getitem__(self, key):
+        return self.sample(key)
+
+    def create_mask(self, selection: IndexLike, as_vector: bool = False) -> NDArray[np.bool_] | NDArray[np.int_]:
         """Creates a boolean mask for the whole array
 
         This ensures all new objects are a copy of an array and no views/references
@@ -220,13 +201,17 @@ class _SampleArray(BaseArray):
             selection = selection.squeeze()
             if as_vector:
                 if selection.ndim > 1:
-                    raise ValueError(f'Selection mask must be a vector like')
+                    raise ValueError(f"Selection mask must be a vector like")
+                if selection.shape[0] != len(self):
+                    raise ValueError(
+                        f"Boolean mask does not have the same number of points " f"{selection.size} != {len(self)}"
+                    )
                 return selection
 
             if selection.shape == self.shape:
                 return selection
             else:
-                raise ValueError(f'Invalid selection mask shape: {selection.shape}')
+                raise ValueError(f"Invalid selection mask shape: {selection.shape}")
 
         if as_vector:
             mask = np.zeros(len(self), dtype=np.bool_)
@@ -242,7 +227,7 @@ class _SampleArray(BaseArray):
     def sample(self, index: IndexLike) -> Self:
         """Return a sample of the array"""
         mask = self.create_mask(index)
-        return self.update_copy( array=self.arr[mask] )
+        return self.copy(array=self.arr[mask])
 
     def reduce(self, index: IndexLike) -> None:
         """Reduces the array to the points indexed"""
@@ -258,22 +243,53 @@ class _SampleArray(BaseArray):
 
 
 class _NumericMixins(BaseArray):
-    def __add__(self, other: Any) -> Self: return self.update_copy(self.arr + other)
-    def __sub__(self, other: Any) -> Self: return self.update_copy(self.arr - other)
-    def __mul__(self, other: Any) -> Self: return self.update_copy(self.arr * other)
-    def __truediv__(self, other: Any) -> Self: return self.update_copy(self.arr / other)
-    def __floordiv__(self, other: Any) -> Self: return self.update_copy(self.arr // other)
-    def __mod__(self, other: Any) -> Self: return self.update_copy(self.arr % other)
-    def __pow__(self, other: Any) -> Self: return self.update_copy(self.arr ** other)
-    def __radd__(self, other: Any) -> Self: return self.update_copy(other + self.arr)
-    def __rsub__(self, other: Any) -> Self: return self.update_copy(other - self.arr)
-    def __rmul__(self, other: Any) -> Self: return self.update_copy(other * self.arr)
-    def __rpow__(self, other: Any) -> Self: return self.update_copy(other ** self.arr)
-    def __rtruediv__(self, other: Any) -> Self: return self.update_copy(other / self.arr )
-    def __rfloordiv__(self, other: Any) -> Self: return self.update_copy(other // self.arr)
-    def __rmod__(self, other: Any) -> Self: return self.update_copy(other % self.arr)
-    def __divmod__(self, other: Any) -> Self: return self.update_copy(divmod(self.arr, other))
-    def __neg__(self, other: Any) -> Self: return self.update_copy(-self.arr)
+    def __add__(self, other: Any) -> Self:
+        return self.copy(self.arr + other)
+
+    def __sub__(self, other: Any) -> Self:
+        return self.copy(self.arr - other)
+
+    def __mul__(self, other: Any) -> Self:
+        return self.copy(self.arr * other)
+
+    def __truediv__(self, other: Any) -> Self:
+        return self.copy(self.arr / other)
+
+    def __floordiv__(self, other: Any) -> Self:
+        return self.copy(self.arr // other)
+
+    def __mod__(self, other: Any) -> Self:
+        return self.copy(self.arr % other)
+
+    def __pow__(self, other: Any) -> Self:
+        return self.copy(self.arr**other)
+
+    def __radd__(self, other: Any) -> Self:
+        return self.copy(other + self.arr)
+
+    def __rsub__(self, other: Any) -> Self:
+        return self.copy(other - self.arr)
+
+    def __rmul__(self, other: Any) -> Self:
+        return self.copy(other * self.arr)
+
+    def __rpow__(self, other: Any) -> Self:
+        return self.copy(other**self.arr)
+
+    def __rtruediv__(self, other: Any) -> Self:
+        return self.copy(other / self.arr)
+
+    def __rfloordiv__(self, other: Any) -> Self:
+        return self.copy(other // self.arr)
+
+    def __rmod__(self, other: Any) -> Self:
+        return self.copy(other % self.arr)
+
+    def __divmod__(self, other: Any) -> Self:
+        return self.copy(divmod(self.arr, other))
+
+    def __neg__(self, other: Any) -> Self:
+        return self.copy(-self.arr)
 
     def __iadd__(self, other: Any) -> Self:
         self.arr = self.arr + other
@@ -300,29 +316,28 @@ class _NumericMixins(BaseArray):
         return self
 
     def __ipow__(self, other: Any) -> Self:
-        self.arr = self.arr ** other
+        self.arr = self.arr**other
         return self
 
 
-class _FixedLengthArray(_SampleArray, _NumericMixins):
+class FixedLengthArray(SampleArray, _NumericMixins):
     """
     Array to support objects like Coordinate sets or vectors which have "len()" or number of items == rows
     """
-    def __len__(self) -> int:
+
+    def __len__(self) -> Any:
         return self.arr.shape[0]
 
-    def __iter__(self) -> Generator[np.ndarray]:
+    def __iter__(self) -> Generator[tuple[str, Any], None, None]:
         for i in self.arr:
             yield i
 
-    def create_mask(self, selection: IndexLike, **kwargs) -> Vector_N_T:
+    def create_mask(self, selection: IndexLike, **kwargs: dict[str, Any]) -> NDArray[np.bool_] | NDArray[np.int_]:
         return super().create_mask(selection, as_vector=True)
 
-    def sample(self, index: IndexLike) -> _FixedLengthArray:
+    def sample(self, index: IndexLike) -> Self:
         mask = self.create_mask(index)
-        return self.update_copy(
-            array = self.arr[mask] if self.shape == mask.shape else self.arr[mask, :]
-        )
+        return self.copy(array=self.arr[mask] if self.shape == mask.shape else self.arr[mask, :])
 
     def reduce(self, index: IndexLike) -> None:
         """Reduces the array to the points indexed"""
@@ -331,27 +346,27 @@ class _FixedLengthArray(_SampleArray, _NumericMixins):
 
     def extract(self, index: IndexLike) -> Self:
         """Returns the points indexed but also reduces the indexed array by these points"""
-        mask = self.create_mask(index)
+        mask: npt.NDArray[np.bool_] | npt.NDArray[np.integer] = self.create_mask(index)
         extracted = self.sample(mask)
         self.reduce(~mask)
         return extracted
 
 
-class BaseVector(_FixedLengthArray):
-    arr: Vector_N_T
+class BaseVector(FixedLengthArray):
+    arr: VectorT
 
 
-class _HomogeneousArray(_FixedLengthArray):
+class HomogeneousArray(FixedLengthArray):
     @property
-    def H(self) -> np.ndarray:
+    def H(self) -> npt.NDArray[Any]:
         return np.column_stack((self.arr, np.ones(len(self), dtype=self.dtype)))
 
 
-class ArrayNx2(_HomogeneousArray):
+class ArrayNx2(HomogeneousArray):
     arr: Array_Nx2_T
 
 
-class ArrayNx3(_HomogeneousArray):
+class ArrayNx3(HomogeneousArray):
     arr: Array_Nx3_T
 
 
@@ -363,13 +378,14 @@ class ReadOnlyVector(BaseVector):
     model_config = ConfigDict(strict=True, frozen=True)
 
 
-class _ImageLike(_SampleArray, _NumericMixins, ABC):
-    arr: Array_NxM_T|Array_NxM_3_T
+class _ImageLike(SampleArray, _NumericMixins, ABC):
+    arr: Array_NxM_T | Array_NxM_3_T
+
     # Update implementation based on if you want to support slicing / views or not
     def __getitem__(self, *key: IndexLike) -> Any:
         return self.arr[*key]
 
-    def create_mask(self, *indices):
+    def create_mask(self, *indices: int|slice):
         if isinstance(indices, slice):
             mask = indices
         else:
@@ -378,4 +394,6 @@ class _ImageLike(_SampleArray, _NumericMixins, ABC):
         return mask
 
     def view(self, cls: Optional[type] = None) -> Self:
-        return self.updated_copy(self.arr.view(cls=cls), deep=False)
+        return self.copy(self.arr.view(cls=cls), deep=False)
+
+

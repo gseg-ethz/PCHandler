@@ -5,7 +5,7 @@ import numpy as np
 from shapely.affinity import scale, translate
 from shapely.geometry import MultiPolygon, Polygon
 
-from pchandler.core import PointCloudData
+from .core import PointCloudData
 
 logger = logging.getLogger(__name__.split(".")[0])
 

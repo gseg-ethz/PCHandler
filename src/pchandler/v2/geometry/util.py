@@ -1,11 +1,18 @@
+from __future__ import annotations
+
 import logging
+from typing import TYPE_CHECKING, Self, Iterable, NamedTuple
 
 import alphashape
 import numpy as np
+
 from shapely.affinity import scale, translate
 from shapely.geometry import MultiPolygon, Polygon
 
-from .core import PointCloudData
+from ..base_types import Vector_3_T, Array_Nx3_T
+
+if TYPE_CHECKING:
+    from .core import PointCloudData
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -67,16 +74,39 @@ def get_outline_polygon(pcd: PointCloudData, plane: str, alpha_value: float = 10
     if not isinstance(als, Polygon):
         raise NotImplementedError
 
-    if pcd.global_coordinate_shift is not None:
+    if pcd.optimized_shift is not None:
         match plane:
             case "xy":
-                gs = pcd.global_coordinate_shift[:2]
+                gs = pcd.optimized_shift.value[:2]
             case "xz":
-                gs = pcd.global_coordinate_shift[[0, 2]]
+                gs = pcd.optimized_shift.value[[0, 2]]
             case "yz":
-                gs = pcd.global_coordinate_shift[1:]
+                gs = pcd.optimized_shift.value[1:]
             case _:
                 raise ValueError
         als = translate(als, *gs)
 
     return als
+
+class MinMaxPoints(NamedTuple):
+    minimum: Vector_3_T
+    maximum: Vector_3_T
+
+    @classmethod
+    def from_points(cls, points: Array_Nx3_T) -> Self:
+        min_point = np.min(points, axis=0)
+        max_point = np.max(points, axis=0)
+        return cls(min_point, max_point)
+
+    @classmethod
+    def from_minmax_points(cls, minmax_points: Iterable[Self]) -> Self:
+        arr = Array_Nx3_T(np.vstack(tuple(minmax_points)))
+        return cls.from_points(arr)
+
+    @property
+    def central_point(self) -> Vector_3_T:
+        return np.mean(np.vstack((self.minimum, self.maximum)), axis=0)
+
+    @property
+    def extents(self) -> Vector_3_T:
+        return self.maximum - self.minimum

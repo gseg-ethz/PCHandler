@@ -6,7 +6,7 @@ from shapely import contains_xy
 from shapely.geometry import Polygon
 
 from ...fov import FoV
-from pchandler.core import PointCloudData
+from ..core import PointCloudData
 from .core import PointCloudFilter
 
 logger = logging.getLogger(__name__.split(".")[0])

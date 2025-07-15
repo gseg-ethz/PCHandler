@@ -33,15 +33,22 @@ Typical usage patterns include:
     print(f"Floating-point epsilon: {EPS}")
 """
 
+import copy
 import logging
 from enum import Enum
-from typing import Optional
+from functools import wraps
+from typing import Any, Optional, Callable, TYPE_CHECKING
 
 import numpy as np
+import numpy.typing as npt
+
+if TYPE_CHECKING:
+    from .base_arrays import BaseArray
 
 logger = logging.getLogger(__name__.split(".")[0])
 
-EPS = np.finfo(np.float32).eps
+from .base_arrays import BaseArray
+
 """
 The smallest positive number such that `1.0 + EPS != 1.0` for 32-bit floating-point values.
 
@@ -75,8 +82,8 @@ class AngleUnit(Enum):
 
 
 def convert_angles(
-    values: np.ndarray, source_unit: AngleUnit, target_unit: AngleUnit, out: Optional[np.ndarray] = None
-) -> np.ndarray:
+    values: npt.NDArray[np.floating], source_unit: AngleUnit, target_unit: AngleUnit, out: Optional[np.ndarray] = None
+) -> npt.NDArray[Any]:
     """
     Converts an array of angles from one unit to another.
 
@@ -145,60 +152,11 @@ def convert_angles(
                     return np.multiply(values, np.pi / 200, out=out)
                 case AngleUnit.DEGREE:
                     return np.multiply(values, 180 / 200, out=out)
+        case _:
+            raise ValueError(f"Invalid unit: {source_unit}")
 
 
-def cartesian_to_spherical(xyz: np.ndarray, origin: np.ndarray = None) -> np.ndarray:
-    """
-    Converts Cartesian coordinates to spherical coordinates (range, elevation, azimuth).
-
-    Parameters
-    ----------
-    xyz : np.ndarray
-        An (N x 3) array of Cartesian coordinates.
-    origin : np.ndarray, optional
-        An optional (3,) array to subtract from xyz before conversion.
-
-    Returns
-    -------
-    np.ndarray
-        An (N x 3) array of spherical coordinates.
-    """
-    if origin is not None:
-        xyz = xyz - origin
-    sph = np.zeros_like(xyz, dtype=np.float32)
-    xy_sq = xyz[:, 0] ** 2 + xyz[:, 1] ** 2
-    sph[:, 0] = np.sqrt(xy_sq + xyz[:, 2] ** 2)
-    sph[:, 1] = np.arctan2(np.sqrt(xy_sq), xyz[:, 2])
-    sph[:, 2] = -np.arctan2(xyz[:, 1], xyz[:, 0])
-    return sph
-
-
-def spherical_to_cartesian(spherical_coords: np.ndarray, origin: np.ndarray = None) -> np.ndarray:
-    """
-    Converts spherical coordinates (range, elevation, azimuth) to Cartesian coordinates.
-
-    Parameters
-    ----------
-    spherical_coords : np.ndarray
-        An (N x 3) array of spherical coordinates.
-    origin : np.ndarray, optional
-        An optional (3,) array to add to the result.
-
-    Returns
-    -------
-    np.ndarray
-        An (N x 3) array of Cartesian coordinates.
-    """
-    xyz = np.zeros((spherical_coords.shape[0], 3), dtype=np.float32)
-    xyz[:, 0] = spherical_coords[:, 0] * np.sin(spherical_coords[:, 1]) * np.cos(spherical_coords[:, 2])
-    xyz[:, 1] = -spherical_coords[:, 0] * np.sin(spherical_coords[:, 1]) * np.sin(spherical_coords[:, 2])
-    xyz[:, 2] = spherical_coords[:, 0] * np.cos(spherical_coords[:, 1])
-    if origin is not None:
-        xyz += origin
-    return xyz
-
-
-def unique_rows_fast(bin_idx: np.ndarray):
+def unique_rows_fast(bin_idx: npt.NDArray[np.int32]) -> tuple[npt.NDArray[Any], npt.NDArray[np.int32]]:
     """
     bin_idx: 2D int32 array of shape (N, D)
     returns (unique_rows, inverse_indices) exactly like
@@ -219,3 +177,34 @@ def unique_rows_fast(bin_idx: np.ndarray):
     uniq = uniq_blob.view(arr.dtype).reshape(-1, arr.shape[1])
 
     return uniq, inv
+
+# TODO update this to support the current implementation
+def bypass_immutable(method: Callable) -> Callable:
+    @wraps(method)
+    def wrapper(self, *args: Any, **kwargs: dict[str, Any]) -> Any:
+        original_state: bool = getattr(self, "_immutable", False)
+        self.set_mutability(False)
+        try:
+            return method(self, *args, **kwargs)
+        finally:
+            self.set_mutability(original_state)
+
+    return wrapper
+
+
+# DECIDE does this serve any future purpose? If so, write tests
+def unpack_npydantic_dtype(cls: type[BaseArray]) -> tuple[np.typing.DTypeLike, ...]:
+    a = cls.model_fields['arr'].annotation.__dict__['__args__'][1]
+    all_types = []
+
+    try:
+        for dt in a:
+            if isinstance(dt, tuple):
+                for dt_ in dt:
+                    all_types.append(dt_)
+            else:
+                all_types.append(dt)
+
+    except Exception as e:
+        all_types.append(a)
+    return tuple(all_types)

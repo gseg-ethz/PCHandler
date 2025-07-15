@@ -1,15 +1,15 @@
 from functools import cached_property
 
-import pytest
 import numpy as np
-from pydantic import BaseModel, Field, ConfigDict, ValidationError, computed_field
-
+import pytest
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, computed_field
 
 from pchandler.v2.base_arrays import BaseArray
 
+
 class TestPydantic:
     def test_initialisation_of_multiple_instances(self):
-        a = np.random.rand(10,3)
+        a = np.random.rand(10, 3)
         b = a + 3
         c = b * 2
         d = c / 4.2
@@ -38,54 +38,54 @@ class TestPydantic:
     def test_exclude_on_dump(self):
         class A(BaseArray):
             num: int = Field(default=1)
-            name: str|None = Field(default=None, exclude=True)
+            name: str | None = Field(default=None, exclude=True)
 
-        a = A(arr=np.random.rand(10,3), name='test')
-        assert 'test' == a.name
-        a.name = 'abcdef'
+        a = A(arr=np.random.rand(10, 3), name="test")
+        assert "test" == a.name
+        a.name = "abcdef"
 
-        assert 'name' in a.__dict__.keys()
+        assert "name" in a.__dict__.keys()
 
         dumped = a.model_dump()
-        assert 'name' not in dumped.keys()
+        assert "name" not in dumped.keys()
 
         pydantic_copy = a.model_copy()
         base_array_copy = a.copy()
 
-
-        assert 'abcdef' == pydantic_copy.name
+        assert "abcdef" == pydantic_copy.name
 
         # Model_copy by default would return the excluded values
-        assert hasattr(pydantic_copy, 'name')
-        assert 'abcdef' == pydantic_copy.name
-        assert hasattr(base_array_copy, 'name')
-        assert getattr(base_array_copy, 'name') is None
+        assert hasattr(pydantic_copy, "name")
+        assert "abcdef" == pydantic_copy.name
+        assert hasattr(base_array_copy, "name")
+        assert getattr(base_array_copy, "name") is None
 
     def test_exclude_on_model_copy(self):
         class A(BaseModel):
             num: int = Field(default=1)
-            name: str = Field(default='test', exclude=True)
+            name: str = Field(default="test", exclude=True)
 
         a = A()
 
-        assert 'name' in a.__dict__.keys()
-        assert 'test' in a.__dict__.values()
+        assert "name" in a.__dict__.keys()
+        assert "test" in a.__dict__.values()
 
     def test_attributes_in_dict(self):
         class A(BaseModel):
             num: int = Field(default=1)
-            name: str = Field(default='test', exclude=True)
-            arr: list[int] = Field(default_factory = lambda: [1, 2, 3])
+            name: str = Field(default="test", exclude=True)
+            arr: list[int] = Field(default_factory=lambda: [1, 2, 3])
 
             def method_not_in_dict(self):
                 pass
+
         a = A()
 
         assert len(a.__dict__.keys()) == 3
-        for name in ('num', 'name', 'arr'):
+        for name in ("num", "name", "arr"):
             assert name in a.__dict__.keys()
 
-        assert 'method_not_in_dict' not in a.__dict__.keys()
+        assert "method_not_in_dict" not in a.__dict__.keys()
 
     def test_model_config_overwrite(self):
         class A(BaseModel):
@@ -95,23 +95,23 @@ class TestPydantic:
         class B(A):
             model_config = ConfigDict(strict=True, frozen=True)
 
-        a = A(num='1')
+        a = A(num="1")
         assert a.num == 1
         a.num = 2
         assert a.num == 2
 
         # Strict now acting
         with pytest.raises(ValidationError):
-            B(num='2')
+            B(num="2")
 
         b = B(num=2)
 
-        with pytest.raises(AttributeError):
+        with pytest.raises(ValidationError):
             b.num = 1
 
     def test_cached_properties_excluded(self):
         class A(BaseModel):
-            name: str = 'abc'
+            name: str = "abc"
             num: int = 1
 
             @cached_property
@@ -119,7 +119,7 @@ class TestPydantic:
                 return 14 + 14
 
         class B(BaseModel):
-            name: str = 'abc'
+            name: str = "abc"
             num: int = 1
 
             @computed_field
@@ -130,16 +130,16 @@ class TestPydantic:
         a = A()
         b = B()
         # Cached property not initially in dict
-        assert 'my_prop' not in a.__dict__
-        assert 'my_prop' not in b.__dict__
-        assert hasattr(a, 'my_prop')
-        assert hasattr(b, 'my_prop')
+        assert "my_prop" not in a.__dict__
+        assert "my_prop" not in b.__dict__
+        assert hasattr(a, "my_prop")
+        assert hasattr(b, "my_prop")
 
         c = a.my_prop
         d = b.my_prop
         assert c == d == 28
-        assert 'my_prop' in a.__dict__
-        assert 'my_prop' in b.__dict__
+        assert "my_prop" in a.__dict__
+        assert "my_prop" in b.__dict__
 
         a_copy = a.model_copy(deep=True)
         a_dumped = a.model_dump()
@@ -148,10 +148,13 @@ class TestPydantic:
         b_dumped = b.model_dump()
 
         # Show that the cached properties are dumped not passed onto the copy
-        assert 'my_prop' not in a_copy.__dict__.keys()
-        assert 'my_prop' not in a_dumped.__dict__.keys()
+        assert "my_prop" in a_copy.__dict__.keys()  # my_prop is still in the dict when using model_copy
+        assert "my_prop" not in a_dumped.keys()
+        assert hasattr(a, "my_prop")
+        assert hasattr(a_copy, "my_prop")
 
-        assert 'my_prop' in b_copy.__dict__.keys()
-        assert 'my_prop' in b_dumped.__dict__.keys()
-
-
+        # Test that computed field dumps the property and has it as an attribute
+        assert "my_prop" in b_copy.__dict__.keys()
+        assert "my_prop" in b_dumped.keys()
+        assert hasattr(b, "my_prop")
+        assert hasattr(b_copy, "my_prop")
