@@ -69,7 +69,7 @@ class E57Handler(AbstractIOHandler):
         logger.debug(f"Loading single scan {cfg.pcd_index} from E57 file: {pcd_path}")
 
         e57 = pye57.E57(str(pcd_path), mode="r")
-        data = e57.read_scan(cfg.pcd_index, ignore_missing_fields=True, intensity=cfg.keep_intensity, colors=cfg.keep_rgb)
+        data = e57.read_scan(cfg.pcd_index, ignore_missing_fields=True, intensity=cfg.retain_intensity, colors=cfg.retain_rgb)
         header = e57.get_header(cfg.pcd_index)
 
         xyz = np.column_stack((data["cartesianX"], data["cartesianY"], data["cartesianZ"]))

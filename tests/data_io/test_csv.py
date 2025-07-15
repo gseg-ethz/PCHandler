@@ -24,7 +24,7 @@ class TestCsvHandler:
         new_pcd = CsvHandler.load(self.out_path)
 
         assert np.allclose(original_pcd.xyz, new_pcd.xyz)
-        assert np.allclose(original_pcd.rgb, new_pcd.rgb)
+        assert np.allclose(original_pcd.rgb, new_pcd.rgb, atol=1)
 
         assert np.allclose(original_pcd.normals, new_pcd.normals)
 

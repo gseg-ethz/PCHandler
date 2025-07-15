@@ -141,14 +141,14 @@ class TestTypeDefinedScalarFields:
 
     def test_bool_valid(self):
         array = np.random.randint(0, 1, 1000, dtype=np.bool_)
-        b = BooleanScalarField(array, name="temp")
-        assert isinstance(b, BooleanScalarField)
+        b = ScalarFieldBoolean(array, name="temp")
+        assert isinstance(b, ScalarFieldBoolean)
         assert np.all(b == array)
 
     def test_bool_invalid(self):
         array = np.random.randint(-128, 127, 100, dtype=np.int8)
         with pytest.raises(Exception) as e:
-            BooleanScalarField(array)
+            ScalarFieldBoolean(array)
         assert type(e.value) in (ValidationError, ValueError, TypeError)
 
 
@@ -275,8 +275,11 @@ class TestNormalsField:
 
     def test_initialise_field_class_method(self):
         data = np.random.rand(100, 3).astype(np.float32)
+        data /= np.linalg.norm(data, axis=1).reshape(-1, 1)
+        check_data = np.zeros_like(data)
+        check_data[:, 2] = 1
         normals1 = NormalFields.initialize(data.shape[0])
-        assert np.all(normals1 == np.zeros_like(data))
+        assert np.all(normals1 == check_data)
         assert np.float32 == normals1.dtype
 
         normals2 = NormalFields.initialize(data.shape[0], data)

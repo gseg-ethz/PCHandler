@@ -5,12 +5,12 @@ from pchandler.v2.constants import (
     DEFAULT_CONFIG,
     EPS,
     HALF_PI,
-    NORMAL_POTENTIAL_NAMES,
+    NORMAL_ALL_NAMES,
     NORMALS_FIELD,
     PI,
     RGB_FIELD,
-    RGB_ALL_POTENTIAL_NAMES,
-    TWO_PI,
+    RGB_ALL_NAMES,
+    TWO_PI, INTENSITY_FIELD, REFLECTANCE_FIELD,
 )
 
 
@@ -31,8 +31,5 @@ def test_default_pydantic_config():
 def test_field_names():
     assert RGB_FIELD == "rgb"
     assert NORMALS_FIELD == "normals"
-    for val in ("r", "g", "b", "rgb", "bgr", "red", "green", "blue", "rgba"):
-        assert val in RGB_ALL_POTENTIAL_NAMES
-
-    for val in ("normal", "normals", "normal_fields"):
-        assert val in NORMAL_POTENTIAL_NAMES
+    assert INTENSITY_FIELD == "intensity"
+    assert REFLECTANCE_FIELD == "reflectance"

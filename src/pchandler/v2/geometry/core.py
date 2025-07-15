@@ -49,22 +49,6 @@ class PointCloudData(CartesianCoordinates):
 
         sfm: ScalarFieldManager[ScalarField | ScalarFieldTriplet] = ScalarFieldManager(None, fields=scalar_fields)
 
-        if isinstance(rgb, np.ndarray):
-            rgb = RGBFields(rgb)
-
-        if isinstance(normals, np.ndarray):
-            normals = NormalFields(normals)
-
-        if isinstance(intensity, np.ndarray):
-            intensity = ScalarField(intensity, name="intensity")
-
-        if isinstance(reflectance, np.ndarray):
-            reflectance = ScalarField(reflectance, name="reflectance")
-
-        for field in (rgb, normals, intensity, reflectance):
-            if field is not None:
-                sfm.add_field(field)
-
         # TODO implement post v2.0
         # if transform_ledger is not None:
         #     kwargs['transform_ledger'] = TransformLedger()
@@ -96,6 +80,24 @@ class PointCloudData(CartesianCoordinates):
             project_transformation = project_transformation,
             transform_ledger = transform_ledger if transform_ledger else TransformLedger(),
         )
+
+        self.scalar_fields.parent = self
+
+        if rgb is not None:
+            self.rgb = rgb
+
+        if normals is not None:
+            self.normals = normals
+
+        if intensity is not None:
+            self.intensity = intensity
+
+        if reflectance is not None:
+            self.reflectance = reflectance
+
+        if scalar_fields is not None:
+            for name, value in scalar_fields.items():
+                self.scalar_fields[name] = value
 
         # if isinstance(optimized_shift, OptimizedShift):
         #     final_shift: OptimizedShift = optimized_shift.register(self, xyz)

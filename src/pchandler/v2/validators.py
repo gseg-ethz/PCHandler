@@ -264,13 +264,10 @@ normalize_float64 = lambda array: _normalize_base(array, np.float64)
 
 
 def ensure_unit_vector(array: npt.NDArray[Any]) -> npt.NDArray[Any]:
-    if array.dtype == np.float32:
-        return array
-
     if not (np.issubdtype(array.dtype, np.floating) or np.issubdtype(array.dtype, np.signedinteger)):
         raise TypeError("Dtype of normals array must be of type floating or signed integer}")
 
-    array = array.astype(np.float32)
     array /= np.linalg.norm(array, axis=1).reshape(-1, 1)
+    array = array.astype(np.float32)
 
     return array

@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Unpack
+from typing import Optional
 import logging
 from datetime import datetime
 
@@ -11,20 +11,14 @@ from ..geometry import PointCloudData
 logger = logging.getLogger(__name__.split(".")[0])
 
 
-class _PlyLoadConfigType(_LoadConfigType):
-    pass
-
-class _PlySaveConfigType(_SaveConfigType):
-    pass
-
-
 class PlyHandler(AbstractIOHandler):
     FORMATS = ['.ply']
 
     @classmethod
-    def load(cls, /, path: str | Path, **config: Unpack[_PlyLoadConfigType]) -> PointCloudData:
-        cfg = LoadConfig(**config)
-
+    def load(cls, /, path: str | Path,
+             scalar_fields: Optional[list[str]] = None,
+             remove_scalar_prefix: bool = True,
+             **config) -> PointCloudData:
         logger.info(f"Loading PLY file: {path}")
 
         try:
@@ -36,23 +30,30 @@ class PlyHandler(AbstractIOHandler):
 
         num_points = plydata["vertex"].count
         logger.debug(f"PLY file {path} contains {num_points} points")
+        file_fields = [pe.name for pe in plydata["vertex"].properties]
 
-        ply_scalar_fields = set([pe.name.lower() for pe in plydata["vertex"].properties])
+        field_names = cls._validate_field_selection(scalar_fields, file_fields)
 
-        pcd = PointCloudData(cls._extract_xyz(plydata["vertex"], num_points, ply_scalar_fields))
-        cls.extract_common_fields(pcd, plydata["vertex"], cfg, num_points, ply_scalar_fields)
-        cls.extract_extra_fields(pcd, plydata["vertex"], cfg, ply_scalar_fields)
+        pcd = PointCloudData(cls.extract_xyz(plydata["vertex"], num_points))
+        cls.extract_scalar_fields(pcd, plydata["vertex"], num_points, field_names)
 
         return pcd
 
 
     # DISCUSS is it worth saving the optimised state with the np.float64 shift written in a header?
     @classmethod
-    def save(cls, /, pcd: PointCloudData, path: str | Path, **config: Unpack[_PlySaveConfigType]) -> None:
+    def save(cls, /,
+             pcd: PointCloudData,
+             path: str | Path,
+             scalar_fields: Optional[list[str]] = None,
+             revert_sf_types: bool = False,
+             add_scalar_prefix: bool = False,
+             **config) -> None:
+        # TODO change bool scalar prefix to string with scalar_ as default
         path = Path(path)
         cfg = SaveConfig(**config)
 
-        structured_array = cls.generate_structured_array(pcd, cfg)
+        structured_array = cls.generate_structured_array(pcd, scalar_fields, revert_sf_types, add_scalar_prefix)
 
         element = PlyElement.describe(
             structured_array,
