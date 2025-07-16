@@ -18,7 +18,7 @@ from ..base_types import (
     Vector_Uint8_T,
     Vector_Uint16_T,
 )
-from ..constants import NORMALS_FIELD, RGB_FIELD
+from ..constants import NORMAL_NAMES, RGB_NAMES
 
 
 logger = logging.getLogger(__name__.split(".")[0])
@@ -88,7 +88,10 @@ class AbstractScalarField(FixedLengthArray):
             logger.info("No changes to the data as no prior conversions made")
             return self.arr.copy()
 
-        return normalize_min_max(self.arr.copy(), self.origin_dtype.lower, self.origin_dtype.upper, self.origin_dtype.dtype)
+        return normalize_min_max(array=self.arr.copy(),
+                                 lower=self.origin_dtype.lower,
+                                 upper=self.origin_dtype.upper,
+                                 target_dtype=self.origin_dtype.dtype)
 
 
 class ScalarField(BaseVector, AbstractScalarField):
@@ -112,10 +115,10 @@ class ScalarFieldTriplet(ArrayNx3, AbstractScalarField):
 
 class RGBFields(ScalarFieldTriplet):
     arr: Annotated[Array_Nx3_Uint8_T, BeforeValidator(normalize_uint8)]
-    name: LowerStr = RGB_FIELD
+    name: LowerStr = RGB_NAMES.base
 
     def __init__(self, arr: Self|npt.NDArray[np.uint8|np.float32], **kwargs: Unpack[ScalarKwargT]):
-        kwargs['name'] = RGB_FIELD
+        kwargs['name'] = RGB_NAMES.base
         super().__init__(arr, **kwargs)
 
     @property
@@ -148,10 +151,10 @@ class RGBFields(ScalarFieldTriplet):
 
 class NormalFields(ScalarFieldTriplet):
     arr: Annotated[Array_Nx3_Float32_T, BeforeValidator(ensure_unit_vector)]
-    name: LowerStr = NORMALS_FIELD
+    name: LowerStr = NORMAL_NAMES.base
 
     def __init__(self, arr: Self|npt.NDArray[np.floating], **kwargs: Unpack[ScalarKwargT]):
-        kwargs['name'] = NORMALS_FIELD
+        kwargs['name'] = NORMAL_NAMES.base
         super().__init__(arr=arr, **kwargs)
 
     @property

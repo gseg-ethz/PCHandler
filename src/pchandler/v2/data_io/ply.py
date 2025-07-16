@@ -5,7 +5,7 @@ from datetime import datetime
 
 from plyfile import PlyData, PlyElement     # type: ignore
 
-from .core import AbstractIOHandler, _LoadConfigType, _SaveConfigType, LoadConfig, SaveConfig
+from .core import AbstractIOHandler
 from ..geometry import PointCloudData
 
 logger = logging.getLogger(__name__.split(".")[0])
@@ -15,10 +15,13 @@ class PlyHandler(AbstractIOHandler):
     FORMATS = ['.ply']
 
     @classmethod
-    def load(cls, /, path: str | Path,
+    def load(cls,
+             path: str | Path, /,
              scalar_fields: Optional[list[str]] = None,
-             remove_scalar_prefix: bool = True,
-             **config) -> PointCloudData:
+             remove_prefix: bool = True,
+             prefix: str = 'scalar_',
+             revert_sf_types: bool = True,
+             ) -> PointCloudData:
         logger.info(f"Loading PLY file: {path}")
 
         try:
@@ -51,17 +54,14 @@ class PlyHandler(AbstractIOHandler):
              **config) -> None:
         # TODO change bool scalar prefix to string with scalar_ as default
         path = Path(path)
-        cfg = SaveConfig(**config)
 
         structured_array = cls.generate_structured_array(pcd, scalar_fields, revert_sf_types, add_scalar_prefix)
 
         element = PlyElement.describe(
-            structured_array,
+            structured_array,   # type: ignore
             name="vertex",
-            comments=[
-                "Created with dranjan/python-plyfile in gseg-ethz/pchandler",
-                f"Created {datetime.now():%Y-%m-%dT%H:%M:%S%z}",
-            ],
+            comments=["Created with dranjan/python-plyfile in gseg-ethz/pchandler",
+                      f"Created {datetime.now():%Y-%m-%dT%H:%M:%S%z}"],
         )
 
         if not path.parent.exists():

@@ -157,22 +157,22 @@ class TestRgbField:
         data = np.random.randint(0, 255, (100, 3), dtype=np.uint8)
         a = RGBFields(data)
 
-        assert a.name == RGB_FIELD
+        assert a.name == RGB_NAMES.base
         assert np.all(a == data)
 
         a = RGBFields(data, name="not_rgb")
-        assert a.name == RGB_FIELD
+        assert a.name == RGB_NAMES.base
         assert a.name != "not_rgb"
 
     def test_keyword_init(self):
         data = np.random.randint(0, 255, (100, 3), dtype=np.uint8)
         a = RGBFields(arr=data)
 
-        assert a.name == RGB_FIELD
+        assert a.name == RGB_NAMES.base
         assert np.all(a == data)
 
         a = RGBFields(arr=data, name="not_rgb")
-        assert a.name == RGB_FIELD
+        assert a.name == RGB_NAMES.base
         assert a.name != "not_rgb"
 
     def test_invalid_shapes(self):
@@ -235,22 +235,22 @@ class TestNormalsField:
         data = np.random.rand(100, 3).astype(np.float32)
         a = NormalFields(data)
 
-        assert a.name == NORMALS_FIELD
+        assert a.name == NORMAL_NAMES.base
         assert np.all(a == data)
 
         a = NormalFields(data, name="not_normals")
-        assert a.name == NORMALS_FIELD
+        assert a.name == NORMAL_NAMES.base
         assert a.name != "not_normals"
 
     def test_keyword_init(self):
         data = np.random.rand(100, 3).astype(np.float32)
         a = NormalFields(arr=data)
 
-        assert a.name == NORMALS_FIELD
+        assert a.name == NORMAL_NAMES.base
         assert np.all(a == data)
 
         a = NormalFields(arr=data, name="not_normals")
-        assert a.name == NORMALS_FIELD
+        assert a.name == NORMAL_NAMES.base
         assert a.name != "not_normals"
 
     def test_invalid_shapes(self):
