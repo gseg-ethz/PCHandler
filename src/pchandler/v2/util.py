@@ -35,7 +35,7 @@ Typical usage patterns include:
 
 import copy
 import logging
-from enum import StrEnum
+from enum import StrEnum, Enum
 from functools import wraps
 from typing import Any, Optional, Callable, TYPE_CHECKING
 
