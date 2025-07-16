@@ -6,7 +6,7 @@ import numpy as np
 import numpy.typing as npt
 
 from .core import AbstractIOHandler
-from ..constants import XYZ_FIELDS
+from ..constants import XYZ_NAMES
 from ..geometry import PointCloudData
 
 logger = logging.getLogger(__name__.split(".")[0])
@@ -29,37 +29,33 @@ class CsvHandler(AbstractIOHandler):
              scalar_fields: Optional[list[str]] = None,
              remove_prefix: bool = True,
              prefix: str = 'scalar_',
-             revert_sf_types: bool = True,
              column_names_row: int = -1,
              comment: str = '//',
              delimiter: Optional[str] = None,) -> PointCloudData:
 
-        load_config: dict[str, Any] = {'fname': Path(path)}
-
-        # Sniff the file for header comments, column_names, delimiters, etc and update parameters
+        # Get general file structure information
         file_info = sniff_file(path, comment=comment, field_names_row_index=column_names_row)
         num_points_line = True if file_info.num_points else False
 
-        load_config['skiprows'] = len(file_info.header) + num_points_line
-        load_config['delimiter'] = delimiter or file_info.delimiter
+        # Validate the fields to be output
+        field_names = cls._validate_field_selection(scalar_fields, file_info.fields, remove_prefix, prefix)
 
-        # Sort out the right fields to read or write from
-        field_names = cls._validate_field_selection(scalar_fields, file_info.fields)
+        # Define load config parameters
+        load_config: dict[str, Any] = {
+            'fname': Path(path), 'skiprows': len(file_info.header) + num_points_line,
+            'delimiter': delimiter or file_info.delimiter,
+            'dtype': generate_ascii_load_dtype(['x', 'y', 'z'] + list(field_names.values())),
+            'usecols': None
+        }
 
         # When number of scalar_fields match, assumes all fields are in the same order
-        if len(field_names) + 3 == file_info.num_fields:
-            load_config['usecols'] = None
-        else:
+        if len(field_names) + 3 <= file_info.num_fields:
             load_config['usecols'] = [0, 1, 2] + [file_info.fields.index(name) for name in field_names.values()]
 
-        load_config['dtype'] = generate_ascii_load_dtype(['x', 'y' , 'z'] + list(field_names.values())),
-
+        # Load all data
         data = np.loadtxt(**load_config)
-
-        num_points = data.size
-
-        pcd = PointCloudData(cls.extract_xyz(data, num_points))
-        cls.extract_scalar_fields(pcd, data, num_points, field_names)
+        pcd = PointCloudData(cls.extract_xyz(data, data.size))
+        cls.extract_scalar_fields(pcd, data, data.size, field_names)
 
         return pcd
 
@@ -69,13 +65,11 @@ class CsvHandler(AbstractIOHandler):
              path: str | Path,
              scalar_fields: Optional[list[str]] = None,
              add_prefix: bool = True,
-             revert_sf_types: bool = False,
              prefix: str = 'scalar_',
+             revert_sf_types: bool = False,
              delimiter: Optional[str] = ',') -> None:
 
-        prefix = prefix if add_prefix else ''
-
-        array = cls.generate_structured_array(pcd, scalar_fields, revert_sf_types, prefix)
+        array = cls._generate_structured_array(pcd, scalar_fields, add_prefix, prefix, revert_sf_types)
 
         header = f"// {delimiter.join(list(array.dtype.names or ''))}"
 
@@ -198,7 +192,7 @@ def _get_header(file: Path, comment: str = '//') -> tuple[list[str], int|None]:
 def generate_ascii_load_dtype(column_names: list[str]) -> npt.DTypeLike:
     names = []; formats = []
     for name in column_names:
-        if name.lower() in XYZ_FIELDS:
+        if name in XYZ_NAMES.char:
             names.append(name.lower())
             formats.append(np.float64)
         else:

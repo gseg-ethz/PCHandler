@@ -19,9 +19,9 @@ class TestCsvHandler:
         assert pcd.rgb.dtype == np.uint8
 
     def test_save(self):
-        original_pcd = CsvHandler.load(self.rgb_file)
-        CsvHandler.save(original_pcd, self.out_path)
-        new_pcd = CsvHandler.load(self.out_path)
+        original_pcd = CsvHandler.load(self.rgb_file, remove_prefix=True)
+        CsvHandler.save(original_pcd, self.out_path, add_prefix=False)
+        new_pcd = CsvHandler.load(self.out_path, remove_prefix=False)
 
         assert np.allclose(original_pcd.xyz, new_pcd.xyz)
         assert np.allclose(original_pcd.rgb, new_pcd.rgb, atol=1)

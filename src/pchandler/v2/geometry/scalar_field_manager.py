@@ -38,6 +38,7 @@ from .scalar_fields import (
     AbstractScalarField,
     DtypeState
 )
+from ..validators import normalize_uint8
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -242,16 +243,9 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
         if name in RGB_NAMES.names:
             return self.rgb
 
-        elif name in RGB_NAMES.triplets:
-            if name[0] == "r":
-                value = ScalarField(self.rgb.arr[:, 0], name=name, origin_dtype=self.rgb.origin_dtype)
-
-            elif name[0] == "g":
-                value = ScalarField(self.rgb.arr[:, 1], name=name, origin_dtype=self.rgb.origin_dtype)
-
-            else:
-                value = ScalarField(self.rgb.arr[:, 2], name=name, origin_dtype=self.rgb.origin_dtype)
-
+        if name in RGB_NAMES.scalars:
+            index = RGB_NAMES.get_position(name)
+            value = ScalarField(self.rgb.arr[:, index], name=name, origin_dtype=self.rgb.origin_dtype)
             return value / value.max() if name in RGB_NAMES.float else value
 
         else:
@@ -263,14 +257,9 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
         if name in NORMAL_NAMES.names:
             return self.normals
 
-        if name in ("nx", "normal_x"):
-            return ScalarField(self.normals.arr[:, 0], name=name, origin_dtype=self.normals.origin_dtype)
-
-        elif name in ("ny", "normal_y"):
-            return ScalarField(self.normals.arr[:, 1], name=name, origin_dtype=self.normals.origin_dtype)
-
-        elif name in ("nz", "normal_z"):
-            return ScalarField(self.normals.arr[:, 2], name=name, origin_dtype=self.normals.origin_dtype)
+        if name in NORMAL_NAMES.scalars:
+            index = NORMAL_NAMES.get_position(name)
+            return ScalarField(self.normals.arr[:, index], name=name, origin_dtype=self.normals.origin_dtype)
 
         else:
             raise KeyError(f"Unknown key made it into normals : {name}")
@@ -280,9 +269,9 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
             self,
             name: LowerStr,
             value: Vector_Uint8_T | Array_Nx3_Uint8_T,
-            origin_dtype: Optional[DtypeState] = None) -> None:
+            origin_dtype: Optional[DtypeState] = None
+    ) -> None:
 
-        # Set the whole field
         if name in RGB_NAMES.names:
             self.fields[RGB_NAMES.base] = RGBFields(value[:, [0, 1, 2]], origin_dtype=origin_dtype)
             return
@@ -290,14 +279,12 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
         if self.rgb is None:
             self.fields[RGB_NAMES.base] = RGBFields.initialize(self.num_points)
 
-        if name in ("r", "red"):
-            self.rgb.arr[:, 0] = value
+        if name in RGB_NAMES.float:
+            value = normalize_uint8(value)
 
-        elif name in ("g", "green"):
-            self.rgb.arr[:, 1] = value
-
-        elif name in ("b", "blue"):
-            self.rgb.arr[:, 2] = value
+        if name in RGB_NAMES.scalars:
+            index = RGB_NAMES.get_position(name)
+            self.rgb.arr[:, index] = Vector_Uint8_T(value) # Perform validation as it's being assigned direct
 
         else:
             raise KeyError(f"Unknown key made it into _handle_rgb : {name}")
@@ -307,23 +294,19 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
             self,
             name: LowerStr,
             value: Vector_Float32_T | Array_Nx3_Float32_T,
-            origin_dtype: Optional[DtypeState] = None) -> None:
-        # Set the whole field
-        if name in ("nxnynz", "normals", "normal"):
+            origin_dtype: Optional[DtypeState] = None
+    ) -> None:
+
+        if name in NORMAL_NAMES.names:
             self.fields[NORMAL_NAMES.base] = NormalFields(arr=value[:, [0, 1, 2]], origin_dtype=origin_dtype)
             return
 
         if self.normals is None:
             self.fields[NORMAL_NAMES.base] = NormalFields.initialize(self.num_points)
 
-        if name in ("nx", "normal_x"):
-            self.normals.arr[:, 0] = value
-
-        elif name in ("ny", "normal_y"):
-            self.normals.arr[:, 1] = value
-
-        elif name in ("nz", "normal_z"):
-            self.normals.arr[:, 2] = value
+        if name in NORMAL_NAMES.scalars:
+            index = NORMAL_NAMES.get_position(name)
+            self.normals.arr[:, index] = value
 
         else:
             raise KeyError(f"Unknown key made it into normals : {name}")

@@ -1,9 +1,6 @@
 from pathlib import Path
-from typing import Unpack, NotRequired
 import logging
-from datetime import datetime
 
-import numpy as np
 # TODO decide if to use https://github.com/MapIV/pypcd4
 #  It has already done similar work on "merge" / concatenating point clouds
 
@@ -23,9 +20,9 @@ class PcdHandler(AbstractIOHandler):
     FORMATS = ['.pcd']
 
     @classmethod
-    def load(cls, /, path: str | Path, **config: Unpack[_PcdLoadConfigType]) -> PointCloudData:
+    def load(cls, /, path: str | Path, **config) -> PointCloudData:
         raise NotImplementedError
 
     @classmethod
-    def save(cls, /, pcd: PointCloudData, path: str | Path, **config: Unpack[_PcdSaveConfigType]) -> None:
+    def save(cls, /, pcd: PointCloudData, path: str | Path, **config) -> None:
         raise NotImplementedError

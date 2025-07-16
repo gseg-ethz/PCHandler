@@ -33,7 +33,7 @@ class TestLasHandler:
 
     def test_save(self):
         original_pcd = LAS.load(self.rgb_file)
-        LAS.save(original_pcd, self.out_path)
+        LAS.save(self.out_path,original_pcd)
         new_pcd = LAS.load(self.out_path)
 
         assert np.allclose(original_pcd.xyz, new_pcd.xyz, atol=0.0001)

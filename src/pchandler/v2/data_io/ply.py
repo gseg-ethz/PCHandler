@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 import logging
 from datetime import datetime
 
@@ -20,7 +20,7 @@ class PlyHandler(AbstractIOHandler):
              scalar_fields: Optional[list[str]] = None,
              remove_prefix: bool = True,
              prefix: str = 'scalar_',
-             revert_sf_types: bool = True,
+             ** config: dict[str, Any]
              ) -> PointCloudData:
         logger.info(f"Loading PLY file: {path}")
 
@@ -35,27 +35,29 @@ class PlyHandler(AbstractIOHandler):
         logger.debug(f"PLY file {path} contains {num_points} points")
         file_fields = [pe.name for pe in plydata["vertex"].properties]
 
-        field_names = cls._validate_field_selection(scalar_fields, file_fields)
+        field_names = cls._validate_field_selection(scalar_fields, file_fields, remove_prefix, prefix)
 
         pcd = PointCloudData(cls.extract_xyz(plydata["vertex"], num_points))
         cls.extract_scalar_fields(pcd, plydata["vertex"], num_points, field_names)
 
         return pcd
 
-
-    # DISCUSS is it worth saving the optimised state with the np.float64 shift written in a header?
     @classmethod
     def save(cls, /,
              pcd: PointCloudData,
              path: str | Path,
              scalar_fields: Optional[list[str]] = None,
+             add_prefix: bool = False,
+             prefix: str = 'scalar_',
              revert_sf_types: bool = False,
-             add_scalar_prefix: bool = False,
+             as_ascii: bool = True,
              **config) -> None:
-        # TODO change bool scalar prefix to string with scalar_ as default
+
         path = Path(path)
 
-        structured_array = cls.generate_structured_array(pcd, scalar_fields, revert_sf_types, add_scalar_prefix)
+        prefix = prefix if add_prefix else ''
+
+        structured_array = cls._generate_structured_array(pcd, scalar_fields, add_prefix, prefix, revert_sf_types)
 
         element = PlyElement.describe(
             structured_array,   # type: ignore
@@ -68,5 +70,6 @@ class PlyHandler(AbstractIOHandler):
             path.parent.mkdir(parents=True, exist_ok=True)
             logger.debug(f"Created {path.parent} folder")
 
-        PlyData([element]).write(f"{path}")
+        with open(path, mode='wb+') as f:
+            PlyData([element], text=as_ascii).write(f"{str(path)}")
         logger.info(f"PLY file saved successfully: {path}")

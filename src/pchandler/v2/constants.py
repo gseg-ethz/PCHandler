@@ -32,8 +32,8 @@ class NameConstantsTriplet(NamedTuple):
     base: str
     char: TripletT
     extra_names: tuple[str, ...] = ()
-    words: Optional[TripletT] = None
-    float: Optional[TripletT] = None
+    words: TripletT = ()
+    float: TripletT = ()
     reverse: Optional[str] = None
 
     @property
@@ -43,16 +43,38 @@ class NameConstantsTriplet(NamedTuple):
     @property
     def triplets(self) -> tuple[TripletT]:
         triplets = (self.char, )
+
         if self.words:
-            triplets += self.words
+            triplets += (self.words, )
+
         if self.float:
-            triplets += self.float
+            triplets += (self.float, )
 
         return triplets
 
     @property
+    def scalars(self) -> tuple[str, ...]:
+        return self.char + self.words + self.float
+
+    @property
     def all(self) -> tuple[TripletT|str, ...]:
-        return self.names + self.triplets
+        return self.names + self.scalars
+
+    @property
+    def positional(self) -> tuple[tuple[str, ...], ...]:
+        groups: list[list[str]] = [[], [], []]
+        for triple in self.triplets:
+            for i, value in enumerate(triple):
+                groups[i].append(value)
+
+        return tuple(tuple(group) for group in groups)
+
+    def get_position(self, name):
+        for i, postional_names in enumerate(self.positional):
+            if name in postional_names:
+                return i
+
+        raise ValueError("Could not find name in positional names")
 
 
 RGB_NAMES = NameConstantsTriplet(

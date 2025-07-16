@@ -1,23 +1,20 @@
 from __future__ import annotations
 
 import warnings
-from typing import Any, Mapping, Optional, Self, Annotated, MutableMapping, Union, Type
+from typing import Any, Optional, Self, Annotated, MutableMapping
 
 import numpy as np
 import numpy.typing as npt
 import open3d as o3d
-from pydantic import Field, field_validator, model_validator, BeforeValidator
+from pydantic import Field, model_validator, BeforeValidator
 
 from ..base_types import Array_4x4_T, Array_Nx3_T, Vector_3_T, IndexLike
-from ..validators import extract_array
 from .coordinates import CartesianCoordinates
 from .optimal_shift import OptimizedShift
 
 from .scalar_field_manager import ScalarFieldManager
 from .scalar_fields import NormalFields, RGBFields, ScalarField, SF_T, NormalisedInt16ScalarField, ScalarFieldTriplet
-from .transforms import Transform, TransformLedger
-
-# TODO check for a better converter - TypeAdapter?
+from .transforms import TransformLedger
 
 
 class PointCloudData(CartesianCoordinates):
