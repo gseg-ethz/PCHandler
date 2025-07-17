@@ -109,11 +109,11 @@ class BaseArray(ABC, BaseModel):
     def max(self, **kwargs: dict[str, Any]) -> npt.NDArray[Any]:
         return self.arr.max(**kwargs)
 
-    def model_dump(self, exclude: set[str]|None = None, **kwargs: dict[str, Any]) -> dict:
-        """Dumps the model as a serialised dict object"""
-        exclude = exclude or set()
-        exclude.add("spher")
-        return copy.deepcopy(super().model_dump(exclude=exclude))
+    # def model_dump(self, exclude: set[str]|None = None, **kwargs: dict[str, Any]) -> dict:
+    #     """Dumps the model as a serialised dict object"""
+    #     exclude = exclude or set()
+    #     exclude.add("spher")
+    #     return copy.deepcopy(super().model_dump(exclude=exclude))
 
 
     def copy(self,
@@ -125,8 +125,8 @@ class BaseArray(ABC, BaseModel):
         """
         Produce a deep or shallow copy of the model. Updates the model also if parameter is parsed.
         """
-        if not deep:
-            raise NotImplementedError(f"Shallow copy is not implemented on this class: {type(self)}")
+        # if not deep:
+        #     raise NotImplementedError(f"Shallow copy is not implemented on this class: {type(self)}")
 
         update = update or {}
 
@@ -138,11 +138,12 @@ class BaseArray(ABC, BaseModel):
             else:
                 raise TypeError(f'Unknown type passed in for the array of {type(array)}')
 
-        update |= copy.deepcopy(self.model_dump(exclude=set(update.keys())))
+        data = self.model_dump(exclude=set(update.keys()), by_alias=False)
+        data = copy.deepcopy(data) if deep else data
 
-        update["arr"] = update["arr"].copy()
+        data.update(update)
 
-        return type(self)(**update)
+        return type(self)(**data)
 
     def view(self, cls: Optional[type] = None) -> Self:
         raise NotImplementedError

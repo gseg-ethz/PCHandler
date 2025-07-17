@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import warnings
 from typing import Any, Mapping, Optional, Self, Annotated, MutableMapping, Union, Type, Callable, cast
+from copy import deepcopy
 
 import numpy as np
 import numpy.typing as npt
@@ -21,69 +22,91 @@ from .transforms import Transform, TransformLedger
 
 
 class PointCloudData(CartesianCoordinates):
-    transform_ledger: Annotated[
-        TransformLedger,
-        Field(default_factory=TransformLedger),
-        BeforeValidator(lambda value: value if not isinstance(value, TransformLedger) else TransformLedger(**value))
-    ]
+    arr: Array_Nx3_T = Field(..., alias='xyz')
+    # TODO: Rework Transform ledger
+    # transform_ledger: Annotated[
+    #     TransformLedger,
+    #     Field(default_factory=TransformLedger),
+    #     BeforeValidator(lambda value: value if not isinstance(value, TransformLedger) else TransformLedger(**value))
+    # ]
     scalar_fields: ScalarFieldManager[ScalarField | ScalarFieldTriplet] = Field(default_factory=ScalarFieldManager)
 
+    # “input‐only” fields that need to be folded into the ScalarFieldManager
+    rgb_input: Optional[npt.NDArray[np.uint8 | np.float32 | np.float64]] = Field(
+        None, alias="rgb", exclude=True, repr=False
+    )
+    normals_input: Optional[npt.NDArray[np.float32 | np.float64]] = Field(
+        None, alias="normals", exclude=True, repr=False
+    )
+    intensity_input: Optional[npt.NDArray[np.uint16 | np.float32 | np.float64]] = Field(
+        None, alias="intensity", exclude=True, repr=False
+    )
+    reflectance_input: Optional[npt.NDArray[np.uint16 | np.float32 | np.float64]] = Field(
+        None, alias="reflectance", exclude=True, repr=False
+    )
+
+    def __init__(self, *args, **kwargs):
+        # Accept xyz/arr as a positional argument
+        if args:
+            if len(args) > 1:
+                raise TypeError(f"Expected at most 1 positional argument, got {len(args)}")
+            if "xyz" in kwargs or "arr" in kwargs:
+                raise TypeError("Cannot pass both positional and keyword for xyz/arr")
+            kwargs["xyz"] = args[0]
+
+        super().__init__(**kwargs)
+
+    # def __init__(
+    #     self,
+    #     xyz: Array_Nx3_T | CartesianCoordinates,
+    #     *,
+    #     rgb: Optional[npt.NDArray[np.uint8|np.float32|np.float64] | RGBFields] = None,
+    #     normals: Optional[npt.NDArray[np.float32|np.float64] | NormalFields] = None,
+    #     intensity: Optional[npt.NDArray[np.uint16|np.float32|np.float64] | ScalarField] = None,
+    #     reflectance: Optional[npt.NDArray[np.uint16|np.float32|np.float64] | ScalarField] = None,
+    #     numerical_optimization_shift: Optional[OptimizedShift | ellipsis] = Ellipsis,
+    #     socs_origin: Optional[npt.NDArray[np.float64]] = None,
+    #     scalar_fields: Optional[ScalarFieldManager[ScalarField | ScalarFieldTriplet] | dict[str, SF_T|npt.NDArray] ] = None,
+    #     project_transformation: Optional[Array_4x4_T] = None,
+    #     transform_ledger: Optional[TransformLedger] = None,
+    #     # frozen: bool = False
+    # ):
+    #     super().__init__(
+    #         arr=xyz,
+    #         numerical_optimization_shift = numerical_optimization_shift,
+    #         socs_origin = socs_origin,
+    #         project_transformation = project_transformation,
+    #         transform_ledger = transform_ledger if transform_ledger else TransformLedger(),
+    #     )
+    #
+    #     self.rgb = rgb
+    #     self.normals = normals
+    #     self.intensity = intensity
+    #     self.reflectance = reflectance
+    #
+    #     if scalar_fields is not None:
+    #         for key, value in scalar_fields:
+    #             self.scalar_fields[key] = value
+
+    @field_validator('scalar_fields', mode="before")
+    @classmethod
+    def _convert_scalar_fields(cls, value):
+        if not isinstance(value, ScalarFieldManager):
+            sfm = ScalarFieldManager()
+            for key, value in value.items():
+                sfm[key] = value
+            return sfm
+        return value
 
 
-    def __init__(
-        self,
-        xyz: Array_Nx3_T | CartesianCoordinates,
-        *,
-        rgb: Optional[npt.NDArray[np.uint8|np.float32|np.float64] | RGBFields] = None,
-        normals: Optional[npt.NDArray[np.float32|np.float64] | NormalFields] = None,
-        intensity: Optional[npt.NDArray[np.uint16|np.float32|np.float64] | ScalarField] = None,
-        reflectance: Optional[npt.NDArray[np.uint16|np.float32|np.float64] | ScalarField] = None,
-        numerical_optimization_shift: Optional[OptimizedShift | ellipsis] = Ellipsis,
-        socs_origin: Optional[npt.NDArray[np.float64]] = None,
-        scalar_fields: Optional[ScalarFieldManager[ScalarField | ScalarFieldTriplet] | dict[str, SF_T|npt.NDArray] ] = None,
-        project_transformation: Optional[Array_4x4_T] = None,
-        transform_ledger: Optional[TransformLedger] = None,
-        # frozen: bool = False
-    ):
-        super().__init__(
-            arr=xyz,
-            numerical_optimization_shift = numerical_optimization_shift,
-            socs_origin = socs_origin,
-            project_transformation = project_transformation,
-            transform_ledger = transform_ledger if transform_ledger else TransformLedger(),
-        )
-
-        self.rgb = rgb
-        self.normals = normals
-        self.intensity = intensity
-        self.reflectance = reflectance
-
-        if scalar_fields is not None:
-            for key, value in scalar_fields:
-                self.scalar_fields[key] = value
-
-
-    def __hash__(self) -> int:
-        return id(self)
-
-    def __reduce__(self):
-        base_fn, base_args = super().__reduce__()
-
-        state_dict, = base_args
-        return (
-            PointCloudData._reconstruct_scalar_field_link,
-            (base_fn, state_dict),
-        )
-
-    @staticmethod
-    def _reconstruct_scalar_field_link(
-            base_fn: Callable[[dict], PointCloudData],
-            state: dict,
-      ):
-        obj = base_fn(state)
-
-        obj.scalar_fields.parent = obj
-        return obj
+    @model_validator(mode="after")
+    def _move_into_scalar_fields(self) -> Self:
+        # map any provided “_input” into the scalar_fields manager
+        for name in ("rgb", "normals", "intensity", "reflectance"):
+            inp = getattr(self, f"{name}_input")
+            if inp is not None:
+                setattr(self, name, inp)
+        return self
 
 
     @model_validator(mode="after")
@@ -91,7 +114,6 @@ class PointCloudData(CartesianCoordinates):
         """Revalidate model to ensure that the weakref points to the correct object"""
 
         self.scalar_fields.parent = self
-
         return self
 
     @property
@@ -132,30 +154,71 @@ class PointCloudData(CartesianCoordinates):
             f"dump data to a dict and reinstantiate."
         )
 
+    def __hash__(self) -> int:
+        return id(self)
+
+    def __reduce__(self):
+        base_fn, base_args = super().__reduce__()
+
+        state_dict, = base_args
+        return (
+            PointCloudData._reconstruct_scalar_field_link,
+            (base_fn, state_dict),
+        )
+
+    @staticmethod
+    def _reconstruct_scalar_field_link(
+            base_fn: Callable[[dict], PointCloudData],
+            state: dict,
+      ):
+        obj = base_fn(state)
+
+        obj.scalar_fields.parent = obj
+        return obj
+
     def copy(self,
-             array: npt.NDArray[np.floating] | Self | None = None,
+             array: Optional[npt.NDArray[np.floating] | Self] = None,
              *,
+             deep: bool = True,
              update: Optional[MutableMapping[str, Any]] = None,
+             link_to_same_NOS: bool = True,
              **kwargs: dict[str, Any]) -> Self:
         """
         Produce a deep or shallow copy of the model. Updates the model also if parameter is parsed.
         """
 
-        update = update or {}
+        update = {} if update is None else update
 
-        # array is passed when sampling and advanced indexing automatically makes a copy
-        if array is not None:
-            if isinstance(array, CartesianCoordinates):
-                update["arr"] = array.arr
-            elif isinstance(array, np.ndarray):
-                update["arr"] = array
-            else:
-                raise TypeError(f"Invalid type of array passed: {type(array)}. Should be PointCloudData or np.ndarray")
+        if array is not None and not isinstance(array, CartesianCoordinates | np.ndarray):
+            raise TypeError(f"Invalid type of array passed: {type(array)}. Should be CartesianCoordinates or np.ndarray")
 
-        # Create a copy of the rest of the fields
-        update = self.model_dump(exclude=(set(update.keys()))) | update
+        if link_to_same_NOS:
+            update["numerical_optimization_shift"] = self.numerical_optimization_shift
 
-        return type(self)(update.pop('arr'), **update)
+        return super().copy(array=array, deep=deep, update=update, **kwargs)
+
+        # # Create a copy of the rest of the fields
+        # data = self.model_dump(
+        #     mode = "python",
+        #     exclude=(set(override.keys()))
+        # )
+        # if array is not None:
+        #     data.pop("arr")
+        #
+        # if link_to_same_NOS:
+        #     numerical_optimization_shift = kwargs.pop("numerical_optimization_shift", None)
+        #
+        # if deep:
+        #     data = deepcopy(data)
+        #
+        # if array is None:
+        #     array = data.pop("arr")
+        #
+        # data.update(override)
+        # if link_to_same_NOS:
+        #     data["numerical_optimization_shift"] = numerical_optimization_shift
+        #
+        # return type(self)(array, **data)
 
     def sample(self, mask: npt.NDArray[np.bool_|np.integer]) -> PointCloudData:
         mask = self.create_mask(mask)

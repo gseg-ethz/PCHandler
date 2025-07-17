@@ -116,12 +116,20 @@ class TestPointCloudData:
 
     class TestInitialisation:
         def test_positional_coordinate_arg(self, xyz_):
-            pcd = PointCloudData(xyz_, optimized_shift=None)
+            pcd = PointCloudData(xyz_, numerical_optimization_shift=None)
             assert np.all(pcd == xyz_)
             assert np.all(pcd.arr == xyz_)
 
+        def test_alias_coordinate_arg(self, xyz_):
+            pcd = PointCloudData(xyz=xyz_, numerical_optimization_shift=None)
+            assert np.all(pcd == xyz_)
+            assert np.all(pcd.arr == xyz_)
+            pcd2 = PointCloudData(arr=xyz_, numerical_optimization_shift=None)
+            assert np.all(pcd2 == xyz_)
+            assert np.all(pcd2.arr == xyz_)
+
         def test_keyword_coordinate_arg(self, xyz_):
-            pcd = PointCloudData(xyz=xyz_, optimized_shift=None)
+            pcd = PointCloudData(xyz=xyz_, numerical_optimization_shift=None)
             assert np.all(pcd == xyz_)
             assert np.all(pcd.arr == xyz_)
 
@@ -154,12 +162,13 @@ class TestPointCloudData:
             for name in ("rgb", "normals", "intensity", "reflectance"):
                 assert name in pcd.scalar_fields
 
-        def test_optimized_keyword(self, xyz_):
-            pcd = PointCloudData(xyz_)
-            assert not pcd.optimized
+        # TODO: Discuss what the optimized flag should represent
+        # def test_optimized_keyword(self, xyz_):
+        #     pcd = PointCloudData(xyz_)
+        #     assert not pcd.optimized
 
-            pcd = PointCloudData(xyz_, optimized_shift=OptimizedShift())
-            assert pcd.optimized is not None
+            # pcd = PointCloudData(xyz_, numerical_optimization_shift=OptimizedShift())
+            # assert pcd.optimized is not None
 
         def test_socs_origin_keyword(self, xyz_):
             pcd = PointCloudData(xyz_)
@@ -307,6 +316,20 @@ class TestPointCloudData:
             pcd2 = PointCloudData(xyz=xyz_, rgb=rgb_, normals=normals_, scalar_fields=scalar_fields)
             assert isinstance(pcd2.scalar_fields, ScalarFieldManager)
             assert len(pcd2.scalar_fields) == 2
+
+    class TestCopy:
+        def test_deepcopy(self, pcd):
+            pcd_copy = pcd.copy(deep=True, link_to_same_NOS=True)
+            assert isinstance(pcd_copy, PointCloudData)
+            assert id(pcd.numerical_optimization_shift) == id(pcd_copy.numerical_optimization_shift)
+            assert np.allclose(pcd_copy.xyz, pcd.xyz)
+
+            # TODO: Rework the deepcopy of NOS
+            pcd_copy = pcd.copy(deep=True, link_to_same_NOS=False)
+            assert id(pcd.numerical_optimization_shift) != id(pcd_copy.numerical_optimization_shift)
+            assert np.allclose(pcd_copy.xyz, pcd.xyz)
+
+
 
     class TestReduceSampleExtractMerge:
         class TestMaskGeneration:

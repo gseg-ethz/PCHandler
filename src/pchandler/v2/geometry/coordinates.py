@@ -97,7 +97,7 @@ class CartesianCoordinates(Abstract3dCoordinates):
     arr: Array_Nx3_T
 
     numerical_optimization_shift: Optional[OptimizedShift] = Field(
-        default=Ellipsis,
+        default_factory=OptimizedShift,
         exclude=False
     )
     # optimized: bool = Field(default=False, exclude=True)
@@ -133,8 +133,10 @@ class CartesianCoordinates(Abstract3dCoordinates):
             info: ValidationInfo
     ) -> Self:
         # Create new Shift instance on Ellipsis
-        if isinstance(data, dict) and data["numerical_optimization_shift"] is Ellipsis:
-            data["numerical_optimization_shift"] = OptimizedShift(np.zeros((3,), dtype=np.float64))
+        # if isinstance(data, dict) and (
+        #         not "numerical_optimization_shift" in data or data["numerical_optimization_shift"] is Ellipsis
+        # ):
+        #     data["numerical_optimization_shift"] = OptimizedShift()
 
         instance = handler(data)
 

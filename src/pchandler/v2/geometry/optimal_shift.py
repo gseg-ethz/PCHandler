@@ -4,6 +4,7 @@ import threading
 import uuid
 import weakref
 from typing import TYPE_CHECKING, ClassVar, Self, Optional
+import copy
 
 import numpy as np
 from numpy.typing import NDArray
@@ -109,6 +110,15 @@ class OptimizedShift:
         self._member_coordinate_sets = weakref.WeakSet()
         self._member_coordinate_sets_unshifted_bbox = weakref.WeakKeyDictionary()
         OptimizedShiftManager().register_shift(self)
+
+
+    def __deepcopy__(self, memo):
+        # Construct new
+        new_vec = copy.deepcopy(self._shift, memo)
+        new_shift =type(self)(new_vec)
+        memo[id(self)] = new_shift
+
+        return new_shift
 
     def __len__(self):
         return len(self._member_coordinate_sets)
