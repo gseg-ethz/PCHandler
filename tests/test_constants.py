@@ -1,16 +1,16 @@
-import numpy as np
 import pytest
+import numpy as np
 
 from pchandler.v2.constants import (
     DEFAULT_CONFIG,
     EPS,
     HALF_PI,
-    NORMAL_POTENTIAL_NAMES,
-    NORMALS_FIELD,
     PI,
-    RGB_FIELD,
-    RGB_ALL_POTENTIAL_NAMES,
-    TWO_PI,
+    RGB_NAMES,
+    NORMAL_NAMES,
+    INTENSITY_NAMES,
+    REFLECTANCE_NAMES,
+    TWO_PI
 )
 
 
@@ -29,10 +29,7 @@ def test_default_pydantic_config():
 
 
 def test_field_names():
-    assert RGB_FIELD == "rgb"
-    assert NORMALS_FIELD == "normals"
-    for val in ("r", "g", "b", "rgb", "bgr", "red", "green", "blue", "rgba"):
-        assert val in RGB_ALL_POTENTIAL_NAMES
-
-    for val in ("normal", "normals", "normal_fields"):
-        assert val in NORMAL_POTENTIAL_NAMES
+    assert RGB_NAMES.base == "rgb"
+    assert NORMAL_NAMES.base == "normals"
+    assert INTENSITY_NAMES.base == "intensity"
+    assert REFLECTANCE_NAMES.base == "reflectance"

@@ -141,14 +141,14 @@ class TestTypeDefinedScalarFields:
 
     def test_bool_valid(self):
         array = np.random.randint(0, 1, 1000, dtype=np.bool_)
-        b = BooleanScalarField(array, name="temp")
-        assert isinstance(b, BooleanScalarField)
+        b = ScalarFieldBoolean(array, name="temp")
+        assert isinstance(b, ScalarFieldBoolean)
         assert np.all(b == array)
 
     def test_bool_invalid(self):
         array = np.random.randint(-128, 127, 100, dtype=np.int8)
         with pytest.raises(Exception) as e:
-            BooleanScalarField(array)
+            ScalarFieldBoolean(array)
         assert type(e.value) in (ValidationError, ValueError, TypeError)
 
 
@@ -157,22 +157,22 @@ class TestRgbField:
         data = np.random.randint(0, 255, (100, 3), dtype=np.uint8)
         a = RGBFields(data)
 
-        assert a.name == RGB_FIELD
+        assert a.name == RGB_NAMES.base
         assert np.all(a == data)
 
         a = RGBFields(data, name="not_rgb")
-        assert a.name == RGB_FIELD
+        assert a.name == RGB_NAMES.base
         assert a.name != "not_rgb"
 
     def test_keyword_init(self):
         data = np.random.randint(0, 255, (100, 3), dtype=np.uint8)
         a = RGBFields(arr=data)
 
-        assert a.name == RGB_FIELD
+        assert a.name == RGB_NAMES.base
         assert np.all(a == data)
 
         a = RGBFields(arr=data, name="not_rgb")
-        assert a.name == RGB_FIELD
+        assert a.name == RGB_NAMES.base
         assert a.name != "not_rgb"
 
     def test_invalid_shapes(self):
@@ -235,22 +235,22 @@ class TestNormalsField:
         data = np.random.rand(100, 3).astype(np.float32)
         a = NormalFields(data)
 
-        assert a.name == NORMALS_FIELD
+        assert a.name == NORMAL_NAMES.base
         assert np.all(a == data)
 
         a = NormalFields(data, name="not_normals")
-        assert a.name == NORMALS_FIELD
+        assert a.name == NORMAL_NAMES.base
         assert a.name != "not_normals"
 
     def test_keyword_init(self):
         data = np.random.rand(100, 3).astype(np.float32)
         a = NormalFields(arr=data)
 
-        assert a.name == NORMALS_FIELD
+        assert a.name == NORMAL_NAMES.base
         assert np.all(a == data)
 
         a = NormalFields(arr=data, name="not_normals")
-        assert a.name == NORMALS_FIELD
+        assert a.name == NORMAL_NAMES.base
         assert a.name != "not_normals"
 
     def test_invalid_shapes(self):
@@ -275,8 +275,11 @@ class TestNormalsField:
 
     def test_initialise_field_class_method(self):
         data = np.random.rand(100, 3).astype(np.float32)
+        data /= np.linalg.norm(data, axis=1).reshape(-1, 1)
+        check_data = np.zeros_like(data)
+        check_data[:, 2] = 1
         normals1 = NormalFields.initialize(data.shape[0])
-        assert np.all(normals1 == np.zeros_like(data))
+        assert np.all(normals1 == check_data)
         assert np.float32 == normals1.dtype
 
         normals2 = NormalFields.initialize(data.shape[0], data)

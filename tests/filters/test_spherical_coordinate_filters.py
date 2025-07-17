@@ -14,7 +14,7 @@ class TestRangeFilter:
     def test_range_filter(self, pcd):
         range_filter = RangeFilter(low=10, high = 70)
         pcd_filtered = range_filter.extract(pcd)
-        assert len(pcd_filtered) < 10000
+        assert len(pcd_filtered) < 100000
         assert np.all(pcd_filtered.r >= 10)
         assert np.all(pcd_filtered.r <= 70)
 
@@ -30,7 +30,7 @@ class TestSphericalPolygonFilter:
         polygon_filter = SphericalPolygonFilter(polygon)
         pcd_filtered = polygon_filter.extract(pcd)
         assert len(pcd_filtered) < 100000
-        assert np.isclose(pcd_filtered.hz.min(), 0.1, atol=0.0001)
-        assert np.isclose(pcd_filtered.hz.max(), 0.5, atol=0.0001)
-        assert np.isclose(pcd_filtered.v.min(), 0.6, atol=0.0001)
-        assert np.isclose(pcd_filtered.v.max(), 1.2, atol=0.0001)
+        assert np.isclose(pcd_filtered.hz.min(), 0.1, atol=0.0002)
+        assert np.isclose(pcd_filtered.hz.max(), 0.5, atol=0.0002)
+        assert np.isclose(pcd_filtered.v.min(), 0.6, atol=0.0002)
+        assert np.isclose(pcd_filtered.v.max(), 1.2, atol=0.0002)

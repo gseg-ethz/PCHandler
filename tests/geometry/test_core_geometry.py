@@ -227,7 +227,7 @@ class TestPointCloudData:
             # normals non_array
             with pytest.raises(Exception) as e:
                 PointCloudData(xyz=xyz_, rgb=rgb_, normals=1, scalar_fields=sfs_)
-            assert type(e.value) in (ValueError, TypeError, AttributeError)
+            assert type(e.value) in (ValueError, TypeError, AttributeError, ValidationError)
 
         def test_intensity(self, xyz_, rgb_, normals_, reflectance_, sfs_):
             # normals non_array
@@ -288,7 +288,7 @@ class TestPointCloudData:
             assert isinstance(pcd.normals, NormalFields)
             assert pcd.normals.shape[1] == 3
             assert pcd.normals.dtype == np.float32
-            assert np.all(pcd.normals == new_data)
+            assert np.all(pcd.normals == new_data / np.linalg.norm(new_data, axis=1).reshape(-1, 1))
 
         def test_intensity_setter(self, pcd):
             new_data = np.random.rand(N).astype(np.float32)
@@ -474,7 +474,7 @@ class TestPointCloudData:
 
             assert np.all(base_xyz[~mask, :] == sampled_pcd.xyz)
             assert np.all(base_rgb[~mask] == sampled_pcd.rgb)
-            assert np.all(base_normal[~mask] == sampled_pcd.normals)
+            assert np.allclose(base_normal[~mask], sampled_pcd.normals)
             assert np.all(base_intensities[~mask] == sampled_pcd.intensity)
             assert np.all(pcd.socs_origin == sampled_pcd.socs_origin)
             assert np.all(pcd.optimized == sampled_pcd.optimized)

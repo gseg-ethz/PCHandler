@@ -4,7 +4,7 @@ import logging
 import weakref
 from collections import Counter
 from collections.abc import ItemsView, ValuesView, KeysView
-from typing import TYPE_CHECKING, Iterable, Iterator, MutableMapping, Self, overload, Optional, Any
+from typing import TYPE_CHECKING, Iterable, Iterator, MutableMapping, Self, overload, Optional
 
 import numpy as np
 import numpy.typing as npt
@@ -26,12 +26,10 @@ from ..base_types import (
 )
 from ..constants import (
     DEFAULT_CONFIG,
-    NORMAL_POTENTIAL_NAMES,
-    RGB_ALL_POTENTIAL_NAMES,
-    NORMALS_FIELD,
-    RGB_FIELD,
-    INTENSITY_FIELD,
-    REFLECTANCE_FIELD
+    RGB_NAMES,
+    NORMAL_NAMES,
+    INTENSITY_NAMES,
+    REFLECTANCE_NAMES
 )
 from .scalar_fields import (
     SF_T,
@@ -40,9 +38,9 @@ from .scalar_fields import (
     RGBFields,
     ScalarField,
     AbstractScalarField,
-    NormalisedInt16ScalarField,
     DtypeState
 )
+from ..validators import normalize_uint8
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -132,6 +130,18 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
     def __getitem__(self, key: str | LowerStr | IndexLike) -> ScalarField | RGBFields | NormalFields | Self:
 
         if isinstance(key, str):
+            if key in RGB_NAMES.all:
+                return self._get_rgb(key)
+
+            if key in NORMAL_NAMES.all:
+                return self._get_normals(key)
+
+            if key in INTENSITY_NAMES.all:
+                return self.intensity
+
+            if key in REFLECTANCE_NAMES.all:
+                return self.reflectance
+
             return self.fields[key]
 
         return self.sample(key)
@@ -152,30 +162,32 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
         if isinstance(value, BaseArray):
             value = value.arr
 
-        if name == INTENSITY_FIELD:
-            self.fields[name] = ScalarField(value, name=INTENSITY_FIELD, origin_dtype=origin_dtype)
-            return None
-
-        if name == REFLECTANCE_FIELD:
-            self.fields[name] = ScalarField(value, name=REFLECTANCE_FIELD, origin_dtype=origin_dtype)
-            return None
-
-        if name in RGB_ALL_POTENTIAL_NAMES:
-            return self._handle_rgb(name, value, origin_dtype=origin_dtype)
-
-        if name in NORMAL_POTENTIAL_NAMES:
-            return self._handle_normal(name, value, origin_dtype=origin_dtype)
-
-        if self._parent is not None:
+        if self._parent is None:
+            logger.warning('No parent object to compare length of scalar fields to corresponding coordinate set')
+        else:
             if self.num_points != value.shape[0]:
                 raise ValueError( f"Scalar field length does not equal #points: {self.num_points} != {value.shape[0]}")
-        else:
-            logger.warning('No parent object to compare length of scalar fields to corresponding coordinate set')
 
-        if isinstance(value, np.ndarray):
+        if name in RGB_NAMES.all:
+            self._set_rgb(name, value, origin_dtype=origin_dtype)
+
+        elif name in NORMAL_NAMES.all:
+            self._set_normals(name, value, origin_dtype=origin_dtype)
+
+        elif name in INTENSITY_NAMES.all:
+            self.fields[INTENSITY_NAMES.base] = (
+                ScalarField(value, name=INTENSITY_NAMES.base, origin_dtype=origin_dtype))
+
+        elif name in REFLECTANCE_NAMES.all:
+            self.fields[REFLECTANCE_NAMES.base] = (
+                ScalarField(value, name=REFLECTANCE_NAMES.base, origin_dtype=origin_dtype))
+
+        elif isinstance(value, np.ndarray):
             self.fields[name] = ScalarField(value, name=name, origin_dtype=origin_dtype)
 
-        return None
+        else:
+            raise ValueError(f"Failed to set scalar field '{name}' of type '{type(value)}'")
+
 
     def __delitem__(self, key: str) -> None:
         del self.fields[key]
@@ -193,6 +205,17 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
         sf = ScalarField(data, name=name)
         self.add_field(sf)
 
+    def get_triplet_scalar_field_names(self) -> set[str]:
+        fields = set()
+        for field_set in (RGB_NAMES, NORMAL_NAMES):
+            if field_set.base in self.fields:
+                fields |= set(field_set.words)
+
+        return fields
+
+    def get_extra_field_names(self) -> set[str]:
+        return set(self.keys()) - {'rgb', 'normals'}
+
     @property
     def shape(self) -> tuple[int, int]:
         return self.num_points, len(self)
@@ -203,7 +226,7 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
 
     @property
     def rgb(self) -> RGBFields | None:
-        return self.fields.get(RGB_FIELD, None)
+        return self.fields.get(RGB_NAMES.base, None)
 
     @rgb.setter
     def rgb(self, value: npt.NDArray[np.floating|np.uint8] | RGBFields) -> None:
@@ -212,11 +235,11 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
 
         if isinstance(value, np.ndarray):
             value: RGBFields = RGBFields(value)
-        self[RGB_FIELD] = value
+        self[RGB_NAMES.base] = value
 
     @property
     def normals(self) -> NormalFields | None:
-        return self.fields.get(NORMALS_FIELD, None)
+        return self.fields.get(NORMAL_NAMES.base, None)
 
     @normals.setter
     def normals(self, value: Optional[npt.NDArray | NormalFields]):
@@ -225,90 +248,102 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
 
         if isinstance(value, np.ndarray):
             value = NormalFields(value)
-        self[NORMALS_FIELD] = value
+        self[NORMAL_NAMES.base] = value
 
     @property
     def intensity(self):
-        return self.fields.get(INTENSITY_FIELD, None)
+        return self.fields.get(INTENSITY_NAMES.base, None)
 
     @intensity.setter
     def intensity(self, value: Optional[npt.NDArray[np.uint16|np.floating] | ScalarField]):
         if isinstance(value, np.ndarray):
-            value = ScalarField(value, name=INTENSITY_FIELD)
-        self[INTENSITY_FIELD] = value
+            value = ScalarField(value, name=INTENSITY_NAMES.base)
+        self[INTENSITY_NAMES.base] = value
 
     @property
     def reflectance(self):
-        return self.fields.get(REFLECTANCE_FIELD, None)
+        return self.fields.get(REFLECTANCE_NAMES, None)
 
     @reflectance.setter
     def reflectance(self, value: np.ndarray | ScalarField):
         if isinstance(value, np.ndarray):
-            value = ScalarField(value, name=REFLECTANCE_FIELD)
-        self[REFLECTANCE_FIELD] = value
+            value = ScalarField(value, name=REFLECTANCE_NAMES.base)
+        self[REFLECTANCE_NAMES.base] = value
 
     @validate_call(config=DEFAULT_CONFIG)
-    def _handle_rgb(
-            self,
-            name: LowerStr,
-            value: Vector_Uint8_T | Array_Nx3_Uint8_T,
-            origin_dtype: Optional[DtypeState] = None) -> None:
+    def _get_rgb(self, name: LowerStr) -> ScalarField | RGBFields:
+        if name in RGB_NAMES.names:
+            return self.rgb
 
-        # Set the whole field
-        if name in ("rgb", "rgba", "color", "colour", "colors", "colours"):
-            self.fields[RGB_FIELD] = RGBFields(value[:, [0, 1, 2]], origin_dtype=origin_dtype)
-            return
-
-        elif name in ("bgr", "bgra"):
-            self.fields[RGB_FIELD] = RGBFields(value[[2, 1, 0], :], origin_dtype=origin_dtype)
-            return
-
-        if self.rgb is None:
-            self.fields[RGB_FIELD] = RGBFields.initialize(self.num_points)
-
-        if name in ("r", "red"):
-            self.rgb.arr[:, 0] = value
-
-        elif name in ("g", "green"):
-            self.rgb.arr[:, 1] = value
-
-        elif name in ("b", "blue"):
-            self.rgb.arr[:, 2] = value
+        if name in RGB_NAMES.scalars:
+            index = RGB_NAMES.get_position(name)
+            value = ScalarField(self.rgb.arr[:, index], name=name, origin_dtype=self.rgb.origin_dtype)
+            return value / value.max() if name in RGB_NAMES.float else value
 
         else:
             raise KeyError(f"Unknown key made it into _handle_rgb : {name}")
 
     @validate_call(config=DEFAULT_CONFIG)
-    def _handle_normal(
-            self,
-            name: LowerStr,
-            value: Vector_Float32_T | Array_Nx3_Float32_T,
-            origin_dtype: Optional[DtypeState] = None) -> None:
+    def _get_normals(self, name: LowerStr) -> ScalarField | NormalFields:
         # Set the whole field
-        if name in ("nxnynz", "normals", "normal"):
-            self.fields[NORMALS_FIELD] = NormalFields(arr=value[:, [0, 1, 2]], origin_dtype=origin_dtype)
-            return
+        if name in NORMAL_NAMES.names:
+            return self.normals
 
-        elif name == "nznynx":
-            self.fields[NORMALS_FIELD] = NormalFields(arr=value[:, [2, 1, 0]], origin_dtype=origin_dtype)
-            return
-
-        if self.normals is None:
-            self.fields[NORMALS_FIELD] = NormalFields.initialize(self.num_points)
-
-        if name in ("nx", "normal_x"):
-            self.normals.arr[:, 0] = value
-
-        elif name in ("ny", "normal_y"):
-            self.normals.arr[:, 1] = value
-
-        elif name in ("nz", "normal_z"):
-            self.normals.arr[:, 2] = value
+        if name in NORMAL_NAMES.scalars:
+            index = NORMAL_NAMES.get_position(name)
+            return ScalarField(self.normals.arr[:, index], name=name, origin_dtype=self.normals.origin_dtype)
 
         else:
             raise KeyError(f"Unknown key made it into normals : {name}")
 
-    def sample(self, mask: IndexLike, view=False) -> ScalarFieldManager:
+    @validate_call(config=DEFAULT_CONFIG)
+    def _set_rgb(
+            self,
+            name: LowerStr,
+            value: Vector_Uint8_T | Array_Nx3_Uint8_T,
+            origin_dtype: Optional[DtypeState] = None
+    ) -> None:
+
+        if name in RGB_NAMES.names:
+            self.fields[RGB_NAMES.base] = RGBFields(value[:, [0, 1, 2]], origin_dtype=origin_dtype)
+            return
+
+        if self.rgb is None:
+            self.fields[RGB_NAMES.base] = RGBFields.initialize(self.num_points)
+
+        if name in RGB_NAMES.float:
+            value = normalize_uint8(value)
+
+        if name in RGB_NAMES.scalars:
+            index = RGB_NAMES.get_position(name)
+            self.rgb.arr[:, index] = Vector_Uint8_T(value) # Perform validation as it's being assigned direct
+
+        else:
+            raise KeyError(f"Unknown key made it into _handle_rgb : {name}")
+
+    @validate_call(config=DEFAULT_CONFIG)
+    def _set_normals(
+            self,
+            name: LowerStr,
+            value: Vector_Float32_T | Array_Nx3_Float32_T,
+            origin_dtype: Optional[DtypeState] = None
+    ) -> None:
+
+        if name in NORMAL_NAMES.names:
+            self.fields[NORMAL_NAMES.base] = NormalFields(arr=value[:, [0, 1, 2]], origin_dtype=origin_dtype)
+            return
+
+        if self.normals is None:
+            self.fields[NORMAL_NAMES.base] = NormalFields.initialize(self.num_points)
+
+        if name in NORMAL_NAMES.scalars:
+            index = NORMAL_NAMES.get_position(name)
+            self.normals.arr[:, index] = value
+
+        else:
+            raise KeyError(f"Unknown key made it into normals : {name}")
+
+    def sample(self, mask: IndexLike) -> ScalarFieldManager:
         sampled = type(self)(fields={})
 
         for name, value in self.items():

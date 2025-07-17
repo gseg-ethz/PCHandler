@@ -1,95 +1,87 @@
 from pathlib import Path
-from typing import Unpack, NotRequired, Iterable, Sequence, Any, Collection
+from typing import Iterable, Optional, NamedTuple, Any
 import logging
 
 import numpy as np
 import numpy.typing as npt
 
-from .core import AbstractIOHandler, _LoadConfigType, _SaveConfigType, SaveConfig, LoadConfig
+from .core import AbstractIOHandler
+from ..constants import XYZ_NAMES
 from ..geometry import PointCloudData
 
 logger = logging.getLogger(__name__.split(".")[0])
 
 
-class _CsvLoadConfigType(_LoadConfigType):
-    comment: NotRequired[str]
-    skip_rows: NotRequired[int]
-    delimiter: NotRequired[str]
-    num_points_line: NotRequired[bool]
-    column_names: NotRequired[Collection[str]]
-    column_names_row: NotRequired[int]
-
-
-class _CsvSaveConfigType(_SaveConfigType):
-    delimiter: NotRequired[str]
-    number_points_line: NotRequired[bool]
-    header_lines: NotRequired[Collection[str]]
+class AsciiInfo(NamedTuple):
+    header: list[str]
+    delimiter: str
+    fields: list[str]
+    num_fields: int
+    num_points: int|None
 
 
 class CsvHandler(AbstractIOHandler):
     FORMATS = ['.csv', '.txt', '.xyz', '.asc', '.ascii', '.pts']
 
     @classmethod
-    def load(cls, path: str | Path, **config: Unpack[_CsvLoadConfigType]) -> PointCloudData:
-        cfg = LoadConfig(**config)
-        path = Path(path)
+    def load(cls,
+             path: str | Path, /,
+             scalar_fields: Optional[list[str]] = None,
+             remove_prefix: bool = True,
+             prefix: str = 'scalar_',
+             column_names_row: int = -1,
+             comment: str = '//',
+             delimiter: Optional[str] = None,) -> PointCloudData:
 
-        header, delimiter, column_names, num_cols, num_points = sniff_file(path, comment=cfg.comment)
+        # Get general file structure information
+        file_info = sniff_file(path, comment=comment, field_names_row_index=column_names_row)
+        num_points_line = True if file_info.num_points else False
 
-        # Use the detected delimiter if none defined
+        # Validate the fields to be output
+        field_names = cls._validate_field_selection(scalar_fields, file_info.fields, remove_prefix, prefix)
 
-        # Check for the number points line (first after header from cloud compare export)
-        cfg.num_points_line = True if num_points else False
-        use_columns = _get_col_indexes(cfg, column_names, num_cols)
+        # Define load config parameters
+        load_config: dict[str, Any] = {
+            'fname': Path(path), 'skiprows': len(file_info.header) + num_points_line,
+            'delimiter': delimiter or file_info.delimiter,
+            'dtype': generate_ascii_load_dtype(['x', 'y', 'z'] + list(field_names.values())),
+            'usecols': None
+        }
 
-        load_params: dict[str, Any] = {'fname': path}
-        load_params['delimiter'] = cfg.delimiter or delimiter
-        load_params['dtype'] = _generate_csv_load_dtype(cfg)
-        load_params['comments'] = cfg.comment
-        load_params['skiprows'] = len(header) + cfg.num_points_line
+        # When number of scalar_fields match, assumes all fields are in the same order
+        if len(field_names) + 3 <= file_info.num_fields:
+            load_config['usecols'] = [0, 1, 2] + [file_info.fields.index(name) for name in field_names.values()]
 
-        if len(use_columns) != 0:
-            load_params['usecols'] = use_columns
-
-        data = np.loadtxt(**load_params)
-
-        num_points = data.size
-
-        field_names = set([name.lower() for name in cfg.column_names])
-
-        pcd = PointCloudData(cls._extract_xyz(data, num_points, field_names))
-        cls.extract_common_fields(pcd, data, cfg, num_points, field_names)
-        cls.extract_extra_fields(pcd, data, cfg, field_names)
+        # Load all data
+        data = np.loadtxt(**load_config)
+        pcd = PointCloudData(cls.extract_xyz(data, data.size))
+        cls.extract_scalar_fields(pcd, data, data.size, field_names)
 
         return pcd
 
     @classmethod
-    def save(cls, /, pcd: PointCloudData, path: str | Path, **config: Unpack[_CsvSaveConfigType]) -> None:
-        cfg = SaveConfig(**config)
-        array = cls.generate_structured_array(pcd, cfg)
+    def save(cls,
+             pcd: PointCloudData,
+             path: str | Path,
+             scalar_fields: Optional[list[str]] = None,
+             add_prefix: bool = True,
+             prefix: str = 'scalar_',
+             revert_sf_types: bool = False,
+             delimiter: Optional[str] = ',') -> None:
 
-        header = f"// {cfg.delimiter.join(list(array.dtype.names or ''))}"
+        array = cls._generate_structured_array(pcd, scalar_fields, add_prefix, prefix, revert_sf_types)
 
-        fmt_map = {
-            "f": "%.6f",  # Default float format
-            "u": "%u",  # Unsigned integer
-            "i": "%d",  # Signed integer
-        }
+        header = f"// {delimiter.join(list(array.dtype.names or ''))}"
 
+        fmt_map = { "f": "%.6f", "u": "%u", "i": "%d", }
         # Use `"%s"` for fallback
-        fmt = cfg.delimiter.join([fmt_map.get(field[1][1], "%s") for field in array.dtype.descr])
+        fmt = delimiter.join([fmt_map.get(field[1][1], "%s") for field in array.dtype.descr])
+
         if array.dtype.names is not None:
             array = np.stack([array[field] for field in list(array.dtype.names)], axis=-1)
 
-            np.savetxt(
-                path,
-                array,
-                fmt=fmt,
-                delimiter=cfg.delimiter,
-                header=header,
-                comments="",  # Avoid prepending '#' to the header
-            )
-
+            # Avoid prepending '#' to the header with comments
+            np.savetxt( path, array, fmt=fmt, delimiter=delimiter, header=header, comments="" )
             logger.info(f"CSV file saved successfully: {path}")
         else:
             raise ValueError("No fields passed")
@@ -97,24 +89,28 @@ class CsvHandler(AbstractIOHandler):
 
 def sniff_file(file: Path,
                delimiters: tuple[str, ...] = (' ', ';', '\t', ','),
-               names_row: int = -1,
+               field_names_row_index: int = -1,
                lines_to_check: int = 10,
                minimum_columns: int = 3,
-               comment: str = "//") -> tuple[list[str], str, Sequence[str], int, int|None]:
+               comment: str = "//") -> AsciiInfo:
 
+    # Read the header information defined by the comment section of the Ascii File and check if number of points is the
+    # first line
     header, num_points = _get_header(file, comment)
     delimiter, number_fields = _delimiter_sniffer(file, delimiters, lines_to_check, minimum_columns, comment)
 
-    if len(header) == 0:
-        return header, delimiter, [], number_fields, num_points
-    line: str = header[names_row]
+    # Get the field names based on the defined row_index. default is the last line of the header (-1)
+    line: str = header[field_names_row_index]
 
+    # Test both the delimiter defined and white space as to the joining character between field name header info
     for i in (' ', delimiter):
-        column_names = line.split(i)
-        if len(column_names) == number_fields:
-            return header, delimiter, column_names, number_fields, num_points
+        field_names = line.split(i)
+        if len(field_names) == number_fields:
+            return AsciiInfo(header, delimiter, field_names, number_fields, num_points)
 
-    raise ValueError(f"Header line does not appear to have column_names at row number {names_row}: {line=}")
+    # Log warning if no field names found
+    logger.info(f"Header row number '{field_names_row_index}' does not contain column_names in the line : {line=}")
+    return AsciiInfo(header, delimiter, [], number_fields, num_points)
 
 def _get_field_counts(file: Path,
                       character: str,
@@ -193,35 +189,57 @@ def _get_header(file: Path, comment: str = '//') -> tuple[list[str], int|None]:
 
     return header, number_points
 
-def _generate_csv_load_dtype(cfg: LoadConfig) -> npt.DTypeLike:
-    elements = []
-    for name in cfg.column_names:
-        if name.lower() in ('x', 'y', 'z'):
-            elements.append((name.lower(), 'f8'))
+def generate_ascii_load_dtype(column_names: list[str]) -> npt.DTypeLike:
+    names = []; formats = []
+    for name in column_names:
+        if name in XYZ_NAMES.char:
+            names.append(name.lower())
+            formats.append(np.float64)
         else:
-            elements.append((name.lower(), 'f4'))
-    return np.dtype(elements)
+            names.append(name)
+            formats.append(np.float32)
+    return np.dtype({'names': names, 'formats': formats})
 
-def _get_col_indexes(cfg: LoadConfig, header_names: Sequence[str], num_cols: int) -> Sequence[int]:
-    # TODO by default, header_names starts with {'x', 'y', 'z'}
-    if len(header_names) == 0 or not cfg.column_names:
-        if num_cols == 3:
-            cfg.column_names = ['x', 'y', 'z']
-            return 0, 1, 2
-        elif len(header_names) == num_cols:
-            cfg.column_names = header_names
-            return tuple([i for i in range(num_cols)])
+def get_column_names(scalar_fields: list[str],
+                     detected_column_names: list[str],
+                     num_cols: int,
+                     use_cols: Optional[list[int]]) -> tuple[list[str], list[int]] :
+    if scalar_fields is None:
+        if len(detected_column_names) == 0:  # No column names detected
+            if num_cols == 3:
+                column_names = ['x', 'y', 'z']
+            else:
+                raise ValueError("Number of columns detected is greater than 3 but no "
+                                 "scalar_fields were passed or column names detected.")
+
+        elif len(detected_column_names) == num_cols:
+            column_names = detected_column_names
+
         else:
-            raise ValueError(f"Unknown fields in text file detect. {num_cols=} > 3.\n"
-                             f"Please define the column names")
+            raise ValueError(f'Number of columns detected do not match the number of column names '
+                             f'read from the header \n {detected_column_names=}')
 
-    if len(cfg.column_names) > num_cols:
-        logger.warning(f"More columns are detected than field names provided. "
-                       f"Extracting the first {len(cfg.column_names)} fields as {cfg.column_names}")
-        cfg.column_names = list(cfg.column_names)[:num_cols]
-        return tuple([i for i in range(num_cols)])
+    elif len(scalar_fields) + 3 == num_cols:  # Exact number of scalar_fields
+        column_names = ['x', 'y', 'z'] + scalar_fields
 
-    if len(set(cfg.column_names)) > len(set(header_names)):
-        raise ValueError("There are more user defined column names than ")
+    elif len(scalar_fields) + 3 < num_cols:  # Select number of scalar_fields
+        if len(detected_column_names) != num_cols:  # Invalid column header
+            raise ValueError(f"Could not resolve the scalar_fields ({scalar_fields}) in the file as the "
+                             f"detected column names ({detected_column_names}) did not match the number of "
+                             f"columns: {num_cols}")
 
-    return tuple([header_names.index(name) for name in cfg.column_names])
+        if not set(scalar_fields).issubset(set(detected_column_names)):  # Unmatched scalar_field
+            raise ValueError(f"The following scalar_fields could not be found in the column names:"
+                             f"\n{set(scalar_fields) - set(detected_column_names)}"
+                             f"\nColumn names: ({detected_column_names})")
+
+        column_names = ['x', 'y', 'z'] + scalar_fields
+        use_cols = [0, 1, 2]
+        for name in scalar_fields:
+            use_cols.append(detected_column_names.index(name))
+
+    else:  # Num scalar_fields greater than num additional columns
+        raise ValueError(f"The input scalar fields should exclude the coordinate names ('x', 'y', 'z') and not "
+                         f"exceed the number of columns-3 (compensating for coordinate columns)")
+
+    return column_names, use_cols

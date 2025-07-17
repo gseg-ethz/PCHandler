@@ -1,30 +1,27 @@
 from pathlib import Path
-from typing import Unpack
+from typing import Optional, Any
 import logging
 from datetime import datetime
 
 from plyfile import PlyData, PlyElement     # type: ignore
 
-from .core import AbstractIOHandler, _LoadConfigType, _SaveConfigType, LoadConfig, SaveConfig
+from .core import AbstractIOHandler
 from ..geometry import PointCloudData
 
 logger = logging.getLogger(__name__.split(".")[0])
-
-
-class _PlyLoadConfigType(_LoadConfigType):
-    pass
-
-class _PlySaveConfigType(_SaveConfigType):
-    pass
 
 
 class PlyHandler(AbstractIOHandler):
     FORMATS = ['.ply']
 
     @classmethod
-    def load(cls, /, path: str | Path, **config: Unpack[_PlyLoadConfigType]) -> PointCloudData:
-        cfg = LoadConfig(**config)
-
+    def load(cls,
+             path: str | Path, /,
+             scalar_fields: Optional[list[str]] = None,
+             remove_prefix: bool = True,
+             prefix: str = 'scalar_',
+             ** config: dict[str, Any]
+             ) -> PointCloudData:
         logger.info(f"Loading PLY file: {path}")
 
         try:
@@ -36,36 +33,43 @@ class PlyHandler(AbstractIOHandler):
 
         num_points = plydata["vertex"].count
         logger.debug(f"PLY file {path} contains {num_points} points")
+        file_fields = [pe.name for pe in plydata["vertex"].properties]
 
-        ply_scalar_fields = set([pe.name.lower() for pe in plydata["vertex"].properties])
+        field_names = cls._validate_field_selection(scalar_fields, file_fields, remove_prefix, prefix)
 
-        pcd = PointCloudData(cls._extract_xyz(plydata["vertex"], num_points, ply_scalar_fields))
-        cls.extract_common_fields(pcd, plydata["vertex"], cfg, num_points, ply_scalar_fields)
-        cls.extract_extra_fields(pcd, plydata["vertex"], cfg, ply_scalar_fields)
+        pcd = PointCloudData(cls.extract_xyz(plydata["vertex"], num_points))
+        cls.extract_scalar_fields(pcd, plydata["vertex"], num_points, field_names)
 
         return pcd
 
-
-    # DISCUSS is it worth saving the optimised state with the np.float64 shift written in a header?
     @classmethod
-    def save(cls, /, pcd: PointCloudData, path: str | Path, **config: Unpack[_PlySaveConfigType]) -> None:
-        path = Path(path)
-        cfg = SaveConfig(**config)
+    def save(cls, /,
+             pcd: PointCloudData,
+             path: str | Path,
+             scalar_fields: Optional[list[str]] = None,
+             add_prefix: bool = False,
+             prefix: str = 'scalar_',
+             revert_sf_types: bool = False,
+             as_ascii: bool = True,
+             **config) -> None:
 
-        structured_array = cls.generate_structured_array(pcd, cfg)
+        path = Path(path)
+
+        prefix = prefix if add_prefix else ''
+
+        structured_array = cls._generate_structured_array(pcd, scalar_fields, add_prefix, prefix, revert_sf_types)
 
         element = PlyElement.describe(
-            structured_array,
+            structured_array,   # type: ignore
             name="vertex",
-            comments=[
-                "Created with dranjan/python-plyfile in gseg-ethz/pchandler",
-                f"Created {datetime.now():%Y-%m-%dT%H:%M:%S%z}",
-            ],
+            comments=["Created with dranjan/python-plyfile in gseg-ethz/pchandler",
+                      f"Created {datetime.now():%Y-%m-%dT%H:%M:%S%z}"],
         )
 
         if not path.parent.exists():
             path.parent.mkdir(parents=True, exist_ok=True)
             logger.debug(f"Created {path.parent} folder")
 
-        PlyData([element]).write(f"{path}")
+        with open(path, mode='wb+') as f:
+            PlyData([element], text=as_ascii).write(f"{str(path)}")
         logger.info(f"PLY file saved successfully: {path}")

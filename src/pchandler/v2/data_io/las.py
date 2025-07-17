@@ -1,96 +1,76 @@
 from pathlib import Path
-from typing import Unpack, NotRequired, Any
+from typing import Optional
 import logging
-from datetime import datetime
 
 import numpy as np
 import numpy.typing as npt
 import laspy                # type: ignore[import-untyped]
 
-from .core import AbstractIOHandler, _LoadConfigType, _SaveConfigType, SaveConfig, LoadConfig
+from .core import AbstractIOHandler, _get_field_names
+from ..constants import RGB_NAMES, NORMAL_NAMES, INTENSITY_NAMES, XYZ_NAMES
 from ..geometry import PointCloudData
-from ..geometry.scalar_field_manager import ScalarFieldManager
-from ..geometry.scalar_fields import BooleanScalarField, ScalarField
 
 logger = logging.getLogger(__name__.split(".")[0])
-
-
-class _LASLoadConfigType(_LoadConfigType):
-    pass
-
-
-class _LASSaveConfigType(_SaveConfigType):
-    pass
 
 
 class LasHandler(AbstractIOHandler):
     FORMATS = ['.las', '.laz']
 
     @classmethod
-    def load(cls, /, path: str | Path, **config: Unpack[_LASLoadConfigType]) -> PointCloudData:
-        cfg = LoadConfig(**config)
-          # TODO: Extend usage from `dimension_names` to `extra_dimension_names`
+    def load(cls,
+             path: str | Path, /,
+             scalar_fields: Optional[list[str]] = None,
+             remove_prefix: bool = True,
+             prefix: str = 'scalar_',
+             **config
+             ) -> PointCloudData:
+
         logger.info(f"Loading LAZ file: {path}")
+
         las = laspy.read(path)
-        scalar_field_names = set(las.point_format.dimension_names).difference({"X", "Y", "Z", "x", "y", "z"})
-        lower_sf_names = {name.lower(): name for name in scalar_field_names}
+        header_names = las._points.array.dtype.names
+
+        data = las._points.array
+        field_names = cls._validate_field_selection(scalar_fields, header_names, remove_prefix, prefix)
+
         pcd = PointCloudData(las.xyz)
-
-        # Update the abstractIOhandler class to clean this up and be more DRY
-        if cfg.keep_rgb:
-            if rgb_field_names := cls._get_rgb_field_names(set(lower_sf_names.values())):
-                pcd.rgb = cls.extract_rgb(las.points.array, len(pcd),
-                                          [lower_sf_names[name] for name in rgb_field_names])
-                cls.remove_field_names(scalar_field_names, *[lower_sf_names.pop(i) for i in rgb_field_names])
-
-        if cfg.keep_normals:
-            if normal_field_names := cls._get_normals_field_names(set(lower_sf_names.keys())):
-                pcd.normals = cls.extract_normals(las.points.array, len(pcd),
-                                                    [lower_sf_names[name] for name in normal_field_names])
-                cls.remove_field_names(scalar_field_names, *[lower_sf_names.pop(i) for i in normal_field_names])
-
-        if cfg.keep_intensity:
-            if intensity_field_names := cls._get_intensity_field_names(set(lower_sf_names.values())):
-                pcd.intensity = cls.extract_intensity(las.points.array)
-                cls.remove_field_names(scalar_field_names, *[lower_sf_names.pop(i) for i in intensity_field_names])
-
-        if cfg.keep_extra_scalar_fields:
-            field_names = tuple(set(cfg.keep_extra_scalar_fields) & set(lower_sf_names))
-        else:
-            field_names = tuple(scalar_field_names)
-
-        lower_sf_names = {k: lower_sf_names[k] for k in field_names}
-
-        for lower_name, name in lower_sf_names.items():
-            if isinstance(las[name], np.ndarray):
-                pcd.scalar_fields[lower_name] = ScalarField(las[name], name=lower_name)
-
-            elif isinstance(las[name], laspy.point.dims.SubFieldView):
-                if name in [
-                    "scan_direction_flag",
-                    "edge_of_flight_line",
-                    "synthetic",
-                    "key_point",
-                    "withheld",
-                    "overlap",
-                ]:
-                    pcd.scalar_fields[lower_name] = BooleanScalarField(las[name].array.astype(np.bool_), name=lower_name)
-                else:
-                    pcd.scalar_fields[lower_name] = ScalarField(las[name].array, name=lower_name)
-
-            else:
-                raise NotImplementedError
+        cls.extract_scalar_fields(pcd, data, data.size, field_names)
 
         logger.info(f"Successfully loaded LAZ file: {path}")
         return pcd
 
     @classmethod
-    def save(cls, /, pcd: PointCloudData, path: str | Path, **config: Unpack[_LASSaveConfigType]) -> None:
-        cfg = SaveConfig(**config)
+    def save(cls,
+             path: str | Path,
+             pcd: PointCloudData,
+             /,
+             scalar_fields: Optional[list[str]] = None,
+             add_prefix: bool = True,
+             prefix: str = 'scalar_',
+             revert_sf_types: bool = False,
+             **config) -> None:
 
+        logger.info(f"Attempting to write to LAS/LAZ file: {path}")
+
+        # TODO should this be linked to the optimal shift?
         offsets: npt.NDArray[np.float32|np.float64] = pcd.min(axis=0)
         scales: npt.NDArray[np.float32|np.float64] = np.array([0.0001, 0.0001, 0.0001])
 
+        if scalar_fields is None:
+            scalar_fields = list(pcd.scalar_fields.keys())
+        elif not isinstance(scalar_fields, list):
+            scalar_fields = list(scalar_fields)
+
+        # Can use the check on the base name as named scalar_fields should match the pcd object names
+        if RGB_NAMES.base in scalar_fields:
+            index = scalar_fields.index(RGB_NAMES.base)
+            scalar_fields = scalar_fields[:index] + list(RGB_NAMES.char) + scalar_fields[index+1:]
+
+        if NORMAL_NAMES.base in scalar_fields:
+            index = scalar_fields.index(NORMAL_NAMES.base)
+            scalar_fields = scalar_fields[:index] + list(NORMAL_NAMES.char) + scalar_fields[index+1:]
+
+        # Set the base coordinates of the LAS point cloud as well as offsets and scales
         las = laspy.create()
         las.header.offsets = offsets
         las.header.scales = scales
@@ -99,27 +79,31 @@ class LasHandler(AbstractIOHandler):
         las.Y = (pcd.y - offsets[1]) / scales[1]
         las.Z = (pcd.z - offsets[2]) / scales[2]
 
-        if cfg.keep_intensity and pcd.intensity:
+        # RGB values
+        if (rgb_fields := _get_field_names(scalar_fields, RGB_NAMES)) and pcd.rgb:
+            for field in rgb_fields:
+                index = RGB_NAMES.get_position(field)
+                setattr(las, RGB_NAMES.words[index], getattr(pcd.rgb, RGB_NAMES.char[index]))
+
+        # Intensities
+        if (intensity_fields := set(scalar_fields).intersection(INTENSITY_NAMES.all)) and pcd.intensity:
             las.intensity = pcd.intensity
 
-        if cfg.keep_rgb and pcd.rgb:
-            las.red = pcd.rgb.r
-            las.green = pcd.rgb.g
-            las.blue = pcd.rgb.b
+        # Clear the previous sfs used
+        for name in (XYZ_NAMES.char + tuple(rgb_fields) + tuple(intensity_fields)):
+            if name in scalar_fields:
+                scalar_fields.remove(name)
 
-        if cfg.keep_normals and pcd.normals:
-            for val in ('nx', 'ny', 'nz'):
-                las.add_extra_dim(laspy.ExtraBytesParams(val, pcd.normals.dtype))
-                setattr(las, val, getattr(pcd.normals, val))
+        # Remaining fields including normals as these are extra dimensions
+        for field in scalar_fields:
+            value = np.asarray(pcd.scalar_fields[field])
 
-        if cfg.keep_reflectance and pcd.reflectance:
-            las.reflectance = pcd.reflectance
+            if not hasattr(las, field):
+                las.add_extra_dim(laspy.ExtraBytesParams(field, value.dtype))
 
-        if cfg.keep_extra_scalar_fields:
-            extra_fields = cfg.keep_extra_scalar_fields & pcd.scalar_fields.keys()
-            for field in extra_fields:
-                las.add_extra_dim(laspy.ExtraBytesParams(field, pcd.scalar_fields[field].dtype))
-                setattr(las, field, pcd.scalar_fields[field])
+            setattr(las, field, value)
 
         las.write(path)
+
+        logger.info(f"Successfully wrote to  LAS/LAZ file: {path}")
 

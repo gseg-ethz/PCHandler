@@ -7,6 +7,7 @@ import numpy as np
 from pchandler.v2.geometry import PointCloudData
 from pchandler.v2.data_io import Las as LAS
 
+base_directory = Path(__file__).resolve().parent
 
 @pytest.fixture(scope='function')
 def pcd():
@@ -20,7 +21,8 @@ def pcd():
 
 
 class TestLasHandler:
-    rgb_file = Path(r"D:\Python\pchandler\tests\data\test_target_intensity_normals_rgb.las")
+    rgb_file = base_directory / ".." / "data" / "test_target_intensity_normals_rgb.las"
+    out_path = base_directory / ".." / "data" / "test_target_rgb_temp.las"
 
     def test_load(self):
         pcd = LAS.load(self.rgb_file)
@@ -30,10 +32,9 @@ class TestLasHandler:
         assert 'rgb' in pcd.scalar_fields
 
     def test_save(self):
-        out_path = Path(r"D:\Python\pchandler\tests\data\test_target_rgb_temp.las")
         original_pcd = LAS.load(self.rgb_file)
-        LAS.save(original_pcd, out_path)
-        new_pcd = LAS.load(out_path)
+        LAS.save(self.out_path,original_pcd)
+        new_pcd = LAS.load(self.out_path)
 
         assert np.allclose(original_pcd.xyz, new_pcd.xyz, atol=0.0001)
         assert np.allclose(original_pcd.normals, new_pcd.normals, atol=0.0001)

@@ -250,9 +250,10 @@ class TestNamedFieldPropertyGetters:
 
     def test_normals_setter(self, empty_sfm):
         array = np.random.rand(N, 3).astype(np.float32)
+        array = array / np.linalg.norm(array, axis=1).reshape(-1,1)
         empty_sfm.normals = array
         assert hasattr(empty_sfm, "normals")
-        assert np.all(empty_sfm.normals == array)
+        assert np.allclose(empty_sfm.normals, array)
         assert empty_sfm.normals.dtype == np.float32
 
     def test_intensity_setter(self, empty_sfm):
@@ -354,7 +355,7 @@ class TestNamedFieldHandlers:
 
         for sf in (nxnynz, normal):
             base_sfm.add_field(sf)
-            assert np.all(sf == base_sfm.normals)
+            assert np.allclose(sf, base_sfm.normals)
 
 
 class TestSampleExtractReduce:
@@ -365,7 +366,7 @@ class TestSampleExtractReduce:
         assert len(sample.rgb) == 10
         assert len(sample) == len(base_sfm)
         assert np.all(sample.rgb == base_sfm.rgb[index])
-        assert np.all(sample.normals == base_sfm.normals[index])
+        assert np.allclose(sample.normals, base_sfm.normals[index])
 
     def test_reduce(self, base_sfm):
         index = slice(0, 10, 1)
