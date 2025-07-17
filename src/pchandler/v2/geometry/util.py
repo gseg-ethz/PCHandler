@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Self, Iterable, NamedTuple
+from typing import TYPE_CHECKING, Self, Iterable, NamedTuple, Optional
 
 import alphashape
 import numpy as np
@@ -93,10 +93,12 @@ class MinMaxPoints(NamedTuple):
     maximum: Vector_3_T
 
     @classmethod
-    def from_points(cls, points: Array_Nx3_T) -> Self:
+    def from_points(cls, points: Array_Nx3_T, already_applied_shift_vec: Optional[Vector_3_T] = None) -> Self:
+        if already_applied_shift_vec is None:
+            already_applied_shift_vec = np.zeros((3,))
         min_point = np.min(points, axis=0)
         max_point = np.max(points, axis=0)
-        return cls(min_point, max_point)
+        return cls(min_point + already_applied_shift_vec, max_point + already_applied_shift_vec)
 
     @classmethod
     def from_minmax_points(cls, minmax_points: Iterable[Self]) -> Self:

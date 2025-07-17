@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+import uuid
 import weakref
 from typing import TYPE_CHECKING, ClassVar, Self, Optional
 
@@ -9,6 +10,7 @@ from numpy.typing import NDArray
 
 if TYPE_CHECKING:
     from .core import PointCloudData
+    from .core import CartesianCoordinates
 
 from .util import MinMaxPoints
 from ..base_types import Vector_3_T, Array_Nx3_T
@@ -26,60 +28,100 @@ class SingletonMeta(type):
 
 
 class OptimizedShiftManager(metaclass=SingletonMeta):
-    _optimized_shifts: weakref.WeakSet[OptimizedShift]
+    _by_uuid: weakref.WeakValueDictionary[uuid.UUID, OptimizedShift]
     _maximum_decimal_places: int
+    FLOAT32_DECIMAL_PRECISION: int = 7
 
     class ShiftNotFeasibleError(Exception):
         pass
 
-    def __init__(self, maximum_decimal_places: int = 4) -> None:
-        self._optimized_shifts = weakref.WeakSet()
-        self._maximum_decimal_places = maximum_decimal_places
+    class ShiftUUIDAlreadyTaken(Exception):
+        pass
 
-    def register(self, shift: OptimizedShift) -> None:
-        self._optimized_shifts.add(shift)
+    class ShiftUUIDNotFound(Exception):
+        pass
+
+    def __init__(self, minimum_decimal_places: int = 3) -> None:
+        self._minimum_decimal_places = minimum_decimal_places
+        self._by_uuid = weakref.WeakValueDictionary()
+
+    def register_shift(self, shift: OptimizedShift) -> None:
+        if shift.uuid in self._by_uuid and id(shift) is not id(self._by_uuid[shift.uuid]):
+            raise OptimizedShiftManager.ShiftUUIDAlreadyTaken()
+
+        self._by_uuid[shift.uuid] = shift
+
+    def register_with(self, coordinates: CartesianCoordinates, shift: OptimizedShift | uuid.UUID) -> OptimizedShift:
+        if isinstance(shift, uuid.UUID):
+            try:
+                shift = self._by_uuid[shift]
+            except KeyError:
+                raise OptimizedShiftManager.ShiftUUIDNotFound()
+        while True:
+            try:
+                shift.register(coordinates)
+                return shift
+            except OptimizedShiftManager.ShiftNotFeasibleError:
+                if len(shift) >= 1: # Allow for one more attempt on a fresh OptimizedShift
+                    shift = OptimizedShift()
+                else:
+                    break
+        raise OptimizedShiftManager.ShiftNotFeasibleError()
 
     def __len__(self):
-        return len(self._optimized_shifts)
-
-    @staticmethod
-    def new_shift() -> OptimizedShift:
-        return OptimizedShift()
+        return len(self._by_uuid)
 
     @property
     def all_shifts(self) -> list[OptimizedShift]:
-        return list(self._optimized_shifts)
+        return list(self._by_uuid.values())
 
     @property
-    def maximum_decimal_places(self) -> int:
-        return self._maximum_decimal_places
+    def minimum_decimal_places(self) -> int:
+        return self._minimum_decimal_places
 
-    @maximum_decimal_places.setter
-    def maximum_decimal_places(self, maximum_decimal_places: int) -> None:
+    @minimum_decimal_places.setter
+    def minimum_decimal_places(self, maximum_decimal_places: int) -> None:
         pass # Todo: Should probably check all registered GlobalShifts and their pcds if they conform to new limit
 
-    def is_shift_needed(self, values: Array_Nx3_T | PointCloudData) -> bool:
-        return np.any(np.abs(values) >= 10 ** self._maximum_decimal_places)
+    @property
+    def maximum_number_representable(self) -> float:
+        return 10**(self.FLOAT32_DECIMAL_PRECISION - self.minimum_decimal_places)
 
-    def is_shift_possible(self, values: Array_Nx3_T | PointCloudData) -> bool:
-        return np.all(np.subtract(np.max(values, axis=0), np.min(values, axis=0)) < 10 ** self._maximum_decimal_places)
+    def get_by_uuid(self, u: uuid.UUID) -> Optional[OptimizedShift]:
+        return self._by_uuid.get(u)
+
+    def is_shift_needed(self, values: Array_Nx3_T) -> bool:
+        return np.any(np.abs(values) >= self.maximum_number_representable)
+
+    def is_shift_possible(self, values: Array_Nx3_T) -> bool:
+        return np.all(np.subtract(np.max(values, axis=0), np.min(values, axis=0)) < self.maximum_number_representable)
 
 class OptimizedShift:
+    _uuid: uuid.UUID
+    _shift: Vector_3_T
+    _member_coordinate_sets: weakref.WeakSet[CartesianCoordinates]
+    _member_coordinate_sets_unshifted_bbox: weakref.WeakKeyDictionary[CartesianCoordinates, MinMaxPoints]
+
     @validate_variables
-    def __init__(self, optimal_shift: Optional[Vector_3_T] = None) -> None:
-        self._shift = np.zeros(3).astype(np.float64) if optimal_shift is None else optimal_shift
-        self._member_pcds = weakref.WeakSet()
-        self._member_pcds_unshifted_bbox = weakref.WeakKeyDictionary()
-        OptimizedShiftManager().register(self)
+    def __init__(self, shift_vec: Optional[Vector_3_T] = None) -> None:
+        self._uuid = uuid.uuid4()
+        self._shift = np.zeros((3,), dtype=np.float64) if shift_vec is None else shift_vec
+        self._member_coordinate_sets = weakref.WeakSet()
+        self._member_coordinate_sets_unshifted_bbox = weakref.WeakKeyDictionary()
+        OptimizedShiftManager().register_shift(self)
 
     def __len__(self):
-        return len(self._member_pcds)
+        return len(self._member_coordinate_sets)
+
+    @property
+    def uuid(self):
+        return self._uuid
 
     @property
     def value(self) -> NDArray[np.float64]:
         return self._shift
 
-    def register(self, pcd: PointCloudData, points: Array_Nx3_T) -> Optional[Self]:
+    def register(self, coordinate_set: CartesianCoordinates) -> None:
         """
         Try to add `pcd` (with its point‐cloud `points`) into this shift.
         Returns self if successful;
@@ -87,94 +129,88 @@ class OptimizedShift:
         or None if even a singleton can’t fit.
         """
 
-        if self._can_add_without_change(points):
-            return self._add_member(pcd, points)
-
+        if self._can_add_without_change(coordinate_set.arr):
+            self._add_member(coordinate_set)
+            return
         try:
-            return self._expand_and_add(pcd, points)
+            self._expand_and_add(coordinate_set)
+            return
         except OptimizedShiftManager.ShiftNotFeasibleError:
-            return self._restart_or_fail(pcd, points)
+            raise OptimizedShiftManager.ShiftNotFeasibleError()
+
+    def check_addibility(self, points: Array_Nx3_T) -> bool:
+        try:
+            _ = self._compute_new_shift(points)
+            return True
+        except OptimizedShiftManager.ShiftNotFeasibleError:
+            return False
+
 
     def _can_add_without_change(self, pts: Array_Nx3_T) -> bool:
         shifted = np.subtract(pts, self._shift)
         return not OptimizedShiftManager().is_shift_needed(shifted)
 
-    def _add_member(self, pcd, pts):
+    def _add_member(self, coordinate_set: CartesianCoordinates) -> None:
         """Add the point‐cloud under the existing shift."""
-        self._member_pcds.add(pcd)
-        self._member_pcds_unshifted_bbox[pcd] = MinMaxPoints.from_points(pts)
-        return self
+        self._member_coordinate_sets.add(coordinate_set)
+        self._member_coordinate_sets_unshifted_bbox[coordinate_set] = MinMaxPoints.from_points(coordinate_set.arr)
 
-    def _expand_and_add(self, pcd, pts):
+    def _expand_and_add(self, coordinate_set: CartesianCoordinates) -> None:
         """
         Compute a new optimal shift to cover existing + this pts,
         apply it and then add the new pcd.
         """
-        new_shift = self._compute_new_shift(pts)
+        new_shift = self._compute_new_shift(coordinate_set.arr)
         self._apply_shift_delta(new_shift)
         self._shift = new_shift
-        return self._add_member(pcd, pts)
+        self._add_member(coordinate_set)
 
-    def _compute_new_shift(self, pts: Array_Nx3_T) -> Vector_3_T:
+    def _compute_new_shift(self, points: Array_Nx3_T) -> Vector_3_T:
         # build up the combined bounding‐box
-        all_bboxes = list(self._member_pcds_unshifted_bbox.values())
-        all_bboxes.append(MinMaxPoints.from_points(pts))
+        all_bboxes = list(self._member_coordinate_sets_unshifted_bbox.values())
+        all_bboxes.append(MinMaxPoints.from_points(points))
         combined = MinMaxPoints.from_minmax_points(all_bboxes)
 
         if not OptimizedShiftManager().is_shift_possible(np.vstack((combined.minimum, combined.maximum))):
             raise OptimizedShiftManager.ShiftNotFeasibleError()
 
         # round the center to keep ints
-        return Vector_3_T(np.round(combined.central_point, decimals=-OptimizedShiftManager().maximum_decimal_places)-1)
+        return np.round(combined.central_point, decimals=-2)
 
-    def _apply_shift_delta(self, new_shift):
-        """Move every registered PCD by the change from old→new shift."""
+    def _apply_shift_delta(self, new_shift: Vector_3_T):
+        """Move every registered coordinate set by the change from old to new shift."""
         delta = self._shift - new_shift
-        for pcd in self._member_pcds:
+        for pcd in self._member_coordinate_sets:
             pcd.update_shift(delta)
 
-    def _restart_or_fail(self, pcd, pts):
-        if self._member_pcds:
-            # start a new group with this single pcd
-            return OptimizedShift().register(pcd, pts)
-        return None
 
-    # def register(self, pcd: "PointCloudData", values: Array_Nx3_T) -> Optional[Self]:
-    #     if self.does_current_shift_fit(values):
-    #         self._member_pcds.add(pcd)
-    #         self._member_pcds_unshifted_bbox[pcd] = OptimizedShift.MinMaxPoints.from_points(values)
-    #         return self
-    #     try:
-    #         new_shift = self.calculate_new_shift(values)
-    #         self.inform_members_change(new_shift)
-    #         self._optimal_shift = new_shift
-    #         self._member_pcds.add(pcd)
-    #         self._member_pcds_unshifted_bbox[pcd] = OptimizedShift.MinMaxPoints.from_points(values)
-    #         return self
-    #     except OptimizedShiftManager.ShiftNotFeasibleError:
-    #         # In this case the new pcd can't be combined with the already registered pcds
-    #         if len(self._member_pcds) > 0:
-    #             new_optimal_shift = OptimizedShift()
-    #             new_shift = new_optimal_shift.register(pcd, values)
-    #             return new_shift
-    #         else:
-    #             return None
-    #
-    # def inform_members_change(self, new_shift: Vector_3_T) -> None:
-    #     shift_delta = self._optimal_shift - new_shift
-    #     for pcd in self._member_pcds:
-    #         pcd.update_shift(shift_delta)
-    #
-    # def does_current_shift_fit(self, values: Array_Nx3_T | NDArray[np.floating]) -> bool:
-    #     return not bool(OptimizedShiftManager().is_shift_needed(np.subtract(values, self._optimal_shift)))
-    #
-    # def calculate_new_shift(self, values: Array_Nx3_T| NDArray[np.floating]) -> Vector_3_T:
-    #     minmax = OptimizedShift.MinMaxPoints.from_points(values)
-    #     minmax_points = [mmp for mmp in self._member_pcds_unshifted_bbox.values()]
-    #     minmax_points.append(minmax)
-    #     new_bbox = OptimizedShift.MinMaxPoints.from_minmax_points(minmax_points)
-    #
-    #     if not OptimizedShiftManager().is_shift_possible(np.vstack((new_bbox.minimum, new_bbox.maximum))):
-    #         raise OptimizedShiftManager().ShiftNotFeasibleError()
-    #
-    #     return np.round(new_bbox.central_point)
+    def __reduce__(self):
+        return self._reconstruct, (self._uuid, self._shift)
+
+    @staticmethod
+    def _reconstruct(u: uuid.UUID, shift_vec: Vector_3_T) -> "OptimizedShift":
+        mgr = OptimizedShiftManager()
+        existing = mgr.get_by_uuid(u)
+        if existing is not None and np.allclose(existing.value, shift_vec):
+            return existing
+
+        new = object.__new__(OptimizedShift)
+        new._uuid = u
+        new._shift = shift_vec
+        new._member_coordinate_sets = weakref.WeakSet()
+        new._member_coordinate_sets_unshifted_bbox = weakref.WeakKeyDictionary()
+        mgr.register_shift(new)
+        return new
+
+    def reattach_member(self, coordinate_set: CartesianCoordinates) -> None:
+        """
+       Register `pcd` under this shift, *without* changing any existing member PCDs.
+       `unshifted_pts` should be the original float64 points before shifting.
+       """
+        # add to the weakref set
+        self._member_coordinate_sets.add(coordinate_set)
+        # store its unshifted bounding box
+        self._member_coordinate_sets_unshifted_bbox[coordinate_set] = (
+            MinMaxPoints.from_points(coordinate_set.xyz, already_applied_shift_vec = self._shift)
+        )
+

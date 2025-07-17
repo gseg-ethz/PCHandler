@@ -3,9 +3,10 @@ import pytest
 import numpy as np
 import math
 
-from src.pchandler.v2.geometry.core import PointCloudData
-from src.pchandler.v2.geometry.fov import FoV, _OldFoV, FoVTree, _OldFoVTree
-from src.pchandler.v2.constants import PI
+from pchandler.v2.spherical.angle import Angle, AngleArray
+from pchandler.v2.geometry.core import PointCloudData
+from pchandler.v2.geometry.fov import FoV, _OldFoV, FoVTree, _OldFoVTree
+from pchandler.v2.constants import PI, EPS
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -21,21 +22,32 @@ class TestFov:
                      'elevation_min', 'elevation_max'):
 
             assert hasattr(fov, name)
-            assert isinstance(getattr(fov, name), (float, int, np.ndarray))
+            assert isinstance(getattr(fov, name), Angle)
 
         assert fov.right == 1.23
         assert fov.top == 0.45
         assert fov.left == -0.12
         assert fov.bottom == 2.78
 
+    def test_instantiation(self):
+        fov = FoV(left=Angle(-0.12), right=Angle(1.23), top=Angle(0.45), bottom=Angle(2.78))
+        assert fov.right == 1.23
+        assert fov.top == 0.45
+        assert fov.left == -0.12
+        assert fov.bottom == 2.78
+
+        fov = FoV(left="0deg", right="90deg", top="0rad", bottom="200gon")
+
+        assert math.isclose(fov.left, Angle(0))
+        assert math.isclose(fov.right, Angle(np.pi/2))
+        assert math.isclose(fov.top, Angle(0))
+        assert math.isclose(fov.bottom, Angle(np.pi))
+
     def test_iter(self):
         fov = FoV(left = -0.12, top = 0.45, right = 1.23, bottom = 2.78)
-        for func in (list, tuple, np.asarray):
+        for func in (list, tuple):
             vals = func(fov)
-            if func == np.asarray:
-                isinstance(vals, np.ndarray)
-            else:
-                isinstance(vals, func)
+            assert isinstance(vals, func)
 
             for i, expected_value in enumerate((-0.12, 0.45, 1.23, 2.78)):
                 assert vals[i] == expected_value
@@ -81,11 +93,11 @@ class TestFov:
         assert math.isclose(center[1], 1.4)
 
     def test_from_center_with_extent(self):
-        fov = FoV.from_center_with_extent(centerpoint=(0.2, 0.2), extent=(0.5, 0.9))
+        fov = FoV.from_center_with_extent(centerpoint=(0.2, 1.0), extent=(0.5, 0.9))
         assert math.isclose(fov.left, -0.05)
         assert math.isclose(fov.right, 0.45)
-        assert math.isclose(fov.bottom, 0.65)
-        assert math.isclose(fov.top, -0.25)
+        assert math.isclose(fov.bottom, 1.45)
+        assert math.isclose(fov.top, 0.55)
 
     def test_union(self):
 
@@ -114,41 +126,45 @@ class TestFov:
         assert math.isclose(intersect.top, 0.4)
         assert math.isclose(intersect.bottom, 2.2)
 
-    def test_ratio(self):
-        fov = FoV(top=0.4, bottom=2.4, right=1.3, left=0.3)
-        ratio = fov.ratio()
-        assert isinstance(ratio, (float, int))
-        assert math.isclose(ratio, 0.5)
-
     def test_repr(self):
         fov = FoV(top=0.4, bottom=2.4, right=1.3, left=0.3)
         assert isinstance(repr(fov), str)
 
+    def test_ratio(self):
+        fov = FoV(top=0, bottom=1/3, left=0, right=1)
+        ratio = fov.ratio()
+        assert isinstance(ratio, (float, int))
+        assert math.isclose(ratio, 3)
+
     def test_extend_to_ratio(self):
-        fov = FoV(top=0.4, bottom=2.4, right=1.3, left=0.3)
-        ref_ratio = 1
+        n = 10_000
+        np.random.seed(42)
+        top_samples = np.random.uniform(low=0.0, high=np.pi/2, size=n)
+        bottom_samples = np.random.uniform(low=np.pi/2, high=np.pi, size=n)
+        left_samples = np.random.uniform(low=-np.pi, high=0, size=n)
+        right_samples = np.random.uniform(low=0, high=np.pi, size=n)
+        ratios = np.random.randint(low=1, high=10, size=n) / np.random.randint(low=1, high=10, size=n)
+        angle_samples = zip(left_samples,right_samples,top_samples,bottom_samples, ratios)
 
-        fov2 = fov.extend_to_ratio(ref_ratio)
-        assert math.isclose(fov2.top, 0.4)
-        assert math.isclose(fov2.bottom, 2.4)
 
-        fov = FoV(top=0.0, bottom=0.5, right=0.5, left=0.0)
-        ref_ratio = 2
+        for angles in angle_samples:
+            fov = FoV(left=angles[0], right=angles[1], top=angles[2], bottom=angles[3])
+            fov_extended = fov.extend_to_ratio(angles[4])
 
-        fov2 = fov.extend_to_ratio(ref_ratio)
-        assert math.isclose(fov2.top, 0.0)
-        assert math.isclose(fov2.bottom, 0.5)
-        assert math.isclose(fov2.right, 1.0)
-        assert math.isclose(fov2.left, 0.0)
+            assert math.isclose(fov_extended.ratio(), angles[4])
+            assert fov_extended.width() - fov.width() >= -EPS and fov_extended.height() - fov.height() >= -EPS
+
+
 
     def test_split(self):
-        fov = FoV(top=0.4, bottom=2.4, right=1.3, left=0.3)
+        fov = FoV(top="20deg", bottom=2.4, right=1.3, left="40gon")
         splits = fov.split((2, 4))
 
         assert len(splits) == 8
+        # assert np.allclose([split.height() for split in splits])
         for i, split in enumerate(splits):
-            assert math.isclose(split.width(), 0.5)
-            assert math.isclose(split.height(), 0.5)
+            assert math.isclose(split.width(), (fov.right - fov.left)/2)
+            assert math.isclose(split.height(), (fov.bottom - fov.top)/4)
             if i > 0:
                 if i == 4:
                     assert split.right > splits[i-1].right
@@ -165,9 +181,9 @@ class TestFov:
         assert len(tiles) == 6
 
     def test_tile(self):
-        fov = FoV(top=0.4, bottom=2.4, right=1.3, left=0.3)
+        fov = FoV(top="0.4rad", bottom=2.4, right=1.3, left=0.3)
 
-        fov_by_extent = FoV.from_center_with_extent((0, 0), (0.2, 0.2))
+        fov_by_extent = FoV(left="0deg", top="0gon", right=0.2, bottom=0.2)
 
         tiles = fov.tile(fov_by_extent)
 

@@ -75,7 +75,6 @@ class AbstractIOHandler(ABC):
     def find_pcds_in_directory(cls, directory_path: str|Path, include_subdirectories: bool = True) -> list[Path]:
         return find_pcd_in_directory(Path(directory_path), cls.FORMATS, include_subdirectories)
 
-
     @classmethod
     @abstractmethod
     def load(cls, /,

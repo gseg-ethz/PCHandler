@@ -80,8 +80,8 @@ class TestOptimizedShift:
         assert getattr(opt_shift, attr) is not None
 
     def test_initialisation(self, opt_shift):
-        assert len(opt_shift._member_pcds) == 0
-        assert len(opt_shift._member_pcds_unshifted_bbox) == 0
+        assert len(opt_shift._member_coordinate_sets) == 0
+        assert len(opt_shift._member_coordinate_sets_unshifted_bbox) == 0
         assert np.all(opt_shift.value == [0, 0, 0])
         assert len(OptimizedShiftManager()) == 1
         assert opt_shift in OptimizedShiftManager().all_shifts
@@ -105,7 +105,7 @@ class TestOptimizedShift:
         assert pcd2.xyz is not pcd3.xyz
         assert pcd.optimized_shift is not pcd3.optimized_shift
         assert pcd2.optimized_shift is not pcd3.optimized_shift
-        assert len(pcd3.optimized_shift._member_pcds) == len(pcd2.optimized_shift._member_pcds)
+        assert len(pcd3.optimized_shift._member_coordinate_sets) == len(pcd2.optimized_shift._member_coordinate_sets)
         assert len(pcd3.optimized_shift) == 1
 
         pcds = []
@@ -116,7 +116,7 @@ class TestOptimizedShift:
             # Main logic that once registered, the pcd item should be optimized
             assert pcds[i].optimized_shift is not None
             assert len(opt_shift) == i+1
-            assert pcds[i] in set(opt_shift._member_pcds)
+            assert pcds[i] in set(opt_shift._member_coordinate_sets)
 
             assert xyz_original is not pcds[i].xyz
             if i > 0:
@@ -137,8 +137,8 @@ class TestOptimizedShift:
             opt_shift._add_member(item, item.xyz)
 
         assert len(opt_shift) == 3
-        assert len(opt_shift._member_pcds) == 3
-        assert len(opt_shift._member_pcds_unshifted_bbox) == 3
+        assert len(opt_shift._member_coordinate_sets) == 3
+        assert len(opt_shift._member_coordinate_sets_unshifted_bbox) == 3
 
     # def test_expand_and_add_method(self, opt_shift, coords_shift):
     #     pcd = PointCloudData(coords_shift, optimized_shift=opt_shift)

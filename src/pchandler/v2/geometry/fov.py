@@ -70,30 +70,39 @@ import copy
 import logging
 import math
 import warnings
+import inspect
+import functools
+
 
 from dataclasses import dataclass, field
 from fractions import Fraction
 from itertools import chain
-from typing import Iterable, Optional, cast, Self, Annotated, NamedTuple, TYPE_CHECKING, Any
+from functools import partial
+from typing import (
+    Iterable, Optional, cast, Self, Annotated, NamedTuple, TYPE_CHECKING, Any, Callable, Union,
+    get_type_hints, get_origin, get_args, ParamSpec, TypeVar, Concatenate, overload, Generator
+)
 
 import numpy as np
 import numpy.typing as npt
-from pydantic import Field, NonNegativeFloat, PositiveFloat, validate_call
+from numba.core.extending import overload
+from pydantic import Field, NonNegativeFloat, PositiveFloat, validate_call, BaseModel, field_validator, ConfigDict, \
+    model_validator
+from pydantic.fields import FieldInfo
 
 from ..constants import EPS, TWO_PI, PI, HALF_PI, validate_variables, DEFAULT_CONFIG
 from ..util import AngleUnit, convert_angles
+from ..spherical.angle import Angle, AngleArray
 
 if TYPE_CHECKING:
     from .coordinates import SphericalCoordinates, CartesianCoordinates
+    from ..base_types import Vector_3_T
 
 logger = logging.getLogger(__name__.split(".")[0])
 
-HzAngleT = Annotated[float, Field(ge=-PI, le=PI)]
-MaxWidthT = Annotated[float, Field(ge=0, le=TWO_PI)]
-VAngleT = Annotated[float, Field(ge=0, le=PI)]
 
 
-class FoV(NamedTuple):
+class FoV(BaseModel):
     """
     Field of View is defined by the spherical angles from the scan origin coordinate system (SOCS).
 
@@ -103,12 +112,85 @@ class FoV(NamedTuple):
     This is designed to be more compatible with spherical angle projections to image coordinate systems.
 
     """
-    left: HzAngleT
-    top: VAngleT
-    right: HzAngleT
-    bottom: VAngleT
+    model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True)
 
-    def __iter__(self) -> Iterable[HzAngleT | VAngleT]:
+    left: Angle = Field(..., description="Hz ∈ [–π, +π]")
+    right: Angle = Field(..., description="Hz ∈ [–π, +π]")
+    top: Angle = Field(..., description="V ∈ [0, +π]")
+    bottom: Angle = Field(..., description="V ∈ [0, +π]")
+
+    @overload
+    def __init__(
+        self,
+        *,
+        left: Union[Angle, float, str],
+        right: Union[Angle, float, str],
+        top: Union[Angle, float, str],
+        bottom: Union[Angle, float, str],
+    ) -> None: ...  # pragma: no cover
+
+    def __init__(self, **data):
+        super().__init__(**data)
+
+    @classmethod
+    def construct_without_bounds_check(
+            cls,
+            *,
+            left: Union[Angle, float, str],
+            right: Union[Angle, float, str],
+            top: Union[Angle, float, str],
+            bottom: Union[Angle, float, str],
+    ) -> Self:
+        left_a = Angle.parse(left)
+        right_a = Angle.parse(right)
+        top_a = Angle.parse(top)
+        bottom_a = Angle.parse(bottom)
+        new_instance = cls.model_construct(
+            _fields_set={'left', 'right', 'top', 'bottom'},
+            left=left_a,
+            right=right_a,
+            top=top_a,
+            bottom=bottom_a,
+        )
+        return new_instance
+
+
+    @field_validator("left", "right", mode="after")
+    def _check_hz(cls, hz: Angle) -> Angle:
+        if not isinstance(hz, Angle):
+            raise TypeError("left/right must be an Angle or float")
+        if not -np.pi-EPS <= hz.internal_value <= np.pi+EPS:
+            raise ValueError(f"Horizontal angle {hz.radians} not in [-π, π]")
+        return hz
+
+    @field_validator("top", mode="after")
+    def _check_top(cls, v: Angle, info) -> Angle:
+        if not isinstance(v, Angle):
+            raise TypeError("Top must be an Angle or float")
+        if not 0-EPS <= v.internal_value <= np.pi+EPS:
+            raise ValueError(f"Top angle {v.radians} not in [0, π]")
+        bottom = info.data.get("bottom")
+        if bottom is not None and v > bottom:
+            raise ValueError(f"Top ({v.radians}) must be smaller than bottom ({bottom.radians})")
+        return v
+
+    @field_validator("bottom", mode="after")
+    def _check_top(cls, v: Angle, info) -> Angle:
+        if not isinstance(v, Angle):
+            raise TypeError("Bottom must be an Angle or float")
+        if not 0-EPS <= v.internal_value <= np.pi+EPS:
+            raise ValueError(f"Bottom angle {v.radians} not in [0, π]")
+        top = info.data.get("top")
+        if top is not None and v < top:
+            raise ValueError(f"Bottom ({v.radians}) must be larger than top ({top.radians})")
+        return v
+
+    # TODO: Write tests
+    @classmethod
+    def from_angles(cls, horizontal: Vector_3_T | AngleArray, vertical: Vector_3_T | AngleArray) -> Self:
+        return cls(left=horizontal.min(), top=vertical.min(), right=horizontal.max(), bottom=vertical.max())
+
+    def __iter__(self) -> Generator[Angle]:
         yield self.left
         yield self.top
         yield self.right
@@ -117,25 +199,22 @@ class FoV(NamedTuple):
     # DISCUSS Would a change to left/right create a clash with previous logic based on min/max values -
     #  especially where it wraps at TWO_PI?
     @property
-    def crosses_pi(self):
+    def crosses_pi(self) -> bool:
         return self.left > self.right
 
-    @validate_variables
-    def width(self) -> MaxWidthT:
+
+    def width(self) -> Angle:
         if self.crosses_pi:
             return TWO_PI - (self.left - self.right)
         return self.right - self.left
 
-    @validate_variables
-    def height(self) -> VAngleT:
+    def height(self) -> Angle:
         return self.bottom - self.top
 
-    @validate_variables
-    def extent(self) -> tuple[MaxWidthT, VAngleT]:
+    def extent(self) -> tuple[Angle, Angle]:
         return self.width(), self.height()
 
-    @validate_variables
-    def center(self) -> tuple[HzAngleT, VAngleT]:
+    def center(self) -> tuple[Angle, Angle]:
         horizontal_center = (self.left + self.right) / 2
         elevation_center = (self.top + self.bottom) / 2
         if self.crosses_pi:
@@ -143,8 +222,8 @@ class FoV(NamedTuple):
         return horizontal_center, elevation_center
 
     @classmethod
-    @validate_call(config=DEFAULT_CONFIG)
-    def from_center_with_extent(cls, centerpoint: tuple[HzAngleT, VAngleT], extent: tuple[MaxWidthT, VAngleT]) -> Self:
+    @validate_call(config=DEFAULT_CONFIG | {"validate_return_type": False})
+    def from_center_with_extent(cls, centerpoint: tuple[Angle, Angle], extent: tuple[Angle, Angle]) -> Self:
         """
         Creates an FoV instance from a center point and angular extent.
 
@@ -160,12 +239,33 @@ class FoV(NamedTuple):
         FoV
             A new FoV instance.
         """
-        fov_min = np.array(centerpoint) - np.array(extent) / 2
-        fov_max = np.array(centerpoint) + np.array(extent) / 2
-        return cls(left=float(fov_min[0]),
-                   right=float(fov_max[0]),
-                   top=float(fov_min[1]),
-                   bottom=float(fov_max[1]))
+        # hz_min = centerpoint[0] - extent[0] / 2
+        # hz_max = centerpoint[0] + extent[0] / 2
+        # v_min = centerpoint[1] - extent[1] / 2
+        """
+        Creates an FoV instance from a center point and angular extent.
+
+        Parameters
+        ----------
+        centerpoint : tuple[float, float]
+            The (horizontal_angle, vertical_angle) center of the FoV in the specified unit.
+        extent : tuple[float, float]
+            The angular extent (width, height) of the FoV in the specified unit.
+
+        Returns
+        -------
+        FoV
+            A new FoV instance.
+        """
+        new_instance = cls.construct_without_bounds_check(
+            left=centerpoint[0] - extent[0] / 2,
+            right=centerpoint[0] + extent[0] / 2,
+            top=centerpoint[1] - extent[1] / 2,
+            bottom=centerpoint[1] + extent[1] / 2)
+        return new_instance
+
+        # def union(self, fov2: Self) -> Self:
+
 
     def union(self, fov2: Self) -> Self:
         """
@@ -219,28 +319,22 @@ class FoV(NamedTuple):
         float
             The aspect ratio (width/height) of the FoV.
         """
-        return self.extent()[0] / self.extent()[1]
+        return self.width() / self.height()
 
-    def __repr__(self):
-        return (
-            f"({self.left:0.4f}, {self.top:0.4f}, "
-            f"{self.right:0.4f}, {self.bottom:0.4f})"
-        )
 
     @validate_call(config=DEFAULT_CONFIG)
     def extend_to_ratio(self, ratio: float) -> Self:
-        # FIXME no handling for wrapping FoV
         if self.ratio() - ratio > EPS:
-            target_vertical_extent = self.extent()[0] / ratio
-            new_fov = FoV(
+            target_vertical_extent = self.width() / ratio
+            new_fov = FoV.construct_without_bounds_check(
                 left=self.left,
                 top=self.top,
                 right=self.right,
                 bottom=self.top + target_vertical_extent,
             )
         elif ratio - self.ratio() > EPS:
-            target_horizontal_extent = self.extent()[1] * ratio
-            new_fov = FoV(
+            target_horizontal_extent = self.height() * ratio
+            new_fov = FoV.construct_without_bounds_check(
                 left=self.left,
                 top=self.top,
                 right=self.left + target_horizontal_extent,
@@ -248,10 +342,9 @@ class FoV(NamedTuple):
             )
         else:
             new_fov = self
-
         return new_fov
 
-    validate_call(config=DEFAULT_CONFIG)
+    @validate_call(config=DEFAULT_CONFIG)
     def split(self, shape: tuple[int, int]) -> list[Self]:
         """
         Splits the FoV into smaller FoVs based on a grid shape.
@@ -270,32 +363,38 @@ class FoV(NamedTuple):
         if shape[0] == shape[1] == 1:
             return [self]
 
-        horizontal_borders = np.linspace(
-            start=self.left,
-            stop=self.right,
+        horizontal_borders = Angle(np.linspace(
+            start=self.left.radians,
+            stop=self.right.radians,
             num=shape[0] + 1,
             endpoint=True,
             retstep=False
-        )
-        vertical_borders = np.linspace(
-            start=self.top,
-            stop=self.bottom,
+        ))
+        vertical_borders = Angle(np.linspace(
+            start=self.top.radians,
+            stop=self.bottom.radians,
             num=shape[1] + 1,
             endpoint=True,
             retstep=False
-        )
+        ))
+        # horizontal_borders.display_unit = self.left.display_unit
+        # vertical_borders.display_unit = self.top.display_unit
 
         fov_splits = [
             FoV(left=hor_min, top=elev_min, right=hor_max, bottom=elev_max)
             for hor_min, hor_max in zip(horizontal_borders[:-1], horizontal_borders[1:])
             for elev_min, elev_max in zip(vertical_borders[:-1], vertical_borders[1:])
         ]
-
+        for fov_split in fov_splits:
+            fov_split.left.display_unit = self.left.display_unit
+            fov_split.right.display_unit = self.right.display_unit
+            fov_split.top.display_unit = self.top.display_unit
+            fov_split.bottom.display_unit = self.bottom.display_unit
         return fov_splits
 
     @validate_call(config=DEFAULT_CONFIG)
-    def equal_tiles(self, width: MaxWidthT, height: VAngleT) -> list[Self]:
-        assert width > 0 and height
+    def equal_tiles(self, width: Angle, height: Angle) -> list[Self]:
+        assert width > 0 and height > 0
         # assert any(target < own for target, own in zip(target_extent[0], self.extent(target_extent[1])))
 
         return self.split(
@@ -306,13 +405,13 @@ class FoV(NamedTuple):
         )
 
     def tile(self, target_extent: Self) -> list[list[Self]]:
-        horizontal_steps = np.append(
+        horizontal_steps = Angle(np.append(
             np.arange(self.left, self.right, target_extent.width()), self.right
-        )
+        ))
 
-        elevation_steps = np.append(
+        elevation_steps = Angle(np.append(
             np.arange(self.top, self.bottom, target_extent.height()), self.bottom
-        )
+        ))
 
         horizontal_bins = list(zip(horizontal_steps[:-1], horizontal_steps[1:]))
         vertical_bins = list(zip(elevation_steps[:-1], elevation_steps[1:]))
@@ -331,13 +430,17 @@ class FoV(NamedTuple):
                     right=hor_bin[1],
                     bottom=vert_bin[1],
                 )
+                new_fov.left.display_unit = self.left.display_unit
+                new_fov.right.display_unit = self.right.display_unit
+                new_fov.top.display_unit = self.top.display_unit
+                new_fov.bottom.display_unit = self.bottom.display_unit
                 if all(e > EPS for e in new_fov.extent()):
                     horizontal_tiles.append(new_fov)
             if horizontal_tiles:
                 tiles.append(horizontal_tiles)
+
         return tiles
 
-    @validate_call(config=DEFAULT_CONFIG)
     def quadrants(self) -> tuple[Self, ...]:
         # Keep for legacy
         return tuple(self.split(shape=(2, 2)))
@@ -352,29 +455,39 @@ class FoV(NamedTuple):
         )
 
     @property
-    def horizontal_min(self):
+    def horizontal_min(self) -> Angle:
         warnings.warn("elevation_min property has been deprecated. Please use the 'top' property",
                       DeprecationWarning, stacklevel=2)
         return self.left
 
     @property
-    def horizontal_max(self):
+    def horizontal_max(self) -> Angle:
         warnings.warn("horizontal_max property has been deprecated. Please use the 'top' property",
                       DeprecationWarning, stacklevel=2)
         return self.right
 
     @property
-    def elevation_min(self):
+    def elevation_min(self) -> Angle:
         warnings.warn("elevation_min property has been deprecated. Please use the 'top' property",
                       DeprecationWarning, stacklevel=2)
         return self.top
 
     @property
-    def elevation_max(self):
+    def elevation_max(self) -> Angle:
         warnings.warn("elevation_max property has been deprecated. Please use the 'bottom' property",
                       DeprecationWarning, stacklevel=2)
         return self.bottom
 
+    def __repr__(self):
+        # return (
+        #     f"({self.left:0.4f}, {self.top:0.4f}, "
+        #     f"{self.right:0.4f}, {self.bottom:0.4f})"
+        # )
+
+        left, top, right, bottom = self.left, self.top, self.right, self.bottom
+        return (
+            f"{self.__class__.__name__}({left=!s}, {right=!s}, {top=!s},{bottom=!s})"
+        )
 
 @dataclass(init=True, frozen=True)
 class FoVTree:

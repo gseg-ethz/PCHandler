@@ -35,7 +35,7 @@ Typical usage patterns include:
 
 import copy
 import logging
-from enum import Enum
+from enum import StrEnum, Enum
 from functools import wraps
 from typing import Any, Optional, Callable, TYPE_CHECKING
 
@@ -58,7 +58,7 @@ float
 """
 
 
-class AngleUnit(Enum):
+class AngleUnit(StrEnum):
     """
     An enumeration for angular units.
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import warnings
 from abc import ABC, abstractmethod
 from functools import cached_property
@@ -7,8 +8,10 @@ from typing import Annotated, Optional, Self, Any
 
 import numpy as np
 import numpy.typing as npt
-from pydantic import BeforeValidator, ConfigDict, Field, validate_call
+from pydantic import BeforeValidator, ConfigDict, Field, validate_call, model_validator, ModelWrapValidatorHandler, ValidationError, PrivateAttr
+from pydantic_core.core_schema import ValidationInfo
 
+from .fov import FoV
 from ..base_arrays import ArrayNx2, ArrayNx3, FixedLengthArray
 from ..base_types import Array_4x4_T, Vector_3_T, Array_Nx3_T, Array_3x3_T
 from ..constants import HALF_PI, PI, TWO_PI, DEFAULT_CONFIG
@@ -21,6 +24,9 @@ from .transforms import (
     _Transform3x3,
     _Transform4x4,
 )
+from .optimal_shift import OptimizedShift, OptimizedShiftManager
+
+logger = logging.getLogger(__name__)
 
 TransformT = _Transform4x4 | _Transform3x3 | Transform
 
@@ -50,7 +56,7 @@ class Abstract2dCoordinates(ArrayNx2, AbstractCoordinates):
 class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates):
     project_transformation: Optional[Array_4x4_T] = None
     socs_origin: Optional[np.ndarray] = None
-    optimized: bool = Field(default=False, exclude=True)
+
 
     @property
     @abstractmethod
@@ -90,6 +96,75 @@ class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates):
 class CartesianCoordinates(Abstract3dCoordinates):
     arr: Array_Nx3_T
 
+    numerical_optimization_shift: Optional[OptimizedShift] = Field(
+        default=Ellipsis,
+        exclude=False
+    )
+    # optimized: bool = Field(default=False, exclude=True)
+
+    _shift_applied: bool = PrivateAttr(False)
+
+    def __hash__(self) -> int:
+        return id(self)
+
+    def __reduce__(self) -> Any:
+        state = self.model_dump()
+        state["_shift_applied"] = self._shift_applied
+        return self._reconstruct, (state,)
+
+    @classmethod
+    def _reconstruct(cls, state: dict) -> Self:
+        shift_flag = state.pop("_shift_applied", False)
+        obj: Self = cls.model_construct(**state)
+
+        obj._shift_applied = shift_flag
+
+        if obj.numerical_optimization_shift is not None:
+            obj.numerical_optimization_shift.reattach_member(obj)
+
+        return obj
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def numeric_optimization(
+            cls,
+            data: Any,
+            handler: ModelWrapValidatorHandler[Self],
+            info: ValidationInfo
+    ) -> Self:
+        # Create new Shift instance on Ellipsis
+        if isinstance(data, dict) and data["numerical_optimization_shift"] is Ellipsis:
+            data["numerical_optimization_shift"] = OptimizedShift(np.zeros((3,), dtype=np.float64))
+
+        instance = handler(data)
+
+        if not instance._shift_applied and instance.numerical_optimization_shift is not None:
+            osm = OptimizedShiftManager()
+            try:
+                shift = osm.register_with(instance, instance.numerical_optimization_shift)
+                if shift is not instance.numerical_optimization_shift:
+                    logger.info(f"The provided numerical_optimization_shift was not feasible and needed to be replaced"
+                                f"by a new one.")
+
+                    object.__setattr__(instance, "numerical_optimization_shift", shift)
+
+                # Use `object.__setattr` to bypass each change re-calling the validator
+                object.__setattr__(instance, "arr",
+                                   (instance.arr - instance.numerical_optimization_shift.value).astype(np.float32))
+                if instance.socs_origin is not None:
+                    object.__setattr__(instance, "socs_origin", instance.socs_origin - instance.numerical_optimization_shift.value)
+            except OptimizedShiftManager.ShiftNotFeasibleError:
+                logger.warning("No numerical_optimization_shift was feasible. Will continue in float64 mode.")
+                object.__setattr__(instance, "numerical_optimization_shift", None)
+
+            object.__setattr__(instance, "_shift_applied", True)
+
+        return instance
+
+
+    def update_shift(self, delta_shift: Vector_3_T) -> None:
+        self.arr = (self.arr + delta_shift.astype(np.float32))
+
     @property
     def x(self) -> npt.NDArray[np.floating]:
         return self.arr[:, 0]
@@ -105,12 +180,12 @@ class CartesianCoordinates(Abstract3dCoordinates):
     @property
     def xyz(self) -> npt.NDArray[np.floating]:
         return self.arr
-
-    @xyz.setter
-    def xyz(self, value: npt.NDArray[np.floating]):
-        # if self.model_config['frozen']:
-        #     raise ValueError('Cannot edit XYZ coordinates of frozen object')
-        self.arr = value
+    #
+    # @xyz.setter
+    # def xyz(self, value: npt.NDArray[np.floating]):
+    #     # if self.model_config['frozen']:
+    #     #     raise ValueError('Cannot edit XYZ coordinates of frozen object')
+    #     self.arr = value
 
     @property
     def yxz(self) -> npt.NDArray[np.floating]:
@@ -143,9 +218,13 @@ class CartesianCoordinates(Abstract3dCoordinates):
     def _hz_v(self) -> npt.NDArray[np.floating]:
         return self.rhv[:, 1:]
 
+    @cached_property
+    def fov(self) -> FoV:
+        return FoV.from_angles(self.hz, self.v)
+
     @property
-    def fov(self):  # TODO must implement this
-        raise NotImplementedError
+    def numerically_optimized(self) -> bool:
+        return not (self.numerical_optimization_shift is None or self.numerical_optimization_shift.value) #TODO close to zero
 
     def to_spherical(self) -> SphericalCoordinates:
         spherical = SphericalCoordinates(**self.model_dump(exclude={"arr"}) | {"arr": self.spher})
@@ -179,9 +258,9 @@ class CartesianCoordinates(Abstract3dCoordinates):
 class SphericalCoordinates(Abstract3dCoordinates):
     arr: Annotated[Array_Nx3_T, Field(validation_alias="spher"), BeforeValidator(validate_spherical_angles)]
 
-    @property
-    def fov(self) -> Any:
-        raise NotImplementedError
+    @cached_property
+    def fov(self) -> FoV:
+        return FoV.from_angles(self.hz, self.v)
 
     @property
     def spher(self) -> npt.NDArray[np.floating]:
