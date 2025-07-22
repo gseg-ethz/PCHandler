@@ -244,9 +244,9 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
     @classmethod
     def _reconstruct(cls, state: dict) -> Self:
-        prev_shift = state.pop("_shift_applied_by", None)
+        # prev_shift = state.pop("_shift_applied_by", None)
         obj: Self = cls.model_construct(**state)
-        obj._shift_applied_by = prev_shift
+        # obj._shift_applied_by = prev_shift
         obj._process_shift()
 
         return obj

@@ -1,5 +1,6 @@
 import copy
 import logging
+import pickle
 
 import numpy as np
 import pytest
@@ -498,6 +499,16 @@ class TestPointCloudData:
             pcd_copy = pcd_shifted.copy(deep=True, link_to_same_NOS=False)
             assert id(pcd_shifted.numerical_optimization_shift) != id(pcd_copy.numerical_optimization_shift)
             assert np.allclose(pcd_copy.xyz, pcd_shifted.xyz)
+
+    class TestPickle:
+        def test_pcd_pickle(self, pcd_shifted):
+            pickle_pcd = pickle.dumps(pcd_shifted)
+            unpickled_pcd = pickle.loads(pickle_pcd)
+
+            assert isinstance(unpickled_pcd, PointCloudData)
+            assert np.allclose(unpickled_pcd.xyz, pcd_shifted.xyz)
+            assert unpickled_pcd.id == pcd_shifted.id
+            assert unpickled_pcd in pcd_shifted.numerical_optimization_shift
 
 
 
