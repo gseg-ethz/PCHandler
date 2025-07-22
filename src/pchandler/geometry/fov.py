@@ -165,16 +165,16 @@ class FoV(BaseModel):
             raise ValueError(f"Top ({v.radians}) must be smaller than bottom ({bottom.radians})")
         return v
 
-    @field_validator("bottom", mode="after")
-    def _check_top(cls, v: Angle, info) -> Angle:
-        if not isinstance(v, Angle):
-            raise TypeError("Bottom must be an Angle or float")
-        if not 0-EPS <= v.internal_value <= np.pi+EPS:
-            raise ValueError(f"Bottom angle {v.radians} not in [0, π]")
-        top = info.data.get("top")
-        if top is not None and v < top:
-            raise ValueError(f"Bottom ({v.radians}) must be larger than top ({top.radians})")
-        return v
+    # @field_validator("bottom", mode="after")
+    # def _check_top(cls, v: Angle, info) -> Angle:
+    #     if not isinstance(v, Angle):
+    #         raise TypeError("Bottom must be an Angle or float")
+    #     if not 0-EPS <= v.internal_value <= np.pi+EPS:
+    #         raise ValueError(f"Bottom angle {v.radians} not in [0, π]")
+    #     top = info.data.get("top")
+    #     if top is not None and v < top:
+    #         raise ValueError(f"Bottom ({v.radians}) must be larger than top ({top.radians})")
+    #     return v
 
     # TODO: Write tests
     @classmethod
