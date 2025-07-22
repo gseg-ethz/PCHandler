@@ -36,13 +36,16 @@ class BoxFilter(PointCloudFilter):
     def extents(self) -> Vector_3_T:
         return self.maximum - self.minimum
 
-    def mask(self, pcd: PointCloudData) -> npt.NDArray[np.bool_]:
-        if pcd.optimized_shift is not None:
-            min_corner = self.minimum - pcd.optimized_shift.value
-            max_corner = self.maximum - pcd.optimized_shift.value
-        else:
-            min_corner = self.minimum
-            max_corner = self.maximum
+    def mask(self, pcd: PointCloudData, mode: Literal["local", "global"] = "local") -> npt.NDArray[np.bool_]:
+        if mode == "local":
+            offset = np.zeros(shape=(3,))
+        elif mode == "global":
+            offset = np.zeros(shape=(3,)) if pcd.numerical_optimization_shift is None else pcd.numerical_optimization_shift.value
+
+
+        min_corner = self.minimum - offset
+        max_corner = self.maximum - offset
+
 
         min_corner[self.extents == 0] = -np.inf
         max_corner[self.extents == 0] = np.inf
@@ -56,12 +59,13 @@ class SphereFilter(PointCloudFilter):
         self.sphere_center = sphere_center
         self.radius = radius
 
-    def mask(self, pcd: PointCloudData) -> npt.NDArray[np.bool_]:
-        point = (
-            self.sphere_center
-            if pcd.optimized_shift is None
-            else self.sphere_center - pcd.optimized_shift.value
-        )
+    def mask(self, pcd: PointCloudData, mode: Literal["local", "global"] = "local") -> npt.NDArray[np.bool_]:
+        if mode == "local":
+            offset = np.zeros(shape=(3,))
+        elif mode == "global":
+            offset = np.zeros(shape=(3,)) if pcd.numerical_optimization_shift is None else pcd.numerical_optimization_shift.value
+        point = self.sphere_center - offset
+
 
         distances_to_point: npt.NDArray[np.float64|np.float32] = np.linalg.norm(pcd.xyz - point, axis=1)
         return distances_to_point <= self.radius
@@ -73,7 +77,7 @@ class PolygonFilter(PointCloudFilter):
         self.polygon: Polygon = polygon
         self.plane = plane
 
-    def mask(self, pcd: PointCloudData) -> npt.NDArray[np.bool_]:
+    def mask(self, pcd: PointCloudData, mode: Literal["local", "global"] = "local") -> npt.NDArray[np.bool_]:
         if self.plane == "xy":
             dims = [0, 1]
         elif self.plane == "xz":
@@ -81,11 +85,13 @@ class PolygonFilter(PointCloudFilter):
         else:
             dims = [1, 2]
 
-        polygon = (
-            self.polygon
-            if pcd.optimized_shift is None
-            else (translate(self.polygon, *(-1 * pcd.optimized_shift.value[dims])))
-        )
+        if mode == "local":
+            offset = np.zeros(shape=(3,))
+        elif mode == "global":
+            offset = np.zeros(shape=(3,)) if pcd.numerical_optimization_shift is None else pcd.numerical_optimization_shift.value
+
+        polygon = translate(self.polygon, *(-1 * offset[dims]))
+
 
         mask: npt.NDArray[np.bool_] = contains_xy(polygon, pcd.xyz[:, dims[0]], pcd.xyz[:, dims[1]])
         return mask
