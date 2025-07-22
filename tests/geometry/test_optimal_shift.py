@@ -1,12 +1,10 @@
-import weakref
-
 import numpy as np
 import pytest
 
-from pchandler.v2.geometry.coordinates import CartesianCoordinates
-from pchandler.v2.geometry import PointCloudData
-from pchandler.v2.geometry.optimal_shift import OptimizedShiftManager, OptimizedShift
-from pchandler.v2.geometry.util import MinMaxPoints
+from pchandler.geometry.coordinates import CartesianCoordinates
+from pchandler.geometry import PointCloudData
+from pchandler.geometry.optimal_shift import OptimizedShiftManager, OptimizedShift
+from pchandler.geometry.util import MinMaxPoints
 
 
 def random_coordinates(scale: float, offset: float) -> np.ndarray:

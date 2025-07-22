@@ -1,9 +1,10 @@
 import pytest
 
 import numpy as np
+from shapely.geometry.polygon import Polygon
 
-from pchandler.v2.geometry import PointCloudData
-from pchandler.v2.filters.spherical_coordinate_filters import SphericalPolygonFilter, RangeFilter, Polygon
+from pchandler.geometry import PointCloudData
+from pchandler.filters import SphericalPolygonFilter, RangeFilter
 
 @pytest.fixture(scope='function')
 def pcd():
@@ -21,7 +22,7 @@ class TestRangeFilter:
     def test_invalid_filter(self, pcd):
         sf_filter = RangeFilter(low=1000, high=1200)
         pcd_filtered = sf_filter.extract(pcd)
-        assert pcd_filtered is None
+        assert len(pcd_filtered) == 0
 
 
 class TestSphericalPolygonFilter:

@@ -1,10 +1,8 @@
-import pytest
-
 from pathlib import Path
 
 import numpy as np
 
-from pchandler.v2.data_io.csv import CsvHandler
+from pchandler.data_io import Csv as CsvHandler
 
 base_directory = Path(__file__).resolve().parent
 

@@ -3,7 +3,7 @@ from pathlib import Path
 
 import numpy as np
 
-from pchandler.v2.data_io.ply import PlyHandler
+from pchandler.data_io import Ply as PlyHandler
 
 base_directory = Path(__file__).resolve().parent
 

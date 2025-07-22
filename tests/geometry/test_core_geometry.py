@@ -1,15 +1,16 @@
 import copy
 import logging
+import pickle
 
 import numpy as np
 import pytest
 
 import open3d as o3d
 from pydantic import ValidationError
-from pchandler.v2.geometry import PointCloudData
-from pchandler.v2.geometry.scalar_fields import ScalarField, RGBFields, NormalFields, NormalisedInt16ScalarField
-from pchandler.v2.geometry.scalar_field_manager import ScalarFieldManager
-from pchandler.v2.geometry.optimal_shift import OptimizedShift, OptimizedShiftManager
+from pchandler.geometry import PointCloudData
+from pchandler.geometry.scalar_fields import ScalarField, RGBFields, NormalFields
+from pchandler.geometry.scalar_field_manager import ScalarFieldManager
+from pchandler.geometry.optimal_shift import OptimizedShift
 
 N = 100
 
@@ -499,6 +500,16 @@ class TestPointCloudData:
             assert id(pcd_shifted.numerical_optimization_shift) != id(pcd_copy.numerical_optimization_shift)
             assert np.allclose(pcd_copy.xyz, pcd_shifted.xyz)
 
+    class TestPickle:
+        def test_pcd_pickle(self, pcd_shifted):
+            pickle_pcd = pickle.dumps(pcd_shifted)
+            unpickled_pcd = pickle.loads(pickle_pcd)
+
+            assert isinstance(unpickled_pcd, PointCloudData)
+            assert np.allclose(unpickled_pcd.xyz, pcd_shifted.xyz)
+            assert unpickled_pcd.id == pcd_shifted.id
+            assert unpickled_pcd in pcd_shifted.numerical_optimization_shift
+
 
 
     class TestReduceSampleExtractMerge:
@@ -659,6 +670,27 @@ class TestPointCloudData:
 
             assert len(extracted_pcd) + len(sampled_pcd) == base_xyz.shape[0]
             assert len(extracted_pcd) == 10
+
+        def test_extract_one_element(self, pcd):
+            mask = np.zeros(len(pcd), dtype=np.bool_)
+            mask[0] = True
+
+            pcd_extract = pcd.extract(mask)
+            assert pcd_extract.arr.shape == (1, 3)
+            assert pcd_extract.rgb.shape == (1, 3)
+            assert pcd_extract.normals.shape == (1, 3)
+            assert pcd_extract.intensity.shape == (1,)
+
+        def test_extract_from_one_element(self, pcd):
+            pcd_single = pcd.sample([0])
+            mask = np.ones(len(pcd_single), dtype=np.bool_)
+            pcd_extract = pcd_single.extract(mask)
+
+            assert pcd_extract.arr.shape == (1, 3)
+            assert pcd_extract.rgb.shape == (1, 3)
+            assert pcd_extract.normals.shape == (1, 3)
+            assert pcd_extract.intensity.shape == (1,)
+
 
         def test_none_fields(self, xyz_):
             ref_pcd = PointCloudData(xyz_, scalar_fields=ScalarFieldManager(parent=None))

@@ -2,8 +2,8 @@ import pytest
 
 import numpy as np
 
-from pchandler.v2.geometry import PointCloudData
-from pchandler.v2.filters import ScalarFieldFilter, ScalarFieldPercentileFilter
+from pchandler.geometry import PointCloudData
+from pchandler.filters import ScalarFieldFilter, ScalarFieldPercentileFilter
 
 
 @pytest.fixture(scope='function')
