@@ -3,9 +3,9 @@ import pytest
 import numpy as np
 from pydantic import ValidationError
 
-from pchandler.v2.geometry import PointCloudData
-from pchandler.v2.geometry.fov import FoV, FoVTree
-from pchandler.v2.geometry.splitter import FoVTreePointCloudSplitter, split_pc_with_fov_tree, PointCloudSplitter
+from pchandler.geometry import PointCloudData
+from pchandler.geometry.fov import FoV, FoVTree
+from pchandler.geometry.splitter import FoVTreePointCloudSplitter, PointCloudSplitter
 
 
 pcd = PointCloudData(np.random.rand(100,3)*100,

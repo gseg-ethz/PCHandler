@@ -3,10 +3,10 @@ import pytest
 import numpy as np
 import math
 
-from pchandler.v2.spherical.angle import Angle, AngleArray
-from pchandler.v2.geometry.core import PointCloudData
-from pchandler.v2.geometry.fov import FoV, _OldFoV, FoVTree, _OldFoVTree
-from pchandler.v2.constants import PI, EPS
+from pchandler.spherical import Angle
+from pchandler.geometry.core import PointCloudData
+from pchandler.geometry.fov import FoV, _OldFoV, FoVTree, _OldFoVTree
+from pchandler.constants import PI, EPS
 
 
 @pytest.fixture(scope="function", autouse=True)

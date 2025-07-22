@@ -2,7 +2,7 @@ import pytest
 
 from pydantic import ValidationError
 
-from pchandler.v2.filters.downsample import *
+from pchandler.filters.downsample import *
 
 N = 100000
 

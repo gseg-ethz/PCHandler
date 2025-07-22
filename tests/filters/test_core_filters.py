@@ -2,7 +2,7 @@ import pytest
 
 from pydantic import ValidationError
 
-from pchandler.v2.filters.core import *
+from pchandler.filters.core import *
 
 @pytest.fixture(scope='function', autouse=True)
 def pcd_all():

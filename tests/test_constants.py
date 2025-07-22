@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 
-from pchandler.v2.constants import (
+from pchandler.constants import (
     DEFAULT_CONFIG,
     EPS,
     HALF_PI,

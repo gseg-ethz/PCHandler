@@ -4,9 +4,9 @@ from weakref import ReferenceType
 import numpy as np
 import pytest
 
-from pchandler.v2.geometry import PointCloudData
-from pchandler.v2.geometry.scalar_field_manager import ScalarFieldManager
-from pchandler.v2.geometry.scalar_fields import ScalarField, RGBFields, NormalFields, AbstractScalarField, \
+from pchandler.geometry import PointCloudData
+from pchandler.geometry.scalar_field_manager import ScalarFieldManager
+from pchandler.geometry.scalar_fields import ScalarField, RGBFields, NormalFields, AbstractScalarField, \
     NormalisedInt16ScalarField
 
 N = 40

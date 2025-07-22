@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, computed_field
 
-from pchandler.v2.base_arrays import BaseArray
+from pchandler.base_arrays import BaseArray
 
 
 class TestPydantic:

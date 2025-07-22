@@ -1,10 +1,8 @@
-import pytest
-
 from pathlib import Path
 
 import numpy as np
 
-from pchandler.v2.data_io.e57 import E57Handler
+from pchandler.data_io import E57 as E57Handler
 
 base_directory = Path(__file__).resolve().parent
 

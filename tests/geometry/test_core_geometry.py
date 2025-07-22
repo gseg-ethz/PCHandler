@@ -6,10 +6,10 @@ import pytest
 
 import open3d as o3d
 from pydantic import ValidationError
-from pchandler.v2.geometry import PointCloudData
-from pchandler.v2.geometry.scalar_fields import ScalarField, RGBFields, NormalFields, NormalisedInt16ScalarField
-from pchandler.v2.geometry.scalar_field_manager import ScalarFieldManager
-from pchandler.v2.geometry.optimal_shift import OptimizedShift, OptimizedShiftManager
+from pchandler.geometry import PointCloudData
+from pchandler.geometry.scalar_fields import ScalarField, RGBFields, NormalFields
+from pchandler.geometry.scalar_field_manager import ScalarFieldManager
+from pchandler.geometry.optimal_shift import OptimizedShift
 
 N = 100
 

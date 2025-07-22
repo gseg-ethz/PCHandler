@@ -4,8 +4,8 @@ from pathlib import Path
 
 import numpy as np
 
-from pchandler.v2.geometry import PointCloudData
-from pchandler.v2.data_io import Las as LAS
+from pchandler.geometry import PointCloudData
+from pchandler.data_io import Las as LAS
 
 base_directory = Path(__file__).resolve().parent
 

@@ -1,7 +1,8 @@
 import pytest
 import numpy as np
-from pchandler.v2.spherical.angle import Angle, AngleArray
-from pchandler.v2.util import AngleUnit
+
+from pchandler.spherical.angle import Angle, AngleArray
+from pchandler.util import AngleUnit
 
 import math
 

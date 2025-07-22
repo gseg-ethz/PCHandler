@@ -5,9 +5,9 @@ import pytest
 from pydantic import ValidationError
 from scipy.spatial.transform import Rotation
 
-from pchandler.v2.base_arrays import ArrayNx3
-from pchandler.v2.constants import HALF_PI, PI, TWO_PI
-from pchandler.v2.geometry.coordinates import (
+from pchandler.base_arrays import ArrayNx3
+from pchandler.constants import HALF_PI, PI
+from pchandler.geometry.coordinates import (
     Abstract3dCoordinates,
     AbstractCoordinates,
     CartesianCoordinates,

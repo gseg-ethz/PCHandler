@@ -6,7 +6,7 @@ import pytest
 from numpydantic import NDArray, Shape
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from pchandler.v2.base_arrays import (
+from pchandler.base_arrays import (
     ArrayNx2,
     ArrayNx3,
     BaseArray,

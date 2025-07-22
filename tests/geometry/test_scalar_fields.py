@@ -3,8 +3,8 @@ import numpy as np
 
 from pydantic import BaseModel, ValidationError
 
-from pchandler.v2.validators import linear_map_dtype, normalize_self
-from pchandler.v2.geometry.scalar_fields import *
+from pchandler.validators import linear_map_dtype, normalize_self
+
 
 def test_lower_str_annotation():
     class A(BaseModel):

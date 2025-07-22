@@ -2,8 +2,9 @@ import pytest
 
 from shapely.geometry import box
 from pydantic import ValidationError
+import numpy as np
 
-from pchandler.v2.filters.gpu import *
+from pchandler.filters.gpu import *
 
 
 @pytest.fixture(scope="function")
