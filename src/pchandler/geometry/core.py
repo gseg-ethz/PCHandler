@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import (Any, Optional, Self, MutableMapping, Callable,
-                    overload, Literal)
+                    overload, Literal, Unpack, Required, NotRequired)
 import logging
 
 import numpy as np
@@ -10,13 +10,20 @@ import open3d as o3d
 from pydantic import Field, field_validator, model_validator, AliasChoices
 
 from pchandler.base_types import Array_Nx3_T, IndexLike
-from pchandler.geometry.coordinates import CartesianCoordinates
+from pchandler.geometry.coordinates import CartesianCoordinates, CartesianKw
 
 from pchandler.geometry.scalar_field_manager import ScalarFieldManager
 from pchandler.geometry.scalar_fields import (NormalFields, RGBFields, ScalarField, NormalisedInt16ScalarField,
                                               ScalarFieldTriplet)
 
 logger = logging.getLogger(__name__)
+
+class PointCloudDataKw(CartesianKw, total=False):
+    scalar_fields: Optional[ScalarFieldManager[ScalarField | ScalarFieldTriplet]]
+    rgb: Optional[npt.NDArray[np.uint8 | np.float32 | np.float64]]
+    normals: Optional[npt.NDArray[np.float32 | np.float64]]
+    intensity: Optional[npt.NDArray[np.uint16 | np.float32 | np.float64]]
+    reflectance: Optional[npt.NDArray[np.uint16 | np.float32 | np.float64]]
 
 class PointCloudData(CartesianCoordinates):
     arr: Array_Nx3_T = Field(..., validation_alias=AliasChoices('arr', 'xyz'))
@@ -42,11 +49,11 @@ class PointCloudData(CartesianCoordinates):
         None, alias="reflectance", exclude=True, repr=False
     )
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs: Unpack[PointCloudDataKw]):
         # Accept xyz/arr as a positional argument
         if args:
             if len(args) > 1:
-                raise TypeError(f"Expected at most 1 positional argument, got {len(args)}")
+                raise AttributeError("expected at most 1 arguments, got %d" % len(args))
             if "xyz" in kwargs or "arr" in kwargs:
                 raise TypeError("Cannot pass both positional and keyword for xyz/arr")
             kwargs["xyz"] = args[0]

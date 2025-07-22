@@ -4,7 +4,7 @@ import logging
 import warnings
 from abc import ABC, abstractmethod
 from functools import cached_property
-from typing import Annotated, Optional, Self, Any, Type, TypeVar
+from typing import Annotated, Optional, Self, Any, Type, TypeVar, Unpack, TypedDict, Required, NotRequired
 import uuid
 
 import numpy as np
@@ -29,6 +29,16 @@ logger = logging.getLogger(__name__)
 TransformT = _Transform4x4 | _Transform3x3 | Transform
 
 CartesianT  = TypeVar("CartesianT", bound="CartesianCoordinates")
+
+class Abstract3dKw(TypedDict, total=False):
+    arr: Array_Nx3_T
+    project_transformation: NotRequired[Array_4x4_T]
+    socs_origin: NotRequired[Vector_3_T]
+
+class CartesianKw(Abstract3dKw, total=False):
+    numerical_optimization_shift: NotRequired[Optional[OptimizedShift]]
+    unshifted_bbox: NotRequired[Optional[MinMaxPoints]]
+    _shift_applied_by: NotRequired[Optional[OptimizedShift]]
 
 
 class AbstractCoordinates(FixedLengthArray, ABC):
@@ -102,6 +112,7 @@ class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates):
         )
 
 
+
 class CartesianCoordinates(Abstract3dCoordinates):
     arr: Array_Nx3_T
 
@@ -115,7 +126,7 @@ class CartesianCoordinates(Abstract3dCoordinates):
     _shift_applied_by: Optional[OptimizedShift] = PrivateAttr(default=None)
 
 
-    def __init__(self, **data):
+    def __init__(self, **data: Unpack[CartesianKw]):
         prev_shift: Optional[OptimizedShift] = data.pop("_shift_applied_by", None)
         super().__init__(**data)
         object.__setattr__(self, "_shift_applied_by", prev_shift)
@@ -233,9 +244,9 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
     @classmethod
     def _reconstruct(cls, state: dict) -> Self:
-        prev_shift = state.pop("_shift_applied_by", None)
+        # prev_shift = state.pop("_shift_applied_by", None)
         obj: Self = cls.model_construct(**state)
-        obj._shift_applied_by = prev_shift
+        # obj._shift_applied_by = prev_shift
         obj._process_shift()
 
         return obj
