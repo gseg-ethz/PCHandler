@@ -508,9 +508,14 @@ class FoVTree:
         )
 
     def depth(self) -> int:
-        if not self.children:
+        if self.is_leaf():
             return 1
         return max([c.depth() for c in self.children.values()]) + 1
+
+    def __len__(self) -> int:
+        if self.is_leaf():
+            return 1
+        return sum((len(c) for c in self.children.values()))
 
     def to_list(self) -> list[tuple[str, FoV]]:
         if self.is_leaf():

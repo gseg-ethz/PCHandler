@@ -199,7 +199,8 @@ class SampleArray(BaseArray):
         This ensures all new objects are a copy of an array and no views/references
         """
         if isinstance(selection, np.ndarray) and selection.dtype == np.bool_:
-            selection = selection.squeeze()
+            # if selection.ndim > 1: # Todo: Think if this is sensible..in which case do we need to squeeze
+            #     selection = selection.squeeze()
             if as_vector:
                 if selection.ndim > 1:
                     raise ValueError(f"Selection mask must be a vector like")

@@ -54,7 +54,7 @@ class FoVTreePointCloudSplitter(PointCloudSplitter):
         self.fov_tree = fov_tree
         self.remove_empty = remove_empty
         self.n_jobs = n_jobs
-        self.method = method
+        self.method: FoVSplitMethodT = method
 
     def split(self, pcd: PointCloudData) -> dict[str, PointCloudData]:
         """
