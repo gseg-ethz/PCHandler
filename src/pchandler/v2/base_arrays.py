@@ -58,8 +58,8 @@ class BaseArray(ABC, BaseModel):
         strict=True,
         frozen=False,
         extra="ignore",
-        serialize_by_alias=True,
-        populate_by_name=True,
+        serialize_by_alias=False,
+        populate_by_name=False,
     )
     arr: ArrayT
 

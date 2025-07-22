@@ -112,3 +112,6 @@ class MinMaxPoints(NamedTuple):
     @property
     def extents(self) -> Vector_3_T:
         return self.maximum - self.minimum
+
+    def __array__(self) -> Array_Nx3_T:
+        return np.vstack((self.minimum, self.maximum))

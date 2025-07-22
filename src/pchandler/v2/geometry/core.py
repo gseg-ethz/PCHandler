@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import warnings
-from typing import Any, Mapping, Optional, Self, Annotated, MutableMapping, Union, Type, Callable, cast
+from typing import (Any, Mapping, Optional, Self, Annotated, MutableMapping, TypedDict, Unpack, Union, Type, Callable,
+                    cast, overload, Literal)
 from copy import deepcopy
+import logging
 
 import numpy as np
 import numpy.typing as npt
 import open3d as o3d
-from pydantic import Field, model_validator, BeforeValidator
+from pydantic import Field, BeforeValidator, field_validator, model_validator, AliasChoices
 
 from ..base_types import Array_4x4_T, Array_Nx3_T, Vector_3_T, IndexLike
 from .coordinates import CartesianCoordinates
@@ -17,9 +19,10 @@ from .scalar_field_manager import ScalarFieldManager
 from .scalar_fields import NormalFields, RGBFields, ScalarField, SF_T, NormalisedInt16ScalarField, ScalarFieldTriplet
 from .transforms import TransformLedger
 
+logger = logging.getLogger(__name__)
 
 class PointCloudData(CartesianCoordinates):
-    arr: Array_Nx3_T = Field(..., alias='xyz')
+    arr: Array_Nx3_T = Field(..., validation_alias=AliasChoices('arr', 'xyz'))
     # TODO: Rework Transform ledger
     # transform_ledger: Annotated[
     #     TransformLedger,
@@ -88,21 +91,22 @@ class PointCloudData(CartesianCoordinates):
     @field_validator('scalar_fields', mode="before")
     @classmethod
     def _convert_scalar_fields(cls, value):
+        logger.debug(f"Running `_convert_scalar_fields` validator on {cls}")
         if not isinstance(value, ScalarFieldManager):
-            sfm = ScalarFieldManager()
-            for key, value in value.items():
-                sfm[key] = value
-            return sfm
+            value = ScalarFieldManager(fields=value)
         return value
 
 
     @model_validator(mode="after")
     def _move_into_scalar_fields(self) -> Self:
+        logger.debug(f"Running `_move_into_scalar_fields` validator on {self}")
         # map any provided “_input” into the scalar_fields manager
         for name in ("rgb", "normals", "intensity", "reflectance"):
-            inp = getattr(self, f"{name}_input")
+            inp = getattr(self, f"{name}_input", None)
             if inp is not None:
                 setattr(self, name, inp)
+                delattr(self, f"{name}_input")
+                # setattr(self, f"{name}_input", None)
         return self
 
 
@@ -189,8 +193,10 @@ class PointCloudData(CartesianCoordinates):
         if array is not None and not isinstance(array, CartesianCoordinates | np.ndarray):
             raise TypeError(f"Invalid type of array passed: {type(array)}. Should be CartesianCoordinates or np.ndarray")
 
-        if link_to_same_NOS:
+        if link_to_same_NOS and "numerical_optimization_shift" not in update:
             update["numerical_optimization_shift"] = self.numerical_optimization_shift
+        update["_shift_applied_by"] = self._shift_applied_by # TODO: Rework structure!
+        update["id"] = None
 
         return super().copy(array=array, deep=deep, update=update, **kwargs)
 
@@ -219,7 +225,14 @@ class PointCloudData(CartesianCoordinates):
 
     def sample(self, mask: npt.NDArray[np.bool_|np.integer]) -> PointCloudData:
         mask = self.create_mask(mask)
-        return self.copy(self.arr[mask, :], update={"scalar_fields": self.scalar_fields.sample(mask)})
+        sample = self.copy(
+            self.arr[mask, :],
+            update={
+                "scalar_fields": self.scalar_fields.sample(mask),
+                "unshifted_bbox": None,
+            }
+        )
+        return sample
 
     def reduce(self, mask: npt.NDArray[np.bool_|np.integer]) -> None:
         super().reduce(mask)
@@ -233,35 +246,42 @@ class PointCloudData(CartesianCoordinates):
             extracted.__dict__['spher'] = extracted.__dict__['spher'][mask]
         return extracted
 
-    @staticmethod
-    def merge(*pcds: PointCloudData) -> PointCloudData:
+    @classmethod
+    def merge(cls, *pcds: PointCloudData) -> PointCloudData:
+        # Check for same optimization shift
         scalar_fields = ScalarFieldManager.merge([pcd.scalar_fields for pcd in pcds])
-        if not all([pcds[0].optimized == pcd.optimized for pcd in pcds[1:]]):
-            raise ValueError('Can only merge point clouds if they are all optimized or unoptimized.')
+        return super().merge(*pcds, scalar_fields=scalar_fields)
+        # if not all([pcds[0].optimized == pcd.optimized for pcd in pcds[1:]]):
+        #     raise ValueError('Can only merge point clouds if they are all optimized or unoptimized.')
+        #
+        # if isinstance(pcds[0].socs_origin, np.ndarray):
+        #     if not all([np.all(pcds[0].socs_origin == pcd.socs_origin) for pcd in pcds[1:]]):
+        #         raise ValueError("Cannot merge point clouds where some origins are known and some are ambiguous")
+        #
+        # for pcd in pcds:
+        #     if pcd.socs_origin is not None:
+        #         raise ValueError("Cannot merge point clouds where some origins are known and some are ambiguous")
+        #
+        # # TODO update when implementing the transformations
+        # if pcds[0].project_transformation is None:
+        #     for pcd in pcds[1:]:
+        #         if pcd.project_transformation is not None:
+        #             raise ValueError("Cannot merge point clouds where only some project transforms are defined")
+        # else:
+        #     for pcd in pcds[1:]:
+        #         if not isinstance(pcd.project_transformation, np.ndarray):
+        #             raise ValueError("Cannot merge point clouds where only some project transforms are defined")
+        #
+        # xyz = np.concatenate([pcd.xyz for pcd in pcds], axis=0)
+        #
+        # return cls(xyz, scalar_fields=scalar_fields)
 
-        if isinstance(pcds[0].socs_origin, np.ndarray):
-            if not all([np.all(pcds[0].socs_origin == pcd.socs_origin) for pcd in pcds[1:]]):
-                raise ValueError("Cannot merge point clouds where some origins are known and some are ambiguous")
+    @overload
+    def to_o3d(self, as_tensor: Literal[False] = ...) -> o3d.geometry.PointCloud: ...
+    @overload
+    def to_o3d(self, as_tensor: Literal[True]) -> o3d.t.geometry.PointCloud: ...
 
-        for pcd in pcds:
-            if pcd.socs_origin is not None:
-                raise ValueError("Cannot merge point clouds where some origins are known and some are ambiguous")
-
-        # TODO update when implementing the transformations
-        if pcds[0].project_transformation is None:
-            for pcd in pcds[1:]:
-                if pcd.project_transformation is not None:
-                    raise ValueError("Cannot merge point clouds where only some project transforms are defined")
-        else:
-            for pcd in pcds[1:]:
-                if not isinstance(pcd.project_transformation, np.ndarray):
-                    raise ValueError("Cannot merge point clouds where only some project transforms are defined")
-
-        xyz = np.concatenate([pcd.xyz for pcd in pcds], axis=0)
-
-        return PointCloudData(xyz, scalar_fields=scalar_fields)
-
-    def to_o3d(self, as_tensor: bool = True) -> o3d.geometry.PointCloud | o3d.t.geometry.PointCloud:
+    def to_o3d(self, as_tensor: bool = False) -> o3d.geometry.PointCloud | o3d.t.geometry.PointCloud:
         """
             Converts the point cloud to an Open3D `PointCloud` object.
 
@@ -276,28 +296,25 @@ class PointCloudData(CartesianCoordinates):
                 pcd_o3d.points = o3d.utility.Vector3dVector((self.xyz + self.global_coordinate_shift).astype(np.float64))
             return pcd_o3d
         """
+        if self.numerical_optimization_shift is not None:
+            pcd = self.copy(update={
+                "numerical_optimization_shift": None,
+                "scalar_fields": None
+            }, link_to_same_NOS=False)
+        else:
+            pcd = self
 
         if as_tensor:
             pcd_o3d = o3d.t.geometry.PointCloud()
-
-            if self.optimized_shift is None:
-                pcd_o3d.point.positions = o3d.core.Tensor(self.xyz)
-            else:
-                pcd_o3d.point.positions = o3d.core.Tensor(
-                    (self.xyz.astype(np.float64) + self.optimized_shift.value.astype(np.float64))
-                )
+            pcd_o3d.point.positions = o3d.core.Tensor(pcd.xyz)
 
             for sf_name in set(self.scalar_fields.keys()):
-                setattr(pcd_o3d.point, sf_name, o3d.core.Tensor(self.scalar_fields[sf_name].arr))
+                if self.scalar_fields[sf_name] is not None:
+                    setattr(pcd_o3d.point, sf_name, o3d.core.Tensor(self.scalar_fields[sf_name].arr))
 
         else:
             pcd_o3d = o3d.geometry.PointCloud()
-            if self.optimized_shift is None:
-                pcd_o3d.points = o3d.utility.Vector3dVector(self.xyz)
-            else:
-                pcd_o3d.points = o3d.utility.Vector3dVector(
-                    (self.xyz.astype(np.float64) + self.optimized_shift.value.astype(np.float64))
-                )
+            pcd_o3d.points = o3d.utility.Vector3dVector(pcd.xyz)
 
             if 'rgb' in self.scalar_fields:
                 pcd_o3d.colors = o3d.utility.Vector3dVector(self.rgb.as_normalised_float32())
@@ -306,7 +323,8 @@ class PointCloudData(CartesianCoordinates):
                 pcd_o3d.normals = o3d.utility.Vector3dVector(self.normals)
 
             for sf_name in set(self.scalar_fields.keys()).difference({'rgb', 'normals'}):
-                warnings.warn(f"Cannot add scalar field '{sf_name}' to the pcd_o3d object")
+                if self.scalar_fields[sf_name] is not None:
+                    logger.warning(f"Cannot add scalar field '{sf_name}' to the pcd_o3d object")
 
         return pcd_o3d
 

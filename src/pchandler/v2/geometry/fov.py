@@ -479,14 +479,15 @@ class FoV(BaseModel):
         return self.bottom
 
     def __repr__(self):
-        # return (
-        #     f"({self.left:0.4f}, {self.top:0.4f}, "
-        #     f"{self.right:0.4f}, {self.bottom:0.4f})"
-        # )
-
         left, top, right, bottom = self.left, self.top, self.right, self.bottom
         return (
-            f"{self.__class__.__name__}({left=!s}, {right=!s}, {top=!s},{bottom=!s})"
+            f"{self.__class__.__name__}({left=!r}, {right=!r}, {top=!r}, {bottom=!r})"
+        )
+
+    def __str__(self):
+        left, top, right, bottom = self.left, self.top, self.right, self.bottom
+        return (
+            f"{self.__class__.__name__}({left=!s}, {right=!s}, {top=!s}, {bottom=!s})"
         )
 
 @dataclass(init=True, frozen=True)

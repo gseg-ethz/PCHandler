@@ -425,6 +425,8 @@ class AngleArray(AngleBase):
         return op(lhs, rhs)
 
     def __eq__(self, other):
+        if isinstance(other, AngleBase):
+            return self.internal_value == other.internal_value
         raise NotImplementedError()
 
     def __lt__(self, other):
