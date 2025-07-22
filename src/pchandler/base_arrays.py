@@ -139,7 +139,7 @@ class BaseArray(ABC, BaseModel):
                 raise TypeError(f'Unknown type passed in for the array of {type(array)}')
 
         data = self.model_dump(exclude=set(update.keys()), by_alias=False)
-        data = copy.deepcopy(data) if deep else data
+        data = copy.deepcopy(data) if deep else data #Todo: Discuss behavior deepcopy should copy the array or not!
 
         data.update(update)
 
