@@ -43,7 +43,7 @@ class TestBoxFilter:
         with pytest.raises(ValueError):
             BoxFilter(np.ones(3), maximum)
 
-    @pytest.mark.parametrize('kwargs', ({}, {'optimized_shift': None}))
+    @pytest.mark.parametrize('kwargs', ({}, {'numerical_optimization_shift': None}))
     def test_mask(self, box_filter: BoxFilter, kwargs, simple_array):
         array = PointCloudData(simple_array, **kwargs)
         mask = box_filter.mask(array)

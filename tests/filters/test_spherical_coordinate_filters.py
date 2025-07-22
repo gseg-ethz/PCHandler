@@ -22,7 +22,7 @@ class TestRangeFilter:
     def test_invalid_filter(self, pcd):
         sf_filter = RangeFilter(low=1000, high=1200)
         pcd_filtered = sf_filter.extract(pcd)
-        assert pcd_filtered is None
+        assert len(pcd_filtered) == 0
 
 
 class TestSphericalPolygonFilter:
