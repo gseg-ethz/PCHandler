@@ -49,11 +49,14 @@ class PointCloudData(CartesianCoordinates):
         None, alias="reflectance", exclude=True, repr=False
     )
 
-    def __init__(self, xyz: Array_Nx3_T, **kwargs: Unpack[PointCloudDataKw]):
+    def __init__(self, *args, **kwargs: Unpack[PointCloudDataKw]):
         # Accept xyz/arr as a positional argument
-        if "xyz" in kwargs or "arr" in kwargs:
-            raise TypeError("Cannot pass both positional and keyword for xyz/arr")
-        kwargs["xyz"] = xyz
+        if args:
+            if len(args) > 1:
+                raise AttributeError("expected at most 1 arguments, got %d" % len(args))
+            if "xyz" in kwargs or "arr" in kwargs:
+                raise TypeError("Cannot pass both positional and keyword for xyz/arr")
+            kwargs["xyz"] = args[0]
 
         super().__init__(**kwargs)
 

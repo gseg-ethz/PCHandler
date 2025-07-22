@@ -94,6 +94,8 @@ class MinMaxPoints(NamedTuple):
 
     @classmethod
     def from_points(cls, points: Array_Nx3_T, already_applied_shift_vec: Optional[Vector_3_T] = None) -> Self:
+        if len(points) == 0:
+            return cls(np.zeros(shape=(3,)),np.zeros(shape=(3,)))
         if already_applied_shift_vec is None:
             already_applied_shift_vec = np.zeros((3,))
         min_point = np.min(points, axis=0)
