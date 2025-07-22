@@ -671,6 +671,17 @@ class TestPointCloudData:
             assert len(extracted_pcd) + len(sampled_pcd) == base_xyz.shape[0]
             assert len(extracted_pcd) == 10
 
+        def test_extract_one_element(self, pcd):
+            mask = np.zeros(len(pcd), dtype=np.bool_)
+            mask[0] = True
+
+            pcd_extract = pcd.extract(mask)
+            assert pcd_extract.arr.shape == (1, 3)
+            assert pcd_extract.rgb.shape == (1, 3)
+            assert pcd_extract.normals.shape == (1, 3)
+            assert pcd_extract.intensity.shape == (1,)
+
+
         def test_none_fields(self, xyz_):
             ref_pcd = PointCloudData(xyz_, scalar_fields=ScalarFieldManager(parent=None))
             this_pcd = ref_pcd.copy()

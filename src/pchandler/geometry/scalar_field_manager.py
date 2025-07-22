@@ -300,7 +300,7 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
     def _set_rgb(
             self,
             name: LowerStr,
-            value: Vector_Uint8_T | Array_Nx3_Uint8_T,
+            value: Array_Nx3_Uint8_T | Vector_Uint8_T,
             origin_dtype: Optional[DtypeState] = None
     ) -> None:
 
@@ -325,7 +325,7 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
     def _set_normals(
             self,
             name: LowerStr,
-            value: Vector_Float32_T | Array_Nx3_Float32_T,
+            value: Array_Nx3_Float32_T | Vector_Float32_T,
             origin_dtype: Optional[DtypeState] = None
     ) -> None:
 
