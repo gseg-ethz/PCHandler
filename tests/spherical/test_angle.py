@@ -1,3 +1,5 @@
+import pickle
+
 import pytest
 import numpy as np
 
@@ -220,6 +222,28 @@ class TestAngleMath:
         assert angle_add.display_unit == angle1_unit
         assert np.allclose(Angle(angle1.internal_value-angle2.internal_value),
                            angle_sub)
+
+class TestAnglePickle:
+
+    @pytest.mark.parametrize("angle_val, angle_unit", [
+        (np.pi / 2, AngleUnit.RAD),
+        (180, AngleUnit.DEGREE),
+        (100.0, AngleUnit.GON),
+        (90.0, AngleUnit.DEGREE),
+        ([0, 90, 180], AngleUnit.DEGREE),
+        ([0, np.pi / 2, np.pi], AngleUnit.RAD),
+    ])
+    def test_angle_pickle(self, angle_val, angle_unit):
+        a = Angle(angle_val, angle_unit)
+
+        pickled_a = pickle.dumps(a)
+        unpickled_a = pickle.loads(pickled_a)
+
+        assert np.allclose(a, unpickled_a)
+        assert unpickled_a.display_unit == angle_unit
+
+
+
 
 
 

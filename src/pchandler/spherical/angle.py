@@ -9,6 +9,13 @@ from typing import Any, Generator, Self, overload
 from pchandler.util import AngleUnit, convert_angles
 from pchandler.base_types import ArrayT
 
+
+def _rebuild_angle(cls, internal_value, display_unit):
+    # internal_value already in INTERNAL_UNIT (rad)
+    obj = object.__new__(cls)
+    AngleBase.__init__(obj, internal_value, display_unit)
+    return obj
+
 @total_ordering
 class AngleBase:
     __slots__ = ("_internal_value", "_display_unit")
@@ -97,55 +104,6 @@ class AngleBase:
         so most numpy functions will operate on ._rad directly.
         """
         return np.array(self._internal_value, dtype=dtype)
-
-    # def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
-    #     """
-    #     Intercept numpy ufuncs (like add, sin, etc).
-    #     We extract raw radians, apply the ufunc, and wrap back in Angle.
-    #     """
-    #     # Extract `out` keyword
-    #     out = kwargs.pop("out", None)
-    #
-    #
-    #
-    #     # Run trigonometric functions on RADIANS
-    #     TRIG_FUNC = {
-    #         np.sin, np.cos, np.tan,
-    #         np.sinh, np.cosh, np.tanh,
-    #     }
-    #     if ufunc in TRIG_FUNC:
-    #         return getattr(ufunc, method)(inputs[0].radians, **kwargs)
-    #
-    #     # extract raw arrays from any Angle inputs
-    #     args = []
-    #     all_inputs_AngleBase = all(isinstance(x, AngleBase) for x in inputs)
-    #     display_units = {x.display_unit for x in inputs if isinstance(x, AngleBase)}
-    #     if len(display_units) != 1:
-    #         raise NotImplementedError(f"When mixing non-Angle and AngleBase inputs, all AngleBase inputs must share the same display_unit.")
-    #     unit_to_use = inputs[0].display_unit if all_inputs_AngleBase else display_units.pop()
-    #
-    #     for x in inputs:
-    #         if isinstance(x, AngleBase):
-    #             args.append(x.to(unit_to_use))
-    #         else:
-    #             args.append(x)
-    #     result = getattr(ufunc, method)(*args, **kwargs)
-    #     # If ufunc returns a tuple, wrap each; else wrap single
-    #     if isinstance(result, tuple):
-    #         return tuple(Angle(r, unit_to_use) for r in result)
-    #     return Angle(result, unit_to_use)
-    #
-    # def __binary_op(self, other, ufunc):
-    #     if isinstance(other, AngleBase):
-    #         vals = ufunc(self.to(self.display_unit), other.to(self.display_unit))
-    #         unit = self.display_unit
-    #     else:
-    #         vals = ufunc(self.to(self.display_unit), other)
-    #         unit = self.display_unit
-    #
-    #     return Angle(vals, unit)
-
-    # def _add_subtract(self, other, op):
 
 
     def __add__(self, other) -> Self:
@@ -263,6 +221,12 @@ class AngleBase:
         #    quantize it to avoid weird float artifacts:
         quant = round(rad, 10)
         return hash(quant)
+
+
+
+    def __reduce__(self):
+        return (_rebuild_angle, (type(self), self.display_value, self._display_unit))
+
 
 class Angle(AngleBase):
 
