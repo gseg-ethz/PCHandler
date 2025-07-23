@@ -10,9 +10,9 @@ from pchandler.util import unique_rows_fast
 from pchandler.geometry.core import PointCloudData
 from pchandler.geometry.scalar_field_manager import ScalarFieldManager
 
-from .core import PointCloudFilter
+from pchandler.filters.core import PointCloudFilter
 from pchandler.constants import validate_variables
-from pchandler.geometry.coordinates import SphericalCoordinates
+from pchandler.geometry.coordinates import SphericalCoordinates, rhv2xyz
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -78,21 +78,21 @@ class VoxelDownsample:
                 for i in range(3):
                     scalar_sum[:, i] = np.bincount(unique_inverse, weights=field_values.arr[:, i] * weights, minlength=unique.shape[0])
 
-                if len(weight_sum.shape) == 1:
+                if weight_sum.ndim == 1:
                     weight_sum = weight_sum[:, None]
 
                 if field_name == 'rgb':
-                    warnings.warn(f'RGB colours are not retained. '
+                    logger.warning(f'RGB colours are not retained. '
                                   f'A weighted value is taken using {self.weighting_method=}')
 
                 elif field_name == 'normals':
-                    warnings.warn(f'Normals are not retained. '
+                    logger.warning(f'Normals are not retained. '
                                   f'A weighted value is taken using {self.weighting_method=}'
                                   f'These values may not be very representative of the data')
 
             else:
                 scalar_sum = np.bincount(unique_inverse, weights=field_values * weights, minlength=unique.shape[0])
-                weight_sum = weight_sum[:, 0]
+                weight_sum = weight_sum.reshape(-1)
 
             sfm[field_name] = type(field_values)(scalar_sum / weight_sum,
                                                  name=field_name,
@@ -123,8 +123,9 @@ class VoxelDownsample:
         # # self.scalar_fields.clear()
         #
         # return
+        new_pcd = pcd.copy(array=centroids, update={"scalar_fields": sfm, "unshifted_bbox": None,}, link_to_same_NOS=True)
 
-        return PointCloudData(centroids, scalar_fields=sfm, optimized_shift=pcd.optimized_shift)
+        return new_pcd
 
 
 class AngleBinDownsample:
@@ -177,7 +178,7 @@ class AngleBinDownsample:
                 for i in range(3):
                     scalar_sum[:, i] = np.bincount(unique_inverse, weights=field_values.arr[:, i] * weights, minlength=unique.shape[0])
 
-                if len(weight_sum.shape) == 1:
+                if weight_sum.ndim == 1:
                     weight_sum = weight_sum[:, None]
 
                 if field_name == 'rgb':
@@ -190,7 +191,7 @@ class AngleBinDownsample:
                                   f'These values may not be very representative of the data')
             else:
                 scalar_sum = np.bincount(unique_inverse, weights=field_values * weights, minlength=unique.shape[0])
-                weight_sum = weight_sum[:, 0]
+                weight_sum = weight_sum.reshape(-1)
 
             sfm[field_name] = type(field_values)(scalar_sum / weight_sum,
                                    name=field_name,
@@ -198,9 +199,10 @@ class AngleBinDownsample:
 
 
         ranges = (
-            np.bincount(unique_inverse, weights=pcd.spher[:, 0] * weights, minlength=unique.shape[0])
+            np.bincount(unique_inverse, weights=pcd.r * weights, minlength=unique.shape[0])
             / weight_sum
         )
+        coords = rhv2xyz(np.hstack((ranges[:, np.newaxis], centroids)), pcd.socs_origin)
 
         # # Average scalar fields
         # averaged_scalar_fields = {}
@@ -225,5 +227,6 @@ class AngleBinDownsample:
         #
         # return
 
-        coords = SphericalCoordinates(arr=np.hstack((ranges[:, np.newaxis], centroids)))
-        return PointCloudData(coords.xyz, scalar_fields=sfm, optimized_shift=pcd.optimized_shift)
+        # coords = SphericalCoordinates(arr=np.hstack((ranges[:, np.newaxis], centroids)))
+        new_pcd = pcd.copy(array=coords, update={"scalar_fields": sfm, "unshifted_bbox": None,}, link_to_same_NOS=True)
+        return new_pcd
