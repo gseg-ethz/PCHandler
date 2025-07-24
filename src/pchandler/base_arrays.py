@@ -7,7 +7,7 @@ from typing import Any, Generator, MutableMapping, Optional, Self
 import numpy as np
 import numpy.typing as npt
 from numpydantic import NDArray, Shape  # type: ignore
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator, field_validator
 
 from pchandler.base_types import (
     Array_Nx2_T,
@@ -63,6 +63,26 @@ class BaseArray(ABC, BaseModel):
     )
     arr: ArrayT
 
+    @field_validator('arr', mode='before')
+    @classmethod
+    def extract_array(cls, value: np.ndarray|type[Self]) -> np.ndarray:
+        if isinstance(value, np.ndarray):
+            return value
+
+        elif isinstance(value, BaseArray):
+            value = value.arr
+
+        elif hasattr(value, '__array__') or hasattr(value, '__array_interface__'):
+            value = np.asarray(value)
+
+        else:
+            raise TypeError(
+                f"Initialisation of {cls.__name__} does not support "
+                f"{type(value)} as a numpy array or instance of the BaseArray."
+            )
+
+        return value
+
     @model_validator(mode="after")
     def freeze(self) -> Self:
         if self.model_config["frozen"]:
@@ -114,7 +134,6 @@ class BaseArray(ABC, BaseModel):
     #     exclude = exclude or set()
     #     exclude.add("spher")
     #     return copy.deepcopy(super().model_dump(exclude=exclude))
-
 
     def copy(self,
              array: npt.NDArray[Any] | BaseArray | None = None,
