@@ -100,6 +100,12 @@ class PointCloudData(CartesianCoordinates):
             value = ScalarFieldManager(fields=value)
         return value
 
+    @model_validator(mode="after")
+    def ensure_scalar_field_manager_pointer(self) -> Self:
+        """Revalidate model to ensure that the weakref points to the correct object"""
+
+        self.scalar_fields.parent = self
+        return self
 
     @model_validator(mode="after")
     def _move_into_scalar_fields(self) -> Self:
@@ -111,14 +117,6 @@ class PointCloudData(CartesianCoordinates):
                 setattr(self, name, inp)
                 delattr(self, f"{name}_input")
                 # setattr(self, f"{name}_input", None)
-        return self
-
-
-    @model_validator(mode="after")
-    def ensure_scalar_field_manager_pointer(self) -> Self:
-        """Revalidate model to ensure that the weakref points to the correct object"""
-
-        self.scalar_fields.parent = self
         return self
 
     @property
