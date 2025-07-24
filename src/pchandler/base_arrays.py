@@ -190,6 +190,7 @@ class BaseArray(ABC, BaseModel):
 
 class SampleArray(BaseArray):
 
+    # TODO need to fix this to behave more like a numpy array when over sampling
     def __getitem__(self, key):
         return self.sample(key)
 
@@ -223,6 +224,7 @@ class SampleArray(BaseArray):
         if isinstance(selection, list):
             selection = np.array(selection)
 
+        # TODO handle the case where np.sum(mask) is less than len(selection) -> E.g. DelauneyInterpolation algorithm
         mask[selection] = True
         return mask
 

@@ -93,21 +93,26 @@ class TestAngle:
         a = Angle([0, np.pi/2, np.pi], AngleUnit.RAD)
         arr = np.asarray(a)
         np.testing.assert_array_equal(arr, [0, np.pi/2, np.pi])
+
         # unary ufunc
         sin_a = np.sin(a)
         assert isinstance(sin_a, AngleArray)
         np.testing.assert_allclose(sin_a.to(AngleUnit.RAD), np.sin(arr), rtol=1e-6)
+
         # binary ufunc
         x = Angle(np.pi/4, AngleUnit.RAD)
         y = Angle(np.pi/6, AngleUnit.RAD)
         z = np.add(x, y)
         assert isinstance(z, Angle)
         assert float(z) == pytest.approx(np.pi/4 + np.pi/6)
+
         # tuple-returning ufunc
         q, r = np.divmod(x, y)
         assert all(isinstance(v, Angle) for v in (q, r))
+
         # recombine
         rec = q * y + r
+
         assert float(rec) == pytest.approx(float(x))
 
 

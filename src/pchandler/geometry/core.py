@@ -26,7 +26,7 @@ class PointCloudDataKw(CartesianKw, total=False):
     reflectance: Optional[npt.NDArray[np.uint16 | np.float32 | np.float64]]
 
 class PointCloudData(CartesianCoordinates):
-    arr: Array_Nx3_T = Field(..., validation_alias=AliasChoices('arr', 'xyz'))
+
     # TODO: Rework Transform ledger
     # transform_ledger: Annotated[
     #     TransformLedger,
@@ -50,15 +50,7 @@ class PointCloudData(CartesianCoordinates):
     )
 
     def __init__(self, *args, **kwargs: Unpack[PointCloudDataKw]):
-        # Accept xyz/arr as a positional argument
-        if args:
-            if len(args) > 1:
-                raise AttributeError("expected at most 1 arguments, got %d" % len(args))
-            if "xyz" in kwargs or "arr" in kwargs:
-                raise TypeError("Cannot pass both positional and keyword for xyz/arr")
-            kwargs["xyz"] = args[0]
-
-        super().__init__(**kwargs)
+        super().__init__(*args, **kwargs)
 
     # def __init__(
     #     self,
@@ -91,6 +83,10 @@ class PointCloudData(CartesianCoordinates):
     #     if scalar_fields is not None:
     #         for key, value in scalar_fields:
     #             self.scalar_fields[key] = value
+
+    @property
+    def nbPoints(self) -> int:
+        return len(self)
 
     @field_validator('scalar_fields', mode="before")
     @classmethod

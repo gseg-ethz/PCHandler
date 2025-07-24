@@ -11,12 +11,13 @@ from pchandler.geometry.coordinates import (
     Abstract3dCoordinates,
     AbstractCoordinates,
     CartesianCoordinates,
-    SphericalCoordinates,
+    # SphericalCoordinates,
     Transform,
     rhv2xyz,
     xyz2rhv,
 )
 
+# Radius, Horizontal, Vertical (Zenith)
 _known_spher = np.array(
     [
         [1, 0, HALF_PI],
@@ -26,40 +27,40 @@ _known_spher = np.array(
         [1, -HALF_PI, HALF_PI],
         [1, 0, PI],
         [np.sqrt(3), np.arctan2(1, 1), np.arctan2(np.sqrt(2), 1)],
-    ]
-).astype(np.float64)
+    ], dtype=np.float64
+)
 
+# X, Y, Z
+_known_xyz = np.array(
+    [
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+        [-1, 0, 0],
+        [0, -1, 0],
+        [0, 0, -1],
+        [1, 1, 1]
+    ], dtype=np.float64
+)
+
+_small_xyz = np.random.rand(100, 3)
+_large_xyz = np.random.rand(1_000_000, 3)
 
 @pytest.fixture(scope="function")
 def known_spher():
     return _known_spher
 
-
-_small_xyz = np.random.rand(100, 3)
-
-
 @pytest.fixture(scope="function")
 def small_xyz():
     return _small_xyz
-
-
-_known_xyz = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1], [-1, 0, 0], [0, -1, 0], [0, 0, -1], [1, 1, 1]]).astype(
-    np.float64
-)
-
 
 @pytest.fixture(scope="function")
 def known_xyz():
     return _known_xyz
 
-
-_large_xyz = np.random.rand(1_000_000, 3)
-
-
 @pytest.fixture(scope="function")
 def large_xyz():
     return _large_xyz
-
 
 @pytest.fixture(scope="function")
 def cart_obj(large_xyz) -> CartesianCoordinates:
@@ -103,7 +104,8 @@ class TestCartesianCoordinates:
         # These properties are access methods and shouldn't be in the base dict
         assert prop in type(cart_obj).__dict__ and prop not in cart_obj.__dict__
 
-    @pytest.mark.parametrize("method", ("to_spherical", "from_spherical", "transform"))
+    # @pytest.mark.parametrize("method", ("to_spherical", "from_spherical", "transform"))
+    @pytest.mark.parametrize("method", ("from_spherical", "transform"))
     def test_has_methods(self, cart_obj, method):
         assert callable(getattr(cart_obj, method))
 
@@ -129,46 +131,48 @@ class TestCartesianCoordinates:
         assert np.all(cart_obj.hz == cart_obj.spher[:, 1])
         assert np.all(cart_obj.v == cart_obj.spher[:, 2])
 
-    def test_conversion_functions(self, cart_obj):
-        spherical = cart_obj.to_spherical()
-        assert isinstance(spherical, SphericalCoordinates)
-        assert np.all(spherical.socs_origin == cart_obj.socs_origin)
+    def test_from_spherical(self, cart_obj):
+        # This is based on the implementation when there is no SphericalCoordinates
+        cart_2 = type(cart_obj).from_spherical(cart_obj.spher)
+        assert isinstance(cart_2, CartesianCoordinates)
+        assert np.allclose(cart_obj, cart_2)
 
-        # check that the cart_obj cleans up the cached spherical coordinates
-        # reasoning is that if a separate object is created, these are not needed
-        assert "spher" not in cart_obj.__dict__
-
-        # Check the id and generate the cached property simultaneously
-        assert id(spherical) != id(cart_obj.spher)
-
-        spherical2 = cart_obj.to_spherical()
-        cart2 = CartesianCoordinates.from_spherical(spherical2)
-        assert np.allclose(cart_obj.xyz, cart2.xyz)
-
-        # Check that all objects are different
-        assert id(spherical2) != id(spherical) != id(cart_obj.spher)
-
-        cart2 = spherical.to_cartesian()
-        assert id(cart2) != id(cart_obj)
-        assert id(cart2) != id(spherical)
-        assert np.allclose(cart2.arr, cart_obj.arr)
-        assert np.allclose(cart2.spher, spherical)
+        # # check that the cart_obj cleans up the cached spherical coordinates
+        # # reasoning is that if a separate object is created, these are not needed
+        # assert "spher" not in cart_obj.__dict__
+        #
+        # # Check the id and generate the cached property simultaneously
+        # assert id(spherical) != id(cart_obj.spher)
+        #
+        # spherical2 = cart_obj.to_spherical()
+        # cart2 = CartesianCoordinates.from_spherical(spherical2)
+        # assert np.allclose(cart_obj.xyz, cart2.xyz)
+        #
+        # # Check that all objects are different
+        # assert id(spherical2) != id(spherical) != id(cart_obj.spher)
+        #
+        # cart2 = spherical.to_cartesian()
+        # assert id(cart2) != id(cart_obj)
+        # assert id(cart2) != id(spherical)
+        # assert np.allclose(cart2.arr, cart_obj.arr)
+        # assert np.allclose(cart2.spher, spherical)
 
     def test_transform_method(self, cart_obj):
-        xyz = cart_obj.xyz.copy()
-        rotation = Rotation.from_euler(seq="zyx", angles=np.array([0, 1.3, 1.4])).as_matrix()
-        scale = np.array([0.5, 0.5, 0.5])
-        translation = np.array([3, 3, 3])
-
-        t_mat = np.eye(4)
-        t_mat[:3, :3] *= rotation
-        t_mat[[0, 1, 2], [0, 1, 2]] *= scale
-        t_mat[:3, 3] += translation
-
-        cart_obj.transform(rotation=rotation, scale=scale, translation=translation)
-
-        # TODO reimplement transform ledger then retest
-        # assert 'AFFINE' in cart_obj.transform_ledger[-1][0]
+        assert False
+        # xyz = cart_obj.xyz.copy()
+        # rotation = Rotation.from_euler(seq="zyx", angles=np.array([0, 1.3, 1.4])).as_matrix()
+        # scale = np.array([0.5, 0.5, 0.5])
+        # translation = np.array([3, 3, 3])
+        #
+        # t_mat = np.eye(4)
+        # t_mat[:3, :3] *= rotation
+        # t_mat[[0, 1, 2], [0, 1, 2]] *= scale
+        # t_mat[:3, 3] += translation
+        #
+        # cart_obj.transform(rotation=rotation, scale=scale, translation=translation)
+        #
+        # # TODO reimplement transform ledger then retest
+        # # assert 'AFFINE' in cart_obj.transform_ledger[-1][0]
 
     def test_left_matrix_multiplication(self, cart_obj):
         rand_3x3 = np.random.rand(3, 3)
@@ -227,34 +231,36 @@ class TestCartesianCoordinates:
             c = cart_obj[mask]
 
     # # TODO uncomment when FOV re-implemented
-    # def test_fov(self, cart_obj):
-    #     cart_obj.fov
+    def test_fov(self, cart_obj):
+        cart_obj.fov
+        assert False
 
 
-class TestSphericalCoordinates:
-    def test_instantiation(self, known_spher, known_xyz):
-        spherical = SphericalCoordinates(arr=known_spher)
-
-        assert isinstance(spherical, SphericalCoordinates)
-        assert np.all(spherical.spher == known_spher)
-
-        with pytest.raises(ValidationError):
-            SphericalCoordinates(arr=known_xyz)
-
-    def test_from_cartesian(self, known_spher, known_xyz):
-        cart_obj = CartesianCoordinates(arr=known_xyz)
-        spher_obj = SphericalCoordinates.from_cartesian(cart_obj)
-        assert np.allclose(spher_obj.arr, known_spher)
-
-    # # TODO uncomment when FOV re-implemented
-    # def test_fov(self, known_spher):
-    #     SphericalCoordinates(arr=known_spher).fov
+# class TestSphericalCoordinates:
+#     def test_instantiation(self, known_spher, known_xyz):
+#         spherical = SphericalCoordinates(arr=known_spher)
+#
+#         assert isinstance(spherical, SphericalCoordinates)
+#         assert np.all(spherical.spher == known_spher)
+#
+#         with pytest.raises(ValidationError):
+#             SphericalCoordinates(arr=known_xyz)
+#
+#     def test_from_cartesian(self, known_spher, known_xyz):
+#         cart_obj = CartesianCoordinates(arr=known_xyz)
+#         spher_obj = SphericalCoordinates.from_cartesian(cart_obj)
+#         assert np.allclose(spher_obj.arr, known_spher)
+#
+#     # # TODO uncomment when FOV re-implemented
+#     # def test_fov(self, known_spher):
+#     #     SphericalCoordinates(arr=known_spher).fov
 
 
 class TestConversions:
     def test_cartesian_to_spherical(self, known_xyz, known_spher):
         rhv = xyz2rhv(known_xyz)
         assert np.allclose(rhv, known_spher)
+
         xyz = rhv2xyz(known_spher)
         assert np.allclose(xyz, known_xyz)
 
@@ -262,6 +268,16 @@ class TestConversions:
         for arr in (small_xyz, large_xyz):
             xyz2 = rhv2xyz(xyz2rhv(arr))
             assert np.allclose(xyz2, arr)
+
+    # TODO implement conversion tests from Cartesian and PointCloudData types
+    # def test_supported_types(self, known_xyz, known_spher):
+    #     xyz = CartesianCoordinates(arr=known_xyz)
+    #     rhv = xyz2rhv(xyz)
+    #     assert np.allclose(rhv, known_spher)
+    #
+    #     xyz = PointCloudData(xyz=xyz)
+    #     rhv = xyz2rhv(xyz)
+    #     assert np.allclose(rhv, known_spher)
 
     class TestSphericalOrigin:
         @staticmethod

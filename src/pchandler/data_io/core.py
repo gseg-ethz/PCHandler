@@ -200,7 +200,10 @@ class AbstractIOHandler(ABC):
         # Leverage dict to avoid any duplicates of using 'rgb' or 'r', 'g', 'b' for example
         dtype_dict: dict = {'names': [], 'formats': []}
 
-        xyz_dtype = np.float64 if pcd.optimized else pcd.xyz.dtype
+        if pcd.numerical_optimization_shift is None:
+            xyz_dtype = np.float64
+        else:
+            xyz_dtype = pcd.xyz.dtype
 
         for name in XYZ_NAMES.char:
             dtype_dict['names'].append(name)
@@ -262,11 +265,16 @@ class AbstractIOHandler(ABC):
 
         array = np.empty((len(pcd),), dtype=np.dtype(dtype_dict))
 
-        shift = pcd.optimized_shift.value
+        shift = pcd.numerical_optimization_shift.value
 
         scalar_fields = dtype_dict['names']
         for i, coord in enumerate(XYZ_NAMES.char):
-            array[coord] = getattr(pcd, coord) + shift[i] if pcd.optimized else getattr(pcd, coord)
+
+            if pcd.numerical_optimization_shift is None:
+                array[coord] = getattr(pcd, coord)
+            else:
+                array[coord] = getattr(pcd, coord) + shift[i]
+
             scalar_fields.remove(coord)
 
         for name in scalar_fields:
