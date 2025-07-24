@@ -264,15 +264,13 @@ class TestPointCloudData:
 
         def test_intensity(self, xyz_, rgb_, normals_, reflectance_, sfs_):
             # normals non_array
-            with pytest.raises(Exception) as e:
+            with pytest.raises(ValidationError) as e:
                 PointCloudData(xyz=xyz_, rgb=rgb_, normals=normals_, reflectance=reflectance_, intensity=1, scalar_fields=sfs_)
-            assert type(e.value) in (ValueError, TypeError, AttributeError)
 
         def test_reflectance(self, xyz_, rgb_, normals_, intensity_, sfs_):
             # normals non_array
-            with pytest.raises(Exception) as e:
+            with pytest.raises(ValidationError) as e:
                 PointCloudData(xyz=xyz_, rgb=rgb_, normals=normals_, reflectance=1, intensity=intensity_, scalar_fields=sfs_)
-            assert type(e.value) in (ValueError, TypeError, AttributeError)
 
         def test_socs_origin(self, xyz_, rgb_, normals_, sfs_):
             # spherical_coordinates_origin

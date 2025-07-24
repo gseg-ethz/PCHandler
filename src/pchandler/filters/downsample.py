@@ -12,7 +12,7 @@ from pchandler.geometry.scalar_field_manager import ScalarFieldManager
 
 from pchandler.filters.core import PointCloudFilter
 from pchandler.constants import validate_variables
-from pchandler.geometry.coordinates import SphericalCoordinates, rhv2xyz
+from pchandler.geometry.coordinates import rhv2xyz
 
 logger = logging.getLogger(__name__.split(".")[0])
 

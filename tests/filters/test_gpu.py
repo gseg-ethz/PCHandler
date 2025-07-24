@@ -20,12 +20,11 @@ def simple_array():
 def sphere_filter():
     return SphereFilter(np.array([0.5, 0.5, 0.5]), 1.3)
 
+
 @pytest.fixture(scope="function")
 def polygon_filter():
     polygon = box(-0.31, -0.31, 1.3, 1.3)
     return PolygonFilter(polygon, 'xy')
-
-
 
 
 class TestGPUSphereFilter:

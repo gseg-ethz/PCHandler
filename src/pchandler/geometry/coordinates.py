@@ -9,7 +9,7 @@ import uuid
 
 import numpy as np
 import numpy.typing as npt
-from pydantic import BeforeValidator, Field, validate_call, PrivateAttr, field_validator
+from pydantic import BeforeValidator, Field, validate_call, PrivateAttr, field_validator, AliasChoices
 
 from pchandler.geometry.fov import FoV
 from pchandler.geometry.util import MinMaxPoints
@@ -112,7 +112,7 @@ class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates):
 
 
 class CartesianCoordinates(Abstract3dCoordinates):
-    arr: Array_Nx3_T
+    arr: Array_Nx3_T = Field(..., validation_alias=AliasChoices('arr', 'xyz'))
 
     numerical_optimization_shift: Optional[OptimizedShift] = Field(
         default_factory=OptimizedShift,
@@ -123,9 +123,17 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
     _shift_applied_by: Optional[OptimizedShift] = PrivateAttr(default=None)
 
-    def __init__(self, **data: Unpack[CartesianKw]):
-        prev_shift: Optional[OptimizedShift] = data.pop("_shift_applied_by", None)
-        super().__init__(**data)
+    def __init__(self, *args, **kwargs: Unpack[CartesianKw]):
+        # Accept xyz/arr as a positional argument
+        if args:
+            if len(args) > 1:
+                raise AttributeError("expected at most 1 arguments, got %d" % len(args))
+            if "xyz" in kwargs or "arr" in kwargs:
+                raise TypeError("Cannot pass both positional and keyword for xyz/arr")
+            kwargs["xyz"] = args[0]
+
+        prev_shift: Optional[OptimizedShift] = kwargs.pop("_shift_applied_by", None)
+        super().__init__(**kwargs)
         object.__setattr__(self, "_shift_applied_by", prev_shift)
         self.compute_unshifted_bbox()
         self._process_shift()
@@ -380,16 +388,14 @@ class CartesianCoordinates(Abstract3dCoordinates):
     def numerically_optimized(self) -> bool:
         return not (self.numerical_optimization_shift is None or self.numerical_optimization_shift.value) #TODO close to zero
 
-    def to_spherical(self) -> SphericalCoordinates:
-        spherical = SphericalCoordinates(**self.model_dump(exclude={"arr"}) | {"arr": self.spher})
-        delattr(self, "spher")
-        return spherical
+    # def to_spherical(self) -> SphericalCoordinates:
+    #     spherical = SphericalCoordinates(**self.model_dump(exclude={"arr"}) | {"arr": self.spher})
+    #     delattr(self, "spher")
+    #     return spherical
 
     @classmethod
-    def from_spherical(cls, spherical: SphericalCoordinates) -> Self:
-        cartesian = cls(**spherical.model_dump(exclude={"arr"}) | {"arr": spherical.xyz})
-        delattr(spherical, "xyz")
-        return cartesian
+    def from_spherical(cls, spher: SphericalCoordinates) -> Self:
+        return cls(arr=rhv2xyz(spher))
 
     # TODO must define on the transformation handling -> Incl. support for the scipy.spatial.transform.rotation
     def transform(self,
@@ -408,99 +414,101 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
         self.arr = (affine @ self.H.T).T[:, :3]
 
-# TODO check the validation process and performance
-class SphericalCoordinates(Abstract3dCoordinates):
-    arr: Annotated[Array_Nx3_T, Field(validation_alias="spher"), BeforeValidator(validate_spherical_angles)]
-
-    @cached_property
-    def fov(self) -> FoV:
-        return FoV.from_angles(self.hz, self.v)
-
-    @property
-    def spher(self) -> npt.NDArray[np.floating]:
-        return self.arr
-
-    @property
-    def rhv(self) -> npt.NDArray[np.floating]:
-        return self.arr
-
-    @property
-    def r(self) -> npt.NDArray[np.floating]:
-        return self.rhv[:, 0]
-
-    @property
-    def hz(self) -> np.ndarray:
-        return self.rhv[:, 1]
-
-    @property
-    def v(self) -> npt.NDArray[np.floating]:
-        return self.rhv[:, 2]
-
-    @property
-    def _hz_v(self) -> npt.NDArray[np.floating]:
-        return self.rhv[:, 1:]
-
-    @cached_property
-    def xyz(self) -> npt.NDArray[np.floating]:
-        if self.socs_origin is None:
-            warnings.warn("Spherical origin was not defined, so coordinates assumed to be at scan origin")
-            return rhv2xyz(self.arr, np.zeros(3, dtype=np.float32))
-        return rhv2xyz(self.arr, self.socs_origin)
-
-    @property
-    def x(self) -> npt.NDArray[np.floating]:
-        return self.xyz[:, 0]
-
-    @property
-    def y(self) -> npt.NDArray[np.floating]:
-        return self.xyz[:, 1]
-
-    @property
-    def z(self) -> npt.NDArray[np.floating]:
-        return self.xyz[:, 2]
-
-    def to_cartesian(self) -> CartesianCoordinates:
-        cartesian = CartesianCoordinates(**self.model_dump(exclude={"arr"}) | {"arr": self.xyz})
-        delattr(self, "xyz")
-        return cartesian
-
-    @classmethod
-    def from_cartesian(cls, cartesian: CartesianCoordinates) -> Self:
-        spherical = cls(**cartesian.model_dump(exclude={"arr"}) | {"arr": cartesian.spher})
-        delattr(cartesian, "spher")
-        return spherical
-
-    # DISCUSS - Add methods to apply tilt and yaw rotations easily (e.g. for spherical image projection shifts?
-    # def rotate(self, yaw=None, pitch=None):
-    #     if yaw:
-    #         self.arr[:, 1] = coerce_azimuths(self.hz + yaw)
-    #
-    #     if pitch:
-    #         self.arr[np.logical_or(temp < 0, temp > PI), 1] = coerce_azimuths(self.hz + TWO_PI)
-    #         self.arr[:, 2] = np.abs(temp := self.v - pitch)
+# class SphericalCoordinates(Abstract3dCoordinates):
+#     arr: Annotated[Array_Nx3_T, Field(validation_alias="spher"), BeforeValidator(validate_spherical_angles)]
+#
+#     @cached_property
+#     def fov(self) -> FoV:
+#         return FoV.from_angles(self.hz, self.v)
+#
+#     @property
+#     def spher(self) -> npt.NDArray[np.floating]:
+#         return self.arr
+#
+#     @property
+#     def rhv(self) -> npt.NDArray[np.floating]:
+#         return self.arr
+#
+#     @property
+#     def r(self) -> npt.NDArray[np.floating]:
+#         return self.rhv[:, 0]
+#
+#     @property
+#     def hz(self) -> np.ndarray:
+#         return self.rhv[:, 1]
+#
+#     @property
+#     def v(self) -> npt.NDArray[np.floating]:
+#         return self.rhv[:, 2]
+#
+#     @property
+#     def _hz_v(self) -> npt.NDArray[np.floating]:
+#         return self.rhv[:, 1:]
+#
+#     @cached_property
+#     def xyz(self) -> npt.NDArray[np.floating]:
+#         if self.socs_origin is None:
+#             warnings.warn("Spherical origin was not defined, so coordinates assumed to be at scan origin")
+#             return rhv2xyz(self.arr, np.zeros(3, dtype=np.float32))
+#         return rhv2xyz(self.arr, self.socs_origin)
+#
+#     @property
+#     def x(self) -> npt.NDArray[np.floating]:
+#         return self.xyz[:, 0]
+#
+#     @property
+#     def y(self) -> npt.NDArray[np.floating]:
+#         return self.xyz[:, 1]
+#
+#     @property
+#     def z(self) -> npt.NDArray[np.floating]:
+#         return self.xyz[:, 2]
+#
+#     def to_cartesian(self) -> CartesianCoordinates:
+#         cartesian = CartesianCoordinates(**self.model_dump(exclude={"arr"}) | {"arr": self.xyz})
+#         delattr(self, "xyz")
+#         return cartesian
+#
+#     @classmethod
+#     def from_cartesian(cls, cartesian: CartesianCoordinates) -> Self:
+#         spherical = cls(**cartesian.model_dump(exclude={"arr"}) | {"arr": cartesian.spher})
+#         delattr(cartesian, "spher")
+#         return spherical
+#
+#     # DISCUSS - Add methods to apply tilt and yaw rotations easily (e.g. for spherical image projection shifts?
+#     # def rotate(self, yaw=None, pitch=None):
+#     #     if yaw:
+#     #         self.arr[:, 1] = coerce_azimuths(self.hz + yaw)
+#     #
+#     #     if pitch:
+#     #         self.arr[np.logical_or(temp < 0, temp > PI), 1] = coerce_azimuths(self.hz + TWO_PI)
+#     #         self.arr[:, 2] = np.abs(temp := self.v - pitch)
 
 
 @validate_call(config=DEFAULT_CONFIG)
-def rhv2xyz(spher: npt.ArrayLike|npt.NDArray[np.floating], origin_shift: Vector_3_T | None = None) -> np.ndarray:
+def rhv2xyz(spher: npt.ArrayLike|npt.NDArray[np.floating], scan_origin: Optional[Vector_3_T] = None) -> np.ndarray:
     xyz: np.ndarray = np.zeros_like(spher)
     xyz[:, 0] = spher[:, 0] * np.sin(spher[:, 2]) * np.cos(spher[:, 1])
     xyz[:, 1] = spher[:, 0] * np.sin(spher[:, 2]) * np.sin(spher[:, 1])
     xyz[:, 2] = spher[:, 0] * np.cos(spher[:, 2])
 
-    return xyz if origin_shift is None else xyz - origin_shift
+    return xyz if scan_origin is None else xyz - scan_origin
+
+
 
 
 # TODO fix this to support the optimal shifts (e.g. remove origin shift)
 @validate_call(config=DEFAULT_CONFIG)
-def xyz2rhv(cart: npt.ArrayLike|npt.NDArray[np.floating], origin_shift: Optional[Vector_3_T] = np.zeros(3)) -> np.ndarray:
+def xyz2rhv(cart: npt.ArrayLike|npt.NDArray[np.floating], scan_origin: Optional[Vector_3_T] = None) -> np.ndarray:
     spher: np.ndarray = np.zeros_like(cart)
 
-    # Apply the shift in place to avoid creating additional copies
-    dx, dy, dz = origin_shift
+    if scan_origin is not None:
+        cart = (cart + scan_origin)
 
-    xy_2: npt.ArrayLike = (cart[:, 0] + dx) ** 2 + (cart[:, 1] + dy) ** 2
-    spher[:, 0] = np.sqrt(xy_2 + (cart[:, 2] + dz) ** 2)  # [  0, inf] slope distance
-    spher[:, 1] = np.arctan2((cart[:, 1] + dy), (cart[:, 0] + dx))  # [-pi, +pi] horizonal angle
-    spher[:, 2] = np.arctan2(np.sqrt(xy_2), cart[:, 2] + dz)  # [  0, +pi] zenith angle
+    xy_2: npt.ArrayLike = cart[:, 0]**2 + cart[:, 1]**2
+
+    spher[:, 0] = np.sqrt(xy_2 + cart[:, 2]**2)         # [  0, inf] slope distance
+    spher[:, 1] = np.arctan2(cart[:, 1], cart[:, 0])    # [-pi, +pi] horizonal angle
+    spher[:, 2] = np.arctan2(np.sqrt(xy_2), cart[:, 2])     # [  0, +pi] zenith angle
 
     return spher

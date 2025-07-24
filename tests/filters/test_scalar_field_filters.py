@@ -31,7 +31,7 @@ class TestScalarFieldFilter:
     def test_invalid_filter(self, pcd):
         sf_filter = ScalarFieldFilter('intensity', upper_bound=100, lower_bound=100)
         pcd_filtered = sf_filter.extract(pcd)
-        assert pcd_filtered is None
+        assert len(pcd_filtered.intensity) == 0
 
 class TestScalarFieldPercentileFilter:
     def test_intensity_filter(self, pcd):
@@ -49,4 +49,4 @@ class TestScalarFieldPercentileFilter:
     def test_invalid_filter(self, pcd):
         sf_filter = ScalarFieldPercentileFilter('intensity', lower_percentile=98, upper_percentile=99)
         pcd_filtered = sf_filter.extract(pcd)
-        assert pcd_filtered is None
+        assert len(pcd_filtered) == 0
