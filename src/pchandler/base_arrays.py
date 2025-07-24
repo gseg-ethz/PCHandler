@@ -19,6 +19,8 @@ from pchandler.base_types import (
     VectorT,
 )
 
+from pchandler.validators import validate_transposed_2d_array
+
 
 def make_ndarray_type(*args: Optional[int | str], dtype: Optional[npt.DTypeLike] = None) -> NDArray[Any, Any]:
     """
@@ -38,16 +40,18 @@ def make_ndarray_type(*args: Optional[int | str], dtype: Optional[npt.DTypeLike]
 class BaseArray(ABC, BaseModel):
     """
     BaseArray is designed to be a subclassable, automatic validator for array based classes.
+    It is built around a combination of the Pydantic and Numpydantic libraries.
 
     In line with the PCHandler project, the main idea is that it can be extended to support the following:
         -> Coordinate Classes
         -> Scalar Fields
         -> Transformation Matrices (4x4 Affine and 3x3 matrices -> intrinsic / extrinsic)
+        -> Image Arrays
+        -> ...
 
-    The shape of each should be validated any time an object or attribute is changed.
-    The dtype should also be able to be validated (e.g. RGB or Optimised Coordinates).
-    Objects can also be easily extended to support other attribute information (e.g. lazy loading, image metadata).
-    Objects can also be frozen absolutely -> e.g. a loaded read-only array's coordinates "never" change"
+    For now, it supports the following:
+        - Boolean, Floating, SignedInteger and UnsignedInteger types
+        - Scalar values (although converted to 1D arrays)
     """
 
     model_config = ConfigDict(
@@ -65,20 +69,13 @@ class BaseArray(ABC, BaseModel):
 
     @field_validator('arr', mode='before')
     @classmethod
-    def extract_array(cls, value: np.ndarray|type[Self]) -> np.ndarray:
-        if isinstance(value, np.ndarray):
-            return value
-
-        elif isinstance(value, BaseArray):
-            value = value.arr
-
-        elif hasattr(value, '__array__') or hasattr(value, '__array_interface__'):
-            value = np.asarray(value)
-
-        else:
+    def coerce_to_numpy(cls, value: npt.ArrayLike|npt.NDArray) -> npt.NDArray:
+        try:
+            value = np.atleast_1d(np.asarray(value))
+        except Exception as e:
             raise TypeError(
                 f"Initialisation of {cls.__name__} does not support "
-                f"{type(value)} as a numpy array or instance of the BaseArray."
+                f"{type(value)} as a numpy array or instance of the BaseArray. \n\n{e}"
             )
 
         return value
@@ -378,6 +375,11 @@ class FixedLengthArray(SampleArray, _NumericMixins):
 class BaseVector(FixedLengthArray):
     arr: VectorT
 
+    @field_validator('arr', mode='before')
+    @classmethod
+    def validate_transposed_vector(cls, value: npt.NDArray) -> npt.NDArray:
+        return np.atleast_1d(value.squeeze())
+
 
 class HomogeneousArray(FixedLengthArray):
     @property
@@ -388,35 +390,45 @@ class HomogeneousArray(FixedLengthArray):
 class ArrayNx2(HomogeneousArray):
     arr: Array_Nx2_T
 
+    @field_validator('arr', mode='before')
+    @classmethod
+    def validate_transposed_Nx2(cls, value: npt.NDArray) -> npt.NDArray:
+        return validate_transposed_2d_array(value, 2)
+
 
 class ArrayNx3(HomogeneousArray):
     arr: Array_Nx3_T
 
+    @field_validator('arr', mode='before')
+    @classmethod
+    def validate_transposed_Nx3(cls, value: npt.NDArray) -> npt.NDArray:
+        return validate_transposed_2d_array(value, 3)
 
-class ReadOnlyArray(BaseArray):
-    model_config = ConfigDict(strict=True, frozen=True)
-
-
-class ReadOnlyVector(BaseVector):
-    model_config = ConfigDict(strict=True, frozen=True)
-
-
-class _ImageLike(SampleArray, _NumericMixins, ABC):
-    arr: Array_NxM_T | Array_NxM_3_T
-
-    # Update implementation based on if you want to support slicing / views or not
-    def __getitem__(self, *key: IndexLike) -> Any:
-        return self.arr[*key]
-
-    def create_mask(self, *indices: int|slice):
-        if isinstance(indices, slice):
-            mask = indices
-        else:
-            mask = np.zeros_like(self.arr, dtype=np.bool_)
-            mask[*indices] = True
-        return mask
-
-    def view(self, cls: Optional[type] = None) -> Self:
-        return self.copy(self.arr.view(cls=cls), deep=False)
-
+# TODO support for frozen classes?
+# class ReadOnlyArray(BaseArray):
+#     model_config = ConfigDict(strict=True, frozen=True)
+#
+#
+# class ReadOnlyVector(BaseVector):
+#     model_config = ConfigDict(strict=True, frozen=True)
+#
+#
+# TODO support for image like arrays? Should be done elsewhere maybe
+# class _ImageLike(SampleArray, _NumericMixins, ABC):
+#     arr: Array_NxM_T | Array_NxM_3_T
+#
+#     # Update implementation based on if you want to support slicing / views or not
+#     def __getitem__(self, *key: IndexLike) -> Any:
+#         return self.arr[*key]
+#
+#     def create_mask(self, *indices: int|slice):
+#         if isinstance(indices, slice):
+#             mask = indices
+#         else:
+#             mask = np.zeros_like(self.arr, dtype=np.bool_)
+#             mask[*indices] = True
+#         return mask
+#
+#     def view(self, cls: Optional[type] = None) -> Self:
+#         return self.copy(self.arr.view(cls=cls), deep=False)
 

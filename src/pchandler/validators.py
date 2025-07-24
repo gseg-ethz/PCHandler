@@ -103,52 +103,14 @@ def coerce_wrapped_horizontal_angles(array: npt.NDArray[np.floating]) -> npt.NDA
     return array
 
 
-def extract_array(value: npt.NDArray[Any] | tuple[npt.NDArray[Any] | object] | object | dict[str, npt.NDArray[Any]]
-                  ) -> npt.NDArray[Any]:
-    # Don't copy numpy data as this should be initialisation of the object
-    if isinstance(value, np.ndarray):
-        return value
 
-    elif hasattr(value, "arr"):
-        value = value.arr.copy()
-
-    elif isinstance(value, tuple):
-        if len(value) != 1:
-            raise TypeError(f"Value to unpack from a tuple > 1 is ambiguous: {value}")
-
-        if isinstance(value[0], np.ndarray):
-            value = value[0]
-        elif hasattr(value[0], "arr"):
-            value = value[0].arr.copy()
-        else:
-            raise TypeError(f"Input value is an unsupported type: {type(value[0])} ")
-
-    elif isinstance(value, dict):
-        if "arr" in value:
-            value = value["arr"]
-        else:
-            raise TypeError(f"'arr' is not in the passed dictionary.")
-
-    else:
-        raise TypeError(f"Input value is an unsupported type: {type(value)} ")
-
-    return value
-
-
-# TODO ensure error thrown with single point but a get_point function exists
-def validate_transposed_vector(array: npt.NDArray[Any]) -> npt.NDArray[Any]:
-    return np.atleast_1d(array.squeeze())
-
-
-def validate_n_by_3_transposed(array: npt.NDArray[Any]) -> npt.NDArray[Any]:
-    return validate_transposed(array, cols=3)
-
-
-def validate_n_by_2_transposed(array: npt.NDArray[Any]) -> npt.NDArray[Any]:
-    return validate_transposed(array, cols=2)
-
-
-def validate_transposed(array: npt.NDArray[Any], cols: int) -> npt.NDArray[Any]:
+def validate_transposed_2d_array(array: npt.NDArray[Any], cols: int) -> npt.NDArray[Any]:
+    """
+    Validats the  transpose of 2D arrays with known fixed cols
+    :param array:
+    :param cols:
+    :return:
+    """
     if array.ndim != 2:
         raise ValueError(f"Input array must be 2-dimensional of Nx{cols} or {cols}xN shape. Received: {array.shape}")
 
