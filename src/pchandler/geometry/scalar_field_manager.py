@@ -262,7 +262,7 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
 
     @property
     def reflectance(self):
-        return self.fields.get(REFLECTANCE_NAMES, None)
+        return self.fields.get(REFLECTANCE_NAMES.base, None)
 
     @reflectance.setter
     def reflectance(self, value: np.ndarray | ScalarField):

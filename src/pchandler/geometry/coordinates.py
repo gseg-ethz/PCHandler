@@ -76,7 +76,6 @@ class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates):
     project_transformation: Optional[Array_4x4_T] = None
     socs_origin: Optional[np.ndarray] = None
 
-
     @property
     @abstractmethod
     def xyz(self) -> npt.NDArray[np.floating]: ...
@@ -112,7 +111,6 @@ class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates):
         )
 
 
-
 class CartesianCoordinates(Abstract3dCoordinates):
     arr: Array_Nx3_T
 
@@ -124,7 +122,6 @@ class CartesianCoordinates(Abstract3dCoordinates):
     unshifted_bbox: Optional[MinMaxPoints] = Field(default=None)
 
     _shift_applied_by: Optional[OptimizedShift] = PrivateAttr(default=None)
-
 
     def __init__(self, **data: Unpack[CartesianKw]):
         prev_shift: Optional[OptimizedShift] = data.pop("_shift_applied_by", None)
@@ -139,7 +136,6 @@ class CartesianCoordinates(Abstract3dCoordinates):
             object.__setattr__(
                 self, "unshifted_bbox", MinMaxPoints.from_points(self.arr, already_applied_shift_vec=applied_shift)
             )
-
 
     def _process_shift(self):
         '''
@@ -167,14 +163,17 @@ class CartesianCoordinates(Abstract3dCoordinates):
             self.update_shift(prev_shift.value)
             prev_shift.unregister(self)
 
-        if prev_shift is not None and self.numerical_optimization_shift is not None:
+        elif prev_shift is not None and self.numerical_optimization_shift is not None:
             if prev_shift is not self.numerical_optimization_shift:
                 delta_shift = prev_shift.value - self.numerical_optimization_shift.value
                 self.update_shift(delta_shift)
                 prev_shift.unregister(self)
 
-        if prev_shift is None and self.numerical_optimization_shift is not None:
+        elif prev_shift is None and self.numerical_optimization_shift is not None:
             self.update_shift(-self.numerical_optimization_shift.value)
+
+        else:
+            raise RuntimeError("Unknown edge case found.")
 
         object.__setattr__(self, "_shift_applied_by", self.numerical_optimization_shift)
 
@@ -187,13 +186,11 @@ class CartesianCoordinates(Abstract3dCoordinates):
         new_sample.compute_unshifted_bbox(overwrite=True)
         return new_sample
 
-
     def update_shift(self, delta_shift: Vector_3_T) -> None:
         target_dtype = np.float64 if self.numerical_optimization_shift is None else np.float32
         self.arr = (self.arr + delta_shift).astype(target_dtype, copy=False)
         if self.socs_origin is not None:
             self.socs_origin = (self.socs_origin + delta_shift).astype(target_dtype, copy=False)
-
 
     def _register_with_shift_at_osm(self) -> None:
         """
@@ -215,8 +212,6 @@ class CartesianCoordinates(Abstract3dCoordinates):
             logger.warning("No numerical_optimization_shift was feasible. Will continue in float64 mode.")
             object.__setattr__(self, "numerical_optimization_shift", None)
 
-
-
     def __setattr__(self, key, value):
         if key == "_shift_applied_by":
             raise AttributeError("Cannot assign to '{key}'")
@@ -226,7 +221,6 @@ class CartesianCoordinates(Abstract3dCoordinates):
             return
         super().__setattr__(key, value)
 
-
     def __hash__(self) -> int:
         return id(self)
 
@@ -234,7 +228,6 @@ class CartesianCoordinates(Abstract3dCoordinates):
         data = super().model_dump(**kwargs)
         data["_shift_applied_by"] = self._shift_applied_by
         return data
-
 
     def __reduce__(self) -> Any:
         logger.debug(f"Running `{self.__class__}.reduce()` ")
@@ -251,6 +244,7 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
         return obj
 
+    # TODO this supports merging of tiled data. Not tested over registration / transformation etc.
     @classmethod
     def merge(cls: Type[CartesianT], *cart_coords: CartesianT , **kwargs) -> CartesianT:
         if len(cart_coords) == 1:
@@ -272,6 +266,7 @@ class CartesianCoordinates(Abstract3dCoordinates):
             cart_coord_copies = list()
             update = {"numerical_optimization_shift": common_nos}
             update.update({k: None for k in kwargs})
+
             for cart_coord in cart_coords:
                 cart_coord_copies.append(cart_coord.copy(update=update, link_to_same_NOS=False))
             cart_coords = tuple(cart_coord_copies)
@@ -284,9 +279,6 @@ class CartesianCoordinates(Abstract3dCoordinates):
             project_transformation=None,
             **kwargs
         )
-
-
-
 
     # @model_validator(mode="wrap")
     # @classmethod
@@ -326,9 +318,6 @@ class CartesianCoordinates(Abstract3dCoordinates):
     #         object.__setattr__(instance, "_shift_applied", True)
     #
     #     return instance
-
-
-
 
     @property
     def x(self) -> npt.NDArray[np.floating]:

@@ -75,11 +75,10 @@ from fractions import Fraction
 from itertools import chain
 from typing import (
     Iterable, Optional, cast, Self, TYPE_CHECKING, Any, Union,
-    Generator
+    Generator, overload
 )
 
 import numpy as np
-from numba.core.extending import overload
 from pydantic import Field, NonNegativeFloat, validate_call, BaseModel, field_validator, ConfigDict
 
 from pchandler.constants import EPS, TWO_PI, PI, validate_variables, DEFAULT_CONFIG
@@ -90,7 +89,6 @@ if TYPE_CHECKING:
     from pchandler.base_types import Vector_3_T
 
 logger = logging.getLogger(__name__.split(".")[0])
-
 
 
 class FoV(BaseModel):
@@ -187,12 +185,9 @@ class FoV(BaseModel):
         yield self.right
         yield self.bottom
 
-    # DISCUSS Would a change to left/right create a clash with previous logic based on min/max values -
-    #  especially where it wraps at TWO_PI?
     @property
     def crosses_pi(self) -> bool:
         return self.left > self.right
-
 
     def width(self) -> Angle:
         if self.crosses_pi:
