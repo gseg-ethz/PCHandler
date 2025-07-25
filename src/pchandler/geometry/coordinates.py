@@ -397,21 +397,18 @@ class CartesianCoordinates(Abstract3dCoordinates):
     def from_spherical(cls, spher: SphericalCoordinates) -> Self:
         return cls(arr=rhv2xyz(spher))
 
+    # TODO need to improve all the transformation functions
+    def rotate(self, rotation: Array_3x3_T) -> Self:
+        self.arr = (rotation @ self.T).T
+
+    def translate(self, translation: Vector_3_T) -> Self:
+        self.arr += translation
+
+    def scale(self, scale: Vector_3_T) -> Self:
+        self.arr *= scale
+
     # TODO must define on the transformation handling -> Incl. support for the scipy.spatial.transform.rotation
-    def transform(self,
-                  affine: Array_4x4_T = None,
-                  rotation: Array_3x3_T = None,
-                  translation: Vector_3_T = None,
-                  scale: Vector_3_T = None) -> None:
-        affine = Transform.from_matrix(affine) if affine else np.eye(4)
-
-        if rotation is not None:
-            affine[:3, :3] @= rotation
-        if translation is not None:
-            affine[:3, 3] += translation
-        if scale is not None:
-            affine[[0, 1, 2], [0, 1, 2]] *= scale
-
+    def transform(self, affine: Array_4x4_T = None) -> None:
         self.arr = (affine @ self.H.T).T[:, :3]
 
 # class SphericalCoordinates(Abstract3dCoordinates):

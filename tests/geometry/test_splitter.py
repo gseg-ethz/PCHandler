@@ -45,10 +45,7 @@ class TestFoVTreePointCloudSplitter:
         assert initialised_splitter.n_jobs == -1
 
     def test_invalid_initialisations(self, new_tree):
-        with pytest.raises(ValidationError):
-            FoVTreePointCloudSplitter(new_tree, n_jobs=-2) # Todo: This is not true!
-
-        with pytest.raises(ValidationError):
+        with pytest.warns(UserWarning):
             FoVTreePointCloudSplitter(new_tree, n_jobs=100)
 
         with pytest.raises(TypeError):
@@ -64,6 +61,7 @@ class TestFoVTreePointCloudSplitter:
             FoVTreePointCloudSplitter(new_tree, method='Not_valid')
 
     def test_split(self, pcd_, new_tree):
+        # TODO this is throwing warnings
         pcd_original = pcd_.copy()
         iterative_splitter = FoVTreePointCloudSplitter(new_tree, method='iterative')
         # direct_splitter = FoVTreePointCloudSplitter(new_tree, method='direct', n_jobs=1)

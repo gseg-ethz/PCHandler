@@ -291,14 +291,14 @@ class TestOptimizedShiftManager:
 
     def test_empty_initialisation(self, osm):
         assert isinstance(osm, OptimizedShiftManager)
-        assert len(osm._optimized_shifts) == 0
+        assert len(osm.all_shifts) == 0
         assert osm._maximum_decimal_places == 4
 
         osm2: OptimizedShiftManager = OptimizedShiftManager(5)
-        assert osm2.maximum_decimal_places != 5
+        assert osm2._maximum_decimal_places != 5
 
     def test_maximal_decimal_setter(self):
-        osm_ = OptimizedShiftManager(maximum_decimal_places=10)
+        osm_ = OptimizedShiftManager(minimum_decimal_places=10)
         assert osm_._maximum_decimal_places == 10
 
     def test_singleton(self, osm):
@@ -307,7 +307,7 @@ class TestOptimizedShiftManager:
         assert id(osm) == id(osm2)
         assert id(osm) == id(osm3)
 
-        assert osm.maximum_decimal_places == 4
+        assert osm._maximum_decimal_places == 4
 
     def test_new_shift_and_register_methods(self, osm):
         shift1 = osm.new_shift()
@@ -360,7 +360,7 @@ def test_pcd_optimized_shift_general(osm):
     xyz = np.random.rand(100, 3)
 
     # add, no change
-    pcd = PointCloudData(xyz, optimized_shift=OptimizedShift(np.array([-5000, 0, 0])))
+    pcd = PointCloudData(xyz, numerical_optimization_shift=OptimizedShift(np.array([-5000, 0, 0])))
     shift_1 = pcd.optimized_shift.value.copy()
 
     assert pcd.xyz.dtype == np.float32
@@ -369,7 +369,7 @@ def test_pcd_optimized_shift_general(osm):
 
     # Add and change
     xyz2 = np.random.rand(100, 3) + np.array([6000,-1000, 2000])
-    pcd2 = PointCloudData(xyz2, optimized_shift=pcd.optimized_shift)
+    pcd2 = PointCloudData(xyz2, numerical_optimization_shift=pcd.optimized_shift)
     shift_2 = pcd2.optimized_shift.value.copy()
 
     assert pcd2.xyz.dtype == np.float32
@@ -379,7 +379,7 @@ def test_pcd_optimized_shift_general(osm):
 
     # Not feasible, add new group
     xyz2 = np.random.rand(100, 3) + [100000, 2000, 400]
-    pcd3 = PointCloudData(xyz2, optimized_shift=pcd.optimized_shift)
+    pcd3 = PointCloudData(xyz2, numerical_optimization_shift=pcd.optimized_shift)
     shift_3 = pcd3.optimized_shift.value.copy()
 
     assert pcd3.xyz.dtype == np.float32

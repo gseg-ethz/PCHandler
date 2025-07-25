@@ -21,10 +21,15 @@ def check_number_jobs(n_jobs: int):
     if n_jobs > cpu_count():
         warnings.warn(f"Maximum number of jobs entered [{n_jobs}] is greater than the number of cores. "
                       f"Using the maximum available CPU count instead = {cpu_count()}", stacklevel=2)
+        return cpu_count()
 
+    return n_jobs
+
+
+cpus = cpu_count()
 
 FoVSplitMethodT = Literal['iterative'] | Literal['direct']
-NumberJobsT = Annotated[int, Field(ge=-1, le=cpu_count()), BeforeValidator(check_number_jobs)]
+NumberJobsT = Annotated[int, Field(gt=-cpus, le=cpus), BeforeValidator(check_number_jobs)]
 
 
 
@@ -36,7 +41,7 @@ class PointCloudSplitter(ABC):
 
 class FoVTreePointCloudSplitter(PointCloudSplitter):
     # Todo: Check how validate_variables interacts with initializers...got weird errors
-    # @validate_variables
+    @validate_variables
     def __init__(self, fov_tree: FoVTree,
                  remove_empty: bool = True,
                  n_jobs: NumberJobsT = -1,
