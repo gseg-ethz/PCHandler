@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import copy
 from abc import ABC
-from typing import Any, Generator, MutableMapping, Optional, Self
+from typing import Any, Generator, MutableMapping, Optional, Self, cast, Union
 
 import numpy as np
 import numpy.typing as npt
 from numpydantic import NDArray, Shape  # type: ignore
+from numpydantic.dtype import DType
 from pydantic import BaseModel, ConfigDict, model_validator, field_validator
 
 from pchandler.base_types import (
@@ -22,19 +23,24 @@ from pchandler.base_types import (
 from pchandler.validators import validate_transposed_2d_array
 
 
-def make_ndarray_type(*args: Optional[int | str], dtype: Optional[npt.DTypeLike] = None) -> NDArray[Any, Any]:
+def make_ndarray_type(
+        *dimensions: Optional[int | str],
+        dtype: Optional[npt.DTypeLike] = None
+) -> type[NDArray[Any, Any]]:
     """
     Helper function to generate the numpydantic type for a ndarray.
 
     Calling 'make_ndarray_type(None, 3, dtype=np.float32)' would return a numpydantic dtype corresponding to an array
     of shape (N, 3) with dtype = np.float32 and would provide pydantic validation on this
     """
-    if len(args) == 0:
+    if len(dimensions) == 0:
         shape_list = ["*", "..."]
     else:
-        shape_list = [str(x) if x is not None else "*" for x in args]
+        shape_list = [str(x) if x is not None else "*" for x in dimensions]
 
-    return NDArray[Shape[", ".join(shape_list)], dtype if dtype is not None else Any]
+    result : type[NDArray[Any, Any]] = NDArray[Shape[", ".join(shape_list)], dtype if dtype is not None else Any]
+
+    return result
 
 
 class BaseArray(ABC, BaseModel):
@@ -55,21 +61,21 @@ class BaseArray(ABC, BaseModel):
     """
 
     model_config = ConfigDict(
-        arbitrary_types_allowed=True,
-        validate_assignment=True,
-        revalidate_instances="never",
-        validate_default=True,
-        strict=True,
-        frozen=False,
-        extra="ignore",
-        serialize_by_alias=False,
-        populate_by_name=False,
+        arbitrary_types_allowed=True,   # Required for the numpy types
+        validate_assignment=True,       # Should validate anytime an attribute is set
+        revalidate_instances="never",   # Don't keep validating instances (avoids infinite validation loops)
+        validate_default=True,          # Ensure default values get validated as well
+        strict=True,                    # Ensure that no coersion of types occurs - strict typechecking
+        frozen=False,                   # Object can be manipulated
+        extra="ignore",                 # Extra fields passed are not stored in the object (e.g. kwargs)
+        serialize_by_alias=False,       # Serialisation takes the original field names (e.g. 'arr')
+        populate_by_name=False,         # Field is not expected to be populated by attribute name if an alias exists
     )
     arr: ArrayT
 
     @field_validator('arr', mode='before')
     @classmethod
-    def coerce_to_numpy(cls, value: npt.ArrayLike|npt.NDArray) -> npt.NDArray:
+    def coerce_to_numpy(cls, value: Any) -> ArrayT:
         try:
             value = np.atleast_1d(np.asarray(value))
         except Exception as e:
@@ -87,52 +93,50 @@ class BaseArray(ABC, BaseModel):
         return self
 
     @property
-    def __array_interface__(self) -> dict[Any, Any]:
+    def __array_interface__(self) -> dict[str, Any]:
         """Gives access for all numpy functions to the root array object
 
         All objects will be converted to numpy arrays when processed with numpy functions.
         - __array__ will be deprecated in future -> more reason to use this
         E.g. any function will use np.asarray(base_arraylike.arr.__array_interface__)
         """
-        return self.arr.__array_interface__
+        value: dict[str, Any] = self.arr.__array_interface__
+        return value
 
     @property
-    def T(self) -> npt.NDArray[Any]:
+    def T(self) -> ArrayT:
         return self.arr.T
 
     @property
     def shape(self) -> tuple[int, ...]:
-        return self.arr.shape
+        return cast(tuple[int, ...], self.arr.shape)
 
     @property
-    def dtype(self) -> npt.DTypeLike[Any]:
-        return self.arr.dtype
+    def dtype(self) -> npt.DTypeLike:
+        return cast(np.dtype, self.arr.dtype)
 
     @property
-    def ndim(self) -> Any:
-        return self.arr.ndim
+    def ndim(self) -> int:
+        return cast(int, self.arr.ndim)
 
     @property
-    def base(self) -> Any:
+    def base(self) -> ArrayT|None:
         return self.arr.base
 
     @property
     def size(self) -> int:
-        return self.arr.size
+        return cast(int, self.arr.size)
 
-    def min(self, **kwargs: dict[str, Any]) -> npt.NDArray[Any]:
+    def view(self, dtype: npt.DTypeLike = None, _type: type|None = None) -> ArrayT:
+        return self.arr.view(dtype=dtype, type=_type)
+
+    def min(self, **kwargs: dict[str, Any]) -> Any:
         return self.arr.min(**kwargs)
 
-    def max(self, **kwargs: dict[str, Any]) -> npt.NDArray[Any]:
+    def max(self, **kwargs: dict[str, Any]) -> Any:
         return self.arr.max(**kwargs)
 
-    # def model_dump(self, exclude: set[str]|None = None, **kwargs: dict[str, Any]) -> dict:
-    #     """Dumps the model as a serialised dict object"""
-    #     exclude = exclude or set()
-    #     exclude.add("spher")
-    #     return copy.deepcopy(super().model_dump(exclude=exclude))
-
-    def copy(self,
+    def copy(self,  # type: ignore
              array: npt.NDArray[Any] | BaseArray | None = None,
              *,
              deep: bool = True,
@@ -141,8 +145,6 @@ class BaseArray(ABC, BaseModel):
         """
         Produce a deep or shallow copy of the model. Updates the model also if parameter is parsed.
         """
-        # if not deep:
-        #     raise NotImplementedError(f"Shallow copy is not implemented on this class: {type(self)}")
 
         update = update or {}
 
@@ -152,7 +154,7 @@ class BaseArray(ABC, BaseModel):
             elif isinstance(array, np.ndarray):
                 update["arr"] = array
             else:
-                raise TypeError(f'Unknown type passed in for the array of {type(array)}')
+                update["arr"] = np.asarray(array)
 
         data = self.model_dump(exclude=set(update.keys()), by_alias=False)
         data = copy.deepcopy(data) if deep else data #Todo: Discuss behavior deepcopy should copy the array or not!
@@ -161,29 +163,34 @@ class BaseArray(ABC, BaseModel):
 
         return type(self)(**data)
 
-    def view(self, cls: Optional[type] = None) -> Self:
-        raise NotImplementedError
-
     def __len__(self) -> int:
-        raise NotImplementedError("Length of an undefined array shape is not clear")
+        """
+        Function mimics the __len__ behavior of numpy. Returns the size of the first dimension (arary.shape[0]
+        Returns
+        -------
+
+        """
+        # Follows the behaviour of __len__ on a numpy array which returns the shape size of the first dimension
+        return self.shape[0]
 
     def __getitem__(self, key: IndexLike) -> npt.NDArray[Any] | Self:
-        if isinstance(key, slice):
-            key = [key]
-
-        result = self.arr[key]
-
-        if isinstance(result, np.ndarray):
-            return self.copy(result)
-        return result
+        """Creates a new object and returns the sampled values"""
+        # if isinstance(key, slice):
+        #     key = [key]
+        #
+        # result = self.arr[key]
+        #
+        # if isinstance(result, np.ndarray):
+        #     return self.copy(result)
+        #
+        # return result
+        return self.copy(array=self.arr[key], deep=False)   # TODO: decide on the deep copy of base array behavior
 
     def __setitem__(self, key: IndexLike, value: npt.NDArray[Any] | BaseArray) -> None:
-        if isinstance(key, slice):
-            key = [key]
         if isinstance(value, BaseArray):
-            self.arr[*key] = value.arr
+            self.arr[key] = value.arr
         else:
-            self.arr[*key] = value
+            self.arr[key] = value
 
     def __lt__(self, other: Any) -> npt.NDArray[np.bool_] | bool:
         return self.arr < other
@@ -191,17 +198,17 @@ class BaseArray(ABC, BaseModel):
     def __le__(self, other: Any) -> npt.NDArray[np.bool_] | bool:
         return self.arr <= other
 
-    def __eq__(self, other: Any) -> npt.NDArray[np.bool_] | bool:
-        return self.arr == other
-
-    def __ne__(self, other: Any) -> npt.NDArray[np.bool_] | bool:
-        return self.arr != other
-
     def __ge__(self, other: Any) -> npt.NDArray[np.bool_] | bool:
         return self.arr >= other
 
     def __gt__(self, other: Any) -> npt.NDArray[np.bool_] | bool:
         return self.arr > other
+
+    def __eq__(self, other: Any) -> npt.NDArray[np.bool_] | bool:
+        return self.arr == other
+
+    def __ne__(self, other: Any) -> npt.NDArray[np.bool_] | bool:
+        return self.arr != other
 
 
 class SampleArray(BaseArray):
