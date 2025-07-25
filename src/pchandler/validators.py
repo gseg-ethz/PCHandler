@@ -104,23 +104,54 @@ def coerce_wrapped_horizontal_angles(array: npt.NDArray[np.floating]) -> npt.NDA
 
 
 
-def validate_transposed_2d_array(array: npt.NDArray[Any], cols: int) -> npt.NDArray[Any]:
+def validate_transposed_2d_array(array: npt.ArrayLike, cols: int) -> npt.ArrayLike:
     """
-    Validats the  transpose of 2D arrays with known fixed cols
+    Validates the transpose of 2D arrays with known fixed cols
     :param array:
     :param cols:
     :return:
     """
-    if array.ndim != 2:
-        raise ValueError(f"Input array must be 2-dimensional of Nx{cols} or {cols}xN shape. Received: {array.shape}")
+    if array.ndim == 2:
+        if array.shape[1] == cols:
+            return array
 
-    if array.shape[1] == cols:
-        return array
+        if array.shape[0] == cols and array.shape[1] != cols:
+            return array.T
 
-    if array.shape[0] == cols and array.shape[1] != cols:
-        return array.T
+    elif array.ndim == 1:
+        if array.shape[0] != cols:
+            return array.reshape(-1, cols)
+
+    raise ValueError(f"Input array must be 2-dimensional of Nx{cols} or {cols}xN shape. Received: {array.shape}")
+
+def convert_slice_to_integer_range(selection: slice, length: int) -> npt.NDArray[np.integer]:
+    start = selection.start
+    stop = selection.stop
+    step = selection.step
+
+    # Default
+    if step is None:
+        step = 1
+
+    if start is None:
+        # If step is positive, start at 0. if step is negative, start from end
+        start = 0 if step > 0 else length - 1
+
+    elif start < 0:
+        # Convert negative addresses to positive address
+        start += length
     else:
-        raise ValueError(f"Array does not appear to be an Nx{cols} array nor it's transpose.")
+        pass
+
+    if stop is None:
+        # Set stop point to include endpoint values if None is set
+        stop = length if step > 0 else -1
+    elif stop < 0:
+        # Convert negative index to positive index
+        stop += length
+
+    # Convert slice objects to numpy integer array
+    return np.arange(start=start, stop=stop, step=step)
 
 
 def check_in_range(value: npt.ArrayLike|npt.NDArray[Any], target_min: float, target_max: float) -> None:
@@ -223,13 +254,3 @@ normalize_int32 = lambda array: _normalize_base(array, np.int32)
 normalize_int64 = lambda array: _normalize_base(array, np.int64)
 normalize_float32 = lambda array: _normalize_base(array, np.float32)
 normalize_float64 = lambda array: _normalize_base(array, np.float64)
-
-
-def ensure_unit_vector(array: npt.NDArray[Any]) -> npt.NDArray[Any]:
-    if not (np.issubdtype(array.dtype, np.floating) or np.issubdtype(array.dtype, np.signedinteger)):
-        raise TypeError("Dtype of normals array must be of type floating or signed integer}")
-
-    array /= np.linalg.norm(array, axis=1).reshape(-1, 1)
-    array = array.astype(np.float32)
-
-    return array

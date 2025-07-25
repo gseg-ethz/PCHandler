@@ -245,48 +245,12 @@ def test_coerce_wrapped_horizontal_angles():
     assert np.allclose(coerced_original_coordinates, original)
 
 
-@pytest.mark.parametrize(
-    "array",
-    (
-        BaseArray(arr=np.ones(10)),
-        np.ones(10),
-        (np.ones(10),),
-        ScalarField(arr=np.ones(10), name="red"),
-        {"arr": np.ones(10), "dummy": True},
-    ),
-)
-def test_extract_array_valid(array):
-    array = extract_array(array)
-    assert np.all(array == np.ones(10))
-
-
-@pytest.mark.parametrize(
-    "array",
-    (
-        "false",
-        (
-            np.ones(10),
-            np.ones(10),
-        ),
-        ("avs",),
-        {
-            "false",
-        },
-        {"false": 2},
-        False,
-    ),
-)
-def test_extract_array_invalid(array):
-    with pytest.raises(TypeError):
-        extract_array(array)
-
-
 @pytest.mark.parametrize("array", (np.random.rand(3, 10), np.random.rand(10, 3)))
 def test_validate_Nx3_transposed(array):
     original = array.copy()
     if array.shape != (10, 3):
         original = original.T
-    array = validate_n_by_3_transposed(array)
+    array = validate_transposed_2d_array(array, cols=3)
     assert array.shape == (10, 3)
     assert np.allclose(array, original)
 
@@ -296,28 +260,13 @@ def test_validate_Nx2_transposed(array):
     original = array.copy()
     if array.shape != (10, 2):
         original = original.T
-    array = validate_n_by_2_transposed(array)
+    array = validate_transposed_2d_array(array, cols=2)
     assert array.shape == (10, 2)
     assert np.allclose(array, original)
 
 
-@pytest.mark.parametrize(
-    "array",
-    (
-        np.arange(10).reshape((1, 10)),
-        np.arange(10).reshape((1, 1, 10)),
-        np.arange(10).reshape((1, 10, 1)),
-        np.arange(10).reshape((1, 1, 10, 1, 1)),
-    ),
-)
-def test_validate_transposed_vector(array):
-    array = validate_transposed_vector(array)
-    assert array.shape == (10,)
-    assert np.allclose(array, np.arange(10))
-
-
-def test_invalid_transpose():
+def test_invalid_transposed_2d():
     a = np.random.rand(100, 100, 100)
     b = np.random.rand(100, 100)
     with pytest.raises(ValueError):
-        validate_n_by_3_transposed(a)
+        validate_transposed_2d_array(a, cols=3)

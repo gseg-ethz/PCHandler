@@ -113,16 +113,14 @@ class TestCartesianCoordinates:
         # Check xyz and arr are the same object
         assert id(cart_obj.arr) == id(cart_obj.xyz)
         assert np.all(cart_obj == cart_obj.arr)
-        with pytest.raises(IndexError):
-            assert np.all(cart_obj.x == cart_obj[:, 0])
-        assert np.all(cart_obj.x == cart_obj.arr[:, 0])
-        assert np.all(cart_obj.y == cart_obj.arr[:, 1])
-        assert np.all(cart_obj.z == cart_obj.arr[:, 2])
+        assert np.all(cart_obj.x == cart_obj[:, 0])
+        assert np.all(cart_obj.y == cart_obj[:, 1])
+        assert np.all(cart_obj.z == cart_obj[:, 2])
 
         assert np.any(cart_obj.yxz != cart_obj.arr)
-        assert np.all(cart_obj.yxz[:, 0] == cart_obj.arr[:, 1])
-        assert np.all(cart_obj.yxz[:, 1] == cart_obj.arr[:, 0])
-        assert np.all(cart_obj.yxz[:, 2] == cart_obj.arr[:, 2])
+        assert np.all(cart_obj.yxz[:, 0] == cart_obj[:, 1])
+        assert np.all(cart_obj.yxz[:, 1] == cart_obj[:, 0])
+        assert np.all(cart_obj.yxz[:, 2] == cart_obj[:, 2])
 
     def test_spherical_properties(self, cart_obj):
         assert id(cart_obj.arr) != id(cart_obj.spher)
@@ -223,12 +221,16 @@ class TestCartesianCoordinates:
         assert a.shape == (10, 3)
         assert np.all(a.arr[0:10, :] == cart_obj.arr[0:10, :])
 
-        with pytest.raises(IndexError):
-            c = cart_obj[0:10, :2]
+        # Indexing an object in the typical numpy fashion is possible.
+        # But if an error throws, will return the numpy array
+        c = cart_obj[0:10, :2]
+        assert isinstance(c, np.ndarray)
+        assert not isinstance(c, CartesianCoordinates)
+        assert c.shape == (10, 2)
 
-        with pytest.raises(ValueError):
+        with pytest.raises(IndexError):
             mask = np.ones((10, 3), dtype=np.bool_)
-            c = cart_obj[mask]
+            cart_obj[mask]
 
     # # TODO uncomment when FOV re-implemented
     def test_fov(self, cart_obj):

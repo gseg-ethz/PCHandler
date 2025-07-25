@@ -113,7 +113,7 @@ class TestScalarFieldClass:
 
         e = ScalarField(c)
         assert id(e) != id(c)
-        assert id(e.arr) != id(c.arr)
+        assert id(e.arr) == id(c.arr)   # Pass by reference expected
         assert e.name == c.name
         assert np.all(e.arr == c.arr)
 

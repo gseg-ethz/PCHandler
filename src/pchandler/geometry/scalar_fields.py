@@ -5,9 +5,9 @@ from typing import Annotated, NamedTuple, Self, TypeVar, Optional, Any, TypedDic
 
 import numpy as np
 import numpy.typing as npt
-from pydantic import StringConstraints, model_validator, BeforeValidator
+from pydantic import StringConstraints, model_validator, BeforeValidator, field_validator
 
-from pchandler.validators import normalize_min_max, normalize_uint8, ensure_unit_vector, normalize_int16
+from pchandler.validators import normalize_min_max, normalize_uint8, normalize_int16
 from pchandler.base_arrays import BaseVector, ArrayNx3, FixedLengthArray
 from pchandler.base_types import (
     Array_Nx3_Float32_T,
@@ -114,12 +114,17 @@ class ScalarFieldTriplet(ArrayNx3, AbstractScalarField):
 
 
 class RGBFields(ScalarFieldTriplet):
-    arr: Annotated[Array_Nx3_Uint8_T, BeforeValidator(normalize_uint8)]
+    arr: Array_Nx3_Uint8_T
     name: LowerStr = RGB_NAMES.base
 
     def __init__(self, arr: Self|npt.NDArray[np.uint8|np.float32], **kwargs: Unpack[ScalarKwargT]):
         kwargs['name'] = RGB_NAMES.base
         super().__init__(arr, **kwargs)
+
+    @field_validator('arr', mode='before')
+    @classmethod
+    def normalise_to_uint8(cls, data: Any) -> Any:
+        return normalize_uint8(data)
 
     @property
     def red(self) -> Vector_Uint8_T:
@@ -150,12 +155,23 @@ class RGBFields(ScalarFieldTriplet):
 
 
 class NormalFields(ScalarFieldTriplet):
-    arr: Annotated[Array_Nx3_Float32_T, BeforeValidator(ensure_unit_vector)]
+    arr: Array_Nx3_Float32_T
     name: LowerStr = NORMAL_NAMES.base
 
     def __init__(self, arr: Self|npt.NDArray[np.floating], **kwargs: Unpack[ScalarKwargT]):
         kwargs['name'] = NORMAL_NAMES.base
         super().__init__(arr=arr, **kwargs)
+
+    @field_validator('arr', mode='before')
+    @classmethod
+    def ensure_unit_vector(cls, array: npt.NDArray) -> npt.NDArray[Any]:
+        if not (np.issubdtype(array.dtype, np.floating) or np.issubdtype(array.dtype, np.signedinteger)):
+            raise TypeError("Dtype of normals array must be of type floating or signed integer}")
+
+        array /= np.linalg.norm(array, axis=1).reshape(-1, 1)
+        array = array.astype(np.float32)
+
+        return array
 
     @property
     def nx(self) -> Vector_Float32_T:

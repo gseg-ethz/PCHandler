@@ -4,9 +4,11 @@ import pickle
 
 import numpy as np
 import pytest
-
 import open3d as o3d
 from pydantic import ValidationError
+from numpydantic.exceptions import DtypeError, ShapeError
+
+
 from pchandler.geometry import PointCloudData
 from pchandler.geometry.scalar_fields import ScalarField, RGBFields, NormalFields
 from pchandler.geometry.scalar_field_manager import ScalarFieldManager
@@ -232,21 +234,21 @@ class TestPointCloudData:
     class TestInvalidValues:
         def test_xyz(self, rgb_, normals_, sfs_):
             # XYZ non_array object
-            with pytest.raises(TypeError):
+            with pytest.raises(ValidationError):
                 PointCloudData({"asb": 123}, rgb=rgb_, normals=normals_, scalar_fields=sfs_)
 
             # Too many columns
-            with pytest.raises(ValueError):
+            with pytest.raises(ValidationError):
                 data = np.random.rand(N, 4).astype(np.float32)
                 PointCloudData(data, rgb=rgb_, normals=normals_, scalar_fields=sfs_)
 
             # Too many dimensions
-            with pytest.raises(ValueError):
+            with pytest.raises(ValidationError):
                 data = np.random.rand(N, 4, 3).astype(np.float32)
                 PointCloudData(data, rgb=rgb_, normals=normals_, scalar_fields=sfs_)
 
-            # Too fed dimensions
-            with pytest.raises(ValueError):
+            # Too few dimensions
+            with pytest.raises(ValidationError):
                 data = np.random.rand(N, 2).astype(np.float32)
                 PointCloudData(data, rgb=rgb_, normals=normals_, scalar_fields=sfs_)
 
@@ -561,17 +563,13 @@ class TestPointCloudData:
 
             def test_invalid_float_array(self, pcd):
                 bad_mask = np.random.rand(len(pcd))
-                with pytest.raises(Exception) as e:
+                with pytest.raises(DtypeError):
                     pcd.create_mask(bad_mask)   #type: ignore
-
-                assert type(e.value) in (TypeError, IndexError, ValueError)
 
             def test_invalid_selection_type(self, pcd):
                 bad_index_type = "NotAMask"
-                with pytest.raises(Exception) as e:
+                with pytest.raises(DtypeError):
                     pcd.create_mask(bad_index_type) #type: ignore
-
-                assert type(e.value) in (TypeError, IndexError, ValueError)
 
         def test_reduce(self, pcd):
             start_id = id(pcd)
