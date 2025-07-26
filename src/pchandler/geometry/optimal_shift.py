@@ -31,19 +31,20 @@ class SingletonMeta(type):
             return cls._instances[cls]
 
 
+class ShiftNotFeasibleError(Exception):
+    pass
+
+class ShiftUUIDAlreadyTaken(Exception):
+    pass
+
+class ShiftUUIDNotFound(Exception):
+    pass
+
+
 class OptimizedShiftManager(metaclass=SingletonMeta):
     _by_uuid: weakref.WeakValueDictionary[uuid.UUID, OptimizedShift]
     _maximum_decimal_places: int
     FLOAT32_DECIMAL_PRECISION: int = 7
-
-    class ShiftNotFeasibleError(Exception):
-        pass
-
-    class ShiftUUIDAlreadyTaken(Exception):
-        pass
-
-    class ShiftUUIDNotFound(Exception):
-        pass
 
     def __init__(self, minimum_decimal_places: int = 3) -> None:
         self._minimum_decimal_places = minimum_decimal_places
@@ -51,7 +52,7 @@ class OptimizedShiftManager(metaclass=SingletonMeta):
 
     def register_shift(self, shift: OptimizedShift) -> None:
         if shift.uuid in self._by_uuid and id(shift) is not id(self._by_uuid[shift.uuid]):
-            raise OptimizedShiftManager.ShiftUUIDAlreadyTaken()
+            raise ShiftUUIDAlreadyTaken()
 
         self._by_uuid[shift.uuid] = shift
 
@@ -60,17 +61,17 @@ class OptimizedShiftManager(metaclass=SingletonMeta):
             try:
                 shift = self._by_uuid[shift]
             except KeyError:
-                raise OptimizedShiftManager.ShiftUUIDNotFound()
+                raise ShiftUUIDNotFound()
         while True:
             try:
                 shift.register(coordinates)
                 return shift
-            except OptimizedShiftManager.ShiftNotFeasibleError:
+            except ShiftNotFeasibleError:
                 if len(shift) >= 1: # Allow for one more attempt on a fresh OptimizedShift
                     shift = OptimizedShift()
                 else:
                     break
-        raise OptimizedShiftManager.ShiftNotFeasibleError()
+        raise ShiftNotFeasibleError()
 
     def __len__(self):
         return len(self._by_uuid)
@@ -161,8 +162,8 @@ class OptimizedShift:
         try:
             self._expand_and_add(coordinate_set)
             return
-        except OptimizedShiftManager.ShiftNotFeasibleError:
-            raise OptimizedShiftManager.ShiftNotFeasibleError()
+        except ShiftNotFeasibleError:
+            raise ShiftNotFeasibleError()
 
     def unregister(self, coordinate_set: CartesianCoordinates) -> None:
         if coordinate_set not in self:
@@ -181,7 +182,7 @@ class OptimizedShift:
         try:
             _ = self._compute_new_shift(unshifted_pts)
             return True
-        except OptimizedShiftManager.ShiftNotFeasibleError:
+        except ShiftNotFeasibleError:
             return False
 
     def _can_add_without_change(self, unshifted_pts: Array_Nx3_T) -> bool:
@@ -213,7 +214,7 @@ class OptimizedShift:
         combined = MinMaxPoints.from_minmax_points(all_bboxes)
 
         if not OptimizedShiftManager().is_shift_possible(np.vstack((combined.minimum, combined.maximum))):
-            raise OptimizedShiftManager.ShiftNotFeasibleError()
+            raise ShiftNotFeasibleError()
 
         # round the center to keep ints
         return np.round(combined.central_point, decimals=-2)

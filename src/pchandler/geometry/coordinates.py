@@ -4,19 +4,19 @@ import logging
 import warnings
 from abc import ABC, abstractmethod
 from functools import cached_property
-from typing import Annotated, Optional, Self, Any, Type, TypeVar, Unpack, TypedDict, Required, NotRequired
+from typing import Union, Optional, Self, Any, Type, TypeVar, Unpack, TypedDict, NotRequired
 import uuid
 
 import numpy as np
 import numpy.typing as npt
-from pydantic import BeforeValidator, Field, validate_call, PrivateAttr, field_validator, AliasChoices
+from pydantic import Field, validate_call, PrivateAttr, field_validator, AliasChoices, UUID4
 
 from pchandler.geometry.fov import FoV
 from pchandler.geometry.util import MinMaxPoints
 from pchandler.base_arrays import ArrayNx2, ArrayNx3, FixedLengthArray
 from pchandler.base_types import Array_4x4_T, Vector_3_T, Array_Nx3_T, Array_3x3_T, IndexLike
 from pchandler.constants import DEFAULT_CONFIG
-from pchandler.validators import validate_spherical_angles
+
 from .transforms import (
     Transform,
     _Transform3x3,
@@ -26,14 +26,16 @@ from pchandler.geometry.optimal_shift import OptimizedShift, OptimizedShiftManag
 
 logger = logging.getLogger(__name__)
 
-TransformT = _Transform4x4 | _Transform3x3 | Transform
+TransformT = Union[_Transform4x4, _Transform3x3, Transform]
 
 CartesianT  = TypeVar("CartesianT", bound="CartesianCoordinates")
+
 
 class Abstract3dKw(TypedDict, total=False):
     arr: Array_Nx3_T
     project_transformation: NotRequired[Array_4x4_T]
     socs_origin: NotRequired[Vector_3_T]
+
 
 class CartesianKw(Abstract3dKw, total=False):
     numerical_optimization_shift: NotRequired[Optional[OptimizedShift]]
@@ -42,27 +44,18 @@ class CartesianKw(Abstract3dKw, total=False):
 
 
 class AbstractCoordinates(FixedLengthArray, ABC):
-    id: uuid.UUID = Field(default_factory=uuid.uuid4, alias="_id")
+    id: UUID4 = Field(default_factory=uuid.uuid4, alias="_id")
 
+    # noinspection PyNestedDecorators
     @field_validator("id", mode="before")
     @classmethod
-    def populate_id(cls, v):
+    def populate_id(cls, v: uuid.UUID|None) -> UUID4:
         if v is None:
             return uuid.uuid4()
         return v
 
 
-    def __matmul__(self, transpose_matrix: TransformT | npt.NDArray[np.floating]) -> Self | np.ndarray:
-        raise NotImplementedError(
-            "Left matrix multiplication is not supported.\n"
-            "For 3D coordinates use the formula: \n"
-            "     y = Tx\n"
-            "where x are coordinates and A the transformation. In python: \n"
-            "     y = A @ x"
-        )
-
-
-class Abstract2dCoordinates(ArrayNx2, AbstractCoordinates):
+class Abstract2dCoordinates(ArrayNx2, AbstractCoordinates, ABC):
     @property
     @abstractmethod
     def row(self) -> npt.NDArray[Any]: ...
@@ -72,7 +65,7 @@ class Abstract2dCoordinates(ArrayNx2, AbstractCoordinates):
     def col(self) -> npt.NDArray[Any]: ...
 
 
-class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates):
+class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates, ABC):
     project_transformation: Optional[Array_4x4_T] = None
     socs_origin: Optional[np.ndarray] = None
 
@@ -84,24 +77,37 @@ class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates):
     @abstractmethod
     def spher(self) -> npt.NDArray[np.floating]: ...
 
-    @validate_call(config=DEFAULT_CONFIG)
-    def __rmatmul__(self, matrix: TransformT | npt.NDArray[np.floating]) -> Self | npt.NDArray[np.floating]:
-        if isinstance(matrix, TransformT):
-            matrix: np.ndarray = matrix.arr
+    def __matmul__(self, other: Any) -> Self:
+        raise NotImplementedError(
+            "Left matrix multiplication is not supported.\n"
+            "For 3D coordinates use the formula: \n"
+            "     y = Tx\n"
+            "where x are coordinates and A the transformation. In python: \n"
+            "     y = A @ x\n\n"
+            "Alternatively, perform matmul directly on the array attribute 'arr'"
+        )
 
+    @validate_call(config=DEFAULT_CONFIG)
+    def __rmatmul__(self, matrix: Any) -> Self:
+        # 4x4 Homogeneous transform matrix
         if matrix.shape == (4, 4):
-            temp = (matrix @ self.H.T).T[:, :3]
-        #     TODO check my math and if this needs to be divided by the final row / column
+            if np.all(matrix[3, :] == [0, 0, 0, 1]):
+                temp = (matrix @ self.H.T).T[:, :3]
+            else:
+                raise ValueError(f"4x4 matrix is not a transformation matrix with all nonzero values: {matrix}")
+
+        # Rotation / scale matrix
         elif matrix.shape == (3, 3):
             temp = (matrix @ self.T).T
+
+        # Otherwise, apply it
         else:
             return matrix @ self.arr
 
-        temp = self.copy(temp)
-        return temp
+        return self.copy(temp)
 
     @validate_call(config=DEFAULT_CONFIG)
-    def __imatmul__(self, transpose_matrix: TransformT | npt.NDArray[np.floating]) -> Self | npt.NDArray[np.floating]:
+    def __imatmul__(self, other: Any) -> Self:
         raise NotImplementedError(
             "In place matrix multiplication not supported due to ambiguity between left and right multiplication.\n\n"
             "For 3D coordinates follow the right matrix multiplication formula of:"
@@ -113,15 +119,12 @@ class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates):
 
 class CartesianCoordinates(Abstract3dCoordinates):
     arr: Array_Nx3_T = Field(..., validation_alias=AliasChoices('arr', 'xyz'))
-
+    unshifted_bbox: Optional[MinMaxPoints] = Field(default=None)
+    _shift_applied_by: Optional[OptimizedShift] = PrivateAttr(default=None)
     numerical_optimization_shift: Optional[OptimizedShift] = Field(
         default_factory=OptimizedShift,
         exclude=False
     )
-    # optimized: bool = Field(default=False, exclude=True)
-    unshifted_bbox: Optional[MinMaxPoints] = Field(default=None)
-
-    _shift_applied_by: Optional[OptimizedShift] = PrivateAttr(default=None)
 
     def __init__(self, *args, **kwargs: Unpack[CartesianKw]):
         # Accept xyz/arr as a positional argument
@@ -130,11 +133,13 @@ class CartesianCoordinates(Abstract3dCoordinates):
                 raise AttributeError("expected at most 1 arguments, got %d" % len(args))
             if "xyz" in kwargs or "arr" in kwargs:
                 raise TypeError("Cannot pass both positional and keyword for xyz/arr")
-            kwargs["xyz"] = args[0]
+            kwargs["xyz"] = args[0] # type: ignore[typeddict-unknown-key]
 
         prev_shift: Optional[OptimizedShift] = kwargs.pop("_shift_applied_by", None)
-        super().__init__(**kwargs)
+        super().__init__(**kwargs)  # type: ignore[misc]
+
         object.__setattr__(self, "_shift_applied_by", prev_shift)
+
         self.compute_unshifted_bbox()
         self._process_shift()
 

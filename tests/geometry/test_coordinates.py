@@ -140,7 +140,7 @@ class TestCartesianCoordinates:
             assert np.allclose(cart_obj, cart_2)
         elif cart_obj.dtype == np.float32:
             assert np.allclose(cart_2, cart_obj, atol=1e-6)
-            warnings.warn("Further investigation should be made why the precision is so bad")
+            # TODO Further investigation should be made why the precision is so bad
 
         # # check that the cart_obj cleans up the cached spherical coordinates
         # # reasoning is that if a separate object is created, these are not needed

@@ -87,7 +87,8 @@ class TestBaseArray:
 
     def check_initialisation_options(self, data: npt.NDArray[np.floating]) -> None:
         a = self.check_init_from_reference(data, self.cls)
-        b = self.check_init_from_copy(data.view(), self.cls, a)
+        b = self.check_init_from_copy(data, self.cls, a)
+        self.check_init_from_view(data, self.cls, a)
         self.check_init_from_array_like(b, self.cls, a)
 
     @staticmethod
@@ -114,9 +115,6 @@ class TestBaseArray:
     @staticmethod
     def check_init_from_array_like(data: Any, cls: type, ref_array: npt.ArrayLike) -> Any:
         # Tests on a view that is passed
-        if not isinstance(data, BaseArray):
-            assert False
-
         a_base_array = cls(arr=data)
         assert ref_array is not a_base_array          # New object
         assert a_base_array is not data               # Also a new object
@@ -582,7 +580,7 @@ class TestNumpyMixins(TestBaseArray):
         g = self.cls(arr=np.full_like(a, 2))
         b = self.cls(arr=a.copy())
 
-        # Left unary operators
+        # Left operators
         c = b + 1
         assert np.allclose(c, a + 1)
         assert np.all(b != c)
@@ -677,6 +675,57 @@ class TestNumpyMixins(TestBaseArray):
         b **= 3
         assert np.allclose(b, 27)
         assert isinstance(c, NumericMixins)
+
+        b.arr = np.full_like(b.arr, 8)
+        c = divmod(b, 6)
+        assert np.all(c[0] == 1)
+        assert np.all(c[1] == 2)
+
+        c = divmod(12, b)
+        assert np.all(c[0] == 1)
+        assert np.all(c[1] == 4)
+
+        assert np.all(-b == (b * -1))
+
+        temp = self.cls(arr=a.copy()) - 0.5
+        assert np.all(abs(temp) >= 0)
+        assert np.all(abs(temp) <= 0.5)
+
+    def test_mat_mul_mixins(self):
+        a_ = np.random.rand(5,3)
+        b_ = np.random.rand(3,2)
+        c_expected = a_ @ b_
+        c_expected_inv = b_.T @ a_.T
+
+        a_ = self.cls(arr=a_)
+        b_ = self.cls(arr=b_)
+        c_ = a_ @ b_
+        assert c_.shape == (5,2)
+        assert np.all(c_ == c_expected)
+        assert isinstance(c_, self.cls)
+
+        a_ = self.cls(arr=a_.T)
+        b_ = self.cls(arr=b_.T)
+        c_inv = a_.__rmatmul__(b_)
+        assert c_inv.shape == (2, 5)
+        assert np.all(c_inv == c_expected_inv)
+        assert isinstance(c_inv, self.cls)
+
+        a_ = np.random.rand(5,3)
+        b_ = np.random.rand(3,3)
+        c_expected = a_ @ b_
+        a_ = self.cls(arr=a_)
+        b_ = self.cls(arr=b_)
+        a_ @= b_
+
+        assert a_.shape == (5,3)
+        assert np.all(a_ == c_expected)
+        assert isinstance(a_, self.cls)
+
+        b_ = np.random.rand(3,2)
+        with pytest.raises(ValueError):
+            a_ @= b_
+
 
 
 class TestFixedLength(TestNumpyMixins):
@@ -888,6 +937,9 @@ class TestBaseVector(TestFixedLength):
     def test_numpy_functions(self) -> None:
         pass
 
+    def test_mat_mul_mixins(self) -> None:
+        pass
+
     def test_transpose(self) -> None:
         a = self.cls(arr=self.rand_32())
         assert np.all(a == a.T)
@@ -932,6 +984,9 @@ class TestArrayNx2(TestHomogeneous):
         pass
 
     def test_coerce_to_numpy_valid(self) -> None:
+        pass
+
+    def test_mat_mul_mixins(self) -> None:
         pass
 
 

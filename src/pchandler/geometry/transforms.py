@@ -12,6 +12,7 @@ from enum import IntEnum, auto
 from typing import MutableMapping, Optional
 
 import numpy as np
+import numpy.typing as npt
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -21,7 +22,7 @@ from pydantic import (
     model_validator,
 )
 
-from pchandler.base_arrays import BaseArray, BaseVector, FixedLengthArray
+from pchandler.base_arrays import BaseArray, BaseVector, FixedLengthArray, NumericMixins
 from pchandler.base_types import Array_3x3_T, Array_4x4_T
 
 
@@ -32,46 +33,25 @@ class TransformType(IntEnum):
     AFFINE = auto()
 
 
-class _TransformArray(BaseArray):
-    def create_mask(self, *args, **kwargs):
-        raise NotImplementedError("")
-
-    def sample(self, *args, **kwargs):
-        raise NotImplementedError
-
-    def extract(self, *args, **kwargs):
-        raise NotImplementedError
-
-    def reduce(self, *args, **kwargs):
-        raise NotImplementedError
-
-    @field_validator("arr", mode="before")
-    @classmethod
-    def always_copy(cls, arr):
-        return copy.deepcopy(arr)
-
-    def __matmul__(self, other: np.ndarray | BaseArray):
-        if isinstance(other, np.ndarray):
-            return self.get_copy(array=self.arr @ other)
-
-        elif isinstance(other, FixedLengthArray) and other.ndim > 1:
+class _TransformArray(NumericMixins):
+    def __matmul__(self, other: npt.NDArray[np.floating] | BaseArray) -> npt.ArrayLike:
+        if isinstance(other, FixedLengthArray) and other.ndim > 1:  # Coordinates and PointCloudData
             return other.__rmatmul__(self)
 
-        elif isinstance(other, type(_TransformArray)):
-            return self.get_copy(array=self.arr @ other.arr)
-        else:
-            raise TypeError(f"Unknown type for matmul: {type(other)}")
+        elif self.shape == other.shape: # Same shaped objects treated like another transformation
+            return self @ other
 
-    def __rmatmul__(self, other):
+        elif isinstance(other, np.ndarray): # return numpy for numpy input
+            return self.arr @ other
+
+        else:   # other objects attempt conversion and return a numpy array
+            return self.arr @ np.asarray(other)
+
+    def __rmatmul__(self, other: npt.NDArray[np.floating] | NumericMixins) -> npt.ArrayLike:
         return other.__matmul__(self.arr)
 
-    def __imatmul__(self, other):
-        if isinstance(other, np.ndarray):
-            self.arr @= other
-        elif issubclass(type(other), _TransformArray):
-            self.arr @= other.arr
-        else:
-            raise TypeError(f"Incompatible type for imatmul with Transformation Array: {type(other)}")
+    def __imatmul__(self, other: npt.NDArray[np.floating] | BaseArray) -> None:
+        self.arr @= other
 
 
 class _Transform3x3(_TransformArray):

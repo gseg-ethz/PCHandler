@@ -185,6 +185,9 @@ class NumericMixins(BaseArray):
     def __mul__(self, other: Any) -> Self:
         return self.copy(self.arr * other)
 
+    def __matmul__(self, other: Any) -> Self:
+        return self.copy(self.arr @ other)
+
     def __truediv__(self, other: Any) -> Self:
         return self.copy(self.arr / other)
 
@@ -206,6 +209,9 @@ class NumericMixins(BaseArray):
     def __rmul__(self, other: Any) -> Self:
         return self.copy(other * self.arr)
 
+    def __rmatmul__(self, other: Any) -> Self:
+        return self.copy(other @ self.arr)
+
     def __rpow__(self, other: Any) -> Self:
         return self.copy(other**self.arr)
 
@@ -218,38 +224,50 @@ class NumericMixins(BaseArray):
     def __rmod__(self, other: Any) -> Self:
         return self.copy(other % self.arr)
 
-    def __divmod__(self, other: Any) -> Self:
-        return self.copy(divmod(self.arr, other))
+    def __divmod__(self, other: npt.ArrayLike) -> tuple[Self, Self]:
+        quotient, remainder = np.divmod(self.arr, other)
+        return self.copy(quotient), self.copy(remainder)
 
-    def __neg__(self, other: Any) -> Self:
+    def __rdivmod__(self, other: Any) -> tuple[Self, Self]:
+        quotient, remainder = np.divmod(other, self.arr)
+        return self.copy(quotient), self.copy(remainder)
+
+    def __neg__(self) -> Self:
         return self.copy(-self.arr)
 
+    def __abs__(self) -> Self:
+        return self.copy(np.abs(self.arr))
+
     def __iadd__(self, other: Any) -> Self:
-        self.arr = self.arr + other
+        self.arr += other
         return self
 
     def __isub__(self, other: Any) -> Self:
-        self.arr = self.arr - other
+        self.arr -= other
         return self
 
     def __imul__(self, other: Any) -> Self:
-        self.arr = self.arr * other
+        self.arr *= other
         return self
 
     def __itruediv__(self, other: Any) -> Self:
-        self.arr = self.arr / other
+        self.arr /= other
         return self
 
     def __ifloordiv__(self, other: Any) -> Self:
-        self.arr = self.arr // other
+        self.arr //= other
         return self
 
     def __imod__(self, other: Any) -> Self:
-        self.arr = self.arr % other
+        self.arr %= other
         return self
 
     def __ipow__(self, other: Any) -> Self:
-        self.arr = self.arr**other
+        self.arr **= other
+        return self
+
+    def __imatmul__(self, other: Any) -> Self:
+        self.arr @= other
         return self
 
 
