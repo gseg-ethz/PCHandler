@@ -6,7 +6,7 @@ from typing import Any, Generator, MutableMapping, Optional, Self, cast
 
 import numpy as np
 import numpy.typing as npt
-from numpydantic import NDArray, Shape
+from numpydantic import NDArray
 from pydantic import BaseModel, ConfigDict, field_validator, ValidationError
 
 from .validators import validate_transposed_2d_array, convert_slice_to_integer_range
@@ -15,7 +15,7 @@ from .base_types import ArrayT, Array_Nx2_T, Array_Nx3_T,  IndexLike, VectorInde
 
 class BaseArray(ABC, BaseModel):
     """
-    BaseArray is designed to be a subclassable, automatic validator for array based classes.
+    BaseArray is designed to be a subclassable, automatic validator for array-based classes.
     It is built around a combination of the Pydantic and Numpydantic libraries.
 
     In line with the PCHandler project, the main idea is that it can be extended to support the following:
@@ -28,7 +28,7 @@ class BaseArray(ABC, BaseModel):
     For now, it supports the following:
         - Boolean, Floating, SignedInteger and UnsignedInteger types
         - Scalar values (although converted to 1D arrays)
-        - 1D or greater arrays (all 0D / scalars will be converted to 1D (1,))
+        - 1D or greater arrays (all 0D / scalars will be converted to 1D)
     """
 
     # Config
@@ -47,10 +47,11 @@ class BaseArray(ABC, BaseModel):
     # Validated Attributes
     arr: ArrayT
 
+    # noinspection PyNestedDecorators
     @field_validator('arr', mode='before')
     @classmethod
     def coerce_array(cls, value: Any) -> ArrayT:
-        # This ensures that a copy is not made by np.asarray(
+        # This ensures that a copy is not made
         if isinstance(value, BaseArray):
             value = value.arr
 
@@ -67,12 +68,13 @@ class BaseArray(ABC, BaseModel):
         """Gives access for all numpy functions to the root array object
 
         All objects will be converted to numpy arrays when processed with numpy functions.
-        - __array__ will be deprecated in future -> more reason to use this
-        E.g. any function will use np.asarray(base_arraylike.arr.__array_interface__)
+        - __array__ will be deprecated in the future, making more reason to use this
+        E.g. any function will use np.as array(base_arraylike.arr.__array_interface__)
         """
         return cast(dict[str, Any], self.arr.__array_interface__)
 
     # Numpy like methods/properties
+    # noinspection PyPep8Naming
     @property
     def T(self) -> ArrayT:
         return self.arr.T
@@ -111,33 +113,33 @@ class BaseArray(ABC, BaseModel):
     def __len__(self) -> int:
         return self.shape[0]
 
-    def __getitem__(self, key: IndexLike) -> npt.NDArray[Any] | Self:
+    def __getitem__(self, key: IndexLike) -> ArrayT | Self:
         try:
             return self.copy(array=self.arr[key], deep=False)
         except ValidationError:
             return self.arr[key]
 
-    def __setitem__(self, key: IndexLike, value: npt.NDArray[Any] | BaseArray) -> None:
+    def __setitem__(self, key: IndexLike, value: ArrayT | BaseArray) -> None:
         self.arr[key] = value.arr if isinstance(value, BaseArray) else value
 
     # Logical Mixins
-    def __lt__(self, other: Any) -> npt.NDArray[np.bool_] | bool:
-        return self.arr < other
+    def __lt__(self, other: Any) -> npt.NDArray[np.bool_]:
+        return cast(npt.NDArray[np.bool_], self.arr < other)
 
-    def __le__(self, other: Any) -> npt.NDArray[np.bool_] | bool:
-        return self.arr <= other
+    def __le__(self, other: Any) -> npt.NDArray[np.bool_]:
+        return cast(npt.NDArray[np.bool_], self.arr <= other)
 
-    def __ge__(self, other: Any) -> npt.NDArray[np.bool_] | bool:
-        return self.arr >= other
+    def __ge__(self, other: Any) -> npt.NDArray[np.bool_]:
+        return cast(npt.NDArray[np.bool_], self.arr >= other)
 
-    def __gt__(self, other: Any) -> npt.NDArray[np.bool_] | bool:
-        return self.arr > other
+    def __gt__(self, other: Any) -> npt.NDArray[np.bool_]:
+        return cast(npt.NDArray[np.bool_], self.arr > other)
 
-    def __eq__(self, other: Any) -> npt.NDArray[np.bool_] | bool:
-        return self.arr == other
+    def __eq__(self, other: Any) -> npt.NDArray[np.bool_]: # type: ignore[override]
+        return cast(npt.NDArray[np.bool_], self.arr == other)
 
-    def __ne__(self, other: Any) -> npt.NDArray[np.bool_] | bool:
-        return self.arr != other
+    def __ne__(self, other: Any) -> npt.NDArray[np.bool_]: # type: ignore[override]
+        return cast(npt.NDArray[np.bool_], self.arr != other)
 
     def copy(self,  # type: ignore
              array: npt.NDArray[Any] | BaseArray | None = None,
@@ -264,26 +266,25 @@ class FixedLengthArray(NumericMixins):
         """Creates a boolean vector mask that corresponds to row indices"""
 
         if isinstance(selection, slice):    # Case 1: slice object
-            selection = convert_slice_to_integer_range(selection=selection, length=len(self))
+            vector_mask = convert_slice_to_integer_range(selection=selection, length=len(self))
 
         elif isinstance(selection, int):    # Case 2: single integer
-            selection = np.array([selection])
+            vector_mask = np.array([selection])
 
         else:                               # Case 3: numpy arrays and sequences
             if isinstance(selection, np.ndarray):
                 selection = np.atleast_1d(selection.squeeze())
-            selection = Vector_IndexT(selection)
+            vector_mask = Vector_IndexT(selection)
 
-
-        if selection.dtype == np.bool_:     # Case 3a: Boolean
-            if selection.shape[0] != len(self):
-                raise ValueError(f"Mask has wrong number of points. Mask:{selection.size}  != array:{len(self)}")
-            return selection
+        if vector_mask.dtype == np.bool_:     # Case 3a: Boolean
+            if vector_mask.shape[0] != len(self):
+                raise ValueError(f"Mask has wrong number of points. Mask:{vector_mask.size}  != array:{len(self)}")
+            return vector_mask
 
         else:                               # Case 3b: Integer
             # TODO throw a warning for attempts to oversample (multiple integers the same)
             mask = np.zeros(len(self), dtype=np.bool_)
-            mask[selection] = True
+            mask[vector_mask] = True
             return mask
 
     def sample(self, index: IndexLike) -> Self:
@@ -307,25 +308,28 @@ class FixedLengthArray(NumericMixins):
 class BaseVector(FixedLengthArray):
     arr: VectorT
 
+    # noinspection PyNestedDecorators
     @field_validator('arr', mode='before')
     @classmethod
-    def coerce_array(cls, value: npt.NDArray | Self) -> npt.NDArray:
+    def coerce_array(cls, value: ArrayT | Self) -> VectorT:
         value = super(BaseVector, cls).coerce_array(value)
         return np.atleast_1d(value.squeeze())
 
 
 class HomogeneousArray(FixedLengthArray):
+    # noinspection PyPep8Naming
     @property
-    def H(self) -> npt.NDArray[Any]:
+    def H(self) -> ArrayT:
         return np.column_stack((self.arr, np.ones(len(self), dtype=self.dtype)))
 
 
 class ArrayNx2(HomogeneousArray):
     arr: Array_Nx2_T
 
+    # noinspection PyNestedDecorators
     @field_validator('arr', mode='plain')
     @classmethod
-    def coerce_array(cls, value: npt.NDArray) -> npt.NDArray:
+    def coerce_array(cls, value: ArrayT) -> Array_Nx2_T:
         value = super(ArrayNx2, cls).coerce_array(value)
         return validate_transposed_2d_array(value, 2)
 
@@ -333,9 +337,10 @@ class ArrayNx2(HomogeneousArray):
 class ArrayNx3(HomogeneousArray):
     arr: Array_Nx3_T
 
+    # noinspection PyNestedDecorators
     @field_validator('arr', mode='plain')
     @classmethod
-    def coerce_array(cls, value: npt.NDArray) -> npt.NDArray:
+    def coerce_array(cls, value: ArrayT) -> Array_Nx3_T:
         value = super(ArrayNx3, cls).coerce_array(value)
         return validate_transposed_2d_array(value, 3)
 

@@ -1,13 +1,13 @@
-from typing import Any, Self
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
 import pytest
-from numpydantic import NDArray, Shape
-from numpydantic.exceptions import DtypeError, ShapeError, NoMatchError
+from numpydantic import NDArray, Shape # type: ignore[import-untyped]
+from numpydantic.exceptions import DtypeError, ShapeError, NoMatchError # type: ignore[import-untyped]
 from pydantic import ValidationError
 
-from pchandler.base_arrays import (
+from pchandler.base_arrays import (     # type: ignore[import-untyped]
     ArrayNx2,
     ArrayNx3,
     BaseArray,
@@ -16,7 +16,7 @@ from pchandler.base_arrays import (
     FixedLengthArray,
     HomogeneousArray,
 )
-from pchandler.base_types import make_ndarray_type
+from pchandler.base_types import make_ndarray_type  # type: ignore[import-untyped]
 
 
 class TestNpydanticType:
@@ -64,15 +64,15 @@ class TestNpydanticType:
 
 class TestBaseArray:
     cls = BaseArray
-    base_shape = (10, 3)
+    base_shape: tuple[int, ...] = (10, 3)
 
-    def rand_32(self):
+    def rand_32(self) -> npt.NDArray[np.float32]:
         return np.random.rand(*self.base_shape).astype(np.float32)
 
-    def rand_64(self):
+    def rand_64(self) -> npt.NDArray[np.float64]:
         return np.random.rand(*self.base_shape).astype(np.float64)
 
-    def test_initialisation(self):
+    def test_initialisation(self) -> None:
         self.check_initialisation_options(self.rand_32())
 
     @staticmethod
@@ -85,7 +85,7 @@ class TestBaseArray:
         assert a.arr.base is None               # ensure it's not a view
         return a
 
-    def check_initialisation_options(self, data: npt.NDArray) -> None:
+    def check_initialisation_options(self, data: npt.NDArray[np.floating]) -> None:
         a = self.check_init_from_reference(data, self.cls)
         b = self.check_init_from_copy(data.view(), self.cls, a)
         self.check_init_from_array_like(b, self.cls, a)
@@ -184,7 +184,7 @@ class TestBaseArray:
         assert b.dtype == np.int64
         assert np.all(b == [1, 3, 2, 4, -1])
 
-        # Case of tuple of floats
+        # Case tuple of floats
         # noinspection PyTypeChecker
         c = self.cls(arr=(2.3, 2.2, 4.5))
         assert c.shape == (3,)
@@ -311,14 +311,14 @@ class TestBaseArray:
         assert id(arr_2.arr) is not id(a.arr)     # The array object is also new
         assert np.all(arr_2 == a)
 
-        # Test on passing of positional object
+        # Test on passing positional arguments
         rand = np.random.rand(100,4)
         arr_3 = a.copy(rand, deep=True)
         assert np.all(arr_3 == rand)
         assert arr_3 is not rand
         assert id(arr_3.arr) is not id(rand)
 
-        # Test on passing of positional object
+        # Test on passing of update argument
         rand2 = np.random.rand(100,4)
         arr_4 = a.copy(update={'arr': rand2}, deep=True)
         assert np.all(arr_4 == rand2)
@@ -372,7 +372,7 @@ class TestBaseArray:
 
     def test_numpy_functions(self) -> None:
         """
-        Test a number of numpy based functions
+        Test a number of numpy functions
         """
         a = self.cls(arr=np.ones(self.base_shape))
         b = np.add(a, 1)
@@ -490,49 +490,48 @@ class TestBaseArray:
         assert np.all((random_1 != random_2) == (a != b))
 
         # Ensure logical checks produce a boolean type
-        b = a > 3
-        assert b.dtype == np.bool_
-        b = a < 3
-        assert b.dtype == np.bool_
-        b = a <= 3
-        assert b.dtype == np.bool_
-        b = a >= 3
-        assert b.dtype == np.bool_
-        b = a == 3
-        assert b.dtype == np.bool_
-        b = a != 3
-        assert b.dtype == np.bool_
-        b = 3 > a
-        assert b.dtype == np.bool_
-        b = 3 < a
-        assert b.dtype == np.bool_
-        b = 3 <= a
-        assert b.dtype == np.bool_
-        b = 3 >= a
-        assert b.dtype == np.bool_
-        # noinspection PyTypeChecker
-        b = 3 == a
-        # noinspection PyUnresolvedReferences
-        assert b.dtype == np.bool_
-        # noinspection PyTypeChecker
-        b = 3 != a
-        # noinspection PyUnresolvedReferences
-        assert b.dtype == np.bool_
+        c: npt.NDArray[np.bool_] = a > 3
+        assert c.dtype == np.bool_
+        c = a < 3
+        assert c.dtype == np.bool_
+        c = a <= 3
+        assert c.dtype == np.bool_
+        c = a >= 3
+        assert c.dtype == np.bool_
+        c = a == 3
+        assert c.dtype == np.bool_
+        c = a != 3
+        assert c.dtype == np.bool_
+        c = 3 > a
+        assert c.dtype == np.bool_
+        c = 3 < a
+        assert c.dtype == np.bool_
+        c = 3 <= a
+        assert c.dtype == np.bool_
+        c = 3 >= a
+        assert c.dtype == np.bool_
+        c = a == 3
+        assert c.dtype == np.bool_
+        c = a != 3
+        assert c.dtype == np.bool_
 
-    def test_numeric_mixins(self):
+    def test_numeric_mixins(self) -> None:
         a = self.cls(arr=np.random.rand(100, 100))
         # Base doesn't support math operators by default
         with pytest.raises(TypeError):
             a += 1
         with pytest.raises(TypeError):
             # noinspection PyTypeChecker
-            a = a - 1.0
+            a - 1.0
         with pytest.raises(TypeError):
-            a = a + 2.0
+            # noinspection PyTypeChecker
+            a + 2.0
         with pytest.raises(TypeError):
-            a = a / 0.5
+            # noinspection PyTypeChecker
+            a / 0.5
         with pytest.raises(TypeError):
-            a = a * 3
+            # noinspection PyTypeChecker
+            a * 3
 
     def test_reshape(self) -> None:
         a = self.cls(arr=np.ones((100, 3)))
@@ -549,8 +548,8 @@ class TestBaseArray:
 
         # Compare against a view
         b = np.reshape(a, (3, 100))     # a view
-        assert a.shape == (100, 3)            # Original shape has not changed
-        assert b.shape == (3, 100)            # New shape is different
+        assert a.shape == (100, 3)            # The original shape has not changed
+        assert b.shape == (3, 100)            # The new shape is different
         assert b.base is not a.arr            # The view base is a copy
         assert isinstance(a, BaseArray)        # Base is not changed
         assert isinstance(b, np.ndarray)      # Reshape returns a numpy array object
@@ -683,7 +682,7 @@ class TestNumpyMixins(TestBaseArray):
 class TestFixedLength(TestNumpyMixins):
     cls = FixedLengthArray
 
-    def test_iter_method(self):
+    def test_iter_method(self) -> None:
         array_fl = self.cls(arr=self.rand_32())
         # Check that each item returns the next row
         for i, vals in enumerate(array_fl):
@@ -694,7 +693,7 @@ class TestFixedLength(TestNumpyMixins):
         assert len(as_list) == len(array_fl)
         assert id(array_fl) != id(as_list)
 
-    def test_create_mask_from_slice(self):
+    def test_create_mask_from_slice(self) -> None:
         array_fl = self.cls(arr=self.rand_32())
         # General case
         index = slice(0, 10, 3)
@@ -727,7 +726,7 @@ class TestFixedLength(TestNumpyMixins):
         assert np.sum(mask) == 10
         assert np.all(mask[:])
 
-    def test_create_mask_from_integer(self):
+    def test_create_mask_from_integer(self) -> None:
         array_fl = self.cls(arr=self.rand_32())
         val = 3
         mask = array_fl.create_mask(val)
@@ -742,7 +741,7 @@ class TestFixedLength(TestNumpyMixins):
         assert np.sum(mask) == 1
         assert mask.dtype == np.bool_
 
-    def test_create_mask_from_boolean(self):
+    def test_create_mask_from_boolean(self) -> None:
         array_fl = self.cls(arr=self.rand_32())
         vals = np.random.randint(0, 2, array_fl.shape[0], dtype=bool)
         mask = array_fl.create_mask(vals)
@@ -754,22 +753,20 @@ class TestFixedLength(TestNumpyMixins):
             with pytest.raises(ValueError):
                 array_fl.create_mask(np.random.randint(0, 2, i, dtype=bool))
     
-    def test_create_mask_from_sequence(self):
+    def test_create_mask_from_sequence(self) -> None:
         array_fl = self.cls(arr=self.rand_32())
-        vals = (0, 1, 2)
-        mask = array_fl.create_mask(vals)
+        mask = array_fl.create_mask((0, 1, 2))
         assert np.all(mask[[0, 1, 2]])
         assert np.sum(mask) == 3
         assert mask.dtype == np.bool_
 
-        vals = [-3, -4, -5]
-        mask = array_fl.create_mask(vals)
+        mask = array_fl.create_mask([-3, -4, -5])
         assert np.all(mask[[-3, -4, -5]])
         assert np.all(mask[[7, 6, 5]])
         assert np.sum(mask) == 3
         assert mask.dtype == np.bool_
 
-    def test_create_mask_from_np_integers(self):
+    def test_create_mask_from_np_integers(self) -> None:
         array_fl = self.cls(arr=self.rand_32())
         # Test no duplicates
         vals = np.array([1, 3, 5])
@@ -790,7 +787,7 @@ class TestFixedLength(TestNumpyMixins):
             array_fl.create_mask(np.array([0, 4, 15]))
 
     @pytest.mark.parametrize('value', ('1 2 3', True, np.random.rand(10), {1: '1', 2: '2'}))
-    def test_invalid_create_mask_values(self, value: Any):
+    def test_invalid_create_mask_values(self, value: Any) -> None:
         array_fl = self.cls(arr=self.rand_32())
 
         with pytest.raises(ValueError) as e:
@@ -798,7 +795,7 @@ class TestFixedLength(TestNumpyMixins):
 
         assert type(e.value) in (DtypeError, ValueError, NoMatchError)
 
-    def test_sample(self):
+    def test_sample(self) -> None:
         array_fl = self.cls(arr=self.rand_32())
         indices = [1, 3, 4, 5]
         sample = array_fl.sample(indices)
@@ -818,7 +815,7 @@ class TestFixedLength(TestNumpyMixins):
         assert len(sample) == 4
         assert len(sample) != len(array_fl)
 
-    def test_reduce(self):
+    def test_reduce(self) -> None:
         array_fl = self.cls(arr=self.rand_32())
         base_vals = array_fl.copy()
         assert id(base_vals) != id(array_fl)
@@ -830,7 +827,7 @@ class TestFixedLength(TestNumpyMixins):
         assert len(base_vals) == len(indices)
         assert np.all(base_vals == array_fl[indices])
 
-    def test_extract(self):
+    def test_extract(self) -> None:
         array_fl = self.cls(arr=self.rand_32())
         indices = [1, 3, 4, 5]
         base_vals = array_fl.copy()
@@ -852,7 +849,7 @@ class TestBaseVector(TestFixedLength):
     cls = BaseVector
     base_shape = (10,)
 
-    def test_initialisation(self):
+    def test_initialisation(self) -> None:
         data = np.random.rand(10)
         self.check_initialisation_options(data)
 
@@ -867,7 +864,7 @@ class TestBaseVector(TestFixedLength):
                                        np.ones((1, 10, 1)),
                                        np.ones((10, 1, 1)),
                                        BaseArray(arr=np.ones((1,10)))))
-    def test_squeeze_coercion(self, value):
+    def test_squeeze_coercion(self, value: npt.ArrayLike) -> None:
         vec = self.cls(arr=value)
         assert vec.size == 10
         assert len(vec) == 10
@@ -875,23 +872,23 @@ class TestBaseVector(TestFixedLength):
         assert vec.shape == (10,)
 
     @pytest.mark.parametrize('value', (np.random.rand(10, 3), BaseArray(arr=np.random.rand(10, 2))))
-    def test_vector_validation(self, value):
+    def test_vector_validation(self, value: npt.ArrayLike) -> None:
         with pytest.raises(ValidationError):
             self.cls(arr=value)
 
-    def test_getitem(self):
+    def test_getitem(self) -> None:
         pass
 
-    def test_setitem(self):
+    def test_setitem(self) -> None:
         pass
 
-    def test_reshape(self):
+    def test_reshape(self) -> None:
         pass
 
     def test_numpy_functions(self) -> None:
         pass
 
-    def test_transpose(self):
+    def test_transpose(self) -> None:
         a = self.cls(arr=self.rand_32())
         assert np.all(a == a.T)
 
@@ -899,7 +896,7 @@ class TestBaseVector(TestFixedLength):
 class TestHomogeneous(TestFixedLength):
     cls = HomogeneousArray
 
-    def test_homogeneous(self):
+    def test_homogeneous(self) -> None:
         array = self.cls(arr=self.rand_32())
         h = array.H
         assert len(array) == len(h)
@@ -914,7 +911,7 @@ class TestArrayNx2(TestHomogeneous):
     cls = ArrayNx2
     base_shape = (10, 2)
 
-    def test_transpose(self):
+    def test_transpose(self) -> None:
         a = self.rand_32().T    # (2, 10)
 
         b = self.cls(arr=a)
@@ -922,19 +919,19 @@ class TestArrayNx2(TestHomogeneous):
         assert b.shape[0] == a.shape[1]
         assert b.shape[1] == a.shape[0]
 
-    def test_getitem(self):
+    def test_getitem(self) -> None:
         pass
 
-    def test_setitem(self):
+    def test_setitem(self) -> None:
         pass
 
-    def test_reshape(self):
+    def test_reshape(self) -> None:
         pass
 
     def test_numpy_functions(self) -> None:
         pass
 
-    def test_coerce_to_numpy_valid(self):
+    def test_coerce_to_numpy_valid(self) -> None:
         pass
 
 
@@ -947,7 +944,7 @@ class TestArrayNx3(TestArrayNx2):
 #     def test_initialisation(self):
 #         array = ReadOnlyArray(arr=np.random.rand(10, 2))
 #         with pytest.raises(ValidationError):
-#             array.arr = np.random.randn(10, 2)
+#             array.arr = np.random.rand(10, 2)
 #
 #
 # class TestReadOnlyVector:
@@ -955,7 +952,7 @@ class TestArrayNx3(TestArrayNx2):
 #         array = ReadOnlyVector(arr=np.random.rand(10))
 #
 #         with pytest.raises(ValidationError):
-#             array.arr = np.random.randn(10)
+#             array.arr = np.random.rand(10)
 
 
 # class TestImageLike(BaseTests):
