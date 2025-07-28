@@ -238,16 +238,15 @@ class CartesianCoordinates(Abstract3dCoordinates):
         return data
 
     def __reduce__(self) -> Any:
-        logger.debug(f"Running `{self.__class__}.reduce()` ")
+        logger.debug(f"Running `{self.__class__}.reduce()` on {self.id}")
         state = self.model_dump()
         # state["_shift_applied"] = self._shift_applied
         return self._reconstruct, (state,)
 
     @classmethod
     def _reconstruct(cls, state: dict) -> Self:
-        # prev_shift = state.pop("_shift_applied_by", None)
         obj: Self = cls.model_construct(**state)
-        # obj._shift_applied_by = prev_shift
+        logger.debug(f"{cls} with id={obj.id} reconstructed")
         obj._process_shift()
 
         return obj
@@ -356,7 +355,7 @@ class CartesianCoordinates(Abstract3dCoordinates):
     @cached_property
     def spher(self) -> npt.NDArray[np.floating]:
         if self.socs_origin is None:
-            warnings.warn("Scan center of point cloud is ambiguous and results can not be guaranteed")
+            logger.warning("Scan center of point cloud is ambiguous and results can not be guaranteed")
             return xyz2rhv(self.arr, np.zeros(3, dtype=np.float32))
         return xyz2rhv(self.arr, self.socs_origin)
 
