@@ -157,7 +157,7 @@ class CartesianCoordinates(Abstract3dCoordinates):
             )
 
     def _process_shift(self):
-        '''
+        """
         4 cases:
             prev_shift is None and NOS is None:
                 Do nothing
@@ -170,7 +170,7 @@ class CartesianCoordinates(Abstract3dCoordinates):
                     register to NOS
                 else:
                     Apply difference in shift, unregister from prev_shift, register to NOS
-        '''
+        """
         prev_shift = self._shift_applied_by
         if self.numerical_optimization_shift is not None:
             self._register_with_shift_at_osm() # This could possibly set self.nos to None
@@ -265,7 +265,7 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
     # TODO this supports merging of tiled data. Not tested over registration / transformation etc.
     @classmethod
-    def merge(cls: Type[CartesianT], *cart_coords: CartesianT , **kwargs) -> CartesianT:
+    def merge(cls: Type[Self], *cart_coords: Self , **kwargs) -> Self:
         if len(cart_coords) == 1:
             return cart_coords[0].copy()
         if len(set(cart_coord.numerical_optimization_shift for cart_coord in cart_coords)) > 1:
@@ -320,8 +320,8 @@ class CartesianCoordinates(Abstract3dCoordinates):
     #         try:
     #             shift = osm.register_with(instance, instance.numerical_optimization_shift)
     #             if shift is not instance.numerical_optimization_shift:
-    #                 logger.info(f"The provided numerical_optimization_shift was not feasible and needed to be replaced"
-    #                             f"by a new one.")
+    #                 logger.info(f"The provided numerical_optimization_shift was not feasible and needed to"
+    #                             f"be replaced by a new one.")
     #
     #                 object.__setattr__(instance, "numerical_optimization_shift", shift)
     #
@@ -397,7 +397,8 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
     @property
     def numerically_optimized(self) -> bool:
-        return not (self.numerical_optimization_shift is None or self.numerical_optimization_shift.value) #TODO close to zero
+        # TODO close to zero
+        return not (self.numerical_optimization_shift is None or self.numerical_optimization_shift.value)
 
     # def to_spherical(self) -> SphericalCoordinates:
     #     spherical = SphericalCoordinates(**self.model_dump(exclude={"arr"}) | {"arr": self.spher})
@@ -405,17 +406,17 @@ class CartesianCoordinates(Abstract3dCoordinates):
     #     return spherical
 
     @classmethod
-    def from_spherical(cls, spher: SphericalCoordinates) -> Self:
+    def from_spherical(cls, spher: Array_Nx3_T) -> Self:
         return cls(arr=rhv2xyz(spher))
 
     # TODO need to improve all the transformation functions
-    def rotate(self, rotation: Array_3x3_T) -> Self:
+    def rotate(self, rotation: Array_3x3_T) -> None:
         self.arr = (rotation @ self.T).T
 
-    def translate(self, translation: Vector_3_T) -> Self:
+    def translate(self, translation: Vector_3_T) -> None:
         self.arr += translation
 
-    def scale(self, scale: Vector_3_T) -> Self:
+    def scale(self, scale: Vector_3_T) -> None:
         self.arr *= scale
 
     # TODO must define on the transformation handling -> Incl. support for the scipy.spatial.transform.rotation
@@ -494,7 +495,7 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
 
 @validate_call(config=DEFAULT_CONFIG)
-def rhv2xyz(spher: npt.ArrayLike|npt.NDArray[np.floating], scan_origin: Optional[Vector_3_T] = None) -> np.ndarray:
+def rhv2xyz(spher: Array_Nx3_T, scan_origin: Optional[Vector_3_T] = None) -> Array_Nx3_T:
     xyz: np.ndarray = np.zeros_like(spher)
     xyz[:, 0] = spher[:, 0] * np.sin(spher[:, 2]) * np.cos(spher[:, 1])
     xyz[:, 1] = spher[:, 0] * np.sin(spher[:, 2]) * np.sin(spher[:, 1])
@@ -507,16 +508,16 @@ def rhv2xyz(spher: npt.ArrayLike|npt.NDArray[np.floating], scan_origin: Optional
 
 # TODO fix this to support the optimal shifts (e.g. remove origin shift)
 @validate_call(config=DEFAULT_CONFIG)
-def xyz2rhv(cart: npt.ArrayLike|npt.NDArray[np.floating], scan_origin: Optional[Vector_3_T] = None) -> np.ndarray:
-    spher: np.ndarray = np.zeros_like(cart)
+def xyz2rhv(xyz: Array_Nx3_T, scan_origin: Optional[Vector_3_T] = None) -> Array_Nx3_T:
+    spher: np.ndarray = np.zeros_like(xyz)
 
     if scan_origin is not None:
-        cart = (cart + scan_origin)
+        xyz = (xyz + scan_origin)
 
-    xy_2: npt.ArrayLike = cart[:, 0]**2 + cart[:, 1]**2
+    xy_2: npt.ArrayLike = xyz[:, 0]**2 + xyz[:, 1]**2
 
-    spher[:, 0] = np.sqrt(xy_2 + cart[:, 2]**2)         # [  0, inf] slope distance
-    spher[:, 1] = np.arctan2(cart[:, 1], cart[:, 0])    # [-pi, +pi] horizonal angle
-    spher[:, 2] = np.arctan2(np.sqrt(xy_2), cart[:, 2])     # [  0, +pi] zenith angle
+    spher[:, 0] = np.sqrt(xy_2 + xyz[:, 2]**2)         # [  0, inf] slope distance
+    spher[:, 1] = np.arctan2(xyz[:, 1], xyz[:, 0])    # [-pi, +pi] horizonal angle
+    spher[:, 2] = np.arctan2(np.sqrt(xy_2), xyz[:, 2])     # [  0, +pi] zenith angle
 
     return spher

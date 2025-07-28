@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Annotated, NamedTuple, Self, TypeVar, Optional, Any, TypedDict, NotRequired, Unpack, TypeAlias
+from typing import Annotated, NamedTuple, Self, TypeVar, Optional, Any, TypedDict, NotRequired, Unpack, TypeAlias, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -58,8 +58,9 @@ class AbstractScalarField(FixedLengthArray):
     name: SfNameT
     origin_dtype: DtypeState
 
-    def __init__(self, arr: npt.ArrayLike, name: SfNameT = None, origin_dtype: SfOrigDtT = None):
-        super().__init__(arr, name=name, origin_dtype=origin_dtype)
+    def __init__(self, arr: VectorT | Array_Nx3_T, name: SfNameT = None, origin_dtype: SfOrigDtT = None):
+        kwargs: dict[str, Any] = {'name': name, 'origin_dtype': origin_dtype}
+        super().__init__(arr, **kwargs)
 
     @model_validator(mode='before')
     @classmethod
@@ -93,13 +94,13 @@ class AbstractScalarField(FixedLengthArray):
 
 
 class ScalarField(BaseVector, AbstractScalarField):
-    def __init__(self, arr: npt.ArrayLike, **kwargs: Unpack[ScalarKwargT]):
-        super().__init__(arr, **kwargs)
+    def __init__(self, arr: VectorT, **kwargs: Unpack[ScalarKwargT]):
+        super().__init__(arr, **cast(dict[str, Any], kwargs))
 
 
 class ScalarFieldTriplet(ArrayNx3, AbstractScalarField):
     def __init__(self, arr: Array_Nx3_T, **kwargs: Unpack[ScalarKwargT]):
-        super().__init__(arr, **kwargs)
+        super().__init__(arr, **cast(dict[str, Any], kwargs))
 
     @classmethod
     def initialize(cls, size: int, value: Array_Nx3_Uint8_T | None = None, name: str = "") -> Self:
