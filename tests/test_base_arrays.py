@@ -75,10 +75,16 @@ class TestBaseArray:
     def test_initialisation(self) -> None:
         self.check_initialisation_options(self.rand_32())
 
+    def test_positional_init(self) -> None:
+        a = self.rand_32()
+        array = self.cls(a)
+        assert isinstance(array, self.cls)
+        assert np.all(a == array)
+
     @staticmethod
     def check_init_from_reference(data: npt.NDArray[Any], cls: type) -> Any:
         a = cls(arr=data)
-        assert isinstance(a, BaseArray)
+        assert isinstance(a, cls)
         assert a is not data                    # base id does not match
         assert a.arr is data                    # array id matches
         assert np.all(a == data)                # Values are identical

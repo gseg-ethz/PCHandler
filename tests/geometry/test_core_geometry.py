@@ -78,7 +78,7 @@ def nos_mini_() -> OptimizedShift:
 @pytest.fixture(scope="function")
 def pcd(rgb_, normals_, intensity_, reflectance_) -> PointCloudData:
     return PointCloudData(
-        xyz=random_coordinates(1, 0),
+        arr=random_coordinates(1, 0),
         rgb=rgb_,
         normals=normals_,
         intensity=intensity_,

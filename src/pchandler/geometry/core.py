@@ -49,8 +49,8 @@ class PointCloudData(CartesianCoordinates):
         None, alias="reflectance", exclude=True, repr=False
     )
 
-    def __init__(self, *args, **kwargs: Unpack[PointCloudDataKw]):
-        super().__init__(*args, **kwargs)
+    def __init__(self, xyz=None, **kwargs: Unpack[PointCloudDataKw]):
+        super().__init__(xyz=xyz, **kwargs)
 
     # def __init__(
     #     self,

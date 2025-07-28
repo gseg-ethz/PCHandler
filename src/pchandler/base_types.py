@@ -1,14 +1,16 @@
 from __future__ import annotations
 
-from typing import Annotated, Union, Sequence, Any, Optional
+from typing import Annotated, Union, Sequence, Any, Optional, TypeAlias, SupportsIndex
 
 import numpy as np
 import numpy.typing as npt
 from numpydantic import NDArray, Shape  # type: ignore
 from numpydantic.dtype import (Bool, Float, Float32, Int8, Int16, Int32, Integer, UInt8, UInt16, Float64) # type: ignore
-from pydantic import BeforeValidator
+from pydantic import BeforeValidator, StringConstraints
 from shapely import Polygon
 
+LowerStr = Annotated[str, StringConstraints(strip_whitespace=True, to_lower=True)]
+SfNameT = Optional[LowerStr]
 
 ValidatedPolygonT = Annotated[
     Sequence | npt.NDArray[np.floating | np.integer] | Polygon, BeforeValidator(lambda x: Polygon(x))
@@ -16,12 +18,21 @@ ValidatedPolygonT = Annotated[
 
 ArrayDtypes = (Integer, Float, Bool)
 IndexDtypes = (Integer, Bool)
+BoolArrayT: TypeAlias = npt.NDArray[np.bool_]
+
+ShapeLikeT: TypeAlias = SupportsIndex | Sequence[SupportsIndex]
+NumberLikeT: TypeAlias = complex | np.number | np.bool
 
 ArrayT = NDArray[Shape["*, ..."], ArrayDtypes]          # Arrays of any shape but support integers, floats and booleans
+Array_Float32_T = NDArray[Shape["*, ..."], Float32]
+Array_Integer_T = NDArray[Shape["*, ..."], Integer]
+Array_Float_T = NDArray[Shape["*, ..."], Float]
+Array_Bool_T = NDArray[Shape["*, ..."], Bool]
 Array_NxM_T = NDArray[Shape["*, *"], ArrayDtypes]       # Intensity/depth image
 Array_NxM_3_T = NDArray[Shape["*, *, 3"], ArrayDtypes]  # RGB image
 Array_Nx2_T = NDArray[Shape["*, 2"], ArrayDtypes]       # Image coordinates
 Array_Nx3_T = NDArray[Shape["*, 3"], ArrayDtypes]       # 3D Coordinates / normals
+Array_Nx3_Float_T = NDArray[Shape["*, 3"], Float]
 Array_Nx3_Float32_T = NDArray[Shape["*, 3"], Float32]   # Optimised coordinates
 Array_Nx3_Uint8_T = NDArray[Shape["*, 3"], UInt8]       # RGB
 Array_3x3_T = NDArray[Shape["4, 4"], ArrayDtypes]       # Rotation Matrix
@@ -32,6 +43,7 @@ Vector_Int16_T = NDArray[Shape["*"], Int16]
 Vector_Int8_T = NDArray[Shape["*"], Int8]
 Vector_Uint16_T = NDArray[Shape["*"], UInt16]
 Vector_Uint8_T = NDArray[Shape["*"], UInt8]             # Single RGB field
+Vector_Float_T = NDArray[Shape["*"], Float]
 Vector_Float32_T = NDArray[Shape["*"], Float32]         # Normal vector field
 Vector_Bool_T = NDArray[Shape["*"], Bool]               # Mask or boolean vector
 Vector_2_T = NDArray[Shape["2"], ArrayDtypes]           # Image coordinate

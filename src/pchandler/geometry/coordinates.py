@@ -4,7 +4,7 @@ import logging
 import warnings
 from abc import ABC, abstractmethod
 from functools import cached_property
-from typing import Union, Optional, Self, Any, Type, TypeVar, Unpack, TypedDict, NotRequired
+from typing import Union, Optional, Self, Any, Type, TypeVar, Unpack, TypedDict, NotRequired, overload
 import uuid
 
 import numpy as np
@@ -32,7 +32,6 @@ CartesianT  = TypeVar("CartesianT", bound="CartesianCoordinates")
 
 
 class Abstract3dKw(TypedDict, total=False):
-    arr: Array_Nx3_T
     project_transformation: NotRequired[Array_4x4_T]
     socs_origin: NotRequired[Vector_3_T]
 
@@ -41,6 +40,9 @@ class CartesianKw(Abstract3dKw, total=False):
     numerical_optimization_shift: NotRequired[Optional[OptimizedShift]]
     unshifted_bbox: NotRequired[Optional[MinMaxPoints]]
     _shift_applied_by: NotRequired[Optional[OptimizedShift]]
+
+class CartesianKwFull(CartesianKw, total=False):
+    arr: NotRequired[Array_Nx3_T]
 
 
 class AbstractCoordinates(FixedLengthArray, ABC):
@@ -126,14 +128,18 @@ class CartesianCoordinates(Abstract3dCoordinates):
         exclude=False
     )
 
-    def __init__(self, *args, **kwargs: Unpack[CartesianKw]):
+    @overload
+    def __init__(self, xyz: Array_Nx3_T, **kwargs: Unpack[CartesianKw]): ...
+
+    @overload
+    def __init__(self, *, arr: Array_Nx3_T, **kwargs: Unpack[CartesianKw]): ...
+
+    def __init__(self, xyz=None, **kwargs: Unpack[CartesianKwFull]):
         # Accept xyz/arr as a positional argument
-        if args:
-            if len(args) > 1:
-                raise AttributeError("expected at most 1 arguments, got %d" % len(args))
-            if "xyz" in kwargs or "arr" in kwargs:
+        if xyz is not None:
+            if "arr" in kwargs:
                 raise TypeError("Cannot pass both positional and keyword for xyz/arr")
-            kwargs["xyz"] = args[0] # type: ignore[typeddict-unknown-key]
+            kwargs["arr"] = xyz
 
         prev_shift: Optional[OptimizedShift] = kwargs.pop("_shift_applied_by", None)
         super().__init__(**kwargs)  # type: ignore[misc]

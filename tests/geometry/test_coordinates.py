@@ -238,8 +238,15 @@ class TestCartesianCoordinates:
         assert b.T.shape != cart_obj.shape
 
         transform = Transform(arr=rand_4x4)
+        with pytest.raises(ValueError):
+            transform @ cart_obj
+
+        valid_transform = transform.copy()
+        valid_transform[3, :3] = 0
+        valid_transform[3, 3] = 1
+
         # c is automatically transformed into a Nx3 array
-        c = transform @ cart_obj
+        c = valid_transform @ cart_obj
         assert c.shape == cart_obj.shape
         assert np.allclose(b.T[:, :3], c)
 
