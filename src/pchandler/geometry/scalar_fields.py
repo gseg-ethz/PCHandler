@@ -1,38 +1,36 @@
 from __future__ import annotations
 
 import logging
-from typing import Annotated, NamedTuple, Self, TypeVar, Optional, Any, TypedDict, NotRequired, Unpack
+from typing import Annotated, NamedTuple, Self, TypeVar, Optional, Any, TypedDict, NotRequired, Unpack, TypeAlias, cast
 
 import numpy as np
 import numpy.typing as npt
-from pydantic import StringConstraints, model_validator, BeforeValidator
+from pydantic import model_validator, BeforeValidator, field_validator
 
-from pchandler.validators import normalize_min_max, normalize_uint8, ensure_unit_vector, normalize_int16
+from pchandler.constants import NORMAL_NAMES, RGB_NAMES
+from pchandler.validators import normalize_min_max, normalize_uint8, normalize_int16
 from pchandler.base_arrays import BaseVector, ArrayNx3, FixedLengthArray
 from pchandler.base_types import (
+    SfNameT,
+    Array_Float32_T,
+    Array_Nx3_T,
+    Array_Nx3_Float_T,
     Array_Nx3_Float32_T,
     Array_Nx3_Uint8_T,
+    VectorT,
     Vector_Bool_T,
     Vector_Float32_T,
     Vector_Int16_T,
     Vector_Uint8_T,
     Vector_Uint16_T,
+    LowerStr
 )
-from pchandler.constants import NORMAL_NAMES, RGB_NAMES
 
 
 logger = logging.getLogger(__name__.split(".")[0])
 
-LowerStr = Annotated[
-    str,
-    StringConstraints(strip_whitespace=True, to_lower=True),
-]
 
-class ScalarKwargT(TypedDict):
-    name: NotRequired[LowerStr]
-    origin_dtype: NotRequired[DtypeState]
-
-
+#  TODO add name attribute to be able to track original names from original data files
 class DtypeState(NamedTuple):
     dtype: npt.DTypeLike
     lower: npt.NDArray[np.number] | float | int
@@ -48,32 +46,34 @@ class DtypeState(NamedTuple):
             raise ValueError(f"lower must be less than upper. {obj=}")
 
 
-# TODO look at model_dict lowerstr parameter
+SfOrigDtT: TypeAlias = Optional[DtypeState]
+
+
+class ScalarKwargT(TypedDict):
+    name: NotRequired[SfNameT]
+    origin_dtype: NotRequired[DtypeState]
+
+
 class AbstractScalarField(FixedLengthArray):
-    name: LowerStr
+    name: SfNameT
     origin_dtype: DtypeState
 
-    def __init__(self,
-                 arr: npt.NDArray[Any] | Self,
-                 *,
-                 name: Optional[LowerStr] = None,
-                 origin_dtype: Optional[DtypeState] = None):
+    def __init__(self, arr: VectorT | Array_Nx3_T | Self, name: SfNameT = None, origin_dtype: SfOrigDtT = None):
+        kwargs: dict[str, Any] = {'name': name, 'origin_dtype': origin_dtype}
+        super().__init__(arr, **kwargs)
 
-        super().__init__(arr=arr, **{'name': name, 'origin_dtype': origin_dtype})
-        return
-
-
+    # noinspection PyNestedDecorators
     @model_validator(mode='before')
     @classmethod
     def validate_model_before(cls, data: Any) -> Any:
-
         if data['name'] is None:
+            # Extract name from field if it exists, otherwise get default if available
             if hasattr(data['arr'], 'name'):
                 data['name'] = data['arr'].name
             else:
                 data['name'] = cls.model_fields['name'].default
 
-
+        # Get the origin_dtype if it exists
         if data['origin_dtype'] is None:
             if hasattr(data['arr'], 'origin_dtype'):
                 data['origin_dtype'] = data['arr'].origin_dtype
@@ -84,26 +84,26 @@ class AbstractScalarField(FixedLengthArray):
 
     def get_original_data(self) -> npt.NDArray[Any]:
         current_dtype_state = DtypeState.generate(self.arr)
+
         if current_dtype_state == self.origin_dtype:
-            logger.info("No changes to the data as no prior conversions made")
             return self.arr.copy()
 
         return normalize_min_max(array=self.arr.copy(),
-                                 lower=self.origin_dtype.lower,
-                                 upper=self.origin_dtype.upper,
+                                 lower=float(self.origin_dtype.lower),
+                                 upper=float(self.origin_dtype.upper),
                                  target_dtype=self.origin_dtype.dtype)
 
 
 class ScalarField(BaseVector, AbstractScalarField):
-    def __init__(self, arr: Self|npt.NDArray, **kwargs: Unpack[ScalarKwargT]):
-        kwargs['name'] = kwargs.get('name', None)
-        super().__init__(arr=arr, **kwargs)
+    def __init__(self, arr: VectorT|Self, name: SfNameT = None, **kwargs: Unpack[ScalarKwargT]):
+        if name is not None:
+            kwargs['name'] = name
+        super().__init__(arr, **cast(dict[str, Any], kwargs))
 
 
 class ScalarFieldTriplet(ArrayNx3, AbstractScalarField):
-    def __init__(self, arr: Self|npt.NDArray[Any], name: str, **kwargs: Unpack[ScalarKwargT]):
-        kwargs['name'] = name
-        super().__init__(arr=arr, **kwargs)
+    def __init__(self, arr: Array_Nx3_T|Self, **kwargs: Unpack[ScalarKwargT]):
+        super().__init__(arr, **cast(dict[str, Any], kwargs))
 
     @classmethod
     def initialize(cls, size: int, value: Array_Nx3_Uint8_T | None = None, name: str = "") -> Self:
@@ -114,12 +114,18 @@ class ScalarFieldTriplet(ArrayNx3, AbstractScalarField):
 
 
 class RGBFields(ScalarFieldTriplet):
-    arr: Annotated[Array_Nx3_Uint8_T, BeforeValidator(normalize_uint8)]
-    name: LowerStr = RGB_NAMES.base
+    arr: Array_Nx3_Uint8_T
+    name: SfNameT = RGB_NAMES.base
 
-    def __init__(self, arr: Self|npt.NDArray[np.uint8|np.float32], **kwargs: Unpack[ScalarKwargT]):
+    def __init__(self, arr: Array_Nx3_Uint8_T|Array_Nx3_Float_T|Self, **kwargs: Unpack[ScalarKwargT]):
         kwargs['name'] = RGB_NAMES.base
         super().__init__(arr, **kwargs)
+
+    # noinspection PyNestedDecorators
+    @field_validator('arr', mode='before')
+    @classmethod
+    def normalise_to_uint8(cls, data: npt.NDArray[Any]) -> npt.NDArray[np.uint8]:
+        return normalize_uint8(data)
 
     @property
     def red(self) -> Vector_Uint8_T:
@@ -145,17 +151,29 @@ class RGBFields(ScalarFieldTriplet):
     def b(self) -> Vector_Uint8_T:
         return self.blue
 
-    def as_normalised_float32(self) -> npt.NDArray[np.float32]:
+    def as_normalised_float32(self) -> Array_Float32_T:
         return normalize_min_max(self.arr, 0, 1, np.float32)
 
 
 class NormalFields(ScalarFieldTriplet):
-    arr: Annotated[Array_Nx3_Float32_T, BeforeValidator(ensure_unit_vector)]
+    arr: Array_Nx3_Float32_T
     name: LowerStr = NORMAL_NAMES.base
 
-    def __init__(self, arr: Self|npt.NDArray[np.floating], **kwargs: Unpack[ScalarKwargT]):
+    def __init__(self, arr: Array_Nx3_Float_T|Self, **kwargs: Unpack[ScalarKwargT]):
         kwargs['name'] = NORMAL_NAMES.base
-        super().__init__(arr=arr, **kwargs)
+        super().__init__(arr, **kwargs)
+
+    # noinspection PyNestedDecorators
+    @field_validator('arr', mode='before')
+    @classmethod
+    def ensure_unit_vector(cls, array: Array_Nx3_Float_T) -> Array_Nx3_Float32_T:
+        if not (np.issubdtype(array.dtype, np.floating) or np.issubdtype(array.dtype, np.signedinteger)):
+            raise TypeError("Dtype of normals array must be of type floating or signed integer}")
+
+        array /= np.linalg.norm(array, axis=1).reshape(-1, 1)
+        result = Array_Nx3_Float32_T(array.astype(np.float32))
+
+        return result
 
     @property
     def nx(self) -> Vector_Float32_T:
@@ -181,20 +199,21 @@ class NormalFields(ScalarFieldTriplet):
 class SegmentationMap(ScalarField):
     arr: Vector_Uint8_T | Vector_Uint16_T
 
-    def __init__(self, arr: Self|npt.NDArray[Any], **kwargs: Unpack[ScalarKwargT]):
-        super().__init__(arr=arr, **kwargs)
+    def __init__(self, arr: Vector_Uint8_T | Vector_Uint16_T | Self, **kwargs: Unpack[ScalarKwargT]):
+        super().__init__(arr, **kwargs)
 
     @classmethod
     def initialize(cls, name: LowerStr, pt_cloud_sizes: list[int]) -> Self:
         vector_length = sum(pt_cloud_sizes)
+
         if len(pt_cloud_sizes) <= 2**8 - 1:
             arr = np.zeros(vector_length, dtype=np.uint8)
+
         elif len(pt_cloud_sizes) <= 2**16 - 1:
             arr = np.zeros(vector_length, dtype=np.uint16)
+
         else:
-            raise ValueError(
-                f"Creating segmentation map for more than {2 ** 16} point {len(pt_cloud_sizes)} not supported."
-            )
+            raise ValueError(f"Segmentation map for more than {2 ** 16} classes {len(pt_cloud_sizes)} not supported.")
 
         return cls(arr, name=name)
 
@@ -202,22 +221,22 @@ class SegmentationMap(ScalarField):
 class ScalarFieldUint8(ScalarField):
     arr: Vector_Uint8_T
 
-    def __init__(self, arr: Self|npt.NDArray[np.uint8], **kwargs: Unpack[ScalarKwargT]):
-        super().__init__(arr=arr, **kwargs)
+    def __init__(self, arr: Vector_Uint8_T | Self, **kwargs: Unpack[ScalarKwargT]):
+        super().__init__(arr, **kwargs)
 
 
 class ScalarFieldBoolean(ScalarField):
     arr: Vector_Bool_T
 
-    def __init__(self, arr: Self|npt.NDArray[np.bool_], **kwargs: Unpack[ScalarKwargT]):
-        super().__init__(arr=arr, **kwargs)
+    def __init__(self, arr: Vector_Bool_T | Self, **kwargs: Unpack[ScalarKwargT]):
+        super().__init__(arr, **kwargs)
 
 
 class ScalarFieldFloat32(ScalarField):
     arr: Vector_Float32_T
 
-    def __init__(self, arr: Self|npt.NDArray[np.float32], **kwargs: Unpack[ScalarKwargT]):
-        super().__init__(arr=arr, **kwargs)
+    def __init__(self, arr: Vector_Float32_T | Self, **kwargs: Unpack[ScalarKwargT]):
+        super().__init__(arr, **kwargs)
 
 
 class NormalisedInt16ScalarField(ScalarField):
@@ -226,10 +245,10 @@ class NormalisedInt16ScalarField(ScalarField):
     """
     arr: Annotated[Vector_Int16_T, BeforeValidator(normalize_int16)]
 
-    def __init__(self, arr: Self|npt.NDArray[np.int16], **kwargs: Unpack[ScalarKwargT]):
-        super().__init__(arr=arr, **kwargs)
+    def __init__(self, arr: VectorT | Self, **kwargs: Unpack[ScalarKwargT]):
+        super().__init__(arr, **kwargs)
 
-    def to_uint8(self) -> Vector_Uint8_T:
+    def to_uint8(self) -> ScalarFieldUint8:
         return ScalarFieldUint8(normalize_uint8(self.arr), name=self.name, origin_dtype=self.origin_dtype)
 
 

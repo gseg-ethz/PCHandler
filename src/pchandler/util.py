@@ -189,21 +189,3 @@ def bypass_immutable(method: Callable) -> Callable:
             self.set_mutability(original_state)
 
     return wrapper
-
-
-# DECIDE does this serve any future purpose? If so, write tests
-def unpack_npydantic_dtype(cls: type[BaseArray]) -> tuple[np.typing.DTypeLike, ...]:
-    a = cls.model_fields['arr'].annotation.__dict__['__args__'][1]
-    all_types = []
-
-    try:
-        for dt in a:
-            if isinstance(dt, tuple):
-                for dt_ in dt:
-                    all_types.append(dt_)
-            else:
-                all_types.append(dt)
-
-    except Exception as e:
-        all_types.append(a)
-    return tuple(all_types)

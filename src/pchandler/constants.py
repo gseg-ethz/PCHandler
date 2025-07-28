@@ -32,8 +32,8 @@ class NameConstantsTriplet(NamedTuple):
     base: str
     char: TripletT
     extra_names: tuple[str, ...] = ()
-    words: TripletT = ()
-    float: TripletT = ()
+    words: TripletT = ("","","")
+    float: TripletT = ("","","")
     reverse: Optional[str] = None
 
     @property
@@ -41,8 +41,8 @@ class NameConstantsTriplet(NamedTuple):
         return (self.base,) + self.extra_names
 
     @property
-    def triplets(self) -> tuple[TripletT]:
-        triplets = (self.char, )
+    def triplets(self) -> tuple[TripletT, ...]:
+        triplets: tuple[TripletT, ...] = (self.char, )
 
         if self.words:
             triplets += (self.words, )
@@ -70,8 +70,8 @@ class NameConstantsTriplet(NamedTuple):
         return tuple(tuple(group) for group in groups)
 
     def get_position(self, name):
-        for i, postional_names in enumerate(self.positional):
-            if name in postional_names:
+        for i, positional_names in enumerate(self.positional):
+            if name in positional_names:
                 return i
 
         raise ValueError("Could not find name in positional names")
@@ -119,32 +119,3 @@ DEFAULT_CONFIG = ConfigDict(arbitrary_types_allowed=True, validate_assignment=Tr
 VALIDATE_RETURN_CONFIG = DEFAULT_CONFIG | {'validate_return': True}
 
 validate_variables = validate_call(config=VALIDATE_RETURN_CONFIG)
-
-
-# RGB_FIELD = "rgb"
-# NORMALS_FIELD = "normals"
-# INTENSITY_FIELD = "intensity"
-# REFLECTANCE_FIELD = "reflectance"
-
-# XYZ_FIELDS = ('x', 'y', 'z')
-#
-# RGB_CHAR = ("r", "g", "b")
-# RGB_WORD = ("red", "green", "blue")
-# RGB_FLOAT = ("rf", "gf", "bf")
-# RGB_PARTIAL_NAMES = RGB_CHAR + RGB_WORD + RGB_FLOAT
-# RGB_FULL_NAMES = (RGB_FIELD, 'colour', 'colours', 'color', 'colors')
-# RGB_ALL_NAMES = RGB_FULL_NAMES + RGB_PARTIAL_NAMES
-
-# NORMALS_CHAR = ("nx", "ny", "nz")
-# NORMALS_WORD = ("normalx", "normaly", "normalz")
-# NORMAL_PARTIAL_NAMES = NORMALS_CHAR + NORMALS_WORD
-# NORMAL_FULL_NAMES = (NORMALS_FIELD, "normal", "normal_fields", "nxnynz")
-# NORMAL_ALL_NAMES = NORMAL_FULL_NAMES + NORMAL_PARTIAL_NAMES
-
-
-# INTENSITY_CHAR = "i",
-# INTENSITY_FULL_NAMES = (INTENSITY_FIELD, "intensities")
-# INTENSITY_ALL_NAMES = INTENSITY_FULL_NAMES + ("i",)
-#
-#
-# REFLECTANCE_ALL_NAMES = (REFLECTANCE_FIELD,)

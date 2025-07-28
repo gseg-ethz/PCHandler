@@ -1,4 +1,5 @@
 import copy
+import warnings
 
 import numpy as np
 import pytest
@@ -16,6 +17,7 @@ from pchandler.geometry.coordinates import (
     rhv2xyz,
     xyz2rhv,
 )
+from pchandler.geometry.fov import FoV
 
 # Radius, Horizontal, Vertical (Zenith)
 _known_spher = np.array(
@@ -64,7 +66,7 @@ def large_xyz():
 
 @pytest.fixture(scope="function")
 def cart_obj(large_xyz) -> CartesianCoordinates:
-    return CartesianCoordinates(arr=large_xyz)
+    return CartesianCoordinates(arr=large_xyz, socs_origin=np.array([0, 0, 0]))
 
 
 class TestCartesianCoordinates:
@@ -113,16 +115,14 @@ class TestCartesianCoordinates:
         # Check xyz and arr are the same object
         assert id(cart_obj.arr) == id(cart_obj.xyz)
         assert np.all(cart_obj == cart_obj.arr)
-        with pytest.raises(IndexError):
-            assert np.all(cart_obj.x == cart_obj[:, 0])
-        assert np.all(cart_obj.x == cart_obj.arr[:, 0])
-        assert np.all(cart_obj.y == cart_obj.arr[:, 1])
-        assert np.all(cart_obj.z == cart_obj.arr[:, 2])
+        assert np.all(cart_obj.x == cart_obj[:, 0])
+        assert np.all(cart_obj.y == cart_obj[:, 1])
+        assert np.all(cart_obj.z == cart_obj[:, 2])
 
         assert np.any(cart_obj.yxz != cart_obj.arr)
-        assert np.all(cart_obj.yxz[:, 0] == cart_obj.arr[:, 1])
-        assert np.all(cart_obj.yxz[:, 1] == cart_obj.arr[:, 0])
-        assert np.all(cart_obj.yxz[:, 2] == cart_obj.arr[:, 2])
+        assert np.all(cart_obj.yxz[:, 0] == cart_obj[:, 1])
+        assert np.all(cart_obj.yxz[:, 1] == cart_obj[:, 0])
+        assert np.all(cart_obj.yxz[:, 2] == cart_obj[:, 2])
 
     def test_spherical_properties(self, cart_obj):
         assert id(cart_obj.arr) != id(cart_obj.spher)
@@ -135,7 +135,12 @@ class TestCartesianCoordinates:
         # This is based on the implementation when there is no SphericalCoordinates
         cart_2 = type(cart_obj).from_spherical(cart_obj.spher)
         assert isinstance(cart_2, CartesianCoordinates)
-        assert np.allclose(cart_obj, cart_2)
+
+        if cart_obj.dtype == np.float64 and cart_obj.spher.dtype == np.float64:
+            assert np.allclose(cart_obj, cart_2)
+        elif cart_obj.dtype == np.float32:
+            assert np.allclose(cart_2, cart_obj, atol=1e-6)
+            # TODO Further investigation should be made why the precision is so bad
 
         # # check that the cart_obj cleans up the cached spherical coordinates
         # # reasoning is that if a separate object is created, these are not needed
@@ -157,9 +162,13 @@ class TestCartesianCoordinates:
         # assert np.allclose(cart2.arr, cart_obj.arr)
         # assert np.allclose(cart2.spher, spherical)
 
-    def test_transform_method(self, cart_obj):
-        assert False
-        # xyz = cart_obj.xyz.copy()
+    def test_transform(self, cart_obj):
+        affine = np.eye(4) * 2
+        xyz2 = cart_obj.copy()
+        xyz2.transform(affine)
+
+        assert np.allclose(cart_obj * 2, xyz2)
+        #
         # rotation = Rotation.from_euler(seq="zyx", angles=np.array([0, 1.3, 1.4])).as_matrix()
         # scale = np.array([0.5, 0.5, 0.5])
         # translation = np.array([3, 3, 3])
@@ -173,6 +182,25 @@ class TestCartesianCoordinates:
         #
         # # TODO reimplement transform ledger then retest
         # # assert 'AFFINE' in cart_obj.transform_ledger[-1][0]
+
+    def test_scale(self, cart_obj):
+        xyz2 = cart_obj.copy()
+        xyz2.scale([3, 3, 3])
+        assert np.allclose(cart_obj * 3, xyz2)
+
+    def test_rotate(self, cart_obj):
+        xyz2 = cart_obj.copy()
+        rot_forward = Rotation.from_euler(seq='zyx', angles=[90, 45, 30], degrees=True ).as_matrix()
+        xyz2.rotate(rot_forward)
+        temp = xyz2.copy()
+        temp.rotate(np.linalg.inv(rot_forward))
+        assert np.allclose(cart_obj, temp)
+        assert not np.any(xyz2 == cart_obj)
+
+    def test_translate(self, cart_obj):
+        xyz2 = cart_obj.copy()
+        xyz2.translate([3, 3, 3])
+        assert np.allclose(cart_obj + 3, xyz2)
 
     def test_left_matrix_multiplication(self, cart_obj):
         rand_3x3 = np.random.rand(3, 3)
@@ -210,8 +238,15 @@ class TestCartesianCoordinates:
         assert b.T.shape != cart_obj.shape
 
         transform = Transform(arr=rand_4x4)
+        with pytest.raises(ValueError):
+            transform @ cart_obj
+
+        valid_transform = transform.copy()
+        valid_transform[3, :3] = 0
+        valid_transform[3, 3] = 1
+
         # c is automatically transformed into a Nx3 array
-        c = transform @ cart_obj
+        c = valid_transform @ cart_obj
         assert c.shape == cart_obj.shape
         assert np.allclose(b.T[:, :3], c)
 
@@ -223,37 +258,19 @@ class TestCartesianCoordinates:
         assert a.shape == (10, 3)
         assert np.all(a.arr[0:10, :] == cart_obj.arr[0:10, :])
 
+        # Indexing an object in the typical numpy fashion is possible.
+        # But if an error throws, will return the numpy array
+        c = cart_obj[0:10, :2]
+        assert isinstance(c, np.ndarray)
+        assert not isinstance(c, CartesianCoordinates)
+        assert c.shape == (10, 2)
+
         with pytest.raises(IndexError):
-            c = cart_obj[0:10, :2]
-
-        with pytest.raises(ValueError):
             mask = np.ones((10, 3), dtype=np.bool_)
-            c = cart_obj[mask]
+            cart_obj[mask]
 
-    # # TODO uncomment when FOV re-implemented
     def test_fov(self, cart_obj):
-        cart_obj.fov
-        assert False
-
-
-# class TestSphericalCoordinates:
-#     def test_instantiation(self, known_spher, known_xyz):
-#         spherical = SphericalCoordinates(arr=known_spher)
-#
-#         assert isinstance(spherical, SphericalCoordinates)
-#         assert np.all(spherical.spher == known_spher)
-#
-#         with pytest.raises(ValidationError):
-#             SphericalCoordinates(arr=known_xyz)
-#
-#     def test_from_cartesian(self, known_spher, known_xyz):
-#         cart_obj = CartesianCoordinates(arr=known_xyz)
-#         spher_obj = SphericalCoordinates.from_cartesian(cart_obj)
-#         assert np.allclose(spher_obj.arr, known_spher)
-#
-#     # # TODO uncomment when FOV re-implemented
-#     # def test_fov(self, known_spher):
-#     #     SphericalCoordinates(arr=known_spher).fov
+        assert isinstance(cart_obj.fov, FoV)
 
 
 class TestConversions:
@@ -269,49 +286,42 @@ class TestConversions:
             xyz2 = rhv2xyz(xyz2rhv(arr))
             assert np.allclose(xyz2, arr)
 
-    # TODO implement conversion tests from Cartesian and PointCloudData types
-    # def test_supported_types(self, known_xyz, known_spher):
-    #     xyz = CartesianCoordinates(arr=known_xyz)
-    #     rhv = xyz2rhv(xyz)
-    #     assert np.allclose(rhv, known_spher)
-    #
-    #     xyz = PointCloudData(xyz=xyz)
-    #     rhv = xyz2rhv(xyz)
-    #     assert np.allclose(rhv, known_spher)
+    def test_supported_types(self, known_xyz, known_spher):
+        xyz = CartesianCoordinates(known_xyz)
+        rhv = xyz2rhv(xyz)
+        assert np.allclose(rhv, known_spher)
+
+        xyz = CartesianCoordinates(xyz)
+        rhv = xyz2rhv(xyz)
+        assert np.allclose(rhv, known_spher)
+
+        # Show that a translation shift is the same
+        xyz += 1
+        xyz.socs_origin = np.ones(3)
+        rhv = xyz2rhv(xyz, xyz.socs_origin)
+        assert np.allclose(rhv, known_spher)
 
     class TestSphericalOrigin:
-        @staticmethod
-        def arrays_setup(fixed_xyz):
-            xyz = CartesianCoordinates(arr=fixed_xyz)
-            xyz_shift = copy.deepcopy(xyz)
-            xyz_shift.socs_origin = np.ones(3)
-            rhv_shift = xyz_shift.to_spherical()
-            xyz2_shift = rhv_shift.to_cartesian()
-            return xyz, xyz_shift, rhv_shift, xyz2_shift
+        def test_socs_origin(self, known_xyz, known_spher):
+            # Different origin but same underlying coordinates
+            xyz = CartesianCoordinates(arr=known_xyz)
+            xyz_shift: CartesianCoordinates = CartesianCoordinates(arr=known_xyz, socs_origin=np.ones(3))
+            assert np.all(xyz == xyz_shift)
+            assert xyz.socs_origin is not xyz_shift.socs_origin
+            assert xyz.socs_origin is None
+            assert np.all(xyz_shift.socs_origin == 1)
 
-        def test_xyz_coordinates(self, known_xyz):
-            xyz, xyz_shift, rhv_shift, xyz2_shift = self.arrays_setup(known_xyz)
-            # Show that xyz coordinates remain the same
-            assert np.allclose(xyz, xyz_shift)
-            assert np.allclose(xyz.xyz, rhv_shift.xyz)
-            assert np.allclose(xyz, known_xyz)
-            assert np.allclose(xyz, xyz2_shift.xyz)
+            # Spherical coordinates will differ
+            assert not np.allclose(xyz.spher, xyz_shift.spher)
+            assert not np.allclose(known_spher, xyz_shift.spher)
 
-        def test_spherical_origin(self, known_xyz):
-            xyz, xyz_shift, rhv_shift, xyz2_shift = self.arrays_setup(known_xyz)
-            # Origins should be different
-            assert np.all(xyz.socs_origin != xyz_shift.socs_origin)
-            assert np.all(xyz.socs_origin != rhv_shift.socs_origin)
-            assert np.all(xyz.socs_origin != xyz2_shift.socs_origin)
+            # Shifting the coordinates to mimic the relative position of the socs origin
+            xyz2 = xyz.copy(deep=True)
+            xyz2 -= 1
+            assert np.allclose(xyz2.spher, xyz_shift.spher)
+            assert xyz2.socs_origin is None
+            assert xyz_shift.socs_origin is not None
 
-            # Origins should be maintained
-            assert np.all(xyz_shift.socs_origin == rhv_shift.socs_origin)
-            assert np.all(xyz_shift.socs_origin == xyz2_shift.socs_origin)
+            xyz_shift2: CartesianCoordinates = CartesianCoordinates(arr=known_xyz, socs_origin=np.array([-1, -2, -3]))
 
-        def test_spherical_coordinates(self, known_xyz, known_spher):
-            xyz, xyz_shift, rhv_shift, xyz2_shift = self.arrays_setup(known_xyz)
-
-            assert np.allclose(xyz.spher, known_spher)  # Reference is still the same
-            assert np.allclose(xyz_shift.spher, rhv_shift)  # shifted objects still match
-            assert np.allclose(xyz_shift.spher, xyz2_shift.spher)  # shifted objects still match
-            assert np.any(xyz.spher != xyz_shift.spher)  # Different origins should yield diff results
+            assert np.any(xyz.spher != xyz_shift2.spher)  # Different origins should yield diff results

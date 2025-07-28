@@ -1,50 +1,52 @@
 import pytest
 import numpy as np
 
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
 
 from pchandler.constants import RGB_NAMES, NORMAL_NAMES
 from pchandler.validators import linear_map_dtype, normalize_self
 from pchandler.geometry.scalar_fields import (
-    LowerStr,
     DtypeState,
     ScalarField,
     ScalarFieldBoolean,
     RGBFields,
     NormalFields,
     SegmentationMap,
-    NormalisedInt16ScalarField
+    NormalisedInt16ScalarField,
+    ScalarFieldUint8,
+    ScalarFieldFloat32
 )
 
 
 def test_lower_str_annotation():
-    class A(BaseModel):
-        name: LowerStr
+    """
+        Test name conversion to lowercase
 
-    test_name = "STEVE"
-    b = A(name=test_name)
-    assert isinstance(b.name, str)
-    assert b.name != test_name
-    assert b.name == "steve"
+    Returns
+    -------
 
-    test2 = "  Allen Steve  "
-    c = A(name=test2)
-    assert c.name == "allen steve"
+    """
+    upper_name = "STEVE"
+    sf = ScalarField(np.ones(10), name=upper_name)
+
+    assert isinstance(sf.name, str)
+    assert sf.name != upper_name
+    assert sf.name == "steve"
 
 
 class TestDtypeState:
+    def test_initialise(self):
+        state = DtypeState(np.int16, 3, 5)
+        assert state.dtype == np.int16
+        assert state.lower == 3
+        assert state.upper == 5
+
     def test_generate_method(self):
         array = np.array([2, 3, 4, 8]).astype(np.uint8)
         state = DtypeState.generate(array)
         assert state.dtype == np.uint8
         assert state.lower == 2
         assert state.upper == 8
-
-    def test_init(self):
-        state = DtypeState(np.int16, 3, 5)
-        assert state.dtype == np.int16
-        assert state.lower == 3
-        assert state.upper == 5
 
     def test_validate(self):
         with pytest.raises(ValueError):
@@ -72,28 +74,29 @@ class TestScalarFieldClass:
         assert a.name == "steve"
         assert np.all(a == np.ones(10))
 
-    ones = np.ones(10)
-
     @pytest.mark.parametrize(
         ["array", "name", "origin_dtype"],
         (
-            (ones, True, None),
-            (ones, {"sas"}, None),
-            (ones, 1234.123, None),
+            (np.ones(10), True, None),
+            (np.ones(10), {"sas"}, None),
+            (np.ones(10), 1234.123, None),
             (np.ones((10, 2)), "sty", None),
             (np.ones((10, 4)), "steve", None),
             (np.ones((10, 3, 3)), "asd", None),
-            (ones, "steve", True),
-            (ones, "steve", {"a": 2}),
+            (np.ones(10), "steve", True),
+            (np.ones(10), "steve", {"a": 2}),
         ),
     )
     def test_invalid_values(self, array, name, origin_dtype):
         with pytest.raises(Exception) as e:
-            _ = ScalarField(array, name=name, origin_dtype=origin_dtype)
+            _ = ScalarField(array, name=name, origin_dtype=origin_dtype) # type: ignore
 
         assert type(e.value) in (ValidationError, ValueError, TypeError)
 
-    @pytest.mark.parametrize("array", (np.ones(1), np.ones(1000), np.ones((1000, 1)), np.ones((1, 1, 1, 1, 1))))
+    @pytest.mark.parametrize("array", (np.ones(1),
+                                       np.ones(1000),
+                                       np.ones((1000, 1)),
+                                       np.ones((1, 1, 1, 1, 1))))
     def test_valid_shape(self, array):
         a = ScalarField(array, name="a")
         assert a.arr.shape == (array.size,)
@@ -105,15 +108,9 @@ class TestScalarFieldClass:
         assert np.all(b == c)
         assert b.name != c.name
 
-        # d = ScalarField(**c.model_dump())
-        # assert id(d) != id(c)
-        # assert id(d.arr) != id(c.arr)
-        # assert d.name == c.name
-        # assert np.all(d.arr == c.arr)
-
         e = ScalarField(c)
         assert id(e) != id(c)
-        assert id(e.arr) != id(c.arr)
+        assert id(e.arr) == id(c.arr)   # Pass by reference expected
         assert e.name == c.name
         assert np.all(e.arr == c.arr)
 
@@ -150,6 +147,10 @@ class TestTypeDefinedScalarFields:
         assert isinstance(b, NormalisedInt16ScalarField)
         assert np.all(b == array)
 
+        as_uint8 = b.to_uint8()
+        assert isinstance(as_uint8, ScalarField)
+        assert as_uint8.dtype == np.uint8
+
     def test_bool_valid(self):
         array = np.random.randint(0, 1, 1000, dtype=np.bool_)
         b = ScalarFieldBoolean(array, name="temp")
@@ -161,6 +162,20 @@ class TestTypeDefinedScalarFields:
         with pytest.raises(Exception) as e:
             ScalarFieldBoolean(array)
         assert type(e.value) in (ValidationError, ValueError, TypeError)
+
+    def test_scalar_uint8(self):
+        array = np.random.randint(0, 255, 1000, dtype=np.uint8)
+        b = ScalarFieldUint8(array, name="temp")
+        assert isinstance(b, ScalarFieldUint8)
+        assert np.all(b == array)
+        assert b.dtype == np.uint8
+
+    def test_scalar_float32(self):
+        array = np.random.rand(1000).astype(np.float32)
+        b = ScalarFieldFloat32(array, name="temp")
+        assert isinstance(b, ScalarFieldFloat32)
+        assert np.all(b == array)
+        assert b.dtype == np.float32
 
 
 class TestRgbField:

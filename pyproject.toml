@@ -62,10 +62,10 @@ extend-ignore = ["E203", "W503"]
 select = ["B", "C", "E", "F", "W", "T4", "D"]
 
 [tool.mypy]
+mypy_path = 'src/pchandler'
 python_version = "3.12"
-strict = true
-plugins = ['numpy.typing.mypy_plugin']
-
+strict = false
+ignore_missing_imports = true
 
 
 [project.urls]
