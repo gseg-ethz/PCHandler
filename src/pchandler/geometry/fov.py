@@ -64,26 +64,40 @@ Example: Use a hierarchical FoV tree for spatial partitioning:
     # Query the depth of the tree
     print("Tree depth:", fov_tree.depth())
 """
+
 from __future__ import annotations
 
 import logging
 import math
 import warnings
-
 from dataclasses import dataclass, field
 from fractions import Fraction
 from itertools import chain
 from typing import (
-    Iterable, Optional, cast, Self, TYPE_CHECKING, Any, Union,
-    Generator, overload
+    TYPE_CHECKING,
+    Any,
+    Generator,
+    Iterable,
+    Optional,
+    Self,
+    Union,
+    cast,
+    overload,
 )
 
 import numpy as np
-from pydantic import Field, NonNegativeFloat, validate_call, BaseModel, field_validator, ConfigDict
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    NonNegativeFloat,
+    field_validator,
+    validate_call,
+)
 
-from pchandler.constants import EPS, TWO_PI, PI, validate_variables, DEFAULT_CONFIG
-from pchandler.util import AngleUnit, convert_angles
+from pchandler.constants import DEFAULT_CONFIG, EPS, PI, TWO_PI, validate_variables
 from pchandler.spherical.angle import Angle, AngleArray
+from pchandler.util import AngleUnit, convert_angles
 
 if TYPE_CHECKING:
     from pchandler.base_types import Vector_3_T
@@ -101,6 +115,7 @@ class FoV(BaseModel):
     This is designed to be more compatible with spherical angle projections to image coordinate systems.
 
     """
+
     model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True)
 
     left: Angle = Field(..., description="Hz ∈ [–π, +π]")
@@ -123,19 +138,19 @@ class FoV(BaseModel):
 
     @classmethod
     def construct_without_bounds_check(
-            cls,
-            *,
-            left: Union[Angle, float, str],
-            right: Union[Angle, float, str],
-            top: Union[Angle, float, str],
-            bottom: Union[Angle, float, str],
+        cls,
+        *,
+        left: Union[Angle, float, str],
+        right: Union[Angle, float, str],
+        top: Union[Angle, float, str],
+        bottom: Union[Angle, float, str],
     ) -> Self:
         left_a = Angle.parse(left)
         right_a = Angle.parse(right)
         top_a = Angle.parse(top)
         bottom_a = Angle.parse(bottom)
         new_instance = cls.model_construct(
-            _fields_set={'left', 'right', 'top', 'bottom'},
+            _fields_set={"left", "right", "top", "bottom"},
             left=left_a,
             right=right_a,
             top=top_a,
@@ -143,12 +158,11 @@ class FoV(BaseModel):
         )
         return new_instance
 
-
     @field_validator("left", "right", mode="after")
     def _check_hz(cls, hz: Angle) -> Angle:
         if not isinstance(hz, Angle):
             raise TypeError("left/right must be an Angle or float")
-        if not -np.pi-EPS <= hz.internal_value <= np.pi+EPS:
+        if not -np.pi - EPS <= hz.internal_value <= np.pi + EPS:
             raise ValueError(f"Horizontal angle {hz.radians} not in [-π, π]")
         return hz
 
@@ -156,7 +170,7 @@ class FoV(BaseModel):
     def _check_top(cls, v: Angle, info) -> Angle:
         if not isinstance(v, Angle):
             raise TypeError("Top must be an Angle or float")
-        if not 0-EPS <= v.internal_value <= np.pi+EPS:
+        if not 0 - EPS <= v.internal_value <= np.pi + EPS:
             raise ValueError(f"Top angle {v.radians} not in [0, π]")
         bottom = info.data.get("bottom")
         if bottom is not None and v > bottom:
@@ -247,11 +261,11 @@ class FoV(BaseModel):
             left=centerpoint[0] - extent[0] / 2,
             right=centerpoint[0] + extent[0] / 2,
             top=centerpoint[1] - extent[1] / 2,
-            bottom=centerpoint[1] + extent[1] / 2)
+            bottom=centerpoint[1] + extent[1] / 2,
+        )
         return new_instance
 
         # def union(self, fov2: Self) -> Self:
-
 
     def union(self, fov2: Self) -> Self:
         """
@@ -271,7 +285,7 @@ class FoV(BaseModel):
             left=min(self.left, fov2.left),
             top=min(self.top, fov2.top),
             right=max(self.right, fov2.right),
-            bottom=max(self.bottom, fov2.bottom)
+            bottom=max(self.bottom, fov2.bottom),
         )
 
     def intersect(self, fov2: Self) -> Self:
@@ -306,7 +320,6 @@ class FoV(BaseModel):
             The aspect ratio (width/height) of the FoV.
         """
         return self.width() / self.height()
-
 
     @validate_call(config=DEFAULT_CONFIG)
     def extend_to_ratio(self, ratio: float) -> Self:
@@ -349,20 +362,16 @@ class FoV(BaseModel):
         if shape[0] == shape[1] == 1:
             return [self]
 
-        horizontal_borders = Angle(np.linspace(
-            start=self.left.radians,
-            stop=self.right.radians,
-            num=shape[0] + 1,
-            endpoint=True,
-            retstep=False
-        ))
-        vertical_borders = Angle(np.linspace(
-            start=self.top.radians,
-            stop=self.bottom.radians,
-            num=shape[1] + 1,
-            endpoint=True,
-            retstep=False
-        ))
+        horizontal_borders = Angle(
+            np.linspace(
+                start=self.left.radians, stop=self.right.radians, num=shape[0] + 1, endpoint=True, retstep=False
+            )
+        )
+        vertical_borders = Angle(
+            np.linspace(
+                start=self.top.radians, stop=self.bottom.radians, num=shape[1] + 1, endpoint=True, retstep=False
+            )
+        )
         # horizontal_borders.display_unit = self.left.display_unit
         # vertical_borders.display_unit = self.top.display_unit
 
@@ -390,14 +399,20 @@ class FoV(BaseModel):
             )
         )
 
-    def tile(self, target_extent: Self) -> list[list[Self]]:
-        horizontal_steps = Angle(np.append(
-            np.arange(self.left, self.right, target_extent.width()), self.right
-        ))
+    def tile(self, target_extent: Self, expand_to_integer_multiple: bool = False) -> list[list[Self]]:
+        if expand_to_integer_multiple:
+            width_int = int(np.ceil(self.width() / target_extent.width()))
+            height_int = int(np.ceil(self.height() / target_extent.height()))
 
-        elevation_steps = Angle(np.append(
-            np.arange(self.top, self.bottom, target_extent.height()), self.bottom
-        ))
+            width_target = width_int * target_extent.width()
+            height_target = height_int * target_extent.height()
+
+            extended_fov = FoV.from_center_with_extent(self.center(), (width_target, height_target))
+            return extended_fov.tile(target_extent, False)
+
+        horizontal_steps = Angle(np.append(np.arange(self.left, self.right, target_extent.width()), self.right))
+
+        elevation_steps = Angle(np.append(np.arange(self.top, self.bottom, target_extent.height()), self.bottom))
 
         horizontal_bins = list(zip(horizontal_steps[:-1], horizontal_steps[1:]))
         vertical_bins = list(zip(elevation_steps[:-1], elevation_steps[1:]))
@@ -442,39 +457,48 @@ class FoV(BaseModel):
 
     @property
     def horizontal_min(self) -> Angle:
-        warnings.warn("elevation_min property has been deprecated. Please use the 'top' property",
-                      DeprecationWarning, stacklevel=2)
+        warnings.warn(
+            "elevation_min property has been deprecated. Please use the 'top' property",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self.left
 
     @property
     def horizontal_max(self) -> Angle:
-        warnings.warn("horizontal_max property has been deprecated. Please use the 'top' property",
-                      DeprecationWarning, stacklevel=2)
+        warnings.warn(
+            "horizontal_max property has been deprecated. Please use the 'top' property",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self.right
 
     @property
     def elevation_min(self) -> Angle:
-        warnings.warn("elevation_min property has been deprecated. Please use the 'top' property",
-                      DeprecationWarning, stacklevel=2)
+        warnings.warn(
+            "elevation_min property has been deprecated. Please use the 'top' property",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self.top
 
     @property
     def elevation_max(self) -> Angle:
-        warnings.warn("elevation_max property has been deprecated. Please use the 'bottom' property",
-                      DeprecationWarning, stacklevel=2)
+        warnings.warn(
+            "elevation_max property has been deprecated. Please use the 'bottom' property",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self.bottom
 
     def __repr__(self):
         left, top, right, bottom = self.left, self.top, self.right, self.bottom
-        return (
-            f"{self.__class__.__name__}({left=!r}, {right=!r}, {top=!r}, {bottom=!r})"
-        )
+        return f"{self.__class__.__name__}({left=!r}, {right=!r}, {top=!r}, {bottom=!r})"
 
     def __str__(self):
         left, top, right, bottom = self.left, self.top, self.right, self.bottom
-        return (
-            f"{self.__class__.__name__}({left=!s}, {right=!s}, {top=!s}, {bottom=!s})"
-        )
+        return f"{self.__class__.__name__}({left=!s}, {right=!s}, {top=!s}, {bottom=!s})"
+
 
 @dataclass(init=True, frozen=True)
 class FoVTree:
@@ -657,9 +681,7 @@ class FoVTree:
         return not self.children
 
     @staticmethod
-    def calculate_optimal_shape(
-        fov: FoV, target_ratio: float, max_denominator: float
-    ) -> tuple[int, int]:
+    def calculate_optimal_shape(fov: FoV, target_ratio: float, max_denominator: float) -> tuple[int, int]:
 
         shape = Fraction(fov.ratio() / target_ratio).limit_denominator(np.round(max_denominator).astype(int))
         shape = (

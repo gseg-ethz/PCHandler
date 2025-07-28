@@ -1,13 +1,13 @@
 import re
 from collections.abc import Sequence
 from functools import total_ordering
+from typing import Any, Generator, Self, overload
 
 import numpy as np
 from numpy.typing import NDArray
-from typing import Any, Generator, Self, overload
 
-from pchandler.util import AngleUnit, convert_angles
 from pchandler.base_types import ArrayT
+from pchandler.util import AngleUnit, convert_angles
 
 
 def _rebuild_angle(cls, internal_value, display_unit):
@@ -15,6 +15,7 @@ def _rebuild_angle(cls, internal_value, display_unit):
     obj = object.__new__(cls)
     AngleBase.__init__(obj, internal_value, display_unit)
     return obj
+
 
 @total_ordering
 class AngleBase:
@@ -32,7 +33,6 @@ class AngleBase:
         self._internal_value = arr
         self._display_unit = unit
 
-
     def to(self, unit: AngleUnit) -> float | NDArray[np.floating]:
         """
         Convert stored radians → `unit`.
@@ -40,10 +40,7 @@ class AngleBase:
         or an ndarray of floats.
         """
         arr = self._internal_value.copy()
-        convert_angles(arr,
-                       source_unit=self._INTERNAL_UNIT,
-                       target_unit=unit,
-                       out=arr)
+        convert_angles(arr, source_unit=self._INTERNAL_UNIT, target_unit=unit, out=arr)
         return arr.item() if arr.ndim == 0 else arr
 
     def in_unit(self, unit: AngleUnit) -> Self:
@@ -54,7 +51,7 @@ class AngleBase:
         # 1) Allocate a new empty instance of the same class
         new = object.__new__(type(self))
         # 2) Shallow‐share the internal rad‐array and swap the unit
-        new._internal_value  = self._internal_value
+        new._internal_value = self._internal_value
         new._display_unit = unit
         return new
 
@@ -73,7 +70,7 @@ class AngleBase:
     @property
     def display_value(self) -> float | NDArray[np.floating]:
         out = self._internal_value.copy()
-        convert_angles(out,self._INTERNAL_UNIT,self._display_unit,out=out)
+        convert_angles(out, self._INTERNAL_UNIT, self._display_unit, out=out)
         return out
 
     @property
@@ -97,14 +94,12 @@ class AngleBase:
     def in_gon(self) -> Self:
         return self.in_unit(AngleUnit.GON)
 
-
     def __array__(self, dtype=None) -> NDArray:
         """
         This makes np.asarray(angle) produce the raw radian array,
         so most numpy functions will operate on ._rad directly.
         """
         return np.array(self._internal_value, dtype=dtype)
-
 
     def __add__(self, other) -> Self:
         try:
@@ -174,7 +169,6 @@ class AngleBase:
     @overload
     def __mod__(self, other: Self) -> float: ...
 
-
     def __mod__(self, other: Any) -> Self | float:
         if isinstance(other, AngleBase):
             raise NotImplementedError(f"Modulo not defined between two AngleBase types.")
@@ -189,7 +183,6 @@ class AngleBase:
     #     if isinstance(other, AngleBase):
     #         raise NotImplementedError(f"Modulo not defined between two AngleBase types.")
     #     return self.__binary_op(other, divmod)
-
 
     def _compare(self, other, op):
         # Pull out the raw float/array to compare
@@ -222,8 +215,6 @@ class AngleBase:
         quant = round(rad, 10)
         return hash(quant)
 
-
-
     def __reduce__(self):
         return (_rebuild_angle, (type(self), self.display_value, self._display_unit))
 
@@ -232,8 +223,10 @@ class Angle(AngleBase):
 
     def __new__(cls, value: float | ArrayT, unit: AngleUnit = AngleUnit.RAD):
         """
-            Selects Angle or AngleArray based on if value is scalar or an array.
+        Selects Angle or AngleArray based on if value is scalar or an array.
         """
+        if isinstance(value, str):
+            return cls.parse(value)
 
         arr = np.array(value, dtype=float)
 
@@ -244,7 +237,6 @@ class Angle(AngleBase):
 
     def __init__(self, value, unit=AngleUnit.RAD):
         super().__init__(value, unit)
-
 
     @classmethod
     def parse(cls, v: Any) -> Self:
@@ -261,7 +253,7 @@ class Angle(AngleBase):
             if m:
                 val, suf = float(m.group(1)), m.group(2).lower()
                 unit = {
-                    "°":   AngleUnit.DEGREE,
+                    "°": AngleUnit.DEGREE,
                     "deg": AngleUnit.DEGREE,
                     "rad": AngleUnit.RAD,
                     "gon": AngleUnit.GON,
@@ -336,7 +328,6 @@ class AngleArray(AngleBase):
         AngleBase.__init__(inst, arr, unit)
         return inst
 
-
     @property
     def shape(self) -> tuple[int, ...]:
         return self._internal_value.shape
@@ -364,14 +355,15 @@ class AngleArray(AngleBase):
     def __repr__(self):
         vals = self.to(self._display_unit)
         preview = np.array2string(vals, threshold=4)
-        return (f"{self.__class__.__name__}(shape={self._internal_value.shape}, "
-                f"unit={self._display_unit.name}, values={preview})")
+        return (
+            f"{self.__class__.__name__}(shape={self._internal_value.shape}, "
+            f"unit={self._display_unit.name}, values={preview})"
+        )
 
     def __str__(self):
         vals = self.to(self._display_unit)
         preview = np.array2string(vals, threshold=4)
         return f"{preview} {self.display_unit.name}"
-
 
     def _compare(self, other, op):
         # Pull out the raw float/array to compare
