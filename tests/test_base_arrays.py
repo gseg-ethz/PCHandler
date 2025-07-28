@@ -153,7 +153,7 @@ class TestBaseArray:
 
         # Test validate assignment
         # noinspection PyArgumentList
-        a = self.cls(arr=self.rand_32(), dummy_field=2)
+        a = self.cls(arr=self.rand_32())
         with pytest.raises(ValidationError):
             # noinspection PyTypeChecker
             a.arr = "False"
@@ -164,6 +164,7 @@ class TestBaseArray:
         assert np.all(a.arr == b)
 
         # Test extra fields ignore
+        a = self.cls(arr=self.rand_32(), dummy_field=2)
         assert not hasattr(a, "dummy_field")
 
         # Without the appropriate fields, cannot test for:

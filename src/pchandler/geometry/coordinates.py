@@ -129,10 +129,10 @@ class CartesianCoordinates(Abstract3dCoordinates):
     )
 
     @overload
-    def __init__(self, xyz: Array_Nx3_T, **kwargs: Unpack[CartesianKw]): ...
+    def __init__(self, xyz: Array_Nx3_T|Self, **kwargs: Unpack[CartesianKw]): ...
 
     @overload
-    def __init__(self, *, arr: Array_Nx3_T, **kwargs: Unpack[CartesianKw]): ...
+    def __init__(self, *, arr: Array_Nx3_T|Self, **kwargs: Unpack[CartesianKw]): ...
 
     def __init__(self, xyz=None, **kwargs: Unpack[CartesianKwFull]):
         # Accept xyz/arr as a positional argument
@@ -495,24 +495,24 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
 
 @validate_call(config=DEFAULT_CONFIG)
-def rhv2xyz(spher: Array_Nx3_T, scan_origin: Optional[Vector_3_T] = None) -> Array_Nx3_T:
+def rhv2xyz(spher: Array_Nx3_T|ArrayNx3, scan_origin: Optional[Vector_3_T] = None) -> Array_Nx3_T:
     xyz: np.ndarray = np.zeros_like(spher)
     xyz[:, 0] = spher[:, 0] * np.sin(spher[:, 2]) * np.cos(spher[:, 1])
     xyz[:, 1] = spher[:, 0] * np.sin(spher[:, 2]) * np.sin(spher[:, 1])
     xyz[:, 2] = spher[:, 0] * np.cos(spher[:, 2])
 
-    return xyz if scan_origin is None else xyz - scan_origin
+    return xyz if scan_origin is None else xyz + scan_origin
 
 
 
 
 # TODO fix this to support the optimal shifts (e.g. remove origin shift)
 @validate_call(config=DEFAULT_CONFIG)
-def xyz2rhv(xyz: Array_Nx3_T, scan_origin: Optional[Vector_3_T] = None) -> Array_Nx3_T:
+def xyz2rhv(xyz: Array_Nx3_T|ArrayNx3, scan_origin: Optional[Vector_3_T] = None) -> Array_Nx3_T:
     spher: np.ndarray = np.zeros_like(xyz)
 
     if scan_origin is not None:
-        xyz = (xyz + scan_origin)
+        xyz = (xyz - scan_origin)
 
     xy_2: npt.ArrayLike = xyz[:, 0]**2 + xyz[:, 1]**2
 

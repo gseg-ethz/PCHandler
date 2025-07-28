@@ -30,11 +30,6 @@ from pchandler.base_types import (
 logger = logging.getLogger(__name__.split(".")[0])
 
 
-class ScalarKwargT(TypedDict):
-    name: NotRequired[SfNameT]
-    origin_dtype: NotRequired[DtypeState]
-
-
 #  TODO add name attribute to be able to track original names from original data files
 class DtypeState(NamedTuple):
     dtype: npt.DTypeLike
@@ -54,14 +49,20 @@ class DtypeState(NamedTuple):
 SfOrigDtT: TypeAlias = Optional[DtypeState]
 
 
+class ScalarKwargT(TypedDict):
+    name: NotRequired[SfNameT]
+    origin_dtype: NotRequired[DtypeState]
+
+
 class AbstractScalarField(FixedLengthArray):
     name: SfNameT
     origin_dtype: DtypeState
 
-    def __init__(self, arr: VectorT | Array_Nx3_T, name: SfNameT = None, origin_dtype: SfOrigDtT = None):
+    def __init__(self, arr: VectorT | Array_Nx3_T | Self, name: SfNameT = None, origin_dtype: SfOrigDtT = None):
         kwargs: dict[str, Any] = {'name': name, 'origin_dtype': origin_dtype}
         super().__init__(arr, **kwargs)
 
+    # noinspection PyNestedDecorators
     @model_validator(mode='before')
     @classmethod
     def validate_model_before(cls, data: Any) -> Any:
@@ -94,12 +95,14 @@ class AbstractScalarField(FixedLengthArray):
 
 
 class ScalarField(BaseVector, AbstractScalarField):
-    def __init__(self, arr: VectorT, **kwargs: Unpack[ScalarKwargT]):
+    def __init__(self, arr: VectorT|Self, name: SfNameT = None, **kwargs: Unpack[ScalarKwargT]):
+        if name is not None:
+            kwargs['name'] = name
         super().__init__(arr, **cast(dict[str, Any], kwargs))
 
 
 class ScalarFieldTriplet(ArrayNx3, AbstractScalarField):
-    def __init__(self, arr: Array_Nx3_T, **kwargs: Unpack[ScalarKwargT]):
+    def __init__(self, arr: Array_Nx3_T|Self, **kwargs: Unpack[ScalarKwargT]):
         super().__init__(arr, **cast(dict[str, Any], kwargs))
 
     @classmethod
@@ -114,7 +117,7 @@ class RGBFields(ScalarFieldTriplet):
     arr: Array_Nx3_Uint8_T
     name: SfNameT = RGB_NAMES.base
 
-    def __init__(self, arr: Array_Nx3_Uint8_T|Array_Nx3_Float_T, **kwargs: Unpack[ScalarKwargT]):
+    def __init__(self, arr: Array_Nx3_Uint8_T|Array_Nx3_Float_T|Self, **kwargs: Unpack[ScalarKwargT]):
         kwargs['name'] = RGB_NAMES.base
         super().__init__(arr, **kwargs)
 
@@ -156,7 +159,7 @@ class NormalFields(ScalarFieldTriplet):
     arr: Array_Nx3_Float32_T
     name: LowerStr = NORMAL_NAMES.base
 
-    def __init__(self, arr: Array_Nx3_Float_T, **kwargs: Unpack[ScalarKwargT]):
+    def __init__(self, arr: Array_Nx3_Float_T|Self, **kwargs: Unpack[ScalarKwargT]):
         kwargs['name'] = NORMAL_NAMES.base
         super().__init__(arr, **kwargs)
 
@@ -196,7 +199,7 @@ class NormalFields(ScalarFieldTriplet):
 class SegmentationMap(ScalarField):
     arr: Vector_Uint8_T | Vector_Uint16_T
 
-    def __init__(self, arr: Vector_Uint8_T | Vector_Uint16_T, **kwargs: Unpack[ScalarKwargT]):
+    def __init__(self, arr: Vector_Uint8_T | Vector_Uint16_T | Self, **kwargs: Unpack[ScalarKwargT]):
         super().__init__(arr, **kwargs)
 
     @classmethod
@@ -218,21 +221,21 @@ class SegmentationMap(ScalarField):
 class ScalarFieldUint8(ScalarField):
     arr: Vector_Uint8_T
 
-    def __init__(self, arr: Vector_Uint8_T, **kwargs: Unpack[ScalarKwargT]):
+    def __init__(self, arr: Vector_Uint8_T | Self, **kwargs: Unpack[ScalarKwargT]):
         super().__init__(arr, **kwargs)
 
 
 class ScalarFieldBoolean(ScalarField):
     arr: Vector_Bool_T
 
-    def __init__(self, arr: Vector_Bool_T, **kwargs: Unpack[ScalarKwargT]):
+    def __init__(self, arr: Vector_Bool_T | Self, **kwargs: Unpack[ScalarKwargT]):
         super().__init__(arr, **kwargs)
 
 
 class ScalarFieldFloat32(ScalarField):
     arr: Vector_Float32_T
 
-    def __init__(self, arr: Vector_Float32_T, **kwargs: Unpack[ScalarKwargT]):
+    def __init__(self, arr: Vector_Float32_T | Self, **kwargs: Unpack[ScalarKwargT]):
         super().__init__(arr, **kwargs)
 
 
@@ -242,7 +245,7 @@ class NormalisedInt16ScalarField(ScalarField):
     """
     arr: Annotated[Vector_Int16_T, BeforeValidator(normalize_int16)]
 
-    def __init__(self, arr: VectorT, **kwargs: Unpack[ScalarKwargT]):
+    def __init__(self, arr: VectorT | Self, **kwargs: Unpack[ScalarKwargT]):
         super().__init__(arr, **kwargs)
 
     def to_uint8(self) -> ScalarFieldUint8:

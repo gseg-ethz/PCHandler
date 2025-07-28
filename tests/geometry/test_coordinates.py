@@ -66,7 +66,7 @@ def large_xyz():
 
 @pytest.fixture(scope="function")
 def cart_obj(large_xyz) -> CartesianCoordinates:
-    return CartesianCoordinates(arr=large_xyz)
+    return CartesianCoordinates(arr=large_xyz, socs_origin=np.array([0, 0, 0]))
 
 
 class TestCartesianCoordinates:
@@ -273,26 +273,6 @@ class TestCartesianCoordinates:
         assert isinstance(cart_obj.fov, FoV)
 
 
-# class TestSphericalCoordinates:
-#     def test_instantiation(self, known_spher, known_xyz):
-#         spherical = SphericalCoordinates(arr=known_spher)
-#
-#         assert isinstance(spherical, SphericalCoordinates)
-#         assert np.all(spherical.spher == known_spher)
-#
-#         with pytest.raises(ValidationError):
-#             SphericalCoordinates(arr=known_xyz)
-#
-#     def test_from_cartesian(self, known_spher, known_xyz):
-#         cart_obj = CartesianCoordinates(arr=known_xyz)
-#         spher_obj = SphericalCoordinates.from_cartesian(cart_obj)
-#         assert np.allclose(spher_obj.arr, known_spher)
-#
-#     # # TODO uncomment when FOV re-implemented
-#     # def test_fov(self, known_spher):
-#     #     SphericalCoordinates(arr=known_spher).fov
-
-
 class TestConversions:
     def test_cartesian_to_spherical(self, known_xyz, known_spher):
         rhv = xyz2rhv(known_xyz)
@@ -306,49 +286,42 @@ class TestConversions:
             xyz2 = rhv2xyz(xyz2rhv(arr))
             assert np.allclose(xyz2, arr)
 
-    # TODO implement conversion tests from Cartesian and PointCloudData types
-    # def test_supported_types(self, known_xyz, known_spher):
-    #     xyz = CartesianCoordinates(arr=known_xyz)
-    #     rhv = xyz2rhv(xyz)
-    #     assert np.allclose(rhv, known_spher)
-    #
-    #     xyz = PointCloudData(xyz=xyz)
-    #     rhv = xyz2rhv(xyz)
-    #     assert np.allclose(rhv, known_spher)
+    def test_supported_types(self, known_xyz, known_spher):
+        xyz = CartesianCoordinates(known_xyz)
+        rhv = xyz2rhv(xyz)
+        assert np.allclose(rhv, known_spher)
+
+        xyz = CartesianCoordinates(xyz)
+        rhv = xyz2rhv(xyz)
+        assert np.allclose(rhv, known_spher)
+
+        # Show that a translation shift is the same
+        xyz += 1
+        xyz.socs_origin = np.ones(3)
+        rhv = xyz2rhv(xyz, xyz.socs_origin)
+        assert np.allclose(rhv, known_spher)
 
     class TestSphericalOrigin:
-        @staticmethod
-        def arrays_setup(fixed_xyz):
-            xyz = CartesianCoordinates(arr=fixed_xyz)
-            xyz_shift = copy.deepcopy(xyz)
-            xyz_shift.socs_origin = np.ones(3)
-            rhv_shift = xyz_shift.to_spherical()
-            xyz2_shift = rhv_shift.to_cartesian()
-            return xyz, xyz_shift, rhv_shift, xyz2_shift
+        def test_socs_origin(self, known_xyz, known_spher):
+            # Different origin but same underlying coordinates
+            xyz = CartesianCoordinates(arr=known_xyz)
+            xyz_shift: CartesianCoordinates = CartesianCoordinates(arr=known_xyz, socs_origin=np.ones(3))
+            assert np.all(xyz == xyz_shift)
+            assert xyz.socs_origin is not xyz_shift.socs_origin
+            assert xyz.socs_origin is None
+            assert np.all(xyz_shift.socs_origin == 1)
 
-        def test_xyz_coordinates(self, known_xyz):
-            xyz, xyz_shift, rhv_shift, xyz2_shift = self.arrays_setup(known_xyz)
-            # Show that xyz coordinates remain the same
-            assert np.allclose(xyz, xyz_shift)
-            assert np.allclose(xyz.xyz, rhv_shift.xyz)
-            assert np.allclose(xyz, known_xyz)
-            assert np.allclose(xyz, xyz2_shift.xyz)
+            # Spherical coordinates will differ
+            assert not np.allclose(xyz.spher, xyz_shift.spher)
+            assert not np.allclose(known_spher, xyz_shift.spher)
 
-        def test_spherical_origin(self, known_xyz):
-            xyz, xyz_shift, rhv_shift, xyz2_shift = self.arrays_setup(known_xyz)
-            # Origins should be different
-            assert np.all(xyz.socs_origin != xyz_shift.socs_origin)
-            assert np.all(xyz.socs_origin != rhv_shift.socs_origin)
-            assert np.all(xyz.socs_origin != xyz2_shift.socs_origin)
+            # Shifting the coordinates to mimic the relative position of the socs origin
+            xyz2 = xyz.copy(deep=True)
+            xyz2 -= 1
+            assert np.allclose(xyz2.spher, xyz_shift.spher)
+            assert xyz2.socs_origin is None
+            assert xyz_shift.socs_origin is not None
 
-            # Origins should be maintained
-            assert np.all(xyz_shift.socs_origin == rhv_shift.socs_origin)
-            assert np.all(xyz_shift.socs_origin == xyz2_shift.socs_origin)
+            xyz_shift2: CartesianCoordinates = CartesianCoordinates(arr=known_xyz, socs_origin=np.array([-1, -2, -3]))
 
-        def test_spherical_coordinates(self, known_xyz, known_spher):
-            xyz, xyz_shift, rhv_shift, xyz2_shift = self.arrays_setup(known_xyz)
-
-            assert np.allclose(xyz.spher, known_spher)  # Reference is still the same
-            assert np.allclose(xyz_shift.spher, rhv_shift)  # shifted objects still match
-            assert np.allclose(xyz_shift.spher, xyz2_shift.spher)  # shifted objects still match
-            assert np.any(xyz.spher != xyz_shift.spher)  # Different origins should yield diff results
+            assert np.any(xyz.spher != xyz_shift2.spher)  # Different origins should yield diff results
