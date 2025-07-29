@@ -35,7 +35,8 @@ class E57Handler(AbstractIOHandler):
              retain_intensity: bool = True,
              pcd_index: Optional[int] = None,
              read_transform: bool = True,
-             ignore_missing_fields: bool = True,) -> PointCloudData | Generator[PointCloudData, None, None]:
+             ignore_missing_fields: bool = True,
+             **kwargs) -> PointCloudData | Generator[PointCloudData, None, None]:
 
         path = Path(path)
         kwargs = {

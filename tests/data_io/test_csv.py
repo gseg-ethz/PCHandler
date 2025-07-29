@@ -1,30 +1,31 @@
 from pathlib import Path
 
-import numpy as np
-
 from pchandler.data_io import Csv as CsvHandler
+from tests.data_io.test_core import TestLoadSave
 
-base_directory = Path(__file__).resolve().parent
+base_directory = Path(__file__).resolve().parent.parent
 
-class TestCsvHandler:
-    rgb_file = base_directory / ".." / "data" / "test_target_intensity_normals_rgbfloat.txt"
-    out_path = base_directory / ".." / "data" / "test_target_rgb_temp.csv"
 
-    def test_load(self):
-        pcd = CsvHandler.load(self.rgb_file)
-        assert len(pcd) == 43577
-        assert 'rgb' in pcd.scalar_fields
-        assert pcd.rgb.dtype == np.uint8
+class TestCsvHandler(TestLoadSave):
+    cls = CsvHandler
+    folder = TestLoadSave.folder / 'TXT'
+    reference: Path = folder / 'XYZ_Only.txt'
+    all_fields_file = folder / 'XYZ_RGB_Normals_Intensity_SFs.txt'
 
-    def test_save(self):
-        original_pcd = CsvHandler.load(self.rgb_file, remove_prefix=True)
-        CsvHandler.save(original_pcd, self.out_path, add_prefix=False)
-        new_pcd = CsvHandler.load(self.out_path, remove_prefix=False)
+    def test_no_number_points_line(self):
+        pass
 
-        assert np.allclose(original_pcd.xyz, new_pcd.xyz)
-        assert np.allclose(original_pcd.rgb, new_pcd.rgb, atol=1)
+    def test_sniff_file(self):
+        pass
 
-        assert np.allclose(original_pcd.normals, new_pcd.normals)
+    def test_get_ascii_load_dtype(self):
+        pass
 
-        for name in original_pcd.scalar_fields.keys():
-            assert name in new_pcd.scalar_fields
+    def test_column_names_row_load(self):
+        pass
+
+    def test_comment_on_load(self):
+        pass
+
+    def test_delimiters(self):
+        pass

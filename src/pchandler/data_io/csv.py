@@ -21,7 +21,7 @@ class AsciiInfo(NamedTuple):
 
 
 class CsvHandler(AbstractIOHandler):
-    FORMATS = ['.csv', '.txt', '.xyz', '.asc', '.ascii', '.pts']
+    FORMATS = ['.txt', '.csv', '.xyz', '.asc', '.ascii', '.pts']
 
     @classmethod
     def load(cls,
@@ -33,6 +33,8 @@ class CsvHandler(AbstractIOHandler):
              comment: str = '//',
              delimiter: Optional[str] = None,) -> PointCloudData:
 
+        # TODO need to simplify the case when only a 3 column array is passed (with columns 'X Y Z').
+
         # Get general file structure information
         file_info = sniff_file(path, comment=comment, field_names_row_index=column_names_row)
         num_points_line = True if file_info.num_points else False
@@ -41,21 +43,31 @@ class CsvHandler(AbstractIOHandler):
         field_names = cls._validate_field_selection(scalar_fields, file_info.fields, remove_prefix, prefix)
 
         # Define load config parameters
+
+        if tuple([k for k in field_names.keys()]) == XYZ_NAMES.char:
+            dt = generate_ascii_load_dtype([k.lower() for k in field_names.values()])
+        else:
+            dt = generate_ascii_load_dtype(['x', 'y', 'z'] + list(field_names.values()))
+
         load_config: dict[str, Any] = {
             'fname': Path(path), 'skiprows': len(file_info.header) + num_points_line,
             'delimiter': delimiter or file_info.delimiter,
-            'dtype': generate_ascii_load_dtype(['x', 'y', 'z'] + list(field_names.values())),
+            'dtype': dt,
             'usecols': None
         }
 
         # When number of scalar_fields match, assumes all fields are in the same order
         if len(field_names) + 3 <= file_info.num_fields:
             load_config['usecols'] = [0, 1, 2] + [file_info.fields.index(name) for name in field_names.values()]
+        elif len(field_names) == 3:
+            load_config['usecols'] = [0, 1, 2]
 
         # Load all data
         data = np.loadtxt(**load_config)
         pcd = PointCloudData(cls.extract_xyz(data, data.size))
-        cls.extract_scalar_fields(pcd, data, data.size, field_names)
+
+        if not tuple([k for k in field_names.keys()]) == XYZ_NAMES.char:
+            cls.extract_scalar_fields(pcd, data, data.size, field_names)
 
         return pcd
 
@@ -200,46 +212,3 @@ def generate_ascii_load_dtype(column_names: list[str]) -> npt.DTypeLike:
             formats.append(np.float32)
     return np.dtype({'names': names, 'formats': formats})
 
-def get_column_names(scalar_fields: list[str],
-                     detected_column_names: list[str],
-                     num_cols: int,
-                     use_cols: Optional[list[int]]) -> tuple[list[str], list[int]] :
-    if scalar_fields is None:
-        if len(detected_column_names) == 0:  # No column names detected
-            if num_cols == 3:
-                column_names = ['x', 'y', 'z']
-            else:
-                raise ValueError("Number of columns detected is greater than 3 but no "
-                                 "scalar_fields were passed or column names detected.")
-
-        elif len(detected_column_names) == num_cols:
-            column_names = detected_column_names
-
-        else:
-            raise ValueError(f'Number of columns detected do not match the number of column names '
-                             f'read from the header \n {detected_column_names=}')
-
-    elif len(scalar_fields) + 3 == num_cols:  # Exact number of scalar_fields
-        column_names = ['x', 'y', 'z'] + scalar_fields
-
-    elif len(scalar_fields) + 3 < num_cols:  # Select number of scalar_fields
-        if len(detected_column_names) != num_cols:  # Invalid column header
-            raise ValueError(f"Could not resolve the scalar_fields ({scalar_fields}) in the file as the "
-                             f"detected column names ({detected_column_names}) did not match the number of "
-                             f"columns: {num_cols}")
-
-        if not set(scalar_fields).issubset(set(detected_column_names)):  # Unmatched scalar_field
-            raise ValueError(f"The following scalar_fields could not be found in the column names:"
-                             f"\n{set(scalar_fields) - set(detected_column_names)}"
-                             f"\nColumn names: ({detected_column_names})")
-
-        column_names = ['x', 'y', 'z'] + scalar_fields
-        use_cols = [0, 1, 2]
-        for name in scalar_fields:
-            use_cols.append(detected_column_names.index(name))
-
-    else:  # Num scalar_fields greater than num additional columns
-        raise ValueError(f"The input scalar fields should exclude the coordinate names ('x', 'y', 'z') and not "
-                         f"exceed the number of columns-3 (compensating for coordinate columns)")
-
-    return column_names, use_cols

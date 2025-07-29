@@ -6,13 +6,14 @@ import numpy as np
 import numpy.typing as npt
 import laspy                # type: ignore[import-untyped]
 
-from pchandler.data_io.core import AbstractIOHandler, _get_field_names
+from pchandler.data_io.core import AbstractIOHandler, _get_rgb_or_normal_field_names
 from pchandler.constants import RGB_NAMES, NORMAL_NAMES, INTENSITY_NAMES, XYZ_NAMES
 from pchandler.geometry import PointCloudData
 
 logger = logging.getLogger(__name__.split(".")[0])
 
 
+# TODO add functionality to handle the extra fields?
 class LasHandler(AbstractIOHandler):
     FORMATS = ['.las', '.laz']
 
@@ -41,8 +42,8 @@ class LasHandler(AbstractIOHandler):
 
     @classmethod
     def save(cls,
-             path: str | Path,
              pcd: PointCloudData,
+             path: str | Path,
              /,
              scalar_fields: Optional[list[str]] = None,
              add_prefix: bool = True,
@@ -54,6 +55,7 @@ class LasHandler(AbstractIOHandler):
 
         # TODO should this be linked to the optimal shift?
         offsets: npt.NDArray[np.float32|np.float64] = pcd.min(axis=0)
+        # TODO extend config parameters for these scale values
         scales: npt.NDArray[np.float32|np.float64] = np.array([0.0001, 0.0001, 0.0001])
 
         if scalar_fields is None:
@@ -80,7 +82,7 @@ class LasHandler(AbstractIOHandler):
         las.Z = (pcd.z - offsets[2]) / scales[2]
 
         # RGB values
-        if (rgb_fields := _get_field_names(scalar_fields, RGB_NAMES)) and pcd.rgb:
+        if (rgb_fields := _get_rgb_or_normal_field_names(scalar_fields, RGB_NAMES)) and pcd.rgb:
             for field in rgb_fields:
                 index = RGB_NAMES.get_position(field)
                 setattr(las, RGB_NAMES.words[index], getattr(pcd.rgb, RGB_NAMES.char[index]))

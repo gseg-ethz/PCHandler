@@ -91,10 +91,7 @@ class BaseArray(ABC, BaseModel):
     @classmethod
     def coerce_array(cls, value: Any) -> ArrayT:
         """
-        Validates and coerces the input into a compatible array format.
-
-        Tries to ensure the object passed is a numpy like array, with at least 1D
-        structure without creating a copy.
+        Coerces the input into a compatible array format.
 
         Parameters
         ----------
@@ -104,7 +101,7 @@ class BaseArray(ABC, BaseModel):
         Returns
         -------
         ArrayT
-            A validated and coerced array.
+            Numpy array of at least 1D
 
         """
         if isinstance(value, BaseArray):
