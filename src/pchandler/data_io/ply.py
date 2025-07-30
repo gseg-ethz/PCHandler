@@ -24,12 +24,9 @@ class PlyHandler(AbstractIOHandler):
              ) -> PointCloudData:
         logger.info(f"Loading PLY file: {path}")
 
-        try:
-            with open(path, "rb") as f:
-                plydata = PlyData.read(f)
-        except Exception as e:
-            logger.error(f"Failed to read PLY file {path}: {e}")
-            raise e
+        with open(path, "rb") as f:
+            plydata = PlyData.read(f)
+
 
         num_points = plydata["vertex"].count
         logger.debug(f"PLY file {path} contains {num_points} points")
@@ -66,10 +63,7 @@ class PlyHandler(AbstractIOHandler):
                       f"Created {datetime.now():%Y-%m-%dT%H:%M:%S%z}"],
         )
 
-        if not path.parent.exists():
-            path.parent.mkdir(parents=True, exist_ok=True)
-            logger.debug(f"Created {path.parent} folder")
-
         with open(path, mode='wb+') as f:
             PlyData([element], text=as_ascii).write(f"{str(path)}")
+
         logger.info(f"PLY file saved successfully: {path}")

@@ -6,7 +6,7 @@ import numpy as np
 import numpy.typing as npt
 
 from pchandler.data_io.core import AbstractIOHandler
-from pchandler.constants import XYZ_NAMES
+from pchandler.constants import XYZ_NAMES, RGB_NAMES
 from pchandler.geometry import PointCloudData
 
 logger = logging.getLogger(__name__.split(".")[0])
@@ -56,6 +56,7 @@ class CsvHandler(AbstractIOHandler):
             'usecols': None
         }
 
+        # TODO add functionality to define the CSV header types when loading as well
         # When number of scalar_fields match, assumes all fields are in the same order
         if len(field_names) + 3 <= file_info.num_fields:
             load_config['usecols'] = [0, 1, 2] + [file_info.fields.index(name) for name in field_names.values()]
@@ -89,14 +90,11 @@ class CsvHandler(AbstractIOHandler):
         # Use `"%s"` for fallback
         fmt = delimiter.join([fmt_map.get(field[1][1], "%s") for field in array.dtype.descr])
 
-        if array.dtype.names is not None:
-            array = np.stack([array[field] for field in list(array.dtype.names)], axis=-1)
+        array = np.stack([array[field] for field in list(array.dtype.names)], axis=-1)
 
-            # Avoid prepending '#' to the header with comments
-            np.savetxt( path, array, fmt=fmt, delimiter=delimiter, header=header, comments="" )
-            logger.info(f"CSV file saved successfully: {path}")
-        else:
-            raise ValueError("No fields passed")
+        # Avoid prepending '#' to the header with comments
+        np.savetxt( path, array, fmt=fmt, delimiter=delimiter, header=header, comments="" )
+        logger.info(f"CSV file saved successfully: {path}")
 
 
 def sniff_file(file: Path,
@@ -112,7 +110,7 @@ def sniff_file(file: Path,
     delimiter, number_fields = _delimiter_sniffer(file, delimiters, lines_to_check, minimum_columns, comment)
 
     # Get the field names based on the defined row_index. default is the last line of the header (-1)
-    line: str = header[field_names_row_index]
+    line: str = header[field_names_row_index].removeprefix(comment)
 
     # Test both the delimiter defined and white space as to the joining character between field name header info
     for i in (' ', delimiter):
@@ -182,8 +180,7 @@ def _delimiter_sniffer(file: Path,
         if number_fields:
             return delimiter, number_fields
 
-    else:
-        raise ValueError(f"No valid delimiter was not found in selection: {repr(delimiters)}")
+    raise ValueError(f"No valid delimiter was not found in selection: {repr(delimiters)}")
 
 
 def _get_header(file: Path, comment: str = '//') -> tuple[list[str], int|None]:
@@ -209,6 +206,9 @@ def generate_ascii_load_dtype(column_names: list[str]) -> npt.DTypeLike:
             formats.append(np.float64)
         else:
             names.append(name)
-            formats.append(np.float32)
+            if name in RGB_NAMES.char or name in RGB_NAMES.words:
+                formats.append(np.uint8)
+            else:
+                formats.append(np.float32)
     return np.dtype({'names': names, 'formats': formats})
 

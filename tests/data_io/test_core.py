@@ -44,11 +44,11 @@ class TestFindPointCloudFunction:
 
         # File passed instead of directory
         with pytest.raises(IOError):
-            find_point_cloud_in_directory(test_data_dir / 'E57' / 'XYZ_only.e57')
+            find_point_cloud_in_directory(test_data_dir / 'E57' / 'XYZ_Only.e57')
 
         # Non-existent directory
         with pytest.raises(IOError):
-            find_point_cloud_in_directory(test_data_dir / 'Not_a_dir' / 'XYZ_only.e57')
+            find_point_cloud_in_directory(test_data_dir / 'Not_a_dir')
 
     def test_file_types(self):
         # Verify it searches and finds the right number of files of that format
@@ -107,8 +107,8 @@ class TestAbstractIOMethods:
 
 
     def test_validate_field_selection_case5(self):
-        # Case 5 - User provides a subset of fields but in the name format of their original Uppercase, etc.
-        user_fields = ['normalx', 'normaly', 'normalz', 'sf1']
+        # Case 5 - User provides a subset of fields but in the name format of that used in the file
+        user_fields = ['NORMALX', 'NORMALY', 'NORMALZ', 'scalar_sf1']
         header_fields = ['x', 'y', 'z', 'R', 'G', 'B', 'NORMALX', 'NORMALY', 'NORMALZ', 'scalar_sf1']
 
         final_fields = AbstractIOHandler._validate_field_selection(user_fields, header_fields, True, 'scalar_')
@@ -222,42 +222,58 @@ class TestAbstractIOMethods:
             assert pcd_dt == expected_vals[i]
 
     def test_generate_struct_array(self):
-        pcd = PointCloudData(np.random.rand(N, 3), numerical_optimization_shift=None)
-        pcd.rgb = np.random.randint(0, 255, (N, 3), dtype=np.uint8)
-        pcd.normals = np.random.rand(N, 3).astype(np.float32)
-        pcd.intensity = np.random.randint(0, 255, N, dtype=np.uint8)
-        pcd.scalar_fields.create_field('sf1', np.random.rand(N).astype(np.float64))
+        for i in range(2):
+            if i == 0:
+                pcd = PointCloudData(np.random.rand(N, 3))
+            else:
+                pcd = PointCloudData(np.random.rand(N, 3), numerical_optimization_shift=None)
 
-        struct_arr = AbstractIOHandler._generate_structured_array(pcd, scalar_fields=None, add_prefix=True, prefix='dummy_', revert_sf_types=False)
+            pcd.rgb = np.random.randint(0, 255, (N, 3), dtype=np.uint8)
+            pcd.normals = np.random.rand(N, 3).astype(np.float32)
+            pcd.intensity = np.random.randint(0, 255, N, dtype=np.uint8)
+            pcd.scalar_fields.create_field('sf1', np.random.rand(N).astype(np.float64))
 
-        assert isinstance(struct_arr, np.ndarray)
-        assert len(struct_arr) == N
+            struct_arr = AbstractIOHandler._generate_structured_array(pcd, scalar_fields=None, add_prefix=True, prefix='dummy_', revert_sf_types=False)
 
-        assert np.all(struct_arr['dummy_sf1'] == pcd.scalar_fields['sf1'])
-        assert np.all(struct_arr['dummy_intensity'] == pcd.scalar_fields['intensity'])
-        assert np.all(struct_arr['r'] == pcd.rgb.r)
-        assert np.all(struct_arr['g'] == pcd.rgb.g)
-        assert np.all(struct_arr['b'] == pcd.rgb.b)
-        assert np.allclose(struct_arr['nx'], pcd.normals.nx)
-        assert np.allclose(struct_arr['ny'], pcd.normals.ny)
-        assert np.allclose(struct_arr['nz'], pcd.normals.nz)
+            assert isinstance(struct_arr, np.ndarray)
+            assert len(struct_arr) == N
 
-        struct_arr = AbstractIOHandler._generate_structured_array(pcd, scalar_fields=['sf1'], add_prefix=False, prefix='', revert_sf_types=False)
+            assert np.all(struct_arr['dummy_sf1'] == pcd.scalar_fields['sf1'])
+            assert np.all(struct_arr['dummy_intensity'] == pcd.scalar_fields['intensity'])
+            assert np.all(struct_arr['r'] == pcd.rgb.r)
+            assert np.all(struct_arr['g'] == pcd.rgb.g)
+            assert np.all(struct_arr['b'] == pcd.rgb.b)
+            assert np.allclose(struct_arr['nx'], pcd.normals.nx)
+            assert np.allclose(struct_arr['ny'], pcd.normals.ny)
+            assert np.allclose(struct_arr['nz'], pcd.normals.nz)
 
-        assert isinstance(struct_arr, np.ndarray)
-        assert len(struct_arr) == N
+            struct_arr = AbstractIOHandler._generate_structured_array(pcd, scalar_fields=['rf', 'gf', 'bf', 'sf1'], add_prefix=False, prefix='', revert_sf_types=False)
 
-        assert np.all(struct_arr['sf1'] == pcd.scalar_fields['sf1'])
-        assert 'intensity' not in struct_arr.dtype.names
-        assert 'r' not in struct_arr.dtype.names
-        assert 'g' not in struct_arr.dtype.names
-        assert 'b' not in struct_arr.dtype.names
-        assert 'nx' not in struct_arr.dtype.names
-        assert 'ny' not in struct_arr.dtype.names
-        assert 'nz' not in struct_arr.dtype.names
-        assert 'x' in struct_arr.dtype.names
-        assert 'y' in struct_arr.dtype.names
-        assert 'z' in struct_arr.dtype.names
+            assert isinstance(struct_arr, np.ndarray)
+            assert len(struct_arr) == N
+
+            assert np.all(struct_arr['sf1'] == pcd.scalar_fields['sf1'])
+            assert 'intensity' not in struct_arr.dtype.names
+            assert 'rf' in struct_arr.dtype.names
+            assert 'gf' in struct_arr.dtype.names
+            assert 'bf' in struct_arr.dtype.names
+            assert 'nx' not in struct_arr.dtype.names
+            assert 'ny' not in struct_arr.dtype.names
+            assert 'nz' not in struct_arr.dtype.names
+            assert 'x' in struct_arr.dtype.names
+            assert 'y' in struct_arr.dtype.names
+            assert 'z' in struct_arr.dtype.names
+
+            if 'rf' in struct_arr.dtype.names:
+                assert struct_arr['rf'].dtype == np.float32
+                assert struct_arr['gf'].dtype == np.float32
+                assert struct_arr['bf'].dtype == np.float32
+                assert np.isclose(struct_arr['rf'].min(), 0, atol=0.5/256)
+                assert np.isclose(struct_arr['gf'].min(), 0, atol=0.5/256)
+                assert np.isclose(struct_arr['bf'].min(), 0, atol=0.5/256)
+                assert np.all(struct_arr['rf'] <= 1)
+                assert np.all(struct_arr['gf'] <= 1)
+                assert np.all(struct_arr['bf'] <= 1)
 
 
     def test_get_field_names(self):
@@ -267,6 +283,13 @@ class TestAbstractIOMethods:
         normal_names = _get_rgb_or_normal_field_names(all_char_names, NORMAL_NAMES)
         assert rgb_names == list(RGB_NAMES.char)
         assert normal_names == list(NORMAL_NAMES.char)
+
+        # Partial_field_names
+        partial_names = ['red', 'nx', 'nz', 'sf1', 'sf2']
+        rgb_names = _get_rgb_or_normal_field_names(partial_names, RGB_NAMES)
+        normal_names = _get_rgb_or_normal_field_names(partial_names, NORMAL_NAMES)
+        assert rgb_names == []
+        assert normal_names == []
 
         # Fields by full 'word'
         all_word_names = ['x', 'y', 'z', 'red', 'green', 'blue', 'normalx', 'normaly', 'normalz', 'sf1', 'sf2']
@@ -286,7 +309,7 @@ class TestAbstractIOMethods:
             with pytest.raises(ValueError):
                 _get_rgb_or_normal_field_names(field_names, ref_names)
 
-        base_names = ['a', 'b', 'c']
+        base_names = ['a', 'd', 'e']
         result = _get_rgb_or_normal_field_names(base_names, RGB_NAMES)
         assert result == []
 
@@ -306,6 +329,7 @@ class TestAbstractIOMethods:
         assert list(cleaned_all_fields.keys()) == ['a', 'b', 'c', 'd', 'e']
         assert list(cleaned_sfs.values()) == scalar_fields
         assert list(cleaned_all_fields.values()) == scalar_fields
+        assert list(_clean_field_names(['x', 'Y', 'Z'], _clean_header_name, prefix='')) == ['x', 'y', 'z']
 
     def test_clean_strings(self):
         # Remove white space and convert to lowercase
@@ -321,16 +345,25 @@ class TestAbstractIOMethods:
         assert _clean_header_name("scalar_abcd", prefix="scalar_") == "abcd"
         assert _clean_header_name("scalar abcd", prefix="scalar") == "abcd"
         assert _clean_header_name(" scalar abcd ", prefix="scalar") == "abcd"
+        assert _clean_header_name("scalar_", prefix="scalar_") == "scalar_"
 
 class BaseLoadSave:
     cls: type[AbstractIOHandler] = AbstractIOHandler
     folder: Path = test_data_dir
     reference: Path = folder / 'replace_this_path.txt'
 
-    def test_load_all(self):
-        if self.cls is AbstractIOHandler:
-            return
+    def test_find_pcds(self):
+        num_files = len(self.cls.find_pcds_in_directory(self.folder))
+        if '.e57' in self.cls.FORMATS:
+            assert num_files == 6
+        elif '.txt' in self.cls.FORMATS:
+            assert num_files == 10
+        elif '.pcd' in self.cls.FORMATS:
+            assert num_files == 1
+        else:
+            assert num_files == 8
 
+    def test_load_all(self):
         reference = self.cls.load(self.reference, remove_prefix=True)
 
         for fmt in self.cls.FORMATS:
@@ -369,9 +402,6 @@ class BaseLoadSave:
                     assert 'sqrt(custom1)' not in pcd.scalar_fields
 
     def test_save(self):
-        if self.cls is AbstractIOHandler:
-            return
-
         with TemporaryDirectory() as temp_dir:
             temp_file = Path(temp_dir) / f'temp{self.cls.FORMATS[0]}'
             original_pcd = self.cls.load(self.reference, remove_prefix=True)

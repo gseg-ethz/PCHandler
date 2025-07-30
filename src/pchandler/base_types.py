@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated, Union, Sequence, Any, Optional, TypeAlias, SupportsIndex
+from typing import Annotated, Union, Sequence, Any, Optional, TypeAlias, SupportsIndex, TypedDict
 
 import numpy as np
 import numpy.typing as npt
@@ -20,6 +20,10 @@ SfNameT = Optional[LowerStr]
 ValidatedPolygonT = Annotated[
     Sequence | npt.NDArray[np.floating | np.integer] | Polygon, BeforeValidator(lambda x: Polygon(x))
 ]
+
+class DtypeDict(TypedDict):
+    names: LowerStr
+    formats: npt.DTypeLike
 
 ArrayDtypes = (Integer, Float, Bool)
 IndexDtypes = (Integer, Bool)

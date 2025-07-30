@@ -9,7 +9,7 @@ from typing import Mapping, Callable, Optional, Any, Generator
 import numpy as np
 import numpy.typing as npt
 
-from pchandler.base_types import Array_Nx3_T
+from pchandler.base_types import Array_Nx3_T,DtypeDict
 from pchandler.constants import (
     INTENSITY_NAMES,
     RGB_NAMES,
@@ -126,7 +126,7 @@ class AbstractIOHandler(ABC):
 
         # If user fields exist, convert to lower case and remove whitespace first
         else:
-            user_fields = _clean_field_names(user_fields, _clean_string)
+            user_fields = _clean_field_names(user_fields, _clean_header_name, prefix=prefix)
 
         # Case 3 - Empty list passed, keep only coordinates
         if len(user_fields) == 0:
@@ -217,10 +217,10 @@ class AbstractIOHandler(ABC):
     def _generate_struct_dtype(cls,
                                pcd: PointCloudData,
                                scalar_fields: list[str],
-                               revert_sf_types: bool) -> npt.DTypeLike:
+                               revert_sf_types: bool) -> DtypeDict:
 
         # Leverage dict to avoid any duplicates of using 'rgb' or 'r', 'g', 'b' for example
-        dtype_dict: dict = {'names': [], 'formats': []}
+        dtype_dict = DtypeDict(names=[], formats=[])
 
         if pcd.numerical_optimization_shift is None:
             xyz_dtype = np.float64
@@ -263,9 +263,6 @@ class AbstractIOHandler(ABC):
             elif field in pcd.scalar_fields.fields:
                 dtype_dict['names'].append(field)
                 dtype_dict['formats'].append(_get_sf_dtype(pcd.scalar_fields[field], revert_sf_types))
-
-            else:
-                logger.info(f"Could not find the expected '{field}' as a scalar field in the point cloud")
 
         return dtype_dict
 
@@ -333,15 +330,17 @@ def _get_rgb_or_normal_field_names(input_names: list[str], target_field: NameCon
     valid_names_set = tuple([set(names) for names in target_field.triplets])
     identified_names = set(input_names) & set(target_field.all)
 
-    if not (identified_names in valid_names_set):
-        logger.info(f"No valid {target_field} found in [{target_field.triplets}]. Only :{identified_names}")
+    if identified_names in valid_names_set:
+        identified_names = list(target_field.triplets[valid_names_set.index(identified_names)])
+
+    elif len(identified_names := identified_names.intersection(target_field.all)) >= 1:
+        logger.info(f"Only a full list of RGB or Normal triplet fields supported. "
+                    f"A partial or mixed list was passed: {identified_names}.")
         return list()
 
     else:
-        # Get the ordered names again
-        identified_names = list(target_field.triplets[valid_names_set.index(identified_names)])
-        if isinstance(identified_names, str):
-            identified_names = [identified_names]
+        logger.info(f"No valid {target_field} found in [{target_field.triplets}]. Only :{identified_names}")
+        return list()
 
     # Removes the fields from the current list
     for name in identified_names:
@@ -350,15 +349,9 @@ def _get_rgb_or_normal_field_names(input_names: list[str], target_field: NameCon
     return identified_names
 
 def _get_sf_dtype(scalar_field: ScalarField|ScalarFieldTriplet, revert_sf_types: bool) -> npt.DTypeLike:
-    if not revert_sf_types:
-        return scalar_field.dtype
-
-    if scalar_field.origin_dtype is not None:
+    if revert_sf_types:
         return scalar_field.origin_dtype.dtype
-    else:
-        logger.info(f'Scalar field "{scalar_field.name}" has no origin dtype to revert to. '
-                       f'Using the sf dtype: {scalar_field.dtype}')
-        return scalar_field.dtype
+    return scalar_field.dtype
 
 def _clean_field_names(column_names: list[str], func: Callable, **kwargs) -> dict[str, str]:
     cleaned_names = dict()
@@ -387,9 +380,12 @@ def _clean_header_name(original_name: str, prefix: str) -> str:
         updated_name = cleaned_name.removeprefix(prefix).strip()
 
         if updated_name == cleaned_name:
+            # No further change
             return updated_name
-        updated_name = _clean_header_name(updated_name, prefix)
-    else:
-        updated_name = cleaned_name
 
-    return updated_name
+        # Return the recursive result
+        return _clean_header_name(updated_name, prefix)
+
+    # Return if it matches the prefix to be stripped
+    else:
+        return cleaned_name

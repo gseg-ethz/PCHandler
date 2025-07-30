@@ -54,6 +54,9 @@ class ScalarKwargT(TypedDict):
     origin_dtype: NotRequired[DtypeState]
 
 
+# TODO add an astype method for converting data types
+
+
 class AbstractScalarField(FixedLengthArray):
     name: SfNameT
     origin_dtype: DtypeState

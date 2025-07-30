@@ -3,13 +3,14 @@ from typing import Optional
 import logging
 
 import numpy as np
-import numpy.typing as npt
 import laspy                # type: ignore[import-untyped]
 
 from pchandler.data_io.core import AbstractIOHandler, _get_rgb_or_normal_field_names
 from pchandler.constants import RGB_NAMES, NORMAL_NAMES, INTENSITY_NAMES, XYZ_NAMES
 from pchandler.geometry import PointCloudData
 from pchandler.validators import normalize_uint16
+from pchandler.base_types import Vector_3_T
+from pchandler.geometry.optimal_shift import OptimizedShift
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -24,6 +25,7 @@ class LasHandler(AbstractIOHandler):
              scalar_fields: Optional[list[str]] = None,
              remove_prefix: bool = True,
              prefix: str = 'scalar_',
+             force_no_numerical_shift: bool = False,
              **config
              ) -> PointCloudData:
 
@@ -35,7 +37,10 @@ class LasHandler(AbstractIOHandler):
         data = las._points.array
         field_names = cls._validate_field_selection(scalar_fields, header_names, remove_prefix, prefix)
 
-        pcd = PointCloudData(las.xyz)
+        if force_no_numerical_shift:
+            pcd = PointCloudData(las.xyz, numerical_optimization_shift=None)
+        else:
+            pcd = PointCloudData(las.xyz, numerical_optimization_shift=OptimizedShift(las.header.offsets))
         cls.extract_scalar_fields(pcd, data, data.size, field_names)
 
         logger.info(f"Successfully loaded LAZ file: {path}")
@@ -50,18 +55,20 @@ class LasHandler(AbstractIOHandler):
              add_prefix: bool = True,
              prefix: str = 'scalar_',
              revert_sf_types: bool = False,
-             scales: np.ndarray = np.array([0.0001, 0.0001, 0.0001]),
+             scales: Vector_3_T = np.array([0.0001, 0.0001, 0.0001]),
              **config) -> None:
 
         logger.info(f"Attempting to write to LAS/LAZ file: {path}")
-        # TODO scales
-        # TODO should this be linked to the optimal shift?
-        offsets: npt.NDArray[np.float32|np.float64] = pcd.min(axis=0)
+        # TODO update the scales input to compute the optimal value -> see optimal shift functionality
+        if pcd.numerical_optimization_shift is None:
+            offsets: Vector_3_T = np.zeros(3)
+        else:
+            offsets = pcd.numerical_optimization_shift.value
 
         if scalar_fields is None:
             scalar_fields = list(pcd.scalar_fields.keys())
-        elif not isinstance(scalar_fields, list):
-            scalar_fields = list(scalar_fields)
+
+        scalar_fields = list(scalar_fields)
 
         # Can use the check on the base name as named scalar_fields should match the pcd object names
         if RGB_NAMES.base in scalar_fields:
@@ -74,12 +81,8 @@ class LasHandler(AbstractIOHandler):
 
         # Set the base coordinates of the LAS point cloud as well as offsets and scales
         las = laspy.create()
-        las.header.offsets = offsets
-        las.header.scales = scales
-
-        las.X = (pcd.x - offsets[0]) / scales[0]
-        las.Y = (pcd.y - offsets[1]) / scales[1]
-        las.Z = (pcd.z - offsets[2]) / scales[2]
+        las.change_scaling(scales=scales, offsets=offsets)
+        las.xyz = pcd.xyz+offsets
 
         # RGB values
         if (rgb_fields := _get_rgb_or_normal_field_names(scalar_fields, RGB_NAMES)) and pcd.rgb:
@@ -119,4 +122,3 @@ class LasHandler(AbstractIOHandler):
         las.write(path)
 
         logger.info(f"Successfully wrote to  LAS/LAZ file: {path}")
-

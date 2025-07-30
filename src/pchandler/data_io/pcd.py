@@ -15,8 +15,8 @@ class PcdHandler(AbstractIOHandler):
 
     @classmethod
     def load(cls, /, path: str | Path, **config) -> PointCloudData:
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @classmethod
     def save(cls, /, pcd: PointCloudData, path: str | Path, **config) -> None:
-        raise NotImplementedError
+        raise NotImplementedError()
