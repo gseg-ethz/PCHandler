@@ -14,6 +14,7 @@ from pchandler.base_arrays import BaseArray
 
 from pchandler.base_types import (
     Array_Nx3_Float32_T,
+    Array_Nx3_Float_T,
     Array_Nx3_T,
     Array_Nx3_Uint8_T,
     IndexLike,
@@ -229,7 +230,7 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
         return self.fields.get(RGB_NAMES.base, None)
 
     @rgb.setter
-    def rgb(self, value: npt.NDArray[np.floating|np.uint8] | RGBFields) -> None:
+    def rgb(self, value: Optional[Array_Nx3_Uint8_T | Array_Nx3_Float32_T | RGBFields]) -> None:
         if value is not None and not isinstance(value, (np.ndarray, RGBFields)):
             value: npt.NDArray[np.floating|np.uint8] = np.asarray(value)
 
@@ -242,7 +243,7 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
         return self.fields.get(NORMAL_NAMES.base, None)
 
     @normals.setter
-    def normals(self, value: Optional[npt.NDArray | NormalFields]):
+    def normals(self, value: Optional[Array_Nx3_Float_T | NormalFields]):
         if value is not None and not isinstance(value, (np.ndarray, NormalFields)):
             value = np.asarray(value)
 
@@ -251,21 +252,21 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
         self[NORMAL_NAMES.base] = value
 
     @property
-    def intensity(self):
+    def intensity(self) -> ScalarField | None:
         return self.fields.get(INTENSITY_NAMES.base, None)
 
     @intensity.setter
-    def intensity(self, value: Optional[npt.NDArray[np.uint16|np.floating] | ScalarField]):
+    def intensity(self, value: Optional[VectorT | ScalarField]):
         if isinstance(value, np.ndarray):
             value = ScalarField(value, name=INTENSITY_NAMES.base)
         self[INTENSITY_NAMES.base] = value
 
     @property
-    def reflectance(self):
+    def reflectance(self) -> ScalarField | None:
         return self.fields.get(REFLECTANCE_NAMES.base, None)
 
     @reflectance.setter
-    def reflectance(self, value: np.ndarray | ScalarField):
+    def reflectance(self, value: Optional[VectorT | ScalarField]):
         if isinstance(value, np.ndarray):
             value = ScalarField(value, name=REFLECTANCE_NAMES.base)
         self[REFLECTANCE_NAMES.base] = value
@@ -300,7 +301,7 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
     def _set_rgb(
             self,
             name: LowerStr,
-            value: Array_Nx3_Uint8_T | Vector_Uint8_T,
+            value: Array_Nx3_Uint8_T | Vector_Uint8_T | RGBFields,
             origin_dtype: Optional[DtypeState] = None
     ) -> None:
 
@@ -325,7 +326,7 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
     def _set_normals(
             self,
             name: LowerStr,
-            value: Array_Nx3_Float32_T | Vector_Float32_T,
+            value: Array_Nx3_Float32_T | Vector_Float32_T | NormalFields,
             origin_dtype: Optional[DtypeState] = None
     ) -> None:
 

@@ -1,5 +1,6 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import warnings
 
 import pytest
 import numpy as np
@@ -19,7 +20,7 @@ from pchandler.data_io.core import (
 )
 
 base_directory = Path(__file__).resolve().parent.parent
-test_data_dir = base_directory / "official_data"
+test_data_dir = base_directory / "data"
 
 N = 100
 
@@ -38,8 +39,8 @@ class TestFindPointCloudFunction:
         # Test the likely types of inputs from the user
         assert len(find_point_cloud_in_directory(test_data_dir, include_subdirectories=False)) == 0
 
-        assert len(find_point_cloud_in_directory(test_data_dir / 'E57')) == 8
-        assert len(find_point_cloud_in_directory(test_data_dir)) == 44
+        assert len(find_point_cloud_in_directory(test_data_dir / 'E57')) == 6
+        assert len(find_point_cloud_in_directory(test_data_dir)) == 48
 
         # File passed instead of directory
         with pytest.raises(IOError):
@@ -51,12 +52,12 @@ class TestFindPointCloudFunction:
 
     def test_file_types(self):
         # Verify it searches and finds the right number of files of that format
-        assert len(find_point_cloud_in_directory(test_data_dir, ['.e57'])) == 8
+        assert len(find_point_cloud_in_directory(test_data_dir, ['.e57'])) == 6
         assert len(find_point_cloud_in_directory(test_data_dir, ['.txt'])) == 8
         assert len(find_point_cloud_in_directory(test_data_dir / 'PLY_Binary', ['.ply'])) == 8
         assert len(find_point_cloud_in_directory(test_data_dir / 'PLY_ASCII', ['.ply'])) == 8
         assert len(find_point_cloud_in_directory(test_data_dir, ['.las'])) == 8
-        assert len(find_point_cloud_in_directory(test_data_dir, ['.laz'])) == 2
+        assert len(find_point_cloud_in_directory(test_data_dir, ['.laz'])) == 8
         assert len(find_point_cloud_in_directory(test_data_dir, ['.csv'])) == 1
         assert len(find_point_cloud_in_directory(test_data_dir, ['.pts'])) == 1
         assert len(find_point_cloud_in_directory(test_data_dir, ['.pts', '.las', '.ply'])) == 25
@@ -64,7 +65,7 @@ class TestFindPointCloudFunction:
     def test_include_subdirectories(self):
         # Test the flag for including subdirs
         assert len(find_point_cloud_in_directory(test_data_dir, include_subdirectories=False)) == 0
-        assert len(find_point_cloud_in_directory(test_data_dir, include_subdirectories=True)) == 44
+        assert len(find_point_cloud_in_directory(test_data_dir, include_subdirectories=True)) == 48
 
 class TestAbstractIOMethods:
     def test_validate_field_selection_case1(self):
@@ -286,10 +287,8 @@ class TestAbstractIOMethods:
                 _get_rgb_or_normal_field_names(field_names, ref_names)
 
         base_names = ['a', 'b', 'c']
-        with pytest.warns(Warning):
-            result = _get_rgb_or_normal_field_names(base_names, RGB_NAMES)
+        result = _get_rgb_or_normal_field_names(base_names, RGB_NAMES)
         assert result == []
-
 
     def test_get_sf_dtype(self):
         # Get the original or current scalar_field dtype
@@ -323,11 +322,10 @@ class TestAbstractIOMethods:
         assert _clean_header_name("scalar abcd", prefix="scalar") == "abcd"
         assert _clean_header_name(" scalar abcd ", prefix="scalar") == "abcd"
 
-class TestLoadSave:
+class BaseLoadSave:
     cls: type[AbstractIOHandler] = AbstractIOHandler
     folder: Path = test_data_dir
     reference: Path = folder / 'replace_this_path.txt'
-    all_fields_file = folder / ''
 
     def test_load_all(self):
         if self.cls is AbstractIOHandler:
@@ -340,7 +338,35 @@ class TestLoadSave:
                 pcd = self.cls.load(file, remove_prefix=True)
                 assert len(pcd) == 54202
                 assert isinstance(pcd, PointCloudData)
-                assert np.allclose(reference, pcd.xyz)
+
+                if 'XYZ' in file.name:
+                    assert np.allclose(reference, pcd.xyz)
+
+                if 'RGB' in file.name:
+                    assert np.allclose(reference.rgb, pcd.rgb)
+                else:
+                    assert pcd.rgb is None
+
+                if 'Normals' in file.name:
+                    if file.suffix == '.e57':
+                        warnings.warn(UserWarning('pye57 does not yet support normals'))
+                        assert pcd.normals is None
+                    else:
+                        assert np.allclose(reference.normals, pcd.normals)
+                else:
+                    assert pcd.normals is None
+
+                if 'Intensity' in file.name:
+                    assert np.allclose(reference.intensity, pcd.intensity)
+                else:
+                    assert pcd.intensity is None
+
+                if 'sfs' in file.name.lower():
+                    assert np.allclose(reference.scalar_fields['custom1'], pcd.scalar_fields['custom1'])
+                    assert np.allclose(reference.scalar_fields['sqrt(custom1)'], pcd.scalar_fields['sqrt(custom1)'])
+                else:
+                    assert 'custom1' not in pcd.scalar_fields
+                    assert 'sqrt(custom1)' not in pcd.scalar_fields
 
     def test_save(self):
         if self.cls is AbstractIOHandler:
@@ -348,14 +374,15 @@ class TestLoadSave:
 
         with TemporaryDirectory() as temp_dir:
             temp_file = Path(temp_dir) / f'temp{self.cls.FORMATS[0]}'
-            original_pcd = self.cls.load(self.all_fields_file, remove_prefix=True)
+            original_pcd = self.cls.load(self.reference, remove_prefix=True)
             self.cls.save(original_pcd, temp_file, add_prefix=False)
             new_pcd = self.cls.load(temp_file, remove_prefix=False)
 
             if '.csv' in self.cls.FORMATS:
+                # Adapt precision due to the number of digits written to file
                 assert np.allclose(original_pcd.xyz, new_pcd.xyz, atol=1e-06)
             elif '.las' in self.cls.FORMATS:
-                # TODO investigate this precision
+                # Adapt precision due to the "scale" factor as this rounds digits
                 assert np.allclose(original_pcd.xyz, new_pcd.xyz, atol=1e-04)
             else:
                 assert np.allclose(original_pcd.xyz, new_pcd.xyz)

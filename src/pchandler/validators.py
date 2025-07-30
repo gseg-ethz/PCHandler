@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional, TypeVar
+from typing import Optional, TypeVar, Callable, Any
 
 import numpy as np
 from numpy import typing as npt
 
 from .constants import HALF_PI, PI, TWO_PI
-from .base_types import ArrayT, Array_Integer_T, Array_Float_T
+from .base_types import (
+    ArrayT,
+    Array_Integer_T, Array_Float_T,
+    Array_Uint8_T, Array_Uint16_T,
+    Array_Int8_T, Array_Int16_T, Array_Int32_T, Array_Int64_T,
+    Array_Float32_T, Array_Float64_T
+)
 
 
 logger = logging.getLogger(__name__.split(".")[0])
@@ -154,7 +160,7 @@ def convert_slice_to_integer_range(selection: slice, length: int) -> Array_Integ
     return np.arange(start=start, stop=stop, step=step)
 
 
-def check_in_range(value: ArrayT, target_min: float, target_max: float) -> None:
+def validate_in_range(value: ArrayT, target_min: float, target_max: float) -> None:
     value = np.asarray(value)
     val_min: float | int = value.min()
     val_max: float | int = value.max()
@@ -240,17 +246,23 @@ def _normalize_base(array: ArrayT, dtype: npt.DTypeLike) -> ArrayT:
     if array.dtype != dtype:
         if np.issubdtype(dtype, np.floating):
             return normalize_min_max(array, 0, 1, dtype)
+
         if 0 <= array.min() <= array.max() <= 1:
             return normalize_min_max(array, np.iinfo(dtype).min, np.iinfo(dtype).max, dtype, 0, 1)
+
         return normalize_min_max(array, np.iinfo(dtype).min, np.iinfo(dtype).max, dtype)
     return array
 
 
-normalize_uint8 = lambda array: _normalize_base(array, np.uint8)
-normalize_uint16 = lambda array: _normalize_base(array, np.uint16)
-normalize_int8 = lambda array: _normalize_base(array, np.int8)
-normalize_int16 = lambda array: _normalize_base(array, np.int16)
-normalize_int32 = lambda array: _normalize_base(array, np.int32)
-normalize_int64 = lambda array: _normalize_base(array, np.int64)
-normalize_float32 = lambda array: _normalize_base(array, np.float32)
-normalize_float64 = lambda array: _normalize_base(array, np.float64)
+FuncT = Callable[[npt.ArrayLike], T]
+
+# TODO write tests that ensure the input array is not changed
+
+normalize_uint8: FuncT[Array_Uint8_T] = lambda array: _normalize_base(array, np.uint8)
+normalize_uint16: FuncT[Array_Uint16_T] = lambda array: _normalize_base(array, np.uint16)
+normalize_int8: FuncT[Array_Int8_T] = lambda array: _normalize_base(array, np.int8)
+normalize_int16: FuncT[Array_Int16_T] = lambda array: _normalize_base(array, np.int16)
+normalize_int32: FuncT[Array_Int32_T] = lambda array: _normalize_base(array, np.int32)
+normalize_int64: FuncT[Array_Int64_T] = lambda array: _normalize_base(array, np.int64)
+normalize_float32: FuncT[Array_Float32_T] = lambda array: _normalize_base(array, np.float32)
+normalize_float64: FuncT[Array_Float64_T] = lambda array: _normalize_base(array, np.float64)

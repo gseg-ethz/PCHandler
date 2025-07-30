@@ -9,6 +9,7 @@ import laspy                # type: ignore[import-untyped]
 from pchandler.data_io.core import AbstractIOHandler, _get_rgb_or_normal_field_names
 from pchandler.constants import RGB_NAMES, NORMAL_NAMES, INTENSITY_NAMES, XYZ_NAMES
 from pchandler.geometry import PointCloudData
+from pchandler.validators import normalize_uint16
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -49,14 +50,13 @@ class LasHandler(AbstractIOHandler):
              add_prefix: bool = True,
              prefix: str = 'scalar_',
              revert_sf_types: bool = False,
+             scales: np.ndarray = np.array([0.0001, 0.0001, 0.0001]),
              **config) -> None:
 
         logger.info(f"Attempting to write to LAS/LAZ file: {path}")
-
+        # TODO scales
         # TODO should this be linked to the optimal shift?
         offsets: npt.NDArray[np.float32|np.float64] = pcd.min(axis=0)
-        # TODO extend config parameters for these scale values
-        scales: npt.NDArray[np.float32|np.float64] = np.array([0.0001, 0.0001, 0.0001])
 
         if scalar_fields is None:
             scalar_fields = list(pcd.scalar_fields.keys())
@@ -87,9 +87,20 @@ class LasHandler(AbstractIOHandler):
                 index = RGB_NAMES.get_position(field)
                 setattr(las, RGB_NAMES.words[index], getattr(pcd.rgb, RGB_NAMES.char[index]))
 
-        # Intensities
+        # Intensities - LAS expects unsigned 16bit (Uint16)
         if (intensity_fields := set(scalar_fields).intersection(INTENSITY_NAMES.all)) and pcd.intensity:
-            las.intensity = pcd.intensity
+            # Case 1 - Leave data as is for Uint8 and Uint16
+            if pcd.intensity.dtype == np.uint8 or pcd.intensity.dtype == np.uint16:
+                las.intensity = pcd.intensity.copy()
+
+            # Case 2: Linear map values in range [0, 1] to [0, (2**16)-1]
+            # Case 3: Any other combination, normalize to [0, 1] then scale to Uint16 range
+            else:
+                logger.info(
+                    f"Values range [{pcd.intensity.min()}, {pcd.intensity.max()}] has been normalized and scaled to"
+                    f"Uint16 range required by LAS format: [0, {np.iinfo(np.uint16).max}]."
+                )
+                las.intensity = normalize_uint16(pcd.intensity)
 
         # Clear the previous sfs used
         for name in (XYZ_NAMES.char + tuple(rgb_fields) + tuple(intensity_fields)):

@@ -12,7 +12,9 @@ from typing import (
     cast,
     TypedDict,
     NotRequired,
-    Unpack
+    Unpack,
+    TypeVar,
+    Generic
 )
 
 import numpy as np
@@ -45,7 +47,11 @@ class MinMaxKwargsT(TypedDict, total=False):
     where: NotRequired[_ArrayLikeBool_co]
 
 
-class BaseArray(ABC, BaseModel):
+SelfT = TypeVar('SelfT', bound='BaseArray')
+
+
+
+class BaseArray(Generic[SelfT], ABC, BaseModel):
     """
     BaseArray is designed to be a subclassable, automatic validator for array-based classes.
     It is built around a combination of the Pydantic and Numpydantic libraries.
@@ -441,8 +447,8 @@ class BaseArray(ABC, BaseModel):
         """
         return self.arr != other
 
-    def copy(self,  # type: ignore
-             array: npt.NDArray[Any] | BaseArray | None = None,
+    def copy(self: Self,
+             array: npt.NDArray[Any] | Self | None = None,
              *,
              deep: bool = True,
              update: Optional[MutableMapping[str, Any]] = None,

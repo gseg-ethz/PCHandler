@@ -1,16 +1,15 @@
 from pathlib import Path
 
 from pchandler.data_io import Csv as CsvHandler
-from tests.data_io.test_core import TestLoadSave
+from tests.data_io.test_core import BaseLoadSave
 
 base_directory = Path(__file__).resolve().parent.parent
 
 
-class TestCsvHandler(TestLoadSave):
+class TestCsvHandler(BaseLoadSave):
     cls = CsvHandler
-    folder = TestLoadSave.folder / 'TXT'
-    reference: Path = folder / 'XYZ_Only.txt'
-    all_fields_file = folder / 'XYZ_RGB_Normals_Intensity_SFs.txt'
+    folder = BaseLoadSave.folder / 'TXT'
+    reference = folder / 'XYZ_RGB_Normals_Intensity_SFs.txt'
 
     def test_no_number_points_line(self):
         pass

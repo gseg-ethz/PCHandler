@@ -5,16 +5,15 @@ import numpy as np
 
 from pchandler.data_io import E57 as E57Handler
 
-from tests.data_io.test_core import TestLoadSave
+from tests.data_io.test_core import BaseLoadSave
 
 base_directory = Path(__file__).resolve().parent.parent
 
 
-class TestE57Handler(TestLoadSave):
+class TestE57Handler(BaseLoadSave):
     cls = E57Handler
-    folder = TestLoadSave.folder / 'E57'
-    reference: Path = folder / 'XYZ_Only.e57'
-    all_fields_file = folder / 'XYZ_RGB_Normals_Intensity_SFs.e57'
+    folder = BaseLoadSave.folder / 'E57'
+    reference = folder / 'XYZ_RGB_Normals_Intensity.e57'
 
     def test_save(self):
         with pytest.raises(NotImplementedError):

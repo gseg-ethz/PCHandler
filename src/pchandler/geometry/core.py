@@ -9,7 +9,7 @@ import numpy.typing as npt
 import open3d as o3d
 from pydantic import Field, field_validator, model_validator, AliasChoices
 
-from pchandler.base_types import Array_Nx3_T, IndexLike
+from pchandler.base_types import Array_Nx3_T, IndexLike, VectorT, Array_Nx3_Float_T, Array_Nx3_Uint8_T, ArrayT
 from pchandler.geometry.coordinates import CartesianCoordinates, CartesianKw
 
 from pchandler.geometry.scalar_field_manager import ScalarFieldManager
@@ -120,7 +120,7 @@ class PointCloudData(CartesianCoordinates):
         return self.scalar_fields.normals
 
     @normals.setter
-    def normals(self, value: Optional[npt.NDArray | NormalFields]) -> None:
+    def normals(self, value: Optional[Array_Nx3_T | NormalFields]) -> None:
         self.scalar_fields.normals = value
 
     @property
@@ -128,15 +128,15 @@ class PointCloudData(CartesianCoordinates):
         return self.scalar_fields.rgb
 
     @rgb.setter
-    def rgb(self, value: Optional[npt.NDArray[np.floating|np.uint8] | RGBFields]) -> None:
+    def rgb(self, value: Optional[Array_Nx3_Float_T | Array_Nx3_Uint8_T | RGBFields]) -> None:
         self.scalar_fields.rgb = value
 
     @property
-    def intensity(self) -> Optional[NormalisedInt16ScalarField]:
+    def intensity(self) -> Optional[ScalarField]:
         return self.scalar_fields.intensity
 
     @intensity.setter
-    def intensity(self, value: Optional[npt.NDArray[np.uint16|np.floating] | ScalarField]) -> None:
+    def intensity(self, value: Optional[VectorT | ScalarField]) -> None:
         self.scalar_fields.intensity = value
 
     @property
@@ -144,10 +144,10 @@ class PointCloudData(CartesianCoordinates):
         return self.scalar_fields.reflectance
 
     @reflectance.setter
-    def reflectance(self, value: Optional[npt.NDArray | ScalarField]) -> None:
+    def reflectance(self, value: Optional[VectorT | ScalarField]) -> None:
         self.scalar_fields.reflectance = value
 
-    def __setitem__(self, key: IndexLike, value: npt.NDArray[Any] | PointCloudData) -> None:
+    def __setitem__(self, key: IndexLike, value: Array_T | PointCloudData) -> None:
         raise IndexError(
             f"Setting items in PointCloudData is not supported. Consider using the copy or "
             f"dump data to a dict and reinstantiate."
@@ -175,7 +175,7 @@ class PointCloudData(CartesianCoordinates):
         obj.scalar_fields.parent = obj
         return obj
 
-    def copy(self,
+    def copy(self: Self,
              array: Optional[npt.NDArray[np.floating] | Self] = None,
              *,
              deep: bool = True,

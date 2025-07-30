@@ -1,6 +1,5 @@
 import copy
 import logging
-import warnings
 
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -173,12 +172,16 @@ class AbstractIOHandler(ABC):
             pcd.normals = cls._extract_scalar_field_triplet(data, num_points, normal_fields, NormalFields, field_names)
 
         # Intensity
-        if set(sf_keys).intersection(INTENSITY_NAMES.all):
+        if intensity_fields := set(sf_keys).intersection(INTENSITY_NAMES.all):
             pcd.intensity = cls._extract_scalar_field(data, INTENSITY_NAMES.base, field_names)
 
         # Reflectance
-        if set(sf_keys).intersection(REFLECTANCE_NAMES.all):
+        if reflectance_fields := set(sf_keys).intersection(REFLECTANCE_NAMES.all):
             pcd.reflectance = cls._extract_scalar_field(data, REFLECTANCE_NAMES.base, field_names)
+
+        sf_keys = set(sf_keys).difference(
+            rgb_fields + normal_fields + list(intensity_fields) + list(reflectance_fields)
+        )
 
         # All others
         for field in sf_keys:
@@ -188,17 +191,26 @@ class AbstractIOHandler(ABC):
     def _extract_scalar_field_triplet(data: BaseDataT,
                                       n: int, field_names: list[str],
                                       sf_class: type[SF_T],
-                                      field_name_map: dict[str, str]) -> SF_T:
+                                      field_name_map: dict[str, str]) -> SF_T|None:
         array = np.empty((n, 3), dtype=data[field_name_map[field_names[0]]].dtype)
 
         for i, name in enumerate(field_names):
             array[:, i] = data[field_name_map[name]]
 
+        if np.all(array == 0):
+            logger.info(f"All values in the '{field_names}' field are zero. Skipping.")
+            return None
+
         return sf_class(array)
 
     @staticmethod
-    def _extract_scalar_field(data: BaseDataT, name: str, field_name_map: dict[str, str]):
+    def _extract_scalar_field(data: BaseDataT, name: str, field_name_map: dict[str, str]) -> ScalarField|None:
         arr = data[field_name_map[name]]
+
+        if np.all(arr == 0):
+            logger.info(f"All values in the '{field_name_map[name]}' field are zero. Skipping.")
+            return None
+
         return ScalarField(arr, name=name, origin_dtype=DtypeState.generate(arr))
 
     @classmethod
@@ -253,7 +265,7 @@ class AbstractIOHandler(ABC):
                 dtype_dict['formats'].append(_get_sf_dtype(pcd.scalar_fields[field], revert_sf_types))
 
             else:
-                logger.warning(f"Could not find '{field}' as a scalar field in the point cloud")
+                logger.info(f"Could not find the expected '{field}' as a scalar field in the point cloud")
 
         return dtype_dict
 
@@ -322,7 +334,7 @@ def _get_rgb_or_normal_field_names(input_names: list[str], target_field: NameCon
     identified_names = set(input_names) & set(target_field.all)
 
     if not (identified_names in valid_names_set):
-        warnings.warn(f"No valid {target_field} found in [{target_field.triplets}]. Only :{identified_names}")
+        logger.info(f"No valid {target_field} found in [{target_field.triplets}]. Only :{identified_names}")
         return list()
 
     else:
@@ -344,7 +356,7 @@ def _get_sf_dtype(scalar_field: ScalarField|ScalarFieldTriplet, revert_sf_types:
     if scalar_field.origin_dtype is not None:
         return scalar_field.origin_dtype.dtype
     else:
-        logger.warning(f'Scalar field "{scalar_field.name}" has no origin dtype to revert to. '
+        logger.info(f'Scalar field "{scalar_field.name}" has no origin dtype to revert to. '
                        f'Using the sf dtype: {scalar_field.dtype}')
         return scalar_field.dtype
 
