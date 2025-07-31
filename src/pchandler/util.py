@@ -177,15 +177,3 @@ def unique_rows_fast(bin_idx: npt.NDArray[np.int32]) -> tuple[npt.NDArray[Any], 
 
     return uniq, inv
 
-# TODO update this to support the current implementation
-def bypass_immutable(method: Callable) -> Callable:
-    @wraps(method)
-    def wrapper(self, *args: Any, **kwargs: dict[str, Any]) -> Any:
-        original_state: bool = getattr(self, "_immutable", False)
-        self.set_mutability(False)
-        try:
-            return method(self, *args, **kwargs)
-        finally:
-            self.set_mutability(original_state)
-
-    return wrapper

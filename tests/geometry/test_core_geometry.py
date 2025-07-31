@@ -196,14 +196,6 @@ class TestPointCloudData:
             for name in ("rgb", "normals", "intensity", "reflectance"):
                 assert name in pcd.scalar_fields
 
-        # TODO: Discuss what the optimized flag should represent
-        # def test_optimized_keyword(self, xyz_):
-        #     pcd = PointCloudData(xyz_)
-        #     assert not pcd.optimized
-
-            # pcd = PointCloudData(xyz_, numerical_optimization_shift=OptimizedShift())
-            # assert pcd.optimized is not None
-
         def test_socs_origin_keyword(self, xyz_):
             pcd = PointCloudData(xyz_)
             assert pcd.socs_origin is None
@@ -723,16 +715,6 @@ class TestPointCloudData:
             assert 'intensity' not in merged_1.scalar_fields
             assert 'reflectance' not in merged_1.scalar_fields
 
-    # def test_immutability(self, xyz_, rgb_, normals_, intensity_):
-    #     pcd = PointCloudData(xyz=xyz_, rgb=rgb_, normals=normals_, scalar_fields={"intensity": intensity_}, frozen=True)
-    #
-    #     with pytest.raises(Exception) as e:
-    #         pcd.xyz = np.random.rand(N, 3)
-    #
-    #     assert type(e.value) in (AttributeError, ValidationError, TypeError, ValueError)
-    #
-    #     # TODO add future feature to have a READ ONLY point cloud object where no fields or attributes can be changed
-
 
 class TestOpen3DSupport:
     def test_to_o3d(self, pcd: PointCloudData) -> None:
@@ -753,7 +735,7 @@ class TestOpen3DSupport:
 
         assert isinstance(obj, o3d.t.geometry.PointCloud)
         assert np.allclose(pcd.xyz, obj.point.positions.numpy())
-        for attr in ('normals', 'rgb', 'reflectance', 'intensity'): # Todo: Reflectance doesn't work right
+        for attr in ('normals', 'rgb', 'reflectance', 'intensity'):
             assert getattr(pcd, attr) is None or hasattr(obj.point, attr)
             assert getattr(pcd, attr) is None or np.allclose(getattr(pcd, attr), getattr(obj.point, attr).numpy())
 

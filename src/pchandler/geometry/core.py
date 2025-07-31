@@ -27,7 +27,6 @@ class PointCloudDataKw(CartesianKw, total=False):
 
 class PointCloudData(CartesianCoordinates):
 
-    # TODO: Rework Transform ledger
     # transform_ledger: Annotated[
     #     TransformLedger,
     #     Field(default_factory=TransformLedger),
@@ -260,7 +259,6 @@ class PointCloudData(CartesianCoordinates):
         #     if pcd.socs_origin is not None:
         #         raise ValueError("Cannot merge point clouds where some origins are known and some are ambiguous")
         #
-        # # TODO update when implementing the transformations
         # if pcds[0].project_transformation is None:
         #     for pcd in pcds[1:]:
         #         if pcd.project_transformation is not None:

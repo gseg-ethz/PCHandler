@@ -15,7 +15,6 @@ from pchandler.geometry.optimal_shift import OptimizedShift
 logger = logging.getLogger(__name__.split(".")[0])
 
 
-# TODO add functionality to handle the extra fields?
 class LasHandler(AbstractIOHandler):
     FORMATS = ['.las', '.laz']
 
@@ -59,7 +58,6 @@ class LasHandler(AbstractIOHandler):
              **config) -> None:
 
         logger.info(f"Attempting to write to LAS/LAZ file: {path}")
-        # TODO update the scales input to compute the optimal value -> see optimal shift functionality
         if pcd.numerical_optimization_shift is None:
             offsets: Vector_3_T = np.zeros(3)
         else:

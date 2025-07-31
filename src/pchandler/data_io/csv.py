@@ -56,7 +56,6 @@ class CsvHandler(AbstractIOHandler):
             'usecols': None
         }
 
-        # TODO add functionality to define the CSV header types when loading as well
         # When number of scalar_fields match, assumes all fields are in the same order
         if len(field_names) + 3 <= file_info.num_fields:
             load_config['usecols'] = [0, 1, 2] + [file_info.fields.index(name) for name in field_names.values()]

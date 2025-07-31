@@ -12,7 +12,7 @@ from pchandler.filters.core import PointCloudFilter
 
 logger = logging.getLogger(__name__.split(".")[0])
 
-# TODO fix functions and add tests
+
 class SphericalOutlierFilter(PointCloudFilter):
     """
     Removes outliers in the spherical coordinate space using statistical filtering.

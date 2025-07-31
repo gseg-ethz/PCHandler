@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import builtins
 import copy
 from abc import ABC
@@ -49,6 +50,7 @@ class MinMaxKwargsT(TypedDict, total=False):
 
 SelfT = TypeVar('SelfT', bound='BaseArray')
 
+logger = logging.getLogger(__name__)
 
 
 class BaseArray(Generic[SelfT], ABC, BaseModel):
@@ -85,12 +87,6 @@ class BaseArray(Generic[SelfT], ABC, BaseModel):
 
     def __init__(self, arr: ArrayT, **kwargs: dict[str, Any]):
         super().__init__(arr=arr, **kwargs)
-
-    # @model_validator(mode="after")
-    # def freeze(self) -> Self:
-    #     if self.model_config["frozen"]:
-    #         self.arr.setflags(write=False)
-    #     return self
 
     # noinspection PyNestedDecorators
     @field_validator('arr', mode='before')
@@ -630,9 +626,14 @@ class FixedLengthArray(NumericMixins):
             return vector_mask
 
         else:                               # Case 3b: Integer
-            # TODO throw a warning for attempts to oversample (multiple integers the same)
             mask = np.zeros(len(self), dtype=np.bool_)
             mask[vector_mask] = True
+
+            if np.sum(mask) < len(vector_mask):
+                logger.warning(f"Oversampling of points in sample, reduce or extract is not supported. "
+                               f"{len(vector_mask) - np.sum(mask)} points were oversampled\n"
+                               f"Duplicate points are not created.")
+
             return mask
 
     def sample(self, index: IndexLike) -> Self:
@@ -703,32 +704,4 @@ class ArrayNx3(HomogeneousArray):
     def coerce_array(cls, value: ArrayT) -> Array_Nx3_T:
         value = super(ArrayNx3, cls).coerce_array(value)
         return validate_transposed_2d_array(value, 3)
-
-# TODO support for frozen classes
-# class ReadOnlyArray(BaseArray):
-#     model_config = ConfigDict(strict=True, frozen=True)
-#
-#
-# class ReadOnlyVector(BaseVector):
-#     model_config = ConfigDict(strict=True, frozen=True)
-#
-#
-# TODO support for image like arrays? Should be done elsewhere maybe
-# class _ImageLike(SampleArray, _NumericMixins, ABC):
-#     arr: Array_NxM_T | Array_NxM_3_T
-#
-#     # Update implementation based on if you want to support slicing / views or not
-#     def __getitem__(self, *key: IndexLike) -> Any:
-#         return self.arr[*key]
-#
-#     def create_mask(self, *indices: int|slice):
-#         if isinstance(indices, slice):
-#             mask = indices
-#         else:
-#             mask = np.zeros_like(self.arr, dtype=np.bool_)
-#             mask[*indices] = True
-#         return mask
-#
-#     def view(self, cls: Optional[type] = None) -> Self:
-#         return self.copy(self.arr.view(cls=cls), deep=False)
 

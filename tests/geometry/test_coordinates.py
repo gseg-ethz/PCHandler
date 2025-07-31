@@ -180,8 +180,7 @@ class TestCartesianCoordinates:
         #
         # cart_obj.transform(rotation=rotation, scale=scale, translation=translation)
         #
-        # # TODO reimplement transform ledger then retest
-        # # assert 'AFFINE' in cart_obj.transform_ledger[-1][0]
+        # assert 'AFFINE' in cart_obj.transform_ledger[-1][0]
 
     def test_scale(self, cart_obj):
         xyz2 = cart_obj.copy()

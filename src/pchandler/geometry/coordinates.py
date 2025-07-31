@@ -262,7 +262,6 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
         return obj
 
-    # TODO this supports merging of tiled data. Not tested over registration / transformation etc.
     @classmethod
     def merge(cls: Type[Self], *cart_coords: Self , **kwargs) -> Self:
         if len(cart_coords) == 1:
@@ -396,8 +395,10 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
     @property
     def numerically_optimized(self) -> bool:
-        # TODO close to zero
-        return not (self.numerical_optimization_shift is None or self.numerical_optimization_shift.value)
+        return not (
+                self.numerical_optimization_shift is None
+                or np.allclose(self.numerical_optimization_shift.value, [0, 0, 0])
+        )
 
     # def to_spherical(self) -> SphericalCoordinates:
     #     spherical = SphericalCoordinates(**self.model_dump(exclude={"arr"}) | {"arr": self.spher})
@@ -408,7 +409,6 @@ class CartesianCoordinates(Abstract3dCoordinates):
     def from_spherical(cls, spher: Array_Nx3_T) -> Self:
         return cls(arr=rhv2xyz(spher))
 
-    # TODO need to improve all the transformation functions
     def rotate(self, rotation: Array_3x3_T) -> None:
         self.arr = (rotation @ self.T).T
 
@@ -418,7 +418,6 @@ class CartesianCoordinates(Abstract3dCoordinates):
     def scale(self, scale: Vector_3_T) -> None:
         self.arr *= scale
 
-    # TODO must define on the transformation handling -> Incl. support for the scipy.spatial.transform.rotation
     def transform(self, affine: Array_4x4_T = None) -> None:
         self.arr = (affine @ self.H.T).T[:, :3]
 
@@ -482,15 +481,6 @@ class CartesianCoordinates(Abstract3dCoordinates):
 #         spherical = cls(**cartesian.model_dump(exclude={"arr"}) | {"arr": cartesian.spher})
 #         delattr(cartesian, "spher")
 #         return spherical
-#
-#     # DISCUSS - Add methods to apply tilt and yaw rotations easily (e.g. for spherical image projection shifts?
-#     # def rotate(self, yaw=None, pitch=None):
-#     #     if yaw:
-#     #         self.arr[:, 1] = coerce_azimuths(self.hz + yaw)
-#     #
-#     #     if pitch:
-#     #         self.arr[np.logical_or(temp < 0, temp > PI), 1] = coerce_azimuths(self.hz + TWO_PI)
-#     #         self.arr[:, 2] = np.abs(temp := self.v - pitch)
 
 
 @validate_call(config=DEFAULT_CONFIG)
@@ -502,10 +492,6 @@ def rhv2xyz(spher: Array_Nx3_T|ArrayNx3, scan_origin: Optional[Vector_3_T] = Non
 
     return xyz if scan_origin is None else xyz + scan_origin
 
-
-
-
-# TODO fix this to support the optimal shifts (e.g. remove origin shift)
 @validate_call(config=DEFAULT_CONFIG)
 def xyz2rhv(xyz: Array_Nx3_T|ArrayNx3, scan_origin: Optional[Vector_3_T] = None) -> Array_Nx3_T:
     spher: np.ndarray = np.zeros_like(xyz)

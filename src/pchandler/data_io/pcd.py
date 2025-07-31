@@ -1,9 +1,6 @@
 from pathlib import Path
 import logging
 
-# TODO decide if to use https://github.com/MapIV/pypcd4
-#  It has already done similar work on "merge" / concatenating point clouds
-
 from pchandler.data_io.core import AbstractIOHandler
 from pchandler.geometry import PointCloudData
 

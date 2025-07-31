@@ -189,12 +189,8 @@ class ScalarFieldManager(MutableMapping[str, SF_T]):
         else:
             raise ValueError(f"Failed to set scalar field '{name}' of type '{type(value)}'")
 
-
     def __delitem__(self, key: str) -> None:
         del self.fields[key]
-
-    # TODO Ensure mame of scalar_field should always be lower case and match the key in _sfm dict
-    # TODO add test for lower case fields
 
     def add_field(self, sf_field: ScalarField | RGBFields | NormalFields) -> None:
         self[sf_field.name] = sf_field

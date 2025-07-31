@@ -136,7 +136,6 @@ class AbstractIOHandler(ABC):
         elif set(user_fields.values()).issubset(header_fields.values()):
             return user_fields
 
-        # TODO check if this code gets reached. I don't think it does as everything is "cleaned"
         # Case 5 - User input is a subset of the edited field names (lowercase, and potentially scalar_ removed)
         elif set(user_fields.values()).issubset(header_fields.keys()):
             return {k: header_fields[v] for k, v in user_fields.items()}

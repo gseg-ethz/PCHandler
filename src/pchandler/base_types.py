@@ -25,6 +25,7 @@ class DtypeDict(TypedDict):
     names: LowerStr
     formats: npt.DTypeLike
 
+# TODO improve naming and setup of all these numpydantic types
 ArrayDtypes = (Integer, Float, Bool)
 IndexDtypes = (Integer, Bool)
 BoolArrayT: TypeAlias = npt.NDArray[np.bool_]
@@ -85,7 +86,6 @@ Vector_Uint8_T = NDArray[Shape["*"], UInt8]             # Single RGB field
 Vector_3_T = NDArray[Shape["3"], ArrayDtypes]           # 3D coordinate
 Vector_2_T = NDArray[Shape["2"], ArrayDtypes]           # Image coordinate
 
-# TODO find good naming for the index type and numpydantic types - Particularly this VectorIndex objects
 Vector_IndexT = NDArray[Shape["*"], IndexDtypes]
 
 IndexLike = Union[int, slice, npt.NDArray[np.bool_], npt.NDArray[np.integer], Sequence]
