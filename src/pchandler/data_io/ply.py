@@ -1,9 +1,9 @@
-from pathlib import Path
-from typing import Optional, Any
 import logging
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Optional
 
-from plyfile import PlyData, PlyElement     # type: ignore
+from plyfile import PlyData, PlyElement  # type: ignore
 
 from pchandler.data_io.core import AbstractIOHandler
 from pchandler.geometry import PointCloudData
@@ -12,16 +12,18 @@ logger = logging.getLogger(__name__.split(".")[0])
 
 
 class PlyHandler(AbstractIOHandler):
-    FORMATS = ['.ply']
+    FORMATS = [".ply"]
 
     @classmethod
-    def load(cls,
-             path: str | Path, /,
-             scalar_fields: Optional[list[str]] = None,
-             remove_prefix: bool = True,
-             prefix: str = 'scalar_',
-             ** config: dict[str, Any]
-             ) -> PointCloudData:
+    def load(
+        cls,
+        path: str | Path,
+        /,
+        scalar_fields: Optional[list[str]] = None,
+        remove_prefix: bool = True,
+        prefix: str = "scalar_",
+        **config: dict[str, Any],
+    ) -> PointCloudData:
         logger.info(f"Loading PLY file: {path}")
 
         try:
@@ -43,33 +45,38 @@ class PlyHandler(AbstractIOHandler):
         return pcd
 
     @classmethod
-    def save(cls, /,
-             pcd: PointCloudData,
-             path: str | Path,
-             scalar_fields: Optional[list[str]] = None,
-             add_prefix: bool = False,
-             prefix: str = 'scalar_',
-             revert_sf_types: bool = False,
-             as_ascii: bool = True,
-             **config) -> None:
+    def save(
+        cls,
+        /,
+        pcd: PointCloudData,
+        path: str | Path,
+        scalar_fields: Optional[list[str]] = None,
+        add_prefix: bool = False,
+        prefix: str = "scalar_",
+        revert_sf_types: bool = False,
+        as_ascii: bool = False,
+        **config,
+    ) -> None:
 
         path = Path(path)
 
-        prefix = prefix if add_prefix else ''
+        prefix = prefix if add_prefix else ""
 
         structured_array = cls._generate_structured_array(pcd, scalar_fields, add_prefix, prefix, revert_sf_types)
 
         element = PlyElement.describe(
-            structured_array,   # type: ignore
+            structured_array,  # type: ignore
             name="vertex",
-            comments=["Created with dranjan/python-plyfile in gseg-ethz/pchandler",
-                      f"Created {datetime.now():%Y-%m-%dT%H:%M:%S%z}"],
+            comments=[
+                "Created with dranjan/python-plyfile in gseg-ethz/pchandler",
+                f"Created {datetime.now():%Y-%m-%dT%H:%M:%S%z}",
+            ],
         )
 
         if not path.parent.exists():
             path.parent.mkdir(parents=True, exist_ok=True)
             logger.debug(f"Created {path.parent} folder")
 
-        with open(path, mode='wb+') as f:
+        with open(path, mode="wb+") as f:
             PlyData([element], text=as_ascii).write(f"{str(path)}")
         logger.info(f"PLY file saved successfully: {path}")
