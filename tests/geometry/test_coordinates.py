@@ -1,5 +1,7 @@
 import copy
 import uuid
+import logging
+import pickle
 
 import numpy as np
 import pytest
@@ -18,6 +20,7 @@ from pchandler.geometry.coordinates import (
     xyz2rhv,
 )
 from pchandler.geometry.fov import FoV
+from pchandler.geometry.optimal_shift import OptimizedShift
 from pchandler.geometry.util import MinMaxPoints
 
 # Radius, Horizontal, Vertical (Zenith)
@@ -46,8 +49,14 @@ _known_xyz = np.array(
     ], dtype=np.float64
 )
 
-_small_xyz = np.random.rand(100, 3)
+N = 100
+_small_xyz = np.random.rand(N, 3)
 _large_xyz = np.random.rand(1_000_000, 3)
+
+
+def random_coordinates(scale: float, offset: float) -> np.ndarray:
+    xyz_base = np.random.randn(N, 3)
+    return xyz_base * scale + offset
 
 @pytest.fixture(scope="function")
 def known_spher():
@@ -69,6 +78,45 @@ def large_xyz():
 def cart_obj(large_xyz) -> CartesianCoordinates:
     return CartesianCoordinates(arr=large_xyz, socs_origin=np.array([0, 0, 0]))
 
+@pytest.fixture(scope="function", autouse=True)
+def sfs_():
+    array = np.random.rand(N)
+    return {"test": array}
+
+@pytest.fixture(scope="function", autouse=True)
+def nos_() -> OptimizedShift:
+    return OptimizedShift(np.array([50000, 10000, 0]))
+
+@pytest.fixture(scope="function", autouse=True)
+def nos_mini_() -> OptimizedShift:
+    return OptimizedShift(np.array([1,2,3]))
+
+
+@pytest.fixture(scope="function", autouse=True)
+def xyz_() -> np.ndarray:
+    return random_coordinates(10, 0)
+
+@pytest.fixture(scope="function", autouse=True)
+def xyz_local_() -> np.typing.NDArray:
+    return random_coordinates(1, 0)
+
+@pytest.fixture(scope="function", autouse=True)
+def xyz_global_() -> np.typing.NDArray:
+    return random_coordinates(1, 100_000)
+
+@pytest.fixture(scope="function", autouse=True)
+def xyz_huge_() -> np.typing.NDArray:
+    return random_coordinates(100_000, 0)
+
+
+@pytest.fixture(scope="function")
+def pcd_shifted(nos_) -> CartesianCoordinates:
+    xyz = random_coordinates(1, 0)
+    xyz += nos_.value
+    return CartesianCoordinates(
+        xyz=xyz,
+        numerical_optimization_shift= nos_,
+    )
 
 
 class TestCartesianCoordinates:
@@ -240,19 +288,48 @@ class TestCartesianCoordinates:
         xyz.compute_unshifted_bbox(overwrite=True)
         assert not np.all(np.array(xyz.unshifted_bbox) == np.array(old))
 
-    def test_process_shift(self):
+    def test_process_shift(self, known_xyz):
+        # TODO add checks to weakrefs in OSM
         # Case 1 - prev_shift is None and NOS is None
         #   Basic init, register to NOS
+        case_1 = CartesianCoordinates(arr=known_xyz, numerical_optimization_shift=None)
+        assert case_1._shift_applied_by is None
+        assert case_1.numerical_optimization_shift is None
+        assert np.all(case_1 == known_xyz)
+        assert not case_1.numerically_optimized
 
         # Case 2 - prev_shift is None and NOS exists
         #   Revert to prev_shift, convert to float64, unregister prev_shift
+        case_2 = CartesianCoordinates(arr=known_xyz, numerical_optimization_shift=OptimizedShift(np.array([1, 1, 1])))
+        assert case_2._shift_applied_by is not None
+        assert case_2.numerical_optimization_shift is not None
+        assert case_2._shift_applied_by is case_2.numerical_optimization_shift
+        assert np.all(case_2.numerical_optimization_shift.value == 1)
+        assert np.all(case_2 + 1 == known_xyz)
+        assert case_2.numerically_optimized
 
         # Case 3 - prev_shift exists and NOS is None
-        #   register to NOS
+        #   Updates coordinates and removes the optimised shift
+        case_3 = CartesianCoordinates(arr=known_xyz+2,
+                                      _shift_applied_by=OptimizedShift(np.array([-2, -2, -2])),
+                                      numerical_optimization_shift=None)
+        assert case_3._shift_applied_by is None
+        assert case_3.numerical_optimization_shift is None
+        assert case_3._shift_applied_by is case_3.numerical_optimization_shift
+        assert np.all(case_3 == known_xyz)
+        assert not case_3.numerically_optimized
 
         # Case 4 - prev_shift exists and NOS exists
         #   If same, register to NOS. Else, apply difference, unregister prev, register NOS
+        case_4 = CartesianCoordinates(arr=known_xyz+2,
+                                      _shift_applied_by=OptimizedShift(np.array([-2, -2, -2])),
+                                      numerical_optimization_shift=OptimizedShift(np.array([1, 1, 1])))
 
+        assert case_4.numerical_optimization_shift is case_4._shift_applied_by
+        assert case_4.numerical_optimization_shift is not None
+        assert np.all(case_4.numerical_optimization_shift.value == 1)
+        assert np.all(case_4 + 1 == known_xyz)
+        assert case_4.numerically_optimized
 
     def test_reduce(self):
         xyz = CartesianCoordinates(arr=np.array([[0, 0, 0], [1, 1, 1], [2, 2, 2], [3, 3, 3], [4, 4, 4], [5, 5, 5]]))
@@ -281,10 +358,43 @@ class TestCartesianCoordinates:
         assert np.all(sample.unshifted_bbox.maximum == 4 )
         assert np.all(xyz.unshifted_bbox.maximum == 5 )
 
-    def test_update_shift(self):
-        raise NotImplementedError
+    def test_update_shift(self, known_xyz):
+        xyz = CartesianCoordinates(arr=known_xyz,
+                                   socs_origin=np.array([-1, 4, 2.5]),
+                                   _shift_applied_by=OptimizedShift(np.array([-2, -2, -2])),
+                                   numerical_optimization_shift=OptimizedShift(np.array([1, 1, 1])))
 
-    def test_register_with_shift_at_osm(self):
+        assert np.all(xyz + 3 == known_xyz)
+        assert np.all(xyz.socs_origin == np.array([-4, 1, -0.5]))
+        assert xyz.arr.dtype == np.float32
+        assert xyz.socs_origin.dtype == np.float32
+
+
+        xyz = CartesianCoordinates(arr=known_xyz,
+                                   socs_origin=np.array([-1, 4, 2.5]),
+                                   _shift_applied_by=OptimizedShift(np.array([-2, -2, -2])),
+                                   numerical_optimization_shift=None)
+
+        assert np.all(xyz + 2 == known_xyz)
+        assert np.all(xyz.socs_origin == np.array([-3, 2, 0.5]))
+        assert xyz.arr.dtype == np.float64
+        assert xyz.socs_origin.dtype == np.float64
+        assert xyz._shift_applied_by is None
+        assert xyz.numerical_optimization_shift is None
+
+        xyz2 = CartesianCoordinates(arr=xyz.arr,
+                                    socs_origin=np.array([5,6,7]),
+                                    _shift_applied_by=xyz.numerical_optimization_shift,
+                                    numerical_optimization_shift=xyz.numerical_optimization_shift)
+
+        assert np.all(xyz2.socs_origin == [5,6,7])
+        assert xyz2._shift_applied_by is xyz.numerical_optimization_shift
+        assert xyz2._shift_applied_by is xyz2.numerical_optimization_shift
+
+    def test_register_with_shift_at_osm(self, known_xyz):
+        xyz = CartesianCoordinates(arr=known_xyz + [14_123.842, 0, 9_000])
+        xyz = CartesianCoordinates(arr=known_xyz + [14_123.842, 0, 9_000])
+        assert xyz.numerical_optimization_shift is not None
         raise NotImplementedError
 
     def test_setattr(self):
@@ -443,7 +553,160 @@ class TestCartesianCoordinates:
         assert c.shape == cart_obj.shape
         assert np.allclose(b.T[:, :3], c)
 
+    class TestNOS:
+        class TestNOSInstantiation:
+            def test_defaults_to_float32_and_zero_shift(self, xyz_):
+                pcd = CartesianCoordinates(xyz=xyz_)
+                assert pcd.xyz.dtype == np.float32
+                assert np.allclose(pcd.numerical_optimization_shift.value, [0, 0, 0])
+                assert np.allclose(pcd.xyz, xyz_)
+                assert np.allclose(pcd.unshifted_bbox.minimum, xyz_.min(axis=0))
+                assert np.allclose(pcd.unshifted_bbox.maximum, xyz_.max(axis=0))
 
+            def test_instantiation_without_nos_keeps_float64_and_none_shift(self, xyz_):
+                pcd_no_nos = CartesianCoordinates(xyz=xyz_, numerical_optimization_shift=None)
+                assert pcd_no_nos.xyz.dtype == np.float64
+                assert pcd_no_nos.numerical_optimization_shift is None
+                assert np.allclose(pcd_no_nos.xyz, xyz_)
+                assert np.allclose(pcd_no_nos.unshifted_bbox.minimum, xyz_.min(axis=0))
+                assert np.allclose(pcd_no_nos.unshifted_bbox.maximum, xyz_.max(axis=0))
+
+            def test_auto_shift_applied_when_points_are_large(self, xyz_local_, nos_):
+                xyz_shifted = xyz_local_ + nos_.value
+                pcd_nos = CartesianCoordinates(xyz=xyz_shifted)
+                assert pcd_nos.xyz.dtype == np.float32
+                assert pcd_nos.numerical_optimization_shift is not nos_
+                assert np.allclose(pcd_nos.numerical_optimization_shift.value, nos_.value)
+                assert np.allclose(pcd_nos.xyz, xyz_local_) # This only holds because xyz_shifted is very close to 0,0,0
+                assert np.allclose(pcd_nos.unshifted_bbox.minimum, xyz_shifted.min(axis=0))
+                assert np.allclose(pcd_nos.unshifted_bbox.maximum, xyz_shifted.max(axis=0))
+
+            def test_predefined_shift_when_points_are_large(self, xyz_local_, nos_):
+                xyz_shifted = xyz_local_ + nos_.value
+                pcd_nos_expected = CartesianCoordinates(xyz=xyz_shifted, numerical_optimization_shift=nos_)
+                assert pcd_nos_expected.xyz.dtype == np.float32
+                assert pcd_nos_expected.numerical_optimization_shift is nos_
+                assert np.allclose(pcd_nos_expected.xyz, xyz_local_)
+                assert np.allclose(pcd_nos_expected.unshifted_bbox.minimum, xyz_shifted.min(axis=0))
+                assert np.allclose(pcd_nos_expected.unshifted_bbox.maximum, xyz_shifted.max(axis=0))
+
+            def test_unsuitable_shift(self, xyz_, nos_, caplog):
+                caplog.set_level(logging.DEBUG)
+                pcd_nos = CartesianCoordinates(xyz=xyz_ + nos_.value, numerical_optimization_shift=nos_) #Needed to bind nos_
+
+                pcd_nos_unexpected = CartesianCoordinates(xyz=xyz_, numerical_optimization_shift=nos_)
+                assert pcd_nos_unexpected.xyz.dtype == np.float32
+                assert pcd_nos_unexpected.numerical_optimization_shift is not nos_
+                assert "provided numerical_optimization_shift was not feasible" in caplog.text
+                assert np.allclose(pcd_nos_unexpected.xyz, xyz_ - pcd_nos_unexpected.numerical_optimization_shift.value)
+                assert np.allclose(pcd_nos_unexpected.unshifted_bbox.minimum, xyz_.min(axis=0))
+                assert np.allclose(pcd_nos_unexpected.unshifted_bbox.maximum, xyz_.max(axis=0))
+
+
+            def test_unsuitable_coordinates_for_shift(self, xyz_huge_, caplog):
+                caplog.set_level(logging.DEBUG)
+                pcd_huge = CartesianCoordinates(xyz=xyz_huge_)
+                assert pcd_huge.xyz.dtype == np.float64
+                assert pcd_huge.numerical_optimization_shift is None
+                assert "No numerical_optimization_shift was feasible." in caplog.text
+                assert np.allclose(pcd_huge.unshifted_bbox.minimum, xyz_huge_.min(axis=0))
+                assert np.allclose(pcd_huge.unshifted_bbox.maximum, xyz_huge_.max(axis=0))
+
+            # xyz_global = random_coordinates(1,100_000)
+            # pcd_global = PointCloudData(xyz=xyz_global)
+            # assert pcd_global.xyz.dtype == np.float32
+            # assert np.allclose(pcd_global.numerical_optimization_shift.value, 3*[100_000,])
+            # assert np.allclose(pcd_global.xyz, xyz_global - np.array(3*[100_000,]))
+            # assert np.allclose(pcd_global.unshifted_bbox.minimum, xyz_global.min(axis=0))
+            # assert np.allclose(pcd_global.unshifted_bbox.maximum, xyz_global.max(axis=0))
+
+        class TestNOSChange:
+            def test_updating_from_default_to_predefined_shift_logs_and_keeps_bbox(self, xyz_local_, nos_, caplog):
+                caplog.set_level(logging.DEBUG)
+
+                pcd = CartesianCoordinates(xyz=xyz_local_)
+                pcd.numerical_optimization_shift = nos_
+                assert "Updating shift" in caplog.text
+                assert np.allclose(pcd.numerical_optimization_shift.value, [0,0,0])
+                assert np.allclose(pcd.unshifted_bbox.minimum, xyz_local_.min(axis=0))
+                assert np.allclose(pcd.unshifted_bbox.maximum, xyz_local_.max(axis=0))
+
+
+            def test_applying_small_shift_after_default_instantiation_adjusts_coords(self, xyz_local_, nos_mini_):
+
+                pcd_local = CartesianCoordinates(xyz=xyz_local_)
+                assert np.allclose(pcd_local.numerical_optimization_shift.value, [0, 0, 0])
+                assert np.allclose(pcd_local.xyz, xyz_local_)
+                assert np.allclose(pcd_local.unshifted_bbox.minimum, xyz_local_.min(axis=0))
+                assert np.allclose(pcd_local.unshifted_bbox.maximum, xyz_local_.max(axis=0))
+
+                pcd_local.numerical_optimization_shift = nos_mini_
+                assert np.allclose(pcd_local.xyz, xyz_local_ - nos_mini_.value)
+                assert np.allclose(pcd_local.unshifted_bbox.minimum, xyz_local_.min(axis=0))
+                assert np.allclose(pcd_local.unshifted_bbox.maximum, xyz_local_.max(axis=0))
+
+
+            def test_changing_from_none_to_predefined_shift_changes_dtype_and_coords(self, xyz_local_, nos_mini_):
+                # Case: changing from None to predefined shift; additional checks on change in coordinate dtype
+                pcd_unshifted = CartesianCoordinates(xyz=xyz_local_, numerical_optimization_shift=None)
+                assert pcd_unshifted.xyz.dtype == np.float64
+                assert np.allclose(pcd_unshifted.unshifted_bbox.minimum, xyz_local_.min(axis=0))
+                assert np.allclose(pcd_unshifted.unshifted_bbox.maximum, xyz_local_.max(axis=0))
+
+                pcd_unshifted.numerical_optimization_shift = nos_mini_
+                assert np.allclose(pcd_unshifted.xyz, xyz_local_ - nos_mini_.value)
+                assert pcd_unshifted.xyz.dtype == np.float32
+                assert np.allclose(pcd_unshifted.unshifted_bbox.minimum, xyz_local_.min(axis=0))
+                assert np.allclose(pcd_unshifted.unshifted_bbox.maximum, xyz_local_.max(axis=0))
+
+
+            def test_changing_from_predefined_shift_to_none_restores_dtype_and_coords(self, xyz_local_, nos_mini_):
+                # Case: changing from predefined shift to None; additional checks on change in coordinate dtype
+                pcd_shifted = CartesianCoordinates(xyz=xyz_local_, numerical_optimization_shift=nos_mini_)
+                pcd_shifted.numerical_optimization_shift = None
+                assert pcd_shifted.xyz.dtype == np.float64
+                assert np.allclose(pcd_shifted.xyz, xyz_local_, rtol=1e-5, atol=1e-6) # Due to the conversion to float32 and back
+                assert pcd_shifted not in nos_mini_
+                assert pcd_shifted.numerical_optimization_shift is None
+                assert np.allclose(pcd_shifted.unshifted_bbox.minimum, xyz_local_.min(axis=0))
+                assert np.allclose(pcd_shifted.unshifted_bbox.maximum, xyz_local_.max(axis=0))
+
+            def test_copying_predefined_shift_creates_distinct_uuid_but_same_value(self, nos_):
+                # Case: copying predefined shift
+                nos2 = copy.deepcopy(nos_)
+                assert nos_.uuid != nos2.uuid
+                assert np.allclose(nos_.value, nos2.value)
+
+            def test_initial_large_points_then_apply_provided_shift_recovers_original(self, xyz_local_, nos_):
+                # Case: changing from initial (large) to predefined shift
+                xyz_shifted = xyz_local_ + nos_.value
+                pcd_shifted = CartesianCoordinates(xyz=xyz_shifted)
+                pcd_shifted.numerical_optimization_shift = nos_
+                assert np.allclose(pcd_shifted.xyz, xyz_local_)
+                assert np.allclose(pcd_shifted.unshifted_bbox.minimum, xyz_shifted.min(axis=0))
+                assert np.allclose(pcd_shifted.unshifted_bbox.maximum, xyz_shifted.max(axis=0))
+
+    class TestCopy:
+        def test_deepcopy(self, pcd_shifted):
+            pcd_copy = pcd_shifted.copy(deep=True, link_to_same_NOS=True)
+            assert isinstance(pcd_copy, CartesianCoordinates)
+            assert id(pcd_shifted.numerical_optimization_shift) == id(pcd_copy.numerical_optimization_shift)
+            assert np.allclose(pcd_copy.xyz, pcd_shifted.xyz)
+
+            # TODO: Rework the deepcopy of NOS
+            pcd_copy = pcd_shifted.copy(deep=True, link_to_same_NOS=False)
+            assert id(pcd_shifted.numerical_optimization_shift) != id(pcd_copy.numerical_optimization_shift)
+            assert np.allclose(pcd_copy.xyz, pcd_shifted.xyz)
+
+    class TestPickle:
+        def test_pcd_pickle(self, pcd_shifted):
+            pickle_pcd = pickle.dumps(pcd_shifted)
+            unpickled_pcd = pickle.loads(pickle_pcd)
+
+            assert isinstance(unpickled_pcd, CartesianCoordinates)
+            assert np.allclose(unpickled_pcd.xyz, pcd_shifted.xyz)
+            assert unpickled_pcd.id == pcd_shifted.id
+            assert unpickled_pcd in pcd_shifted.numerical_optimization_shift
 
 class TestConversions:
     def test_cartesian_to_spherical(self, known_xyz, known_spher):

@@ -165,7 +165,7 @@ class CartesianCoordinates(Abstract3dCoordinates):
         if self.numerical_optimization_shift is not None:
             self._register_with_shift_at_osm() # This could possibly set self.nos to None
 
-        # Case 1 - Typical initialisation
+        # Case 1 - Typical initialisation with numerical_optimization_shift = None
         if prev_shift is None and self.numerical_optimization_shift is None:
             return
 
@@ -173,7 +173,7 @@ class CartesianCoordinates(Abstract3dCoordinates):
         elif prev_shift is None and self.numerical_optimization_shift is not None:
             self.update_shift(-self.numerical_optimization_shift.value)
 
-        # Case 3 - Case where a point cloud has been pickled and being reconstructed
+        # Case 3 - Case where a point cloud has a previous shift but should no longer be "optimized"
         elif prev_shift is not None and self.numerical_optimization_shift is None:
             self.update_shift(prev_shift.value)
             prev_shift.unregister(self)
