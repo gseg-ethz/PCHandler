@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import warnings
 from abc import ABC, abstractmethod
 from functools import cached_property
 from typing import Union, Optional, Self, Any, Type, TypeVar, Unpack, TypedDict, NotRequired, overload
@@ -9,7 +8,7 @@ import uuid
 
 import numpy as np
 import numpy.typing as npt
-from pydantic import Field, validate_call, PrivateAttr, field_validator, AliasChoices, UUID4
+from pydantic import Field, validate_call, PrivateAttr, AliasChoices, UUID4
 
 from pchandler.geometry.fov import FoV
 from pchandler.geometry.util import MinMaxPoints
@@ -41,20 +40,13 @@ class CartesianKw(Abstract3dKw, total=False):
     unshifted_bbox: NotRequired[Optional[MinMaxPoints]]
     _shift_applied_by: NotRequired[Optional[OptimizedShift]]
 
+
 class CartesianKwFull(CartesianKw, total=False):
     arr: NotRequired[Array_Nx3_T]
 
 
 class AbstractCoordinates(FixedLengthArray, ABC):
     id: UUID4 = Field(default_factory=uuid.uuid4, alias="_id")
-
-    # noinspection PyNestedDecorators
-    @field_validator("id", mode="before")
-    @classmethod
-    def populate_id(cls, v: uuid.UUID|None) -> UUID4:
-        if v is None:
-            return uuid.uuid4()
-        return v
 
 
 class Abstract2dCoordinates(ArrayNx2, AbstractCoordinates, ABC):
@@ -69,7 +61,7 @@ class Abstract2dCoordinates(ArrayNx2, AbstractCoordinates, ABC):
 
 class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates, ABC):
     project_transformation: Optional[Array_4x4_T] = None
-    socs_origin: Optional[np.ndarray] = None
+    socs_origin: Optional[Vector_3_T] = None
 
     @property
     @abstractmethod
@@ -81,15 +73,10 @@ class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates, ABC):
 
     def __matmul__(self, other: Any) -> Self:
         raise NotImplementedError(
-            "Left matrix multiplication is not supported.\n"
-            "For 3D coordinates use the formula: \n"
-            "     y = Tx\n"
-            "where x are coordinates and A the transformation. In python: \n"
-            "     y = A @ x\n\n"
-            "Alternatively, perform matmul directly on the array attribute 'arr'"
+            'Left matrix multiplication is not supported for coordinates class. '
+            'If necessary, access the array data directly: y = a.arr @ b'
         )
 
-    @validate_call(config=DEFAULT_CONFIG)
     def __rmatmul__(self, matrix: Any) -> Self:
         # 4x4 Homogeneous transform matrix
         if matrix.shape == (4, 4):
@@ -111,11 +98,8 @@ class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates, ABC):
     @validate_call(config=DEFAULT_CONFIG)
     def __imatmul__(self, other: Any) -> Self:
         raise NotImplementedError(
-            "In place matrix multiplication not supported due to ambiguity between left and right multiplication.\n\n"
-            "For 3D coordinates follow the right matrix multiplication formula of:"
-            "       y = Ax\n"
-            "where x are coordinates and A the transformation. In python:\n"
-            "       y = A @ x"
+            "In place matrix multiplication not supported to avoid ambiguity between left and right multiplication.\n"
+            "Use direct assignment instead. E.g. x = A @ x"
         )
 
 
@@ -129,7 +113,7 @@ class CartesianCoordinates(Abstract3dCoordinates):
     )
 
     @overload
-    def __init__(self, xyz: Array_Nx3_T|Self, **kwargs: Unpack[CartesianKw]): ...
+    def __init__(self, *, xyz: Array_Nx3_T|Self, **kwargs: Unpack[CartesianKw]): ...
 
     @overload
     def __init__(self, *, arr: Array_Nx3_T|Self, **kwargs: Unpack[CartesianKw]): ...
@@ -144,16 +128,21 @@ class CartesianCoordinates(Abstract3dCoordinates):
         prev_shift: Optional[OptimizedShift] = kwargs.pop("_shift_applied_by", None)
         super().__init__(**kwargs)  # type: ignore[misc]
 
+        # Set the private attribute after initialisation
         object.__setattr__(self, "_shift_applied_by", prev_shift)
 
         self.compute_unshifted_bbox()
         self._process_shift()
 
     def compute_unshifted_bbox(self, overwrite: bool = False):
+        """ Computes the bounding box for the point cloud's original coordinates """
         if self.unshifted_bbox is None or overwrite:
-            applied_shift = self._shift_applied_by.value if self._shift_applied_by is not None else None
+            applied_shift = None if self._shift_applied_by is None else self._shift_applied_by.value
+
             object.__setattr__(
-                self, "unshifted_bbox", MinMaxPoints.from_points(self.arr, already_applied_shift_vec=applied_shift)
+                self,
+                "unshifted_bbox",
+                MinMaxPoints.from_points(self.arr, already_applied_shift_vec=applied_shift)
             )
 
     def _process_shift(self):
@@ -175,21 +164,26 @@ class CartesianCoordinates(Abstract3dCoordinates):
         if self.numerical_optimization_shift is not None:
             self._register_with_shift_at_osm() # This could possibly set self.nos to None
 
+        # Case 1 - User set None for numerical shift and no prev_shift passed from __init__ (e.g. __reduce__)
         if prev_shift is None and self.numerical_optimization_shift is None:
             return
 
-        if prev_shift is not None and self.numerical_optimization_shift is None:
+        # Case 2 - Numerical_shift initialised from either default or defined value
+        elif prev_shift is None and self.numerical_optimization_shift is not None:
+            self.update_shift(-self.numerical_optimization_shift.value)
+
+        # Case 3 - PCD previously existed with shift, and numerical_shift set to None in __init__, recreate
+        elif prev_shift is not None and self.numerical_optimization_shift is None:
             self.update_shift(prev_shift.value)
             prev_shift.unregister(self)
 
+        # Case 4 - Previous shift passed, but also a numerical_shift has been initialised.
+        # If the same, leave as is, else, update with the difference
         elif prev_shift is not None and self.numerical_optimization_shift is not None:
             if prev_shift is not self.numerical_optimization_shift:
                 delta_shift = prev_shift.value - self.numerical_optimization_shift.value
                 self.update_shift(delta_shift)
                 prev_shift.unregister(self)
-
-        elif prev_shift is None and self.numerical_optimization_shift is not None:
-            self.update_shift(-self.numerical_optimization_shift.value)
 
         else:
             raise RuntimeError("Unknown edge case found.")
@@ -198,10 +192,10 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
     def reduce(self, index: IndexLike) -> None:
         super().reduce(index)
-        self.compute_unshifted_bbox(overwrite=True)
+        self.compute_unshifted_bbox(overwrite=True)     # In case limits have been reduced
 
     def sample(self, index: IndexLike) -> Self:
-        new_sample = super().sample(index)
+        new_sample: Self = super().sample(index)
         new_sample.compute_unshifted_bbox(overwrite=True)
         return new_sample
 
@@ -262,6 +256,7 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
         return obj
 
+    # TODO this supports merging of tiled data. Not tested over registration / transformation etc.
     @classmethod
     def merge(cls: Type[Self], *cart_coords: Self , **kwargs) -> Self:
         if len(cart_coords) == 1:
@@ -296,6 +291,11 @@ class CartesianCoordinates(Abstract3dCoordinates):
             project_transformation=None,
             **kwargs
         )
+
+    @property
+    def numerically_optimized(self) -> bool:
+        # TODO close to zero
+        return not (self.numerical_optimization_shift is None or self.numerical_optimization_shift.value)
 
     # @model_validator(mode="wrap")
     # @classmethod

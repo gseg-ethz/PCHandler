@@ -74,21 +74,21 @@ class AngleBase:
         return out
 
     @property
-    def degrees(self) -> Self:
+    def degrees(self) -> float | NDArray[np.floating]:
         return self.to(AngleUnit.DEGREE)
 
     def in_degrees(self) -> Self:
         return self.in_unit(AngleUnit.DEGREE)
 
     @property
-    def radians(self):
+    def radians(self) -> float | NDArray[np.floating]:
         return self.to(AngleUnit.RAD)
 
     def in_radians(self) -> Self:
         return self.in_unit(AngleUnit.RAD)
 
     @property
-    def gon(self):
+    def gon(self) -> float | NDArray[np.floating]:
         return self.to(AngleUnit.GON)
 
     def in_gon(self) -> Self:
