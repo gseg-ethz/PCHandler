@@ -483,6 +483,8 @@ class CartesianCoordinates(Abstract3dCoordinates):
 #         return spherical
 
 
+
+
 @validate_call(config=DEFAULT_CONFIG)
 def rhv2xyz(spher: Array_Nx3_T|ArrayNx3, scan_origin: Optional[Vector_3_T] = None) -> Array_Nx3_T:
     xyz: np.ndarray = np.zeros_like(spher)

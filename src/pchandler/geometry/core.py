@@ -51,38 +51,6 @@ class PointCloudData(CartesianCoordinates):
     def __init__(self, xyz=None, **kwargs: Unpack[PointCloudDataKw]):
         super().__init__(xyz=xyz, **kwargs)
 
-    # def __init__(
-    #     self,
-    #     xyz: Array_Nx3_T | CartesianCoordinates,
-    #     *,
-    #     rgb: Optional[npt.NDArray[np.uint8|np.float32|np.float64] | RGBFields] = None,
-    #     normals: Optional[npt.NDArray[np.float32|np.float64] | NormalFields] = None,
-    #     intensity: Optional[npt.NDArray[np.uint16|np.float32|np.float64] | ScalarField] = None,
-    #     reflectance: Optional[npt.NDArray[np.uint16|np.float32|np.float64] | ScalarField] = None,
-    #     numerical_optimization_shift: Optional[OptimizedShift | ellipsis] = Ellipsis,
-    #     socs_origin: Optional[npt.NDArray[np.float64]] = None,
-    #     scalar_fields: Optional[ScalarFieldManager[ScalarField | ScalarFieldTriplet] | dict[str, SF_T|npt.NDArray] ] = None,
-    #     project_transformation: Optional[Array_4x4_T] = None,
-    #     transform_ledger: Optional[TransformLedger] = None,
-    #     # frozen: bool = False
-    # ):
-    #     super().__init__(
-    #         arr=xyz,
-    #         numerical_optimization_shift = numerical_optimization_shift,
-    #         socs_origin = socs_origin,
-    #         project_transformation = project_transformation,
-    #         transform_ledger = transform_ledger if transform_ledger else TransformLedger(),
-    #     )
-    #
-    #     self.rgb = rgb
-    #     self.normals = normals
-    #     self.intensity = intensity
-    #     self.reflectance = reflectance
-    #
-    #     if scalar_fields is not None:
-    #         for key, value in scalar_fields:
-    #             self.scalar_fields[key] = value
-
     @property
     def nbPoints(self) -> int:
         return len(self)
@@ -146,7 +114,7 @@ class PointCloudData(CartesianCoordinates):
     def reflectance(self, value: Optional[VectorT | ScalarField]) -> None:
         self.scalar_fields.reflectance = value
 
-    def __setitem__(self, key: IndexLike, value: Array_T | PointCloudData) -> None:
+    def __setitem__(self, key: IndexLike, value: ArrayT | PointCloudData) -> None:
         raise IndexError(
             f"Setting items in PointCloudData is not supported. Consider using the copy or "
             f"dump data to a dict and reinstantiate."
@@ -197,28 +165,6 @@ class PointCloudData(CartesianCoordinates):
 
         return super().copy(array=array, deep=deep, update=update, **kwargs)
 
-        # # Create a copy of the rest of the fields
-        # data = self.model_dump(
-        #     mode = "python",
-        #     exclude=(set(override.keys()))
-        # )
-        # if array is not None:
-        #     data.pop("arr")
-        #
-        # if link_to_same_NOS:
-        #     numerical_optimization_shift = kwargs.pop("numerical_optimization_shift", None)
-        #
-        # if deep:
-        #     data = deepcopy(data)
-        #
-        # if array is None:
-        #     array = data.pop("arr")
-        #
-        # data.update(override)
-        # if link_to_same_NOS:
-        #     data["numerical_optimization_shift"] = numerical_optimization_shift
-        #
-        # return type(self)(array, **data)
 
     def sample(self, mask: npt.NDArray[np.bool_|np.integer]) -> PointCloudData:
         mask = self.create_mask(mask)
@@ -248,29 +194,7 @@ class PointCloudData(CartesianCoordinates):
         # Check for same optimization shift
         scalar_fields = ScalarFieldManager.merge([pcd.scalar_fields for pcd in pcds])
         return super().merge(*pcds, scalar_fields=scalar_fields)
-        # if not all([pcds[0].optimized == pcd.optimized for pcd in pcds[1:]]):
-        #     raise ValueError('Can only merge point clouds if they are all optimized or unoptimized.')
-        #
-        # if isinstance(pcds[0].socs_origin, np.ndarray):
-        #     if not all([np.all(pcds[0].socs_origin == pcd.socs_origin) for pcd in pcds[1:]]):
-        #         raise ValueError("Cannot merge point clouds where some origins are known and some are ambiguous")
-        #
-        # for pcd in pcds:
-        #     if pcd.socs_origin is not None:
-        #         raise ValueError("Cannot merge point clouds where some origins are known and some are ambiguous")
-        #
-        # if pcds[0].project_transformation is None:
-        #     for pcd in pcds[1:]:
-        #         if pcd.project_transformation is not None:
-        #             raise ValueError("Cannot merge point clouds where only some project transforms are defined")
-        # else:
-        #     for pcd in pcds[1:]:
-        #         if not isinstance(pcd.project_transformation, np.ndarray):
-        #             raise ValueError("Cannot merge point clouds where only some project transforms are defined")
-        #
-        # xyz = np.concatenate([pcd.xyz for pcd in pcds], axis=0)
-        #
-        # return cls(xyz, scalar_fields=scalar_fields)
+
 
     @overload
     def to_o3d(self, as_tensor: Literal[False] = ...) -> o3d.geometry.PointCloud: ...
@@ -325,7 +249,6 @@ class PointCloudData(CartesianCoordinates):
         return pcd_o3d
 
 
-
     @classmethod
     def from_o3d(cls, pcd_o3d: o3d.geometry.PointCloud | o3d.t.geometry.PointCloud) -> PointCloudData:
         """
@@ -366,58 +289,3 @@ class PointCloudData(CartesianCoordinates):
             raise TypeError(f"Input point cloud is not an open 3d type but {type(pcd_o3d)=}")
 
         return pcd
-
-    # # DECIDE Implement in PCHandler or in pc2image
-    # @classmethod
-    # def from_range_image(
-    #         cls,
-    #         range_data: NDArray[np.floating],
-    #         fov: FoV,
-    #         scalar_fields: Optional[dict[str, NDArray[np.generic]] | ScalarFieldManager] = None,
-    #         spherical_coordinates_origin: Optional[NDArray[np.float_]] = None,
-    # ) -> Self:
-    #     """
-    #     Creates a `PointCloudData` instance from a range image.
-    #
-    #     Parameters
-    #     ----------
-    #     range_data : NDArray[np.floating]
-    #         A 2D array representing the range values.
-    #     fov : FoV
-    #         The field of view defining the angular limits of the range image.
-    #     scalar_fields : dict[str, NDArray[np.generic]] | ScalarFieldManager, optional
-    #         Scalar fields corresponding to the range data.
-    #     spherical_coordinates_origin : NDArray[np.float_], optional
-    #         The origin for spherical coordinate calculations.
-    #
-    #     Returns
-    #     -------
-    #     PointCloudData
-    #         A new instance of the `PointCloudData` class.
-    #     """
-    #     sfm = ScalarFieldManager() if scalar_fields is None else scalar_fields
-    #     if not isinstance(sfm, ScalarFieldManager) and scalar_fields is not None:
-    #         sfm = ScalarFieldManager()
-    #         for sf_id, sf in scalar_fields.items():
-    #             sfm.create_field(sf_id, sf.flatten())
-    #
-    #     resolution = range_data.shape
-    #     elevation_range = np.linspace(
-    #         fov.elevation_min, fov.elevation_max, num=resolution[0], endpoint=True, dtype=np.float32
-    #     )
-    #     horizontal_range = np.linspace(
-    #         fov.horizontal_min, fov.horizontal_max, num=resolution[1], endpoint=True, dtype=np.float32
-    #     )
-    #
-    #     elevation_mesh, horizontal_mesh = np.meshgrid(elevation_range, horizontal_range, indexing="ij")
-    #
-    #     ranges = range_data.flatten()
-    #     elevations = elevation_mesh.flatten()
-    #     horizontals = horizontal_mesh.flatten()
-    #
-    #     spherical_coordinates = np.vstack((ranges, elevations, horizontals)).T
-    #     spherical_coordinates = spherical_coordinates[~np.isnan(ranges), :]
-    #
-    #     sfm_reduced = sfm[~np.isnan(ranges)]
-    #
-    #     return cls.from_spherical_coordinates(spherical_coordinates, sfm_reduced, spherical_coordinates_origin)
