@@ -196,14 +196,6 @@ class TestPointCloudData:
             for name in ("rgb", "normals", "intensity", "reflectance"):
                 assert name in pcd.scalar_fields
 
-        # TODO: Discuss what the optimized flag should represent
-        # def test_optimized_keyword(self, xyz_):
-        #     pcd = PointCloudData(xyz_)
-        #     assert not pcd.optimized
-
-            # pcd = PointCloudData(xyz_, numerical_optimization_shift=OptimizedShift())
-            # assert pcd.optimized is not None
-
         def test_socs_origin_keyword(self, xyz_):
             pcd = PointCloudData(xyz_)
             assert pcd.socs_origin is None
@@ -350,144 +342,6 @@ class TestPointCloudData:
             assert isinstance(pcd2.scalar_fields, ScalarFieldManager)
             assert len(pcd2.scalar_fields) == 2
 
-    class TestNOS:
-        class TestNOSInstantiation:
-            def test_defaults_to_float32_and_zero_shift(self, xyz_):
-                pcd = PointCloudData(xyz=xyz_)
-                assert pcd.xyz.dtype == np.float32
-                assert np.allclose(pcd.numerical_optimization_shift.value, [0, 0, 0])
-                assert np.allclose(pcd.xyz, xyz_)
-                assert np.allclose(pcd.unshifted_bbox.minimum, xyz_.min(axis=0))
-                assert np.allclose(pcd.unshifted_bbox.maximum, xyz_.max(axis=0))
-
-            def test_instantiation_without_nos_keeps_float64_and_none_shift(self, xyz_):
-                pcd_no_nos = PointCloudData(xyz=xyz_, numerical_optimization_shift=None)
-                assert pcd_no_nos.xyz.dtype == np.float64
-                assert pcd_no_nos.numerical_optimization_shift is None
-                assert np.allclose(pcd_no_nos.xyz, xyz_)
-                assert np.allclose(pcd_no_nos.unshifted_bbox.minimum, xyz_.min(axis=0))
-                assert np.allclose(pcd_no_nos.unshifted_bbox.maximum, xyz_.max(axis=0))
-
-            def test_auto_shift_applied_when_points_are_large(self, xyz_local_, nos_):
-                xyz_shifted = xyz_local_ + nos_.value
-                pcd_nos = PointCloudData(xyz=xyz_shifted)
-                assert pcd_nos.xyz.dtype == np.float32
-                assert pcd_nos.numerical_optimization_shift is not nos_
-                assert np.allclose(pcd_nos.numerical_optimization_shift.value, nos_.value)
-                assert np.allclose(pcd_nos.xyz, xyz_local_) # This only holds because xyz_shifted is very close to 0,0,0
-                assert np.allclose(pcd_nos.unshifted_bbox.minimum, xyz_shifted.min(axis=0))
-                assert np.allclose(pcd_nos.unshifted_bbox.maximum, xyz_shifted.max(axis=0))
-
-            def test_predefined_shift_when_points_are_large(self, xyz_local_, nos_):
-                xyz_shifted = xyz_local_ + nos_.value
-                pcd_nos_expected = PointCloudData(xyz=xyz_shifted, numerical_optimization_shift=nos_)
-                assert pcd_nos_expected.xyz.dtype == np.float32
-                assert pcd_nos_expected.numerical_optimization_shift is nos_
-                assert np.allclose(pcd_nos_expected.xyz, xyz_local_)
-                assert np.allclose(pcd_nos_expected.unshifted_bbox.minimum, xyz_shifted.min(axis=0))
-                assert np.allclose(pcd_nos_expected.unshifted_bbox.maximum, xyz_shifted.max(axis=0))
-
-            def test_unsuitable_shift(self, xyz_, nos_, caplog):
-                caplog.set_level(logging.DEBUG)
-                pcd_nos = PointCloudData(xyz=xyz_ + nos_.value, numerical_optimization_shift=nos_) #Needed to bind nos_
-
-                pcd_nos_unexpected = PointCloudData(xyz=xyz_, numerical_optimization_shift=nos_)
-                assert pcd_nos_unexpected.xyz.dtype == np.float32
-                assert pcd_nos_unexpected.numerical_optimization_shift is not nos_
-                assert "provided numerical_optimization_shift was not feasible" in caplog.text
-                assert np.allclose(pcd_nos_unexpected.xyz, xyz_ - pcd_nos_unexpected.numerical_optimization_shift.value)
-                assert np.allclose(pcd_nos_unexpected.unshifted_bbox.minimum, xyz_.min(axis=0))
-                assert np.allclose(pcd_nos_unexpected.unshifted_bbox.maximum, xyz_.max(axis=0))
-
-
-            def test_unsuitable_coordinates_for_shift(self, xyz_huge_, caplog):
-                caplog.set_level(logging.DEBUG)
-                pcd_huge = PointCloudData(xyz=xyz_huge_)
-                assert pcd_huge.xyz.dtype == np.float64
-                assert pcd_huge.numerical_optimization_shift is None
-                assert "No numerical_optimization_shift was feasible." in caplog.text
-                assert np.allclose(pcd_huge.unshifted_bbox.minimum, xyz_huge_.min(axis=0))
-                assert np.allclose(pcd_huge.unshifted_bbox.maximum, xyz_huge_.max(axis=0))
-
-
-
-            # xyz_global = random_coordinates(1,100_000)
-            # pcd_global = PointCloudData(xyz=xyz_global)
-            # assert pcd_global.xyz.dtype == np.float32
-            # assert np.allclose(pcd_global.numerical_optimization_shift.value, 3*[100_000,])
-            # assert np.allclose(pcd_global.xyz, xyz_global - np.array(3*[100_000,]))
-            # assert np.allclose(pcd_global.unshifted_bbox.minimum, xyz_global.min(axis=0))
-            # assert np.allclose(pcd_global.unshifted_bbox.maximum, xyz_global.max(axis=0))
-
-
-
-        class TestNOSChange:
-            def test_updating_from_default_to_predefined_shift_logs_and_keeps_bbox(self, xyz_local_, nos_, caplog):
-                caplog.set_level(logging.DEBUG)
-
-                pcd = PointCloudData(xyz=xyz_local_)
-                pcd.numerical_optimization_shift = nos_
-                assert "Updating shift" in caplog.text
-                assert np.allclose(pcd.numerical_optimization_shift.value, [0,0,0])
-                assert np.allclose(pcd.unshifted_bbox.minimum, xyz_local_.min(axis=0))
-                assert np.allclose(pcd.unshifted_bbox.maximum, xyz_local_.max(axis=0))
-
-
-            def test_applying_small_shift_after_default_instantiation_adjusts_coords(self, xyz_local_, nos_mini_):
-
-                pcd_local = PointCloudData(xyz=xyz_local_)
-                assert np.allclose(pcd_local.numerical_optimization_shift.value, [0, 0, 0])
-                assert np.allclose(pcd_local.xyz, xyz_local_)
-                assert np.allclose(pcd_local.unshifted_bbox.minimum, xyz_local_.min(axis=0))
-                assert np.allclose(pcd_local.unshifted_bbox.maximum, xyz_local_.max(axis=0))
-
-                pcd_local.numerical_optimization_shift = nos_mini_
-                assert np.allclose(pcd_local.xyz, xyz_local_ - nos_mini_.value)
-                assert np.allclose(pcd_local.unshifted_bbox.minimum, xyz_local_.min(axis=0))
-                assert np.allclose(pcd_local.unshifted_bbox.maximum, xyz_local_.max(axis=0))
-
-
-            def test_changing_from_none_to_predefined_shift_changes_dtype_and_coords(self, xyz_local_, nos_mini_):
-                # Case: changing from None to predefined shift; additional checks on change in coordinate dtype
-                pcd_unshifted = PointCloudData(xyz=xyz_local_, numerical_optimization_shift=None)
-                assert pcd_unshifted.xyz.dtype == np.float64
-                assert np.allclose(pcd_unshifted.unshifted_bbox.minimum, xyz_local_.min(axis=0))
-                assert np.allclose(pcd_unshifted.unshifted_bbox.maximum, xyz_local_.max(axis=0))
-
-                pcd_unshifted.numerical_optimization_shift = nos_mini_
-                assert np.allclose(pcd_unshifted.xyz, xyz_local_ - nos_mini_.value)
-                assert pcd_unshifted.xyz.dtype == np.float32
-                assert np.allclose(pcd_unshifted.unshifted_bbox.minimum, xyz_local_.min(axis=0))
-                assert np.allclose(pcd_unshifted.unshifted_bbox.maximum, xyz_local_.max(axis=0))
-
-
-            def test_changing_from_predefined_shift_to_none_restores_dtype_and_coords(self, xyz_local_, nos_mini_):
-                # Case: changing from predefined shift to None; additional checks on change in coordinate dtype
-                pcd_shifted = PointCloudData(xyz=xyz_local_, numerical_optimization_shift=nos_mini_)
-                pcd_shifted.numerical_optimization_shift = None
-                assert pcd_shifted.xyz.dtype == np.float64
-                assert np.allclose(pcd_shifted.xyz, xyz_local_, rtol=1e-5, atol=1e-6) # Due to the conversion to float32 and back
-                assert pcd_shifted not in nos_mini_
-                assert pcd_shifted.numerical_optimization_shift is None
-                assert np.allclose(pcd_shifted.unshifted_bbox.minimum, xyz_local_.min(axis=0))
-                assert np.allclose(pcd_shifted.unshifted_bbox.maximum, xyz_local_.max(axis=0))
-
-            def test_copying_predefined_shift_creates_distinct_uuid_but_same_value(self, nos_):
-                # Case: copying predefined shift
-                nos2 = copy.deepcopy(nos_)
-                assert nos_.uuid != nos2.uuid
-                assert np.allclose(nos_.value, nos2.value)
-
-            def test_initial_large_points_then_apply_provided_shift_recovers_original(self, xyz_local_, nos_):
-                # Case: changing from initial (large) to predefined shift
-                xyz_shifted = xyz_local_ + nos_.value
-                pcd_shifted = PointCloudData(xyz=xyz_shifted)
-                pcd_shifted.numerical_optimization_shift = nos_
-                assert np.allclose(pcd_shifted.xyz, xyz_local_)
-                assert np.allclose(pcd_shifted.unshifted_bbox.minimum, xyz_shifted.min(axis=0))
-                assert np.allclose(pcd_shifted.unshifted_bbox.maximum, xyz_shifted.max(axis=0))
-
-
     class TestCopy:
         def test_deepcopy(self, pcd_shifted):
             pcd_copy = pcd_shifted.copy(deep=True, link_to_same_NOS=True)
@@ -509,8 +363,6 @@ class TestPointCloudData:
             assert np.allclose(unpickled_pcd.xyz, pcd_shifted.xyz)
             assert unpickled_pcd.id == pcd_shifted.id
             assert unpickled_pcd in pcd_shifted.numerical_optimization_shift
-
-
 
     class TestReduceSampleExtractMerge:
         class TestMaskGeneration:
@@ -723,16 +575,6 @@ class TestPointCloudData:
             assert 'intensity' not in merged_1.scalar_fields
             assert 'reflectance' not in merged_1.scalar_fields
 
-    # def test_immutability(self, xyz_, rgb_, normals_, intensity_):
-    #     pcd = PointCloudData(xyz=xyz_, rgb=rgb_, normals=normals_, scalar_fields={"intensity": intensity_}, frozen=True)
-    #
-    #     with pytest.raises(Exception) as e:
-    #         pcd.xyz = np.random.rand(N, 3)
-    #
-    #     assert type(e.value) in (AttributeError, ValidationError, TypeError, ValueError)
-    #
-    #     # TODO add future feature to have a READ ONLY point cloud object where no fields or attributes can be changed
-
 
 class TestOpen3DSupport:
     def test_to_o3d(self, pcd: PointCloudData) -> None:
@@ -753,7 +595,7 @@ class TestOpen3DSupport:
 
         assert isinstance(obj, o3d.t.geometry.PointCloud)
         assert np.allclose(pcd.xyz, obj.point.positions.numpy())
-        for attr in ('normals', 'rgb', 'reflectance', 'intensity'): # Todo: Reflectance doesn't work right
+        for attr in ('normals', 'rgb', 'reflectance', 'intensity'):
             assert getattr(pcd, attr) is None or hasattr(obj.point, attr)
             assert getattr(pcd, attr) is None or np.allclose(getattr(pcd, attr), getattr(obj.point, attr).numpy())
 

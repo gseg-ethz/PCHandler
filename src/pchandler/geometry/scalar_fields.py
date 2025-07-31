@@ -30,7 +30,6 @@ from pchandler.base_types import (
 logger = logging.getLogger(__name__.split(".")[0])
 
 
-#  TODO add name attribute to be able to track original names from original data files
 class DtypeState(NamedTuple):
     dtype: npt.DTypeLike
     lower: npt.NDArray[np.number] | float | int

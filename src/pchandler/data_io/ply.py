@@ -26,12 +26,9 @@ class PlyHandler(AbstractIOHandler):
     ) -> PointCloudData:
         logger.info(f"Loading PLY file: {path}")
 
-        try:
-            with open(path, "rb") as f:
-                plydata = PlyData.read(f)
-        except Exception as e:
-            logger.error(f"Failed to read PLY file {path}: {e}")
-            raise e
+        with open(path, "rb") as f:
+            plydata = PlyData.read(f)
+
 
         num_points = plydata["vertex"].count
         logger.debug(f"PLY file {path} contains {num_points} points")

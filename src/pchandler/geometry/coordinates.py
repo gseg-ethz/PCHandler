@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 import logging
-import warnings
 from abc import ABC, abstractmethod
 from functools import cached_property
-from typing import Union, Optional, Self, Any, Type, TypeVar, Unpack, TypedDict, NotRequired, overload
+from typing import Union, Optional, Self, Any, Type, TypeVar, Unpack, TypedDict, NotRequired, overload, MutableMapping
 import uuid
 
 import numpy as np
 import numpy.typing as npt
-from pydantic import Field, validate_call, PrivateAttr, field_validator, AliasChoices, UUID4
+from pydantic import Field, validate_call, PrivateAttr, AliasChoices, UUID4
 
 from pchandler.geometry.fov import FoV
 from pchandler.geometry.util import MinMaxPoints
@@ -41,20 +40,13 @@ class CartesianKw(Abstract3dKw, total=False):
     unshifted_bbox: NotRequired[Optional[MinMaxPoints]]
     _shift_applied_by: NotRequired[Optional[OptimizedShift]]
 
+
 class CartesianKwFull(CartesianKw, total=False):
     arr: NotRequired[Array_Nx3_T]
 
 
 class AbstractCoordinates(FixedLengthArray, ABC):
     id: UUID4 = Field(default_factory=uuid.uuid4, alias="_id")
-
-    # noinspection PyNestedDecorators
-    @field_validator("id", mode="before")
-    @classmethod
-    def populate_id(cls, v: uuid.UUID|None) -> UUID4:
-        if v is None:
-            return uuid.uuid4()
-        return v
 
 
 class Abstract2dCoordinates(ArrayNx2, AbstractCoordinates, ABC):
@@ -69,7 +61,7 @@ class Abstract2dCoordinates(ArrayNx2, AbstractCoordinates, ABC):
 
 class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates, ABC):
     project_transformation: Optional[Array_4x4_T] = None
-    socs_origin: Optional[np.ndarray] = None
+    socs_origin: Optional[Vector_3_T] = None
 
     @property
     @abstractmethod
@@ -81,15 +73,10 @@ class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates, ABC):
 
     def __matmul__(self, other: Any) -> Self:
         raise NotImplementedError(
-            "Left matrix multiplication is not supported.\n"
-            "For 3D coordinates use the formula: \n"
-            "     y = Tx\n"
-            "where x are coordinates and A the transformation. In python: \n"
-            "     y = A @ x\n\n"
-            "Alternatively, perform matmul directly on the array attribute 'arr'"
+            'Left matrix multiplication is not supported for coordinates class. '
+            'If necessary, access the array data directly: y = a.arr @ b'
         )
 
-    @validate_call(config=DEFAULT_CONFIG)
     def __rmatmul__(self, matrix: Any) -> Self:
         # 4x4 Homogeneous transform matrix
         if matrix.shape == (4, 4):
@@ -111,11 +98,8 @@ class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates, ABC):
     @validate_call(config=DEFAULT_CONFIG)
     def __imatmul__(self, other: Any) -> Self:
         raise NotImplementedError(
-            "In place matrix multiplication not supported due to ambiguity between left and right multiplication.\n\n"
-            "For 3D coordinates follow the right matrix multiplication formula of:"
-            "       y = Ax\n"
-            "where x are coordinates and A the transformation. In python:\n"
-            "       y = A @ x"
+            "In place matrix multiplication not supported to avoid ambiguity between left and right multiplication.\n"
+            "Use direct assignment instead. E.g. x = A @ x"
         )
 
 
@@ -129,7 +113,7 @@ class CartesianCoordinates(Abstract3dCoordinates):
     )
 
     @overload
-    def __init__(self, xyz: Array_Nx3_T|Self, **kwargs: Unpack[CartesianKw]): ...
+    def __init__(self, *, xyz: Array_Nx3_T|Self, **kwargs: Unpack[CartesianKw]): ...
 
     @overload
     def __init__(self, *, arr: Array_Nx3_T|Self, **kwargs: Unpack[CartesianKw]): ...
@@ -144,52 +128,63 @@ class CartesianCoordinates(Abstract3dCoordinates):
         prev_shift: Optional[OptimizedShift] = kwargs.pop("_shift_applied_by", None)
         super().__init__(**kwargs)  # type: ignore[misc]
 
+        # Set the private attribute after initialisation
         object.__setattr__(self, "_shift_applied_by", prev_shift)
 
         self.compute_unshifted_bbox()
         self._process_shift()
 
     def compute_unshifted_bbox(self, overwrite: bool = False):
+        """ Computes the bounding box for the point cloud's original coordinates """
         if self.unshifted_bbox is None or overwrite:
-            applied_shift = self._shift_applied_by.value if self._shift_applied_by is not None else None
+            applied_shift = None if self._shift_applied_by is None else self._shift_applied_by.value
+
             object.__setattr__(
-                self, "unshifted_bbox", MinMaxPoints.from_points(self.arr, already_applied_shift_vec=applied_shift)
+                self,
+                "unshifted_bbox",
+                MinMaxPoints.from_points(self.arr, already_applied_shift_vec=applied_shift)
             )
 
     def _process_shift(self):
         """
-        4 cases:
-            prev_shift is None and NOS is None:
-                Do nothing
-            prev_shift is None and NOS not None:
-                Do basic xyz, register to NOS
-            prev_shift is not None and NOS is None:
-                Revert prev_shift, convert to float64, unregister from prev_shift
-            prev_shift is not None and NOS is not None:
-                Check if they are the same
-                    register to NOS
-                else:
-                    Apply difference in shift, unregister from prev_shift, register to NOS
+        Handles the different cases of self.numerical_optimization_shift and self._shift_applied_by that are passed
+
+        Case 1 - prev_shift is None and NOS is None
+          Basic init, register to NOS
+
+        Case 2 - prev_shift is None and NOS exists
+          Revert to prev_shift, convert to float64, unregister prev_shift
+
+        Case 3 - prev_shift exists and NOS is None
+          register to NOS
+
+        Case 4 - prev_shift exists and NOS exists
+          If same, register to NOS. Else, apply difference, unregister prev, register NOS
         """
         prev_shift = self._shift_applied_by
         if self.numerical_optimization_shift is not None:
             self._register_with_shift_at_osm() # This could possibly set self.nos to None
 
+        # Case 1 - Typical initialisation with numerical_optimization_shift = None
         if prev_shift is None and self.numerical_optimization_shift is None:
             return
 
-        if prev_shift is not None and self.numerical_optimization_shift is None:
+        # Case 2 - Typical initialization with a NOS kwarg
+        elif prev_shift is None and self.numerical_optimization_shift is not None:
+            self.update_shift(-self.numerical_optimization_shift.value)
+
+        # Case 3 - Case where a point cloud has a previous shift but should no longer be "optimized"
+        elif prev_shift is not None and self.numerical_optimization_shift is None:
             self.update_shift(prev_shift.value)
             prev_shift.unregister(self)
 
+        # Case 4 - Case when pcd has been pickled but another optimization shift is provided,
+        # or has changed since it was pickled
         elif prev_shift is not None and self.numerical_optimization_shift is not None:
             if prev_shift is not self.numerical_optimization_shift:
                 delta_shift = prev_shift.value - self.numerical_optimization_shift.value
                 self.update_shift(delta_shift)
                 prev_shift.unregister(self)
-
-        elif prev_shift is None and self.numerical_optimization_shift is not None:
-            self.update_shift(-self.numerical_optimization_shift.value)
 
         else:
             raise RuntimeError("Unknown edge case found.")
@@ -198,10 +193,10 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
     def reduce(self, index: IndexLike) -> None:
         super().reduce(index)
-        self.compute_unshifted_bbox(overwrite=True)
+        self.compute_unshifted_bbox(overwrite=True)     # In case limits have been reduced
 
     def sample(self, index: IndexLike) -> Self:
-        new_sample = super().sample(index)
+        new_sample: Self = super().sample(index)
         new_sample.compute_unshifted_bbox(overwrite=True)
         return new_sample
 
@@ -262,6 +257,29 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
         return obj
 
+    def copy(self: Self,
+             array: Optional[npt.NDArray[np.floating] | Self] = None,
+             *,
+             deep: bool = True,
+             update: Optional[MutableMapping[str, Any]] = None,
+             link_to_same_NOS: bool = True,
+             **kwargs: dict[str, Any]) -> Self:
+        """
+        Produce a deep or shallow copy of the model. Updates the model also if parameter is parsed.
+        """
+
+        update = {} if update is None else update
+
+        if array is not None and not isinstance(array, CartesianCoordinates | np.ndarray):
+            raise TypeError(f"Invalid type of array passed: {type(array)}. Should be CartesianCoordinates or np.ndarray")
+
+        if link_to_same_NOS and "numerical_optimization_shift" not in update:
+            update["numerical_optimization_shift"] = self.numerical_optimization_shift
+        update["_shift_applied_by"] = self._shift_applied_by # TODO: Rework structure!
+        update["id"] = None
+
+        return super().copy(array=array, deep=deep, update=update, **kwargs)
+
     # TODO this supports merging of tiled data. Not tested over registration / transformation etc.
     @classmethod
     def merge(cls: Type[Self], *cart_coords: Self , **kwargs) -> Self:
@@ -297,6 +315,11 @@ class CartesianCoordinates(Abstract3dCoordinates):
             project_transformation=None,
             **kwargs
         )
+
+    @property
+    def numerically_optimized(self) -> bool:
+        # TODO close to zero
+        return not (self.numerical_optimization_shift is None or self.numerical_optimization_shift.value)
 
     # @model_validator(mode="wrap")
     # @classmethod
@@ -396,8 +419,10 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
     @property
     def numerically_optimized(self) -> bool:
-        # TODO close to zero
-        return not (self.numerical_optimization_shift is None or self.numerical_optimization_shift.value)
+        return not (
+                self.numerical_optimization_shift is None
+                or np.allclose(self.numerical_optimization_shift.value, [0, 0, 0])
+        )
 
     # def to_spherical(self) -> SphericalCoordinates:
     #     spherical = SphericalCoordinates(**self.model_dump(exclude={"arr"}) | {"arr": self.spher})
@@ -408,7 +433,6 @@ class CartesianCoordinates(Abstract3dCoordinates):
     def from_spherical(cls, spher: Array_Nx3_T) -> Self:
         return cls(arr=rhv2xyz(spher))
 
-    # TODO need to improve all the transformation functions
     def rotate(self, rotation: Array_3x3_T) -> None:
         self.arr = (rotation @ self.T).T
 
@@ -418,7 +442,6 @@ class CartesianCoordinates(Abstract3dCoordinates):
     def scale(self, scale: Vector_3_T) -> None:
         self.arr *= scale
 
-    # TODO must define on the transformation handling -> Incl. support for the scipy.spatial.transform.rotation
     def transform(self, affine: Array_4x4_T = None) -> None:
         self.arr = (affine @ self.H.T).T[:, :3]
 
@@ -482,15 +505,8 @@ class CartesianCoordinates(Abstract3dCoordinates):
 #         spherical = cls(**cartesian.model_dump(exclude={"arr"}) | {"arr": cartesian.spher})
 #         delattr(cartesian, "spher")
 #         return spherical
-#
-#     # DISCUSS - Add methods to apply tilt and yaw rotations easily (e.g. for spherical image projection shifts?
-#     # def rotate(self, yaw=None, pitch=None):
-#     #     if yaw:
-#     #         self.arr[:, 1] = coerce_azimuths(self.hz + yaw)
-#     #
-#     #     if pitch:
-#     #         self.arr[np.logical_or(temp < 0, temp > PI), 1] = coerce_azimuths(self.hz + TWO_PI)
-#     #         self.arr[:, 2] = np.abs(temp := self.v - pitch)
+
+
 
 
 @validate_call(config=DEFAULT_CONFIG)
@@ -502,10 +518,6 @@ def rhv2xyz(spher: Array_Nx3_T|ArrayNx3, scan_origin: Optional[Vector_3_T] = Non
 
     return xyz if scan_origin is None else xyz + scan_origin
 
-
-
-
-# TODO fix this to support the optimal shifts (e.g. remove origin shift)
 @validate_call(config=DEFAULT_CONFIG)
 def xyz2rhv(xyz: Array_Nx3_T|ArrayNx3, scan_origin: Optional[Vector_3_T] = None) -> Array_Nx3_T:
     spher: np.ndarray = np.zeros_like(xyz)

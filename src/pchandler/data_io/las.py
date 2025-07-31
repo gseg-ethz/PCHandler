@@ -3,12 +3,14 @@ from typing import Optional
 import logging
 
 import numpy as np
-import numpy.typing as npt
 import laspy                # type: ignore[import-untyped]
 
-from pchandler.data_io.core import AbstractIOHandler, _get_field_names
+from pchandler.data_io.core import AbstractIOHandler, _get_rgb_or_normal_field_names
 from pchandler.constants import RGB_NAMES, NORMAL_NAMES, INTENSITY_NAMES, XYZ_NAMES
 from pchandler.geometry import PointCloudData
+from pchandler.validators import normalize_uint16
+from pchandler.base_types import Vector_3_T
+from pchandler.geometry.optimal_shift import OptimizedShift
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -22,6 +24,7 @@ class LasHandler(AbstractIOHandler):
              scalar_fields: Optional[list[str]] = None,
              remove_prefix: bool = True,
              prefix: str = 'scalar_',
+             force_no_numerical_shift: bool = False,
              **config
              ) -> PointCloudData:
 
@@ -33,7 +36,10 @@ class LasHandler(AbstractIOHandler):
         data = las._points.array
         field_names = cls._validate_field_selection(scalar_fields, header_names, remove_prefix, prefix)
 
-        pcd = PointCloudData(las.xyz)
+        if force_no_numerical_shift:
+            pcd = PointCloudData(las.xyz, numerical_optimization_shift=None)
+        else:
+            pcd = PointCloudData(las.xyz, numerical_optimization_shift=OptimizedShift(las.header.offsets))
         cls.extract_scalar_fields(pcd, data, data.size, field_names)
 
         logger.info(f"Successfully loaded LAZ file: {path}")
@@ -41,25 +47,26 @@ class LasHandler(AbstractIOHandler):
 
     @classmethod
     def save(cls,
-             path: str | Path,
              pcd: PointCloudData,
+             path: str | Path,
              /,
              scalar_fields: Optional[list[str]] = None,
              add_prefix: bool = True,
              prefix: str = 'scalar_',
              revert_sf_types: bool = False,
+             scales: Vector_3_T = np.array([0.0001, 0.0001, 0.0001]),
              **config) -> None:
 
         logger.info(f"Attempting to write to LAS/LAZ file: {path}")
-
-        # TODO should this be linked to the optimal shift?
-        offsets: npt.NDArray[np.float32|np.float64] = pcd.min(axis=0)
-        scales: npt.NDArray[np.float32|np.float64] = np.array([0.0001, 0.0001, 0.0001])
+        if pcd.numerical_optimization_shift is None:
+            offsets: Vector_3_T = np.zeros(3)
+        else:
+            offsets = pcd.numerical_optimization_shift.value
 
         if scalar_fields is None:
             scalar_fields = list(pcd.scalar_fields.keys())
-        elif not isinstance(scalar_fields, list):
-            scalar_fields = list(scalar_fields)
+
+        scalar_fields = list(scalar_fields)
 
         # Can use the check on the base name as named scalar_fields should match the pcd object names
         if RGB_NAMES.base in scalar_fields:
@@ -72,22 +79,29 @@ class LasHandler(AbstractIOHandler):
 
         # Set the base coordinates of the LAS point cloud as well as offsets and scales
         las = laspy.create()
-        las.header.offsets = offsets
-        las.header.scales = scales
-
-        las.X = (pcd.x - offsets[0]) / scales[0]
-        las.Y = (pcd.y - offsets[1]) / scales[1]
-        las.Z = (pcd.z - offsets[2]) / scales[2]
+        las.change_scaling(scales=scales, offsets=offsets)
+        las.xyz = pcd.xyz+offsets
 
         # RGB values
-        if (rgb_fields := _get_field_names(scalar_fields, RGB_NAMES)) and pcd.rgb:
+        if (rgb_fields := _get_rgb_or_normal_field_names(scalar_fields, RGB_NAMES)) and pcd.rgb:
             for field in rgb_fields:
                 index = RGB_NAMES.get_position(field)
                 setattr(las, RGB_NAMES.words[index], getattr(pcd.rgb, RGB_NAMES.char[index]))
 
-        # Intensities
+        # Intensities - LAS expects unsigned 16bit (Uint16)
         if (intensity_fields := set(scalar_fields).intersection(INTENSITY_NAMES.all)) and pcd.intensity:
-            las.intensity = pcd.intensity
+            # Case 1 - Leave data as is for Uint8 and Uint16
+            if pcd.intensity.dtype == np.uint8 or pcd.intensity.dtype == np.uint16:
+                las.intensity = pcd.intensity.copy()
+
+            # Case 2: Linear map values in range [0, 1] to [0, (2**16)-1]
+            # Case 3: Any other combination, normalize to [0, 1] then scale to Uint16 range
+            else:
+                logger.info(
+                    f"Values range [{pcd.intensity.min()}, {pcd.intensity.max()}] has been normalized and scaled to"
+                    f"Uint16 range required by LAS format: [0, {np.iinfo(np.uint16).max}]."
+                )
+                las.intensity = normalize_uint16(pcd.intensity)
 
         # Clear the previous sfs used
         for name in (XYZ_NAMES.char + tuple(rgb_fields) + tuple(intensity_fields)):
@@ -106,4 +120,3 @@ class LasHandler(AbstractIOHandler):
         las.write(path)
 
         logger.info(f"Successfully wrote to  LAS/LAZ file: {path}")
-

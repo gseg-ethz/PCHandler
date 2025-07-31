@@ -35,7 +35,8 @@ class E57Handler(AbstractIOHandler):
              retain_intensity: bool = True,
              pcd_index: Optional[int] = None,
              read_transform: bool = True,
-             ignore_missing_fields: bool = True,) -> PointCloudData | Generator[PointCloudData, None, None]:
+             ignore_missing_fields: bool = True,
+             **kwargs) -> PointCloudData | Generator[PointCloudData, None, None]:
 
         path = Path(path)
         kwargs = {
@@ -68,8 +69,6 @@ class E57Handler(AbstractIOHandler):
 
     @classmethod
     def save(cls, path: str | Path, /, pcd: PointCloudData, **config) -> None:
-        # TODO need to decide if to implement this / extend the pye57 library to support other fields and writing
-        #  or extend the PLY format header to contain metadata. E.g. transforms
         raise NotImplementedError
 
     @classmethod

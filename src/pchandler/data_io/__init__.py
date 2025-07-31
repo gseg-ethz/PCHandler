@@ -4,7 +4,7 @@ from .las import LasHandler as Las
 from .ply import PlyHandler as Ply
 from .pcd import PcdHandler as Pcd
 
-from .core import find_pcd_in_directory
+from .core import find_point_cloud_in_directory
 
 __all__ = [
     "Csv",
@@ -12,5 +12,5 @@ __all__ = [
     "Las",
     "Ply",
     # "Pcd",
-    "find_pcd_in_directory",
+    "find_point_cloud_in_directory",
 ]

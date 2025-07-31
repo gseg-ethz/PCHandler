@@ -114,7 +114,6 @@ COMMON_FIELD_NAMES: tuple[NameConstantsSingle|NameConstantsTriplet, ...] = \
 
 COMMON_FIELD_BASES = (field.base for field in COMMON_FIELD_NAMES)
 
-# TODO determine if str_to_lower should be in default config for validation functions/method
 DEFAULT_CONFIG = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True, str_to_lower=True)
 VALIDATE_RETURN_CONFIG = DEFAULT_CONFIG | {'validate_return': True}
 

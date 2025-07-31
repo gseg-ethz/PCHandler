@@ -1,3 +1,4 @@
+import copy
 import logging
 
 from abc import ABC, abstractmethod
@@ -8,7 +9,7 @@ from typing import Mapping, Callable, Optional, Any, Generator
 import numpy as np
 import numpy.typing as npt
 
-from pchandler.base_types import Array_Nx3_T
+from pchandler.base_types import Array_Nx3_T,DtypeDict
 from pchandler.constants import (
     INTENSITY_NAMES,
     RGB_NAMES,
@@ -33,12 +34,12 @@ from pchandler.geometry.scalar_fields import (
 logger = logging.getLogger(__name__.split(".")[0])
 
 BaseDataT =  Mapping[str, npt.NDArray[Any]] | npt.NDArray[Any]
-SUPPORTED_TYPES = (".ply", ".las", ".laz", ".txt", ".csv", ".ply", ".e57")
+SUPPORTED_TYPES = [".ply", ".las", ".laz", ".txt", ".csv", ".pts", ".e57"]
 
 
-def find_pcd_in_directory(directory_path: Path,
-                          pcd_file_types: list[str],
-                          include_subdirectories: bool = True) -> list[Path]:
+def find_point_cloud_in_directory(directory_path: Path,
+                                  pcd_file_types: list[str] = SUPPORTED_TYPES,
+                                  include_subdirectories: bool = True) -> list[Path]:
     """
     (Recursively) searches a directory for point cloud files with specific extensions.
 
@@ -56,13 +57,18 @@ def find_pcd_in_directory(directory_path: Path,
     list[Path]
         A list of `Path` objects representing the found PCD files.
     """
+    if not directory_path.is_dir():
+        if directory_path.is_file():
+            raise IOError(f"{directory_path} is file not a directory.")
+        raise IOError(f"{directory_path} is not a directory.")
+
     logger.debug(f"Starting search for {directory_path}")
     file_list = [file_path for file_path in directory_path.iterdir() if file_path.suffix.lower() in pcd_file_types]
 
     if include_subdirectories:
         for file_path in directory_path.iterdir():
             if file_path.is_dir():
-                file_list.extend(find_pcd_in_directory(file_path, pcd_file_types, include_subdirectories))
+                file_list.extend(find_point_cloud_in_directory(file_path, pcd_file_types, include_subdirectories))
     logger.info(f"Found {len(file_list)} PCD files in {directory_path}")
     return file_list
 
@@ -72,7 +78,7 @@ class AbstractIOHandler(ABC):
 
     @classmethod
     def find_pcds_in_directory(cls, directory_path: str|Path, include_subdirectories: bool = True) -> list[Path]:
-        return find_pcd_in_directory(Path(directory_path), cls.FORMATS, include_subdirectories)
+        return find_point_cloud_in_directory(Path(directory_path), cls.FORMATS, include_subdirectories)
 
     @classmethod
     @abstractmethod
@@ -106,6 +112,7 @@ class AbstractIOHandler(ABC):
 
         prefix = prefix if remove_prefix else ''
 
+
         header_fields = _clean_field_names(header_fields, _clean_header_name, prefix=prefix)
 
         if user_fields is None:
@@ -119,7 +126,7 @@ class AbstractIOHandler(ABC):
 
         # If user fields exist, convert to lower case and remove whitespace first
         else:
-            user_fields = _clean_field_names(user_fields, _clean_string)
+            user_fields = _clean_field_names(user_fields, _clean_header_name, prefix=prefix)
 
         # Case 3 - Empty list passed, keep only coordinates
         if len(user_fields) == 0:
@@ -133,6 +140,7 @@ class AbstractIOHandler(ABC):
         elif set(user_fields.values()).issubset(header_fields.keys()):
             return {k: header_fields[v] for k, v in user_fields.items()}
 
+        # Case 6 - Unknown keys
         else:
             raise ValueError(f"Unhandled combination of user_defined_fields and detected fields in file header. \n"
                              f"Potentially user entered scalar_fields that do not match the field/property names:\n"
@@ -155,20 +163,24 @@ class AbstractIOHandler(ABC):
         sf_keys = list(field_names.keys())
 
         # RGB Cases (e.g. 'rgb' or 'r', 'g', 'b')
-        if rgb_fields := _get_field_names(sf_keys, RGB_NAMES):
+        if rgb_fields := _get_rgb_or_normal_field_names(sf_keys, RGB_NAMES):
             pcd.rgb = cls._extract_scalar_field_triplet(data, num_points, rgb_fields, RGBFields, field_names)
 
         # Normals Cases (e.g. 'normals' or 'nx', 'ny', 'nz')
-        if normal_fields := _get_field_names(sf_keys, NORMAL_NAMES):
+        if normal_fields := _get_rgb_or_normal_field_names(sf_keys, NORMAL_NAMES):
             pcd.normals = cls._extract_scalar_field_triplet(data, num_points, normal_fields, NormalFields, field_names)
 
         # Intensity
-        if set(sf_keys).intersection(INTENSITY_NAMES.all):
+        if intensity_fields := set(sf_keys).intersection(INTENSITY_NAMES.all):
             pcd.intensity = cls._extract_scalar_field(data, INTENSITY_NAMES.base, field_names)
 
         # Reflectance
-        if set(sf_keys).intersection(REFLECTANCE_NAMES.all):
+        if reflectance_fields := set(sf_keys).intersection(REFLECTANCE_NAMES.all):
             pcd.reflectance = cls._extract_scalar_field(data, REFLECTANCE_NAMES.base, field_names)
+
+        sf_keys = set(sf_keys).difference(
+            rgb_fields + normal_fields + list(intensity_fields) + list(reflectance_fields)
+        )
 
         # All others
         for field in sf_keys:
@@ -178,27 +190,36 @@ class AbstractIOHandler(ABC):
     def _extract_scalar_field_triplet(data: BaseDataT,
                                       n: int, field_names: list[str],
                                       sf_class: type[SF_T],
-                                      field_name_map: dict[str, str]) -> SF_T:
+                                      field_name_map: dict[str, str]) -> SF_T|None:
         array = np.empty((n, 3), dtype=data[field_name_map[field_names[0]]].dtype)
 
         for i, name in enumerate(field_names):
             array[:, i] = data[field_name_map[name]]
 
+        if np.all(array == 0):
+            logger.info(f"All values in the '{field_names}' field are zero. Skipping.")
+            return None
+
         return sf_class(array)
 
     @staticmethod
-    def _extract_scalar_field(data: BaseDataT, name: str, field_name_map: dict[str, str]):
+    def _extract_scalar_field(data: BaseDataT, name: str, field_name_map: dict[str, str]) -> ScalarField|None:
         arr = data[field_name_map[name]]
+
+        if np.all(arr == 0):
+            logger.info(f"All values in the '{field_name_map[name]}' field are zero. Skipping.")
+            return None
+
         return ScalarField(arr, name=name, origin_dtype=DtypeState.generate(arr))
 
     @classmethod
     def _generate_struct_dtype(cls,
                                pcd: PointCloudData,
                                scalar_fields: list[str],
-                               revert_sf_types: bool) -> npt.DTypeLike:
+                               revert_sf_types: bool) -> DtypeDict:
 
         # Leverage dict to avoid any duplicates of using 'rgb' or 'r', 'g', 'b' for example
-        dtype_dict: dict = {'names': [], 'formats': []}
+        dtype_dict = DtypeDict(names=[], formats=[])
 
         if pcd.numerical_optimization_shift is None:
             xyz_dtype = np.float64
@@ -242,9 +263,6 @@ class AbstractIOHandler(ABC):
                 dtype_dict['names'].append(field)
                 dtype_dict['formats'].append(_get_sf_dtype(pcd.scalar_fields[field], revert_sf_types))
 
-            else:
-                logger.warning(f"Could not find '{field}' as a scalar field in the point cloud")
-
         return dtype_dict
 
     @classmethod
@@ -263,22 +281,24 @@ class AbstractIOHandler(ABC):
 
         dtype_dict = cls._generate_struct_dtype(pcd, scalar_fields, revert_sf_types)
 
+        sf_names = copy.deepcopy(dtype_dict['names'])
+        for i, name in enumerate(dtype_dict['names']):
+            if (name not in RGB_NAMES.all) and (name not in NORMAL_NAMES.all) and (name not in XYZ_NAMES.all):
+                dtype_dict['names'][i] = prefix + name
+
         array = np.empty((len(pcd),), dtype=np.dtype(dtype_dict))
 
-        shift = pcd.numerical_optimization_shift.value
-
-        scalar_fields = dtype_dict['names']
         for i, coord in enumerate(XYZ_NAMES.char):
 
             if pcd.numerical_optimization_shift is None:
                 array[coord] = getattr(pcd, coord)
             else:
-                array[coord] = getattr(pcd, coord) + shift[i]
+                array[coord] = getattr(pcd, coord) + pcd.numerical_optimization_shift.value[i]
 
-            scalar_fields.remove(coord)
+            sf_names.remove(coord)
 
-        for name in scalar_fields:
-            if name not in (RGB_NAMES.all, NORMAL_NAMES.all):
+        for name in sf_names:
+            if (name not in RGB_NAMES.all) and (name not in NORMAL_NAMES.all):
                 array[prefix + name] = pcd.scalar_fields[name]
 
             elif name in RGB_NAMES.float:
@@ -289,8 +309,8 @@ class AbstractIOHandler(ABC):
 
         return array
 
-def _get_field_names(input_names: list[str], target_field: NameConstantsSingle|NameConstantsTriplet ) -> list[str]:
-    """ Get matching input field names from eligible names of target field.
+def _get_rgb_or_normal_field_names(input_names: list[str], target_field: NameConstantsSingle | NameConstantsTriplet) -> list[str]:
+    """ Get matching rgb or normal field names from eligible names of target field.
 
     Ensures the output list of fields are still in order and are a subset of the appropriate target field
 
@@ -301,23 +321,25 @@ def _get_field_names(input_names: list[str], target_field: NameConstantsSingle|N
 
     Returns
     -------
-
+    list[str]
     """
     if target_field not in (RGB_NAMES, NORMAL_NAMES):
-        raise ValueError(f"Field '{target_field}' is not a valid target field constant set")
+        raise ValueError(f"Field '{target_field}' is not a valid target field constant set.")
 
     valid_names_set = tuple([set(names) for names in target_field.triplets])
     identified_names = set(input_names) & set(target_field.all)
 
-    if not (identified_names in valid_names_set):
-        logger.warning(f"No valid {target_field} found in [{target_field.triplets}]. Only :{identified_names}")
+    if identified_names in valid_names_set:
+        identified_names = list(target_field.triplets[valid_names_set.index(identified_names)])
+
+    elif len(identified_names := identified_names.intersection(target_field.all)) >= 1:
+        logger.info(f"Only a full list of RGB or Normal triplet fields supported. "
+                    f"A partial or mixed list was passed: {identified_names}.")
         return list()
 
     else:
-        # Get the ordered names again
-        identified_names = list(target_field.triplets[valid_names_set.index(identified_names)])
-        if isinstance(identified_names, str):
-            identified_names = [identified_names]
+        logger.info(f"No valid {target_field} found in [{target_field.triplets}]. Only :{identified_names}")
+        return list()
 
     # Removes the fields from the current list
     for name in identified_names:
@@ -327,13 +349,8 @@ def _get_field_names(input_names: list[str], target_field: NameConstantsSingle|N
 
 def _get_sf_dtype(scalar_field: ScalarField|ScalarFieldTriplet, revert_sf_types: bool) -> npt.DTypeLike:
     if revert_sf_types:
-        return scalar_field.dtype
-
-    if scalar_field.origin_dtype is not None:
         return scalar_field.origin_dtype.dtype
-    else:
-        logger.warning(f'Scalar field "{scalar_field.name}" has no dtype. Using the sf dtype: {scalar_field.dtype}')
-        return scalar_field.dtype
+    return scalar_field.dtype
 
 def _clean_field_names(column_names: list[str], func: Callable, **kwargs) -> dict[str, str]:
     cleaned_names = dict()
@@ -341,8 +358,13 @@ def _clean_field_names(column_names: list[str], func: Callable, **kwargs) -> dic
         cleaned_names[func(name, **kwargs)] = name
 
     # Remove cartesian coordinates from the field names. These are always assumed to be the first three columns
-    for name in XYZ_NAMES.char:
-        del cleaned_names[name]
+    if tuple([k for k in cleaned_names.keys()]) != XYZ_NAMES.char:
+        # Keep cleaned_names if 'x', 'y', 'z' are the only fields
+        for name in XYZ_NAMES.char:
+            if name in cleaned_names:
+                del cleaned_names[name]
+    else:
+        logger.info("Only X, Y, Z fields in the file.")
 
     return cleaned_names
 
@@ -351,8 +373,18 @@ def _clean_string(name: str) -> str:
 
 def _clean_header_name(original_name: str, prefix: str) -> str:
     cleaned_name = _clean_string(original_name)
+    prefix = prefix.lower()
 
     if cleaned_name != prefix:
-        cleaned_name = cleaned_name.removeprefix(prefix).strip()
+        updated_name = cleaned_name.removeprefix(prefix).strip()
 
-    return cleaned_name
+        if updated_name == cleaned_name:
+            # No further change
+            return updated_name
+
+        # Return the recursive result
+        return _clean_header_name(updated_name, prefix)
+
+    # Return if it matches the prefix to be stripped
+    else:
+        return cleaned_name
