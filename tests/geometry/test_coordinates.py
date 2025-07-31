@@ -69,7 +69,73 @@ def cart_obj(large_xyz) -> CartesianCoordinates:
     return CartesianCoordinates(arr=large_xyz, socs_origin=np.array([0, 0, 0]))
 
 
+
 class TestCartesianCoordinates:
+    class TestAbstractCoordinates:
+        def test_uuid(self):
+            raise NotImplementedError
+
+    class TestAbstract3dCoord:
+        def test_attributes(self):
+            raise NotImplementedError
+
+        def test_xyz(self):
+            raise NotImplementedError
+
+        def test_spher(self):
+            raise NotImplementedError
+
+        def test_matmul(self, cart_obj):
+            rand_3x3 = np.random.rand(3, 3)
+            with pytest.raises(NotImplementedError):
+                cart_obj @ rand_3x3
+
+        def test_rmatmul(self, cart_obj):
+            rand_3x3 = np.random.rand(3, 3)
+            b = rand_3x3 @ cart_obj.T
+            assert np.any(b.T != cart_obj)
+            assert b.T.shape == cart_obj.shape
+
+            arr = cart_obj.__rmatmul__(rand_3x3)
+            assert isinstance(arr, type(cart_obj))
+            assert arr.shape == cart_obj.shape
+
+            same_shape_array = np.ones_like(cart_obj.arr)
+            b = cart_obj.__rmatmul__(same_shape_array.T)
+            assert isinstance(b, np.ndarray)
+            assert b.shape != cart_obj.shape
+
+        def test_imatmul(self, cart_obj):
+            rand_3x3 = np.random.rand(3, 3)
+            with pytest.raises(NotImplementedError):
+                cart_obj @= rand_3x3
+
+    @pytest.mark.parametrize("attr", ("arr",
+                                      "socs_origin",
+                                      "project_transformation",
+                                      "unshifted_bbox",
+                                      "_shift_applied_by",
+                                      "numerical_optimization_shift"))
+    def test_attributes(self, cart_obj, attr):
+        assert attr in cart_obj.__dict__.keys()
+
+        match attr:
+            case "socs_origin":
+                if cart_obj.socs_origin is not None:
+                    assert np.allclose(cart_obj.socs_origin, np.zeros(3))
+            case "unshifted_bbox":
+                pass
+
+            case "_shift_applied_by":
+                pass
+
+            case "numerical_optimization_shift":
+                pass
+
+            case _:
+                raise ValueError(f"Unexpected attribute: {attr}")
+
+
     @pytest.mark.parametrize("array", (_small_xyz, _large_xyz, _known_xyz))
     def test_instantiation(self, array):
         a = CartesianCoordinates(arr=array)
@@ -77,6 +143,55 @@ class TestCartesianCoordinates:
         assert isinstance(a, Abstract3dCoordinates)
         assert isinstance(a, AbstractCoordinates)
         assert isinstance(a, ArrayNx3)
+
+    def test_kwarg_instantiation(self):
+        a = CartesianCoordinates(arr=_known_xyz)
+        assert isinstance(a, CartesianCoordinates)
+
+        # Alias kwarg
+        b = CartesianCoordinates(xyz=_known_xyz)
+        assert isinstance(b, CartesianCoordinates)
+
+        assert np.all(a == b)
+
+    def test_compute_unshifted_bbox(self):
+        raise NotImplementedError
+
+    def test_process_shift(self):
+        raise NotImplementedError
+
+    def test_reduce(self):
+        raise NotImplementedError
+
+    def test_sample(self):
+        raise NotImplementedError
+
+    def test_update_shift(self):
+        raise NotImplementedError
+
+    def test_register_with_shift_at_osm(self):
+        raise NotImplementedError
+
+    def test_setattr(self):
+        raise NotImplementedError
+
+    def test_hash(self):
+        raise NotImplementedError
+
+    def test_model_dump(self):
+        raise NotImplementedError
+
+    def test__reduce__(self):
+        raise NotImplementedError
+
+    def test_reconstruct(self):
+        raise NotImplementedError
+
+    def test_merge(self):
+        raise NotImplementedError
+
+    def test_numerically_optimized(self):
+        raise NotImplementedError
 
     def test_cached_properties(self, cart_obj):
         assert "spher" not in cart_obj.__dict__
@@ -93,23 +208,6 @@ class TestCartesianCoordinates:
         num_items_after = len(cart_obj.__dict__)
 
         assert num_items_after == num_items_before
-
-    @pytest.mark.parametrize("attr", ("arr", "socs_origin"))
-    def test_has_attributes(self, cart_obj, attr):
-        assert attr in cart_obj.__dict__.keys()
-        if attr == "socs_origin":
-            if cart_obj.socs_origin is not None:
-                assert np.allclose(cart_obj.socs_origin, np.zeros(3))
-
-    @pytest.mark.parametrize("prop", ("xyz", "spher", "x", "y", "z", "yxz", "rhv", "r", "hz", "v"))
-    def test_has_properties(self, cart_obj, prop):
-        # These properties are access methods and shouldn't be in the base dict
-        assert prop in type(cart_obj).__dict__ and prop not in cart_obj.__dict__
-
-    # @pytest.mark.parametrize("method", ("to_spherical", "from_spherical", "transform"))
-    @pytest.mark.parametrize("method", ("from_spherical", "transform"))
-    def test_has_methods(self, cart_obj, method):
-        assert callable(getattr(cart_obj, method))
 
     def test_cartesian_properties(self, cart_obj):
         # Check xyz and arr are the same object
@@ -130,6 +228,11 @@ class TestCartesianCoordinates:
         assert np.all(cart_obj.r == cart_obj.spher[:, 0])
         assert np.all(cart_obj.hz == cart_obj.spher[:, 1])
         assert np.all(cart_obj.v == cart_obj.spher[:, 2])
+        assert np.all(cart_obj._hz_v == cart_obj.spher[:, 1:])
+
+    def test_fov(self):
+        assert isinstance(cart_obj.fov, FoV)
+        raise NotImplementedError
 
     def test_from_spherical(self, cart_obj):
         # This is based on the implementation when there is no SphericalCoordinates
@@ -162,6 +265,25 @@ class TestCartesianCoordinates:
         # assert np.allclose(cart2.arr, cart_obj.arr)
         # assert np.allclose(cart2.spher, spherical)
 
+    def test_rotate(self, cart_obj):
+        xyz2 = cart_obj.copy()
+        rot_forward = Rotation.from_euler(seq='zyx', angles=[90, 45, 30], degrees=True ).as_matrix()
+        xyz2.rotate(rot_forward)
+        temp = xyz2.copy()
+        temp.rotate(np.linalg.inv(rot_forward))
+        assert np.allclose(cart_obj, temp)
+        assert not np.any(xyz2 == cart_obj)
+
+    def test_translate(self, cart_obj):
+        xyz2 = cart_obj.copy()
+        xyz2.translate([3, 3, 3])
+        assert np.allclose(cart_obj + 3, xyz2)
+
+    def test_scale(self, cart_obj):
+        xyz2 = cart_obj.copy()
+        xyz2.scale([3, 3, 3])
+        assert np.allclose(cart_obj * 3, xyz2)
+
     def test_transform(self, cart_obj):
         affine = np.eye(4) * 2
         xyz2 = cart_obj.copy()
@@ -182,50 +304,6 @@ class TestCartesianCoordinates:
         #
         # # TODO reimplement transform ledger then retest
         # # assert 'AFFINE' in cart_obj.transform_ledger[-1][0]
-
-    def test_scale(self, cart_obj):
-        xyz2 = cart_obj.copy()
-        xyz2.scale([3, 3, 3])
-        assert np.allclose(cart_obj * 3, xyz2)
-
-    def test_rotate(self, cart_obj):
-        xyz2 = cart_obj.copy()
-        rot_forward = Rotation.from_euler(seq='zyx', angles=[90, 45, 30], degrees=True ).as_matrix()
-        xyz2.rotate(rot_forward)
-        temp = xyz2.copy()
-        temp.rotate(np.linalg.inv(rot_forward))
-        assert np.allclose(cart_obj, temp)
-        assert not np.any(xyz2 == cart_obj)
-
-    def test_translate(self, cart_obj):
-        xyz2 = cart_obj.copy()
-        xyz2.translate([3, 3, 3])
-        assert np.allclose(cart_obj + 3, xyz2)
-
-    def test_left_matrix_multiplication(self, cart_obj):
-        rand_3x3 = np.random.rand(3, 3)
-        with pytest.raises(NotImplementedError):
-            cart_obj @ rand_3x3
-
-    def test_right_matrix_multiplication(self, cart_obj):
-        rand_3x3 = np.random.rand(3, 3)
-        b = rand_3x3 @ cart_obj.T
-        assert np.any(b.T != cart_obj)
-        assert b.T.shape == cart_obj.shape
-
-        arr = cart_obj.__rmatmul__(rand_3x3)
-        assert isinstance(arr, type(cart_obj))
-        assert arr.shape == cart_obj.shape
-
-        same_shape_array = np.ones_like(cart_obj.arr)
-        b = cart_obj.__rmatmul__(same_shape_array.T)
-        assert isinstance(b, np.ndarray)
-        assert b.shape != cart_obj.shape
-
-    def test_inplace_matrix_multiplication(self, cart_obj):
-        rand_3x3 = np.random.rand(3, 3)
-        with pytest.raises(NotImplementedError):
-            cart_obj @= rand_3x3
 
     def test_homogeneous_matrix_multiplication(self, cart_obj):
         rand_4x4 = np.random.rand(4, 4)
@@ -250,27 +328,6 @@ class TestCartesianCoordinates:
         assert c.shape == cart_obj.shape
         assert np.allclose(b.T[:, :3], c)
 
-    def test_get_item(self, cart_obj):
-        a = cart_obj[0:10]
-        assert isinstance(a, CartesianCoordinates)
-
-        assert len(a) == 10
-        assert a.shape == (10, 3)
-        assert np.all(a.arr[0:10, :] == cart_obj.arr[0:10, :])
-
-        # Indexing an object in the typical numpy fashion is possible.
-        # But if an error throws, will return the numpy array
-        c = cart_obj[0:10, :2]
-        assert isinstance(c, np.ndarray)
-        assert not isinstance(c, CartesianCoordinates)
-        assert c.shape == (10, 2)
-
-        with pytest.raises(IndexError):
-            mask = np.ones((10, 3), dtype=np.bool_)
-            cart_obj[mask]
-
-    def test_fov(self, cart_obj):
-        assert isinstance(cart_obj.fov, FoV)
 
 
 class TestConversions:

@@ -41,6 +41,7 @@ class CartesianKw(Abstract3dKw, total=False):
     unshifted_bbox: NotRequired[Optional[MinMaxPoints]]
     _shift_applied_by: NotRequired[Optional[OptimizedShift]]
 
+
 class CartesianKwFull(CartesianKw, total=False):
     arr: NotRequired[Array_Nx3_T]
 
@@ -129,7 +130,7 @@ class CartesianCoordinates(Abstract3dCoordinates):
     )
 
     @overload
-    def __init__(self, xyz: Array_Nx3_T|Self, **kwargs: Unpack[CartesianKw]): ...
+    def __init__(self, *, xyz: Array_Nx3_T|Self, **kwargs: Unpack[CartesianKw]): ...
 
     @overload
     def __init__(self, *, arr: Array_Nx3_T|Self, **kwargs: Unpack[CartesianKw]): ...
@@ -298,6 +299,11 @@ class CartesianCoordinates(Abstract3dCoordinates):
             **kwargs
         )
 
+    @property
+    def numerically_optimized(self) -> bool:
+        # TODO close to zero
+        return not (self.numerical_optimization_shift is None or self.numerical_optimization_shift.value)
+
     # @model_validator(mode="wrap")
     # @classmethod
     # def numeric_optimization(
@@ -394,11 +400,6 @@ class CartesianCoordinates(Abstract3dCoordinates):
     def fov(self) -> FoV:
         return FoV.from_angles(self.hz, self.v)
 
-    @property
-    def numerically_optimized(self) -> bool:
-        # TODO close to zero
-        return not (self.numerical_optimization_shift is None or self.numerical_optimization_shift.value)
-
     # def to_spherical(self) -> SphericalCoordinates:
     #     spherical = SphericalCoordinates(**self.model_dump(exclude={"arr"}) | {"arr": self.spher})
     #     delattr(self, "spher")
@@ -483,7 +484,7 @@ class CartesianCoordinates(Abstract3dCoordinates):
 #         delattr(cartesian, "spher")
 #         return spherical
 #
-#     # DISCUSS - Add methods to apply tilt and yaw rotations easily (e.g. for spherical image projection shifts?
+#     # TODO - Add methods to apply tilt and yaw rotations easily (e.g. for spherical image projection shifts?
 #     # def rotate(self, yaw=None, pitch=None):
 #     #     if yaw:
 #     #         self.arr[:, 1] = coerce_azimuths(self.hz + yaw)
