@@ -241,7 +241,18 @@ class TestCartesianCoordinates:
         assert not np.all(np.array(xyz.unshifted_bbox) == np.array(old))
 
     def test_process_shift(self):
-        raise NotImplementedError
+        # Case 1 - prev_shift is None and NOS is None
+        #   Basic init, register to NOS
+
+        # Case 2 - prev_shift is None and NOS exists
+        #   Revert to prev_shift, convert to float64, unregister prev_shift
+
+        # Case 3 - prev_shift exists and NOS is None
+        #   register to NOS
+
+        # Case 4 - prev_shift exists and NOS exists
+        #   If same, register to NOS. Else, apply difference, unregister prev, register NOS
+
 
     def test_reduce(self):
         xyz = CartesianCoordinates(arr=np.array([[0, 0, 0], [1, 1, 1], [2, 2, 2], [3, 3, 3], [4, 4, 4], [5, 5, 5]]))

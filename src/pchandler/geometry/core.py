@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from typing import (Any, Optional, Self, MutableMapping, Callable,
-                    overload, Literal, Unpack, Required, NotRequired)
+from typing import Optional, Self, Callable, overload, Literal, Unpack
 import logging
 
 import numpy as np
 import numpy.typing as npt
 import open3d as o3d
-from pydantic import Field, field_validator, model_validator, AliasChoices
+from pydantic import Field, field_validator, model_validator
 
 from pchandler.base_types import Array_Nx3_T, IndexLike, VectorT, Array_Nx3_Float_T, Array_Nx3_Uint8_T, ArrayT
 from pchandler.geometry.coordinates import CartesianCoordinates, CartesianKw
@@ -141,30 +140,6 @@ class PointCloudData(CartesianCoordinates):
 
         obj.scalar_fields.parent = obj
         return obj
-
-    def copy(self: Self,
-             array: Optional[npt.NDArray[np.floating] | Self] = None,
-             *,
-             deep: bool = True,
-             update: Optional[MutableMapping[str, Any]] = None,
-             link_to_same_NOS: bool = True,
-             **kwargs: dict[str, Any]) -> Self:
-        """
-        Produce a deep or shallow copy of the model. Updates the model also if parameter is parsed.
-        """
-
-        update = {} if update is None else update
-
-        if array is not None and not isinstance(array, CartesianCoordinates | np.ndarray):
-            raise TypeError(f"Invalid type of array passed: {type(array)}. Should be CartesianCoordinates or np.ndarray")
-
-        if link_to_same_NOS and "numerical_optimization_shift" not in update:
-            update["numerical_optimization_shift"] = self.numerical_optimization_shift
-        update["_shift_applied_by"] = self._shift_applied_by # TODO: Rework structure!
-        update["id"] = None
-
-        return super().copy(array=array, deep=deep, update=update, **kwargs)
-
 
     def sample(self, mask: npt.NDArray[np.bool_|np.integer]) -> PointCloudData:
         mask = self.create_mask(mask)

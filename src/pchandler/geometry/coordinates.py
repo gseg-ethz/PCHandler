@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from functools import cached_property
-from typing import Union, Optional, Self, Any, Type, TypeVar, Unpack, TypedDict, NotRequired, overload
+from typing import Union, Optional, Self, Any, Type, TypeVar, Unpack, TypedDict, NotRequired, overload, MutableMapping
 import uuid
 
 import numpy as np
@@ -147,38 +147,39 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
     def _process_shift(self):
         """
-        4 cases:
-            prev_shift is None and NOS is None:
-                Do nothing
-            prev_shift is None and NOS not None:
-                Do basic xyz, register to NOS
-            prev_shift is not None and NOS is None:
-                Revert prev_shift, convert to float64, unregister from prev_shift
-            prev_shift is not None and NOS is not None:
-                Check if they are the same
-                    register to NOS
-                else:
-                    Apply difference in shift, unregister from prev_shift, register to NOS
+        Handles the different cases of self.numerical_optimization_shift and self._shift_applied_by that are passed
+
+        Case 1 - prev_shift is None and NOS is None
+          Basic init, register to NOS
+
+        Case 2 - prev_shift is None and NOS exists
+          Revert to prev_shift, convert to float64, unregister prev_shift
+
+        Case 3 - prev_shift exists and NOS is None
+          register to NOS
+
+        Case 4 - prev_shift exists and NOS exists
+          If same, register to NOS. Else, apply difference, unregister prev, register NOS
         """
         prev_shift = self._shift_applied_by
         if self.numerical_optimization_shift is not None:
             self._register_with_shift_at_osm() # This could possibly set self.nos to None
 
-        # Case 1 - User set None for numerical shift and no prev_shift passed from __init__ (e.g. __reduce__)
+        # Case 1 - Typical initialisation
         if prev_shift is None and self.numerical_optimization_shift is None:
             return
 
-        # Case 2 - Numerical_shift initialised from either default or defined value
+        # Case 2 - Typical initialization with a NOS kwarg
         elif prev_shift is None and self.numerical_optimization_shift is not None:
             self.update_shift(-self.numerical_optimization_shift.value)
 
-        # Case 3 - PCD previously existed with shift, and numerical_shift set to None in __init__, recreate
+        # Case 3 - Case where a point cloud has been pickled and being reconstructed
         elif prev_shift is not None and self.numerical_optimization_shift is None:
             self.update_shift(prev_shift.value)
             prev_shift.unregister(self)
 
-        # Case 4 - Previous shift passed, but also a numerical_shift has been initialised.
-        # If the same, leave as is, else, update with the difference
+        # Case 4 - Case when pcd has been pickled but another optimization shift is provided,
+        # or has changed since it was pickled
         elif prev_shift is not None and self.numerical_optimization_shift is not None:
             if prev_shift is not self.numerical_optimization_shift:
                 delta_shift = prev_shift.value - self.numerical_optimization_shift.value
@@ -255,6 +256,29 @@ class CartesianCoordinates(Abstract3dCoordinates):
         obj._process_shift()
 
         return obj
+
+    def copy(self: Self,
+             array: Optional[npt.NDArray[np.floating] | Self] = None,
+             *,
+             deep: bool = True,
+             update: Optional[MutableMapping[str, Any]] = None,
+             link_to_same_NOS: bool = True,
+             **kwargs: dict[str, Any]) -> Self:
+        """
+        Produce a deep or shallow copy of the model. Updates the model also if parameter is parsed.
+        """
+
+        update = {} if update is None else update
+
+        if array is not None and not isinstance(array, CartesianCoordinates | np.ndarray):
+            raise TypeError(f"Invalid type of array passed: {type(array)}. Should be CartesianCoordinates or np.ndarray")
+
+        if link_to_same_NOS and "numerical_optimization_shift" not in update:
+            update["numerical_optimization_shift"] = self.numerical_optimization_shift
+        update["_shift_applied_by"] = self._shift_applied_by # TODO: Rework structure!
+        update["id"] = None
+
+        return super().copy(array=array, deep=deep, update=update, **kwargs)
 
     # TODO this supports merging of tiled data. Not tested over registration / transformation etc.
     @classmethod
