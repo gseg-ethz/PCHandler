@@ -87,6 +87,31 @@ class TestOptimizedShift:
         assert np.all(opt_shift.value == [1, 2, 3])
         assert opt_shift in OptimizedShiftManager().all_shifts
 
+    def test_new_value_assignment(self, opt_shift):
+        xyz = np.random.rand(100, 3)
+        pcd = PointCloudData(xyz, numerical_optimization_shift=opt_shift)
+        initial_value = opt_shift.value
+        initial_uuid = opt_shift.uuid
+        assert np.allclose(pcd.xyz, xyz - initial_value)
+
+        new_value = np.array([10,20,30])
+        opt_shift.value = new_value
+        assert opt_shift.uuid != initial_uuid
+        assert pcd._shift_applied_by.uuid == opt_shift.uuid
+        assert np.allclose(pcd.xyz, xyz - new_value)
+
+    def test_invalid_value_assignment(self, opt_shift):
+        xyz = np.random.rand(100, 3)
+        pcd = PointCloudData(xyz, numerical_optimization_shift=opt_shift)
+        initial_value = opt_shift.value
+        initial_uuid = opt_shift.uuid
+        assert np.allclose(pcd.xyz, xyz - initial_value)
+
+        new_value = np.array([100_000,200_000,300_000])
+        with pytest.raises(OptimizedShiftManager.ShiftNotFeasibleError):
+            opt_shift.value = new_value
+
+
     def test___contains__(self, opt_shift):
         pcd = PointCloudData(np.random.rand(100, 3), numerical_optimization_shift=opt_shift)
         assert len(opt_shift._member_coordinate_sets) == 1
@@ -287,24 +312,31 @@ class TestOptimizedShift:
         func, state = shift.__reduce__()
 
         old_id = id(shift)
-        original_value = shift.value.copy()
+        old_uuid = shift.uuid
 
-        shift._shift += 1000
-        new_value = shift.value.copy()
+        old_value = shift.value
+        shift.value = old_value + np.array([1000, 1000, 1000])
 
-        # Case 3 - Shift has moved, create new
-        # TODO this test needs to be fixed
-        with pytest.raises(OptimizedShiftManager.ShiftUUIDAlreadyTaken):
-            func(*state)
+        reconstructed_shift = func(*state)
 
-        # Case 4 - Moved but old one doesn't exist
-        del shift
-        gc.collect()
+        assert id(reconstructed_shift) != old_id
+        assert reconstructed_shift.uuid == old_uuid
+        assert reconstructed_shift.uuid != shift.uuid
+        assert np.allclose(reconstructed_shift.value, old_value)
 
-        reconstructed = func(*state)
-        assert id(reconstructed) != old_id
-        assert np.all(reconstructed.value == original_value)
-        assert np.all(reconstructed.value != new_value)
+    def test_reconstruct_pcd_after_shift_moved(self, opt_shift):
+        xyz = np.random.rand(100, 3)
+        pcd = PointCloudData(xyz, numerical_optimization_shift=opt_shift)
+        initial_value = opt_shift.value
+        initial_uuid = opt_shift.uuid
+
+        pcd_pickled = pickle.dumps(pcd)
+        opt_shift.value = np.array([0,0,0])
+
+        pcd_unpickled = pickle.loads(pcd_pickled)
+        assert np.allclose(xyz, pcd.xyz - opt_shift.value, atol=1e-5, rtol=1e-5)
+        assert np.allclose(pcd_unpickled, xyz - initial_value, atol=1e-5, rtol=1e-5)
+        assert pcd_unpickled._shift_applied_by.uuid == initial_uuid
 
 
 class TestMinMaxPoints:

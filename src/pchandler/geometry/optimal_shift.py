@@ -165,12 +165,34 @@ class OptimizedShift:
         return f"OptimizedShift(uuid={self.uuid}, value={self.value}, num_registered_pcds={len(self)})"
 
     @property
-    def uuid(self):
+    def uuid(self) -> uuid.UUID:
         return self._uuid
 
     @property
-    def value(self) -> NDArray[np.float64]:
+    def value(self) -> Vector_3_T:
         return self._shift
+
+    @value.setter
+    @validate_variables
+    def value(self, new_shift: Vector_3_T) -> None:
+        # check if new shift can be used for registered points
+        all_bboxes = [member.unshifted_bbox for member in self._member_coordinate_sets]
+        if all_bboxes:
+            combined = MinMaxPoints.from_minmax_points(all_bboxes)
+
+            if OptimizedShiftManager().is_shift_needed(np.vstack((combined.minimum, combined.maximum)) - new_shift):
+                raise OptimizedShiftManager.ShiftNotFeasibleError(
+                    f"The provided shift {new_shift} is not feasible for the coordinate sets registered to this shift."
+                )
+
+        self._compute_and_apply_shift_delta(new_shift)
+        new_uuid = uuid.uuid4()
+        OptimizedShiftManager().update_uuid(self._uuid, new_uuid)
+        self._uuid = new_uuid
+        self._shift = new_shift
+
+        logger.debug(f"Updated shift to {new_shift}. New uuid: {new_uuid}.")
+
 
     @property
     def __array_interface__(self):
