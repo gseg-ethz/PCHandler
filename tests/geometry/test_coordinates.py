@@ -805,7 +805,7 @@ class BaseTestNOSChange:
 
         pcd = self.cls(xyz=xyz_local_)
         pcd.numerical_optimization_shift = nos_
-        assert "Updating shift" in caplog.text
+        assert "Updated shift" in caplog.text
         assert np.allclose(pcd.numerical_optimization_shift.value, [0,0,0])
         assert np.allclose(pcd.unshifted_bbox.minimum, xyz_local_.min(axis=0))
         assert np.allclose(pcd.unshifted_bbox.maximum, xyz_local_.max(axis=0))

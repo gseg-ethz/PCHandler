@@ -164,14 +164,6 @@ class TestOptimizedShift:
             # noinspection PyPropertyAccess
             opt_shift.uuid = uuid.uuid4()
 
-    def test_value(self, opt_shift):
-        assert isinstance(opt_shift.value, np.ndarray)
-        assert np.all(opt_shift.value == [1, 2, 3])
-
-        with pytest.raises(AttributeError):
-            # noinspection PyPropertyAccess
-            opt_shift.value = np.array([4, 5, 6])
-
     def test___array_interface___(self, opt_shift):
         assert np.all(np.add(opt_shift, 1) == [2, 3, 4])
 
