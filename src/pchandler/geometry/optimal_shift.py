@@ -80,22 +80,36 @@ class OptimizedShiftManager(metaclass=SingletonMeta):
             np.subtract(np.max(values, axis=0), np.min(values, axis=0)) < self.maximum_number_representable
         ))
 
+    def update_uuid(self, old_uuid: uuid.UUID, new_uuid: uuid.UUID) -> None:
+        if old_uuid not in self._by_uuid:
+            raise OptimizedShiftManager.ShiftUUIDNotFound(
+                f"Shift with uuid: {old_uuid} not found."
+            )
+        if new_uuid in self._by_uuid:
+            raise OptimizedShiftManager.ShiftUUIDAlreadyTaken(
+                f"Shift with uuid: {new_uuid} already exists."
+            )
+        self._by_uuid[new_uuid] = self._by_uuid.pop(old_uuid)
+
+
     def register_shift(self, shift: OptimizedShift) -> None:
         if shift.uuid in self._by_uuid and id(shift) is not id(self._by_uuid[shift.uuid]):
             raise OptimizedShiftManager.ShiftUUIDAlreadyTaken()
 
         self._by_uuid[shift.uuid] = shift
 
-    def register_coordinates_to_shift(self,
-                                      coordinates: CartesianCoordinates,
-                                      shift: OptimizedShift | uuid.UUID) -> OptimizedShift:
-        if isinstance(shift, uuid.UUID):
+    def register_coordinates_to_shift(
+            self,
+            coordinates: CartesianCoordinates,
+            shift: OptimizedShift | uuid.UUID
+    ) -> OptimizedShift:
+        if isinstance(shift, OptimizedShift):
+            current_shift = shift
+        else:
             try:
                 current_shift: OptimizedShift = self._by_uuid[shift]
             except KeyError:
                 raise OptimizedShiftManager.ShiftUUIDNotFound()
-        else:
-            current_shift = shift
 
         while True:
             try:
@@ -213,11 +227,14 @@ class OptimizedShift:
 
     def _expand_and_add(self, coordinate_set: CartesianCoordinates) -> None:
         """
-        Compute a new optimal shift to cover existing + this pts,
-        apply it and then add the new pcd.
+        Compute a new optimal shift to cover existing coordinate sets and the new pts,
+        apply it, generate new uuid, and then add the new pcd.
         """
         new_shift = self._compute_new_shift(coordinate_set.unshifted_bbox)
-        logger.debug(f"Updating shift to {new_shift}")
+        new_uuid = uuid.uuid4()
+        OptimizedShiftManager().update_uuid(self._uuid, new_uuid)
+        logger.debug(f"Updated shift to {new_shift}. New uuid: {new_uuid}.")
+        self._uuid = new_uuid
         self._compute_and_apply_shift_delta(new_shift)
         self._shift = new_shift
         self._add_member(coordinate_set)
