@@ -137,8 +137,7 @@ class OptimizedShift:
         return self.uuid == other.uuid
 
     def __reduce__(self):
-        # TODO should this be a deep or shallow copy of the shift?
-        return self._reconstruct, (self._uuid, self._shift.copy())
+        return self._reconstruct, (self._uuid, self._shift)
 
     def __deepcopy__(self, memo):
         # Construct new
@@ -246,9 +245,11 @@ class OptimizedShift:
     def _reconstruct(u: UUID, shift_vec: Vector_3_T) -> "OptimizedShift":
         mgr = OptimizedShiftManager()
         existing = mgr.get_by_uuid(u)
-        if existing is not None and np.allclose(existing.value, shift_vec):
+
+        if existing is not None:
             return existing
 
+        # TODO implement the creation of a new shift object if ever there's a difference with the existing one
         new = object.__new__(OptimizedShift)
         new._uuid = u
         new._shift = shift_vec
