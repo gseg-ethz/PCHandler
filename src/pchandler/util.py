@@ -30,23 +30,20 @@ Typical usage patterns include:
 .. code-block:: python
 
     from pchandler.util import EPS
-    print(f"Floating-point epsilon: {EPS}")
+    print( f"Floating-point epsilon: {EPS}" )
 """
 
 import logging
 from enum import StrEnum
-from functools import wraps
-from typing import Any, Optional, Callable, TYPE_CHECKING
+from typing import Any, Optional, cast
 
 import numpy as np
 import numpy.typing as npt
 
-if TYPE_CHECKING:
-    from pchandler.base_arrays import BaseArray
+from pchandler.base_types import Array_Float_T
 
 logger = logging.getLogger(__name__.split(".")[0])
 
-from pchandler.base_arrays import BaseArray
 
 """
 The smallest positive number such that `1.0 + EPS != 1.0` for 32-bit floating-point values.
@@ -70,7 +67,7 @@ class AngleUnit(StrEnum):
     GON : str
         Gradians (also known as gons), where a full circle is divided into 400 units.
 
-    Usage
+    Notes
     -----
     This enum is used to specify the angular unit for conversions and operations.
     """
@@ -81,8 +78,11 @@ class AngleUnit(StrEnum):
 
 
 def convert_angles(
-    values: npt.NDArray[np.floating], source_unit: AngleUnit, target_unit: AngleUnit, out: Optional[np.ndarray] = None
-) -> npt.NDArray[Any]:
+        values: Array_Float_T,
+        source_unit: AngleUnit,
+        target_unit: AngleUnit,
+        out: Optional[Array_Float_T] = None
+) -> Array_Float_T|None:
     """
     Converts an array of angles from one unit to another.
 
@@ -95,7 +95,7 @@ def convert_angles(
     target_unit : AngleUnit
         The unit to convert the angles to.
     out : Optional[np.ndarray], default=None
-        An optional output array to store the results. If provided, must be the same shape as `values`.
+        An optional output array to store the results. If provided, it must be the same shape as `values`.
 
     Returns
     -------
@@ -123,37 +123,61 @@ def convert_angles(
     Convert angles from radians to gradians:
     >>> angles_rad = np.array([0, np.pi/2, np.pi, 2*np.pi])
     >>> convert_angles(angles_rad, AngleUnit.RAD, AngleUnit.GON)
-    array([  0., 100., 200., 400.])
+    array([ 0., 100., 200., 400.])
     """
+
+    if source_unit not in AngleUnit:
+        raise ValueError(f"Invalid source unit: {source_unit}")
+
+    if target_unit not in AngleUnit:
+        raise ValueError(f"Invalid target unit: {target_unit}")
+
+    if out is not None:
+        out = cast(npt.NDArray[np.floating], out)
+
     if source_unit == target_unit:
         if out is None:
-            return values.copy()
+            return values
         else:
             out = values
             return out
 
-    match source_unit:
-        case AngleUnit.RAD:
-            match target_unit:
-                case AngleUnit.DEGREE:
-                    return np.rad2deg(values, out=out)
-                case AngleUnit.GON:
-                    return np.multiply(values, 200 / np.pi, out=out)
-        case AngleUnit.DEGREE:
-            match target_unit:
-                case AngleUnit.RAD:
-                    return np.deg2rad(values, out=out)
-                case AngleUnit.GON:
-                    return np.multiply(values, 200 / 180, out=out)
-        case AngleUnit.GON:
-            match target_unit:
-                case AngleUnit.RAD:
-                    return np.multiply(values, np.pi / 200, out=out)
-                case AngleUnit.DEGREE:
-                    return np.multiply(values, 180 / 200, out=out)
-        case _:
-            raise ValueError(f"Invalid unit: {source_unit}")
+    elif source_unit == AngleUnit.RAD:
+        if target_unit == AngleUnit.DEGREE:
+            return _rad2deg(values, out=out)
+        else:
+            return _rad2gon(values, out=out)
 
+    elif source_unit == AngleUnit.DEGREE:
+        if target_unit == AngleUnit.RAD:
+            return _deg2rad(values, out=out)
+        else:
+            return _deg2gon(values, out=out)
+
+    else:
+        if target_unit == AngleUnit.RAD:
+            return _gon2rad(values, out=out)
+        else:
+            return _gon2deg(values, out=out)
+
+
+def _rad2deg(values: Array_Float_T|float, out: Optional[Array_Float_T]=None):
+    return np.rad2deg(values, out=out)
+
+def _rad2gon(values: Array_Float_T|float, out: Optional[Array_Float_T]=None):
+    return np.multiply(values, 200 / np.pi, out=out)
+
+def _deg2rad(values: Array_Float_T|float, out: Optional[Array_Float_T]=None):
+    return np.deg2rad(values, out=out)
+
+def _deg2gon(values: Array_Float_T|float, out: Optional[Array_Float_T]=None):
+    return np.multiply(values, 200 / 180, out=out)
+
+def _gon2rad(values: Array_Float_T|float, out: Optional[Array_Float_T]=None):
+    return np.multiply(values, np.pi / 200, out=out)
+
+def _gon2deg(values: Array_Float_T|float, out: Optional[Array_Float_T]=None):
+    return np.multiply(values, 180 / 200, out=out)
 
 def unique_rows_fast(bin_idx: npt.NDArray[np.int32]) -> tuple[npt.NDArray[Any], npt.NDArray[np.int32]]:
     """
@@ -175,5 +199,4 @@ def unique_rows_fast(bin_idx: npt.NDArray[np.int32]) -> tuple[npt.NDArray[Any], 
     # turn the blobs back into an (M, D) int32 array
     uniq = uniq_blob.view(arr.dtype).reshape(-1, arr.shape[1])
 
-    return uniq, inv
-
+    return uniq, inv    # type: ignore

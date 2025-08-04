@@ -11,9 +11,9 @@ class PcdHandler(AbstractIOHandler):
     FORMATS = ['.pcd']
 
     @classmethod
-    def load(cls, /, path: str | Path, **config) -> PointCloudData:
+    def load(cls, /, path: str | Path, **config) -> PointCloudData:   # type: ignore[override]
         raise NotImplementedError()
 
     @classmethod
-    def save(cls, /, pcd: PointCloudData, path: str | Path, **config) -> None:
+    def save(cls, /, pcd: PointCloudData, path: str | Path, **config) -> None:   # type: ignore[override]
         raise NotImplementedError()

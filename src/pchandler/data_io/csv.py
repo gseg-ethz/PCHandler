@@ -24,19 +24,19 @@ class CsvHandler(AbstractIOHandler):
     FORMATS = ['.txt', '.csv', '.xyz', '.asc', '.ascii', '.pts']
 
     @classmethod
-    def load(cls,
-             path: str | Path, /,
+    def load(cls,   # type: ignore[override]
+             /,
+             path: str | Path,
              scalar_fields: Optional[list[str]] = None,
              remove_prefix: bool = True,
              prefix: str = 'scalar_',
              column_names_row: int = -1,
              comment: str = '//',
-             delimiter: Optional[str] = None,) -> PointCloudData:
-
-        # TODO need to simplify the case when only a 3 column array is passed (with columns 'X Y Z').
+             delimiter: Optional[str] = None,
+             **config) -> PointCloudData:
 
         # Get general file structure information
-        file_info = sniff_file(path, comment=comment, field_names_row_index=column_names_row)
+        file_info = sniff_file(path := Path(path), comment=comment, field_names_row_index=column_names_row)
         num_points_line = True if file_info.num_points else False
 
         # Validate the fields to be output
@@ -50,13 +50,13 @@ class CsvHandler(AbstractIOHandler):
             dt = generate_ascii_load_dtype(['x', 'y', 'z'] + list(field_names.values()))
 
         load_config: dict[str, Any] = {
-            'fname': Path(path), 'skiprows': len(file_info.header) + num_points_line,
+            'fname': path, 'skiprows': len(file_info.header) + num_points_line,
             'delimiter': delimiter or file_info.delimiter,
             'dtype': dt,
             'usecols': None
         }
 
-        # When number of scalar_fields match, assumes all fields are in the same order
+        # When a number of scalar_fields match, assumes all fields are in the same order
         if len(field_names) + 3 <= file_info.num_fields:
             load_config['usecols'] = [0, 1, 2] + [file_info.fields.index(name) for name in field_names.values()]
         elif len(field_names) == 3:
@@ -72,26 +72,23 @@ class CsvHandler(AbstractIOHandler):
         return pcd
 
     @classmethod
-    def save(cls,
+    def save(cls,   # type: ignore[override]
+             /,
              pcd: PointCloudData,
              path: str | Path,
              scalar_fields: Optional[list[str]] = None,
              add_prefix: bool = True,
              prefix: str = 'scalar_',
              revert_sf_types: bool = False,
-             delimiter: Optional[str] = ',') -> None:
+             delimiter: str = ',',
+             **config: dict[str, Any]) -> None:
 
         array = cls._generate_structured_array(pcd, scalar_fields, add_prefix, prefix, revert_sf_types)
 
         header = f"// {delimiter.join(list(array.dtype.names or ''))}"
-
         fmt_map = { "f": "%.6f", "u": "%u", "i": "%d", }
-        # Use `"%s"` for fallback
-        fmt = delimiter.join([fmt_map.get(field[1][1], "%s") for field in array.dtype.descr])
+        fmt = delimiter.join([fmt_map.get(field[1][1], "%s") for field in array.dtype.descr])   # use %s as fallback
 
-        array = np.stack([array[field] for field in list(array.dtype.names)], axis=-1)
-
-        # Avoid prepending '#' to the header with comments
         np.savetxt( path, array, fmt=fmt, delimiter=delimiter, header=header, comments="" )
         logger.info(f"CSV file saved successfully: {path}")
 
@@ -103,12 +100,12 @@ def sniff_file(file: Path,
                minimum_columns: int = 3,
                comment: str = "//") -> AsciiInfo:
 
-    # Read the header information defined by the comment section of the Ascii File and check if number of points is the
-    # first line
+    # Read the header information defined by the comment section of the Ascii File and check if
+    # a number of points is on the first line
     header, num_points = _get_header(file, comment)
     delimiter, number_fields = _delimiter_sniffer(file, delimiters, lines_to_check, minimum_columns, comment)
 
-    # Get the field names based on the defined row_index. default is the last line of the header (-1)
+    # Get the field names based on the defined row_index. Default is the last line of the header (-1)
     line: str = header[field_names_row_index].removeprefix(comment)
 
     # Test both the delimiter defined and white space as to the joining character between field name header info
@@ -157,11 +154,11 @@ def _get_field_counts(file: Path,
             fields = line.split(character)
             field_counts.add(len(fields))
 
-        # Ensure number of fields per line are consistent
+        # Ensure the number of fields per line are consistent
         if len(field_counts) > 1:
             return 0
 
-        # Check all lines have same number of columns
+        # Check all lines have the same number of columns
         num_fields = field_counts.pop()
         if num_fields < minimum_columns:
             return 0
@@ -198,7 +195,8 @@ def _get_header(file: Path, comment: str = '//') -> tuple[list[str], int|None]:
     return header, number_points
 
 def generate_ascii_load_dtype(column_names: list[str]) -> npt.DTypeLike:
-    names = []; formats = []
+    names: list[str] = []
+    formats: list[npt.DTypeLike] = []
     for name in column_names:
         if name in XYZ_NAMES.char:
             names.append(name.lower())

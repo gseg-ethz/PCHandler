@@ -1,18 +1,30 @@
 from __future__ import annotations
 
 import logging
-from typing import Annotated, NamedTuple, Self, TypeVar, Optional, Any, TypedDict, NotRequired, Unpack, TypeAlias, cast
+from typing import (
+    Annotated,
+    NamedTuple,
+    Self,
+    Optional,
+    Any,
+    TypedDict,
+    NotRequired,
+    Unpack,
+    TypeAlias
+)
 
 import numpy as np
 import numpy.typing as npt
-from pydantic import model_validator, BeforeValidator, field_validator
+from pydantic import model_validator, field_validator, BeforeValidator
 
 from pchandler.constants import NORMAL_NAMES, RGB_NAMES
 from pchandler.validators import normalize_min_max, normalize_uint8, normalize_int16
 from pchandler.base_arrays import BaseVector, ArrayNx3, FixedLengthArray
 from pchandler.base_types import (
     SfNameT,
+    ArrayT,
     Array_Float32_T,
+    Array_Uint8_T,
     Array_Nx3_T,
     Array_Nx3_Float_T,
     Array_Nx3_Float32_T,
@@ -26,7 +38,6 @@ from pchandler.base_types import (
     LowerStr
 )
 
-
 logger = logging.getLogger(__name__.split(".")[0])
 
 
@@ -36,7 +47,9 @@ class DtypeState(NamedTuple):
     upper: npt.NDArray[np.number] | float | int
 
     @classmethod
-    def generate(cls, array: npt.NDArray[Any]) -> DtypeState:
+    def generate(cls, array: ArrayT|ArrayNx3|BaseVector) -> DtypeState:
+        if not hasattr(array, "dtype"):
+            raise TypeError(f"Array does not have dtype attribute: {array}")
         return DtypeState(dtype=array.dtype, lower=array.min(), upper=array.max())
 
     @staticmethod
@@ -48,13 +61,13 @@ class DtypeState(NamedTuple):
 SfOrigDtT: TypeAlias = Optional[DtypeState]
 
 
-class ScalarKwargT(TypedDict):
-    name: NotRequired[SfNameT]
+class ScalarKwargT(TypedDict, total=False):
+    name: str
     origin_dtype: NotRequired[DtypeState]
 
 
 class AbstractScalarField(FixedLengthArray):
-    name: SfNameT
+    name: LowerStr
     origin_dtype: DtypeState
 
     def __init__(self, arr: VectorT | Array_Nx3_T | Self, name: SfNameT = None, origin_dtype: SfOrigDtT = None):
@@ -94,15 +107,15 @@ class AbstractScalarField(FixedLengthArray):
 
 
 class ScalarField(BaseVector, AbstractScalarField):
-    def __init__(self, arr: VectorT|Self, name: SfNameT = None, **kwargs: Unpack[ScalarKwargT]):
-        if name is not None:
-            kwargs['name'] = name
-        super().__init__(arr, **cast(dict[str, Any], kwargs))
+    def __init__(self, arr: VectorT | Array_Nx3_T | Self, name: SfNameT = None, origin_dtype: SfOrigDtT = None):
+        kwargs: dict[str, Any] = {'name': name, 'origin_dtype': origin_dtype}
+        super().__init__(arr, **kwargs)
 
 
 class ScalarFieldTriplet(ArrayNx3, AbstractScalarField):
-    def __init__(self, arr: Array_Nx3_T|Self, **kwargs: Unpack[ScalarKwargT]):
-        super().__init__(arr, **cast(dict[str, Any], kwargs))
+    def __init__(self, arr: Array_Nx3_T | Self, name: SfNameT = None, origin_dtype: SfOrigDtT = None):
+        kwargs: dict[str, Any] = {'name': name, 'origin_dtype': origin_dtype}
+        super().__init__(arr, **kwargs)
 
     @classmethod
     def initialize(cls, size: int, value: Array_Nx3_Uint8_T | None = None, name: str = "") -> Self:
@@ -114,17 +127,21 @@ class ScalarFieldTriplet(ArrayNx3, AbstractScalarField):
 
 class RGBFields(ScalarFieldTriplet):
     arr: Array_Nx3_Uint8_T
-    name: SfNameT = RGB_NAMES.base
+    name: str = RGB_NAMES.base
 
     def __init__(self, arr: Array_Nx3_Uint8_T|Array_Nx3_Float_T|Self, **kwargs: Unpack[ScalarKwargT]):
-        kwargs['name'] = RGB_NAMES.base
         super().__init__(arr, **kwargs)
 
     # noinspection PyNestedDecorators
     @field_validator('arr', mode='before')
     @classmethod
-    def normalise_to_uint8(cls, data: npt.NDArray[Any]) -> npt.NDArray[np.uint8]:
+    def normalise_to_uint8(cls, data: npt.NDArray[Any]) -> Array_Uint8_T:
         return normalize_uint8(data)
+
+    @field_validator('name', mode='before')
+    @classmethod
+    def override_name(cls, value: Any) -> str:
+        return RGB_NAMES.base
 
     @property
     def red(self) -> Vector_Uint8_T:
@@ -156,23 +173,29 @@ class RGBFields(ScalarFieldTriplet):
 
 class NormalFields(ScalarFieldTriplet):
     arr: Array_Nx3_Float32_T
-    name: LowerStr = NORMAL_NAMES.base
+    name: str = NORMAL_NAMES.base
 
     def __init__(self, arr: Array_Nx3_Float_T|Self, **kwargs: Unpack[ScalarKwargT]):
-        kwargs['name'] = NORMAL_NAMES.base
         super().__init__(arr, **kwargs)
 
     # noinspection PyNestedDecorators
     @field_validator('arr', mode='before')
     @classmethod
-    def ensure_unit_vector(cls, array: Array_Nx3_Float_T) -> Array_Nx3_Float32_T:
+    def ensure_unit_vector(cls, array: Array_Nx3_Float_T) -> npt.NDArray[np.float32] :
         if not (np.issubdtype(array.dtype, np.floating) or np.issubdtype(array.dtype, np.signedinteger)):
             raise TypeError("Dtype of normals array must be of type floating or signed integer}")
 
-        array /= np.linalg.norm(array, axis=1).reshape(-1, 1)
-        result = Array_Nx3_Float32_T(array.astype(np.float32))
+        result: npt.NDArray[np.float32] = np.asarray(array, dtype=np.float32)
+        base_vectors: npt.NDArray[np.float32] = np.linalg.norm(result, axis=1).reshape(-1, 1)
+        if np.allclose(base_vectors, 1):
+            return result
 
-        return result
+        return (result / base_vectors).astype(np.float32)
+
+    @field_validator('name', mode='before')
+    @classmethod
+    def override_name(cls, value: Any) -> str:
+        return NORMAL_NAMES.base
 
     @property
     def nx(self) -> Vector_Float32_T:
@@ -250,5 +273,3 @@ class NormalisedInt16ScalarField(ScalarField):
     def to_uint8(self) -> ScalarFieldUint8:
         return ScalarFieldUint8(normalize_uint8(self.arr), name=self.name, origin_dtype=self.origin_dtype)
 
-
-SF_T = TypeVar("SF_T", bound=AbstractScalarField)

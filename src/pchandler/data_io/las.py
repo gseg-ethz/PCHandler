@@ -19,7 +19,7 @@ class LasHandler(AbstractIOHandler):
     FORMATS = ['.las', '.laz']
 
     @classmethod
-    def load(cls,
+    def load(cls,   # type: ignore[override]
              path: str | Path, /,
              scalar_fields: Optional[list[str]] = None,
              remove_prefix: bool = True,
@@ -46,7 +46,7 @@ class LasHandler(AbstractIOHandler):
         return pcd
 
     @classmethod
-    def save(cls,
+    def save(cls,   # type: ignore[override]
              pcd: PointCloudData,
              path: str | Path,
              /,
@@ -61,7 +61,7 @@ class LasHandler(AbstractIOHandler):
         if pcd.numerical_optimization_shift is None:
             offsets: Vector_3_T = np.zeros(3)
         else:
-            offsets = pcd.numerical_optimization_shift.value
+            offsets = np.array(pcd.numerical_optimization_shift)
 
         if scalar_fields is None:
             scalar_fields = list(pcd.scalar_fields.keys())

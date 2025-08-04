@@ -58,6 +58,8 @@ class NameConstantsTriplet(NamedTuple):
 
     @property
     def all(self) -> tuple[TripletT|str, ...]:
+        if self.reverse:
+            return self.names + self.scalars + (self.reverse,)
         return self.names + self.scalars
 
     @property
@@ -97,6 +99,7 @@ XYZ_NAMES = NameConstantsTriplet(
     base="xyz",
     char=("x", "y", "z"),
     extra_names=("cartesian", "cartesians", "coordinates", "coordinate"),
+    reverse="zyx"
 )
 
 INTENSITY_NAMES = NameConstantsSingle(

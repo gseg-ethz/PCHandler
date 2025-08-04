@@ -1,5 +1,5 @@
 import logging
-from typing import Annotated
+from typing import Annotated, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -10,6 +10,8 @@ from pchandler.geometry.core import PointCloudData
 
 from pchandler.filters.core import PointCloudFilter
 from pchandler.constants import validate_variables
+from pchandler.geometry.scalar_field_manager import SF_T
+
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -28,7 +30,7 @@ class ScalarFieldFilter(PointCloudFilter):
     def mask(self, pcd: PointCloudData) -> NDArray[np.bool_]:
         if self.field_label not in pcd.scalar_fields.keys():
             raise KeyError(f"Scalar field '{self.field_label}' is not defined.")
-        scalar_field_data = pcd.scalar_fields[self.field_label]
+        scalar_field_data = cast(SF_T, pcd.scalar_fields[self.field_label])
 
         return np.logical_and(scalar_field_data >= self.lower_bound, scalar_field_data <= self.upper_bound)
 
@@ -52,10 +54,7 @@ class ScalarFieldPercentileFilter(PointCloudFilter):
         if self.field_label not in pcd.scalar_fields.keys():
             raise KeyError(f"Scalar field '{self.field_label}' is not defined.")
 
-        lower_bound, upper_bound = np.percentile(
-            pcd.scalar_fields[self.field_label], [self.lower_percentile, self.upper_percentile]
-        )
+        sf = cast(SF_T, pcd.scalar_fields[self.field_label])
+        lower_bound, upper_bound = np.percentile(sf.arr, [self.lower_percentile, self.upper_percentile])
 
-        scalar_field_data = pcd.scalar_fields[self.field_label]
-
-        return np.logical_and(scalar_field_data >= lower_bound, scalar_field_data <= upper_bound)
+        return np.logical_and(sf >= lower_bound, sf <= upper_bound)

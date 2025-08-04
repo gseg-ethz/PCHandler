@@ -1,5 +1,5 @@
 from pathlib import Path
-from tempfile import TemporaryDirectory
+from tempfile import TemporaryDirectory, NamedTemporaryFile
 import warnings
 
 import pytest
@@ -23,6 +23,12 @@ base_directory = Path(__file__).resolve().parent.parent
 test_data_dir = base_directory / "data"
 
 N = 100
+
+@pytest.fixture(scope='function')
+def valid_normals():
+    vals = np.random.rand(N, 3).astype(np.float32)
+    vals = vals / np.linalg.norm(vals, axis=1).reshape(-1, 1)
+    return vals
 
 @pytest.fixture(scope="function")
 def struct_array():
@@ -137,11 +143,9 @@ class TestAbstractIOMethods:
         assert xyz_.shape == (N, 3)
         assert np.all(xyz_ == xyz)
 
-    def test_extract_scalar_fields(self, struct_array):
+    def test_extract_scalar_fields(self, struct_array, valid_normals):
         pcd = PointCloudData(np.random.rand(N, 3).astype(np.float32))
         rgb = np.random.randint(0, 255, (N, 3), dtype=np.uint8)
-        normals = np.random.rand(N, 3).astype(np.float32)
-        normals /= np.linalg.norm(normals, axis=1).reshape(-1,1)
         intensity = np.random.randint(0, 255, N, dtype=np.uint8)
 
         header_fields = ['x', 'y', 'z', 'r', 'g', 'b', 'nx', 'ny', 'nz', 'intensity', 'sf1']
@@ -153,9 +157,9 @@ class TestAbstractIOMethods:
         struct_array['r'] = rgb[:, 0]
         struct_array['g'] = rgb[:, 1]
         struct_array['b'] = rgb[:, 2]
-        struct_array['nx'] = normals[:, 0]
-        struct_array['ny'] = normals[:, 1]
-        struct_array['nz'] = normals[:, 2]
+        struct_array['nx'] = valid_normals[:, 0]
+        struct_array['ny'] = valid_normals[:, 1]
+        struct_array['nz'] = valid_normals[:, 2]
         struct_array['intensity'] = intensity
         struct_array['sf1'] = intensity.astype(np.float64)
 
@@ -163,7 +167,7 @@ class TestAbstractIOMethods:
 
         assert np.all(pcd.intensity == intensity)
         assert np.all(pcd.rgb == rgb)
-        assert np.allclose(pcd.normals, normals)
+        assert np.allclose(pcd.normals, valid_normals)
         assert np.all(pcd.scalar_fields['sf1'] == intensity.astype(np.float64))
 
     def test_extract_scalar_triplets(self, struct_array):
@@ -363,8 +367,8 @@ class BaseLoadSave:
         else:
             assert num_files == 8
 
-    def test_load_all(self):
-        reference = self.cls.load(self.reference, remove_prefix=True)
+    def _load_all(self, **kwargs):
+        reference = self.cls.load(self.reference, remove_prefix=True, **kwargs)
 
         for fmt in self.cls.FORMATS:
             for file in find_point_cloud_in_directory(self.folder, [fmt], True):
@@ -401,28 +405,24 @@ class BaseLoadSave:
                     assert 'custom1' not in pcd.scalar_fields
                     assert 'sqrt(custom1)' not in pcd.scalar_fields
 
-    def test_save(self):
-        with TemporaryDirectory() as temp_dir:
-            temp_file = Path(temp_dir) / f'temp{self.cls.FORMATS[0]}'
-            original_pcd = self.cls.load(self.reference, remove_prefix=True)
-            self.cls.save(original_pcd, temp_file, add_prefix=False)
-            new_pcd = self.cls.load(temp_file, remove_prefix=False)
+    def _save(self, tmp_path, **kwargs):
+        temp_file = tmp_path / ('tmp' + self.cls.FORMATS[0])
+        original_pcd = self.cls.load(self.reference, remove_prefix=True)
+        self.cls.save(original_pcd, temp_file, add_prefix=False, **kwargs)
+        new_pcd = self.cls.load(temp_file, remove_prefix=False)
 
-            if '.csv' in self.cls.FORMATS:
-                # Adapt precision due to the number of digits written to file
-                assert np.allclose(original_pcd.xyz, new_pcd.xyz, atol=1e-06)
-            elif '.las' in self.cls.FORMATS:
-                # Adapt precision due to the "scale" factor as this rounds digits
-                assert np.allclose(original_pcd.xyz, new_pcd.xyz, atol=1e-04)
-            else:
-                assert np.allclose(original_pcd.xyz, new_pcd.xyz)
+        if '.csv' in self.cls.FORMATS:
+            # Adapt precision due to the number of digits written to file
+            assert np.allclose(original_pcd.xyz, new_pcd.xyz, atol=1e-06)
+        elif '.las' in self.cls.FORMATS:
+            # Adapt precision due to the "scale" factor as this rounds digits
+            assert np.allclose(original_pcd.xyz, new_pcd.xyz, atol=1e-04)
+        else:
+            assert np.allclose(original_pcd.xyz, new_pcd.xyz)
 
-            assert np.allclose(original_pcd.rgb, new_pcd.rgb, atol=1)
+        assert np.allclose(original_pcd.rgb, new_pcd.rgb, atol=1)
 
-            assert np.allclose(original_pcd.normals, new_pcd.normals)
+        assert np.allclose(original_pcd.normals, new_pcd.normals)
 
-            for name in original_pcd.scalar_fields.keys():
-                assert name in new_pcd.scalar_fields
-
-        # Check cleanup
-        assert not Path(temp_file).exists()
+        for name in original_pcd.scalar_fields.keys():
+            assert name in new_pcd.scalar_fields

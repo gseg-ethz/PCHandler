@@ -1,17 +1,37 @@
+import pytest
 from abc import ABC
 from typing import Callable
 
-import pytest
+import numpy as np
 
-from pchandler.geometry.scalar_fields import ScalarField
+from pchandler.constants import HALF_PI, PI, TWO_PI
 from pchandler.base_arrays import BaseArray
-from pchandler.validators import *
+from pchandler.geometry.scalar_fields import ScalarField
+from pchandler.validators import (
+    validate_azimuth_angles,
+    validate_inclination_angles,
+    validate_spherical_angles,
+    validate_horizontal_angles,
+    validate_zenith_angles,
+    validate_radius,
+    coerce_wrapped_azimuth_angles,
+    coerce_wrapped_horizontal_angles,
+    validate_transposed_2d_array,
+    convert_slice_to_integer_range,
+    validate_in_range,
+normalize_uint8,
+normalize_uint16,
+normalize_int8,
+normalize_int16,
+normalize_int32,
+normalize_int64
+)
 
 COORDINATE_3D_PROPERTIES = ("x", "y", "z", "r", "v", "hz", "rho", "theta", "phi", "xyz", "spher")
 
 
 class BaseAngleTestClass(ABC):
-    main_test: Callable = None
+    main_test: Callable | None = None
 
     @pytest.mark.parametrize(
         "values, func",
@@ -45,6 +65,7 @@ class TestValidation(BaseAngleTestClass):
                 (np.array([0, 2 * np.pi, 1.7, -np.pi - 3]), main_test),
                 (float(72), main_test),
                 (int(-44), main_test),
+                (np.array([0, 1.3, np.pi, np.pi * 1.5, np.pi*2]), main_test),
             ],
         )
         def test_invalid_values(self, values: np.ndarray, func: Callable):
@@ -95,6 +116,9 @@ class TestValidation(BaseAngleTestClass):
             "values, func",
             [
                 (np.array([0, 3 * np.pi, 1.7, -np.pi - 3]), main_test),
+                ("not an array", main_test),
+                (float(72), main_test),
+                (np.array([-1.1, 0.5, 1.3]), main_test),
             ],
         )
         def test_invalid_values(self, values: np.ndarray, func: Callable):
@@ -118,6 +142,7 @@ class TestValidation(BaseAngleTestClass):
             "values, func",
             [
                 (np.array([0, np.pi, 1.7, -np.pi]), main_test),
+                (np.array([0, np.pi, 1.7, 2*np.pi]), main_test),
                 (float(72), main_test),
                 (int(-44), main_test),
             ],
@@ -213,6 +238,9 @@ class TestValidation(BaseAngleTestClass):
                     ),
                     main_test,
                 ),
+                (
+                    "Not an array", main_test,
+                )
             ],
         )
         def test_invalid_values(self, values: np.ndarray, func: Callable):
@@ -270,3 +298,71 @@ def test_invalid_transposed_2d():
     b = np.random.rand(100, 100)
     with pytest.raises(ValueError):
         validate_transposed_2d_array(a, cols=3)
+
+
+
+@pytest.mark.parametrize(("slice_obj", "expected"), (
+                         (slice(None, None, None), [i for i in range(10)]),
+                         (slice(0, None, None), [i for i in range(10)]),
+                         (slice(0, 5, None), [i for i in range(5)]),
+                         (slice(3, 8, None), [i for i in range(3, 8)]),
+                         (slice(3, 8, 2), [3, 5, 7]),
+                         (slice(3, 9, 2), [3, 5, 7]),
+                         (slice(3, 9, -1), []),
+                         (slice(9, 3, -1), [9, 8, 7, 6, 5, 4]),
+                         (slice(None, None, 3), [0, 3, 6, 9]),
+                         (slice(-1, -3, -1), [9, 8]),
+                         (slice(-1, -3, None), []),
+                         (slice(-2, -10, -2), [8, 6, 4, 2]),
+                         (slice(-2, None, -2), [8, 6, 4, 2, 0]),
+                         (slice(None, 4, None), [0, 1, 2, 3]),
+))
+def test_slice_to_integer_range(slice_obj, expected):
+    result = convert_slice_to_integer_range(slice_obj, 10)
+    assert np.all(result == expected)
+
+@pytest.mark.parametrize(("value", "v_min", "v_max"), (
+    (np.full(2, 2), 1, 4),
+    (np.arange(100), -1, 100),
+    (np.linspace(-np.pi, np.pi, 100, endpoint=True), -np.pi-0.0001, np.pi+0.0001),
+    ([-2, 7, 1004, 200.43], -34, 10000),
+    (1, 0, 2)
+))
+def test_validate_in_range(value, v_min, v_max):
+    assert validate_in_range(value, v_min, v_max) is None
+
+
+def test_validate_in_range_invalid():
+    # Both bounds broken
+    with pytest.raises(ValueError):
+        validate_in_range(np.arange(100), 20, 60)
+
+    # Lower bound broken
+    with pytest.raises(ValueError):
+        validate_in_range(np.array([-100]), 10, 100)
+
+    # Upper bound broken
+    with pytest.raises(ValueError):
+        validate_in_range(np.array([100123]), 10, 100)
+
+
+@pytest.mark.parametrize(("func", "dtype"), (
+                         (normalize_uint8, np.uint8),
+                         (normalize_uint16, np.uint16),
+                         (normalize_int8, np.int8),
+                         (normalize_int16, np.int16),
+                         (normalize_int32, np.int32),
+                         (normalize_int64, np.int64)
+))
+def test_normalize_to_dedicated_int_dtype_funcs(func, dtype: np.dtype):
+    values = np.random.rand(100).astype(np.float64)
+    lower = np.iinfo(dtype).min
+    upper = np.iinfo(dtype).max
+
+    width = upper - lower
+
+    values = np.ceil(values * width + lower).astype(dtype)
+    computed = func(values)
+
+    assert np.allclose(computed, values)
+

@@ -19,9 +19,16 @@ def pcd_only_coords():
     return PointCloudData(np.random.rand(100,3))
 
 class TestAbstractPointCloudFilter:
-    def test_abstract_methods(self):
+    def test_abstract_methods(self, pcd_only_coords):
         for name in ('mask', 'reduce', 'sample'):
             assert hasattr(PointCloudFilter, name)
+
+        with pytest.raises(TypeError):
+            PointCloudFilter()
+
+        # Not implemented Methods
+        assert PointCloudFilter.mask(None, pcd_only_coords) == None     # type: ignore
+
 
 
 class TestGenericFieldFilter:
@@ -43,9 +50,29 @@ class TestGenericFieldFilter:
         assert mask.shape == getattr(pcd_all, attr).shape
         assert mask.dtype == np.bool_
 
+    def test_all_methods(self, pcd_only_coords):
+        field_filter = GenericFieldFilter('sf1', lambda x: x < 0.5)
+        pcd_only_coords.scalar_fields.create_field('sf1', np.linspace(0, 1, len(pcd_only_coords)))
+        pcd1 = pcd_only_coords.copy()
+        pcd2 = pcd_only_coords.copy()
+
+        mask = field_filter.mask(pcd2)
+        sample = field_filter.sample(pcd2)
+        extracted = field_filter.extract(pcd2)
+        field_filter.reduce(pcd1)
+
+        assert np.sum(mask) == 50
+        assert len(sample) == 50
+        assert len(extracted) == 50
+        assert len(pcd1) == 50
+
+        assert np.all(sample == extracted)
+        assert np.all(pcd1 == field_filter.sample(pcd_only_coords))
+
 
     def test_invalid_mask(self, pcd_only_coords):
         field_filter = GenericFieldFilter('rgb', lambda x: np.ones_like(x, dtype=np.bool_))
+
         with pytest.raises(ValueError):
             field_filter.mask(pcd_only_coords)
 
@@ -54,5 +81,9 @@ class TestGenericFieldFilter:
 
         with pytest.raises(ValidationError):
             GenericFieldFilter('rgb', 23)
+
+        with pytest.raises(ValueError):
+            field_filter.field_label = 'non-existant'
+            field_filter.mask(pcd_only_coords)
 
 

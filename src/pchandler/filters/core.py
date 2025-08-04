@@ -1,12 +1,13 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import Callable, Optional
+from typing import Callable, cast
 
 import numpy as np
 import numpy.typing as npt
 
 from pchandler.constants import validate_variables
 from pchandler.geometry.core import PointCloudData
+from pchandler.geometry.scalar_field_manager import SF_T
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -43,14 +44,9 @@ class PointCloudFilter(ABC):
         Returns:
             The modified point cloud.
         """
-        m = self.mask(pcd)
-        # if np.sum(m) == 0:
-        #     warnings.warn('Filter produced no values to index, thus returning full point cloud')
-        # else:
-        #     pcd.reduce(m)
-        pcd.reduce(m)
+        pcd.reduce(self.mask(pcd))
 
-    def extract(self, pcd: PointCloudData) -> Optional[PointCloudData]:
+    def extract(self, pcd: PointCloudData) -> PointCloudData:
         """
         Extracts points where mask() is True: returns a new point cloud with those points,
         and removes them from the original.
@@ -61,15 +57,9 @@ class PointCloudFilter(ABC):
         Returns:
             A new PointCloudData instance containing the extracted points.
         """
-        m = self.mask(pcd)
+        return pcd.extract(self.mask(pcd))
 
-        # if np.sum(m) == 0:
-        #     warnings.warn('Filter produced no values to index, thus nothing has been extracted')
-        #     return None
-        new_pcd = pcd.extract(m)
-        return new_pcd
-
-    def sample(self, pcd: PointCloudData) -> Optional[PointCloudData]:
+    def sample(self, pcd: PointCloudData) -> PointCloudData:
         """
         Returns a new point cloud with only the points where mask() is True, leaving
         the original point cloud untouched.
@@ -80,16 +70,12 @@ class PointCloudFilter(ABC):
         Returns:
             A new PointCloudData instance containing only the sampled points.
         """
-        m = self.mask(pcd)
-        # if np.sum(m) == 0:
-        #     warnings.warn('Filter produced no values to index, thus nothing has been sampled')
-        #     return None
-        return pcd.sample(m)
+        return pcd.sample(self.mask(pcd))
 
 
 class GenericFieldFilter(PointCloudFilter):
     """
-    A generic filter that uses a user-supplied function to generate a mask
+    A generic filter that uses a user-supplied function to _generate a mask
     from a given field.
 
     Parameters:
@@ -112,7 +98,7 @@ class GenericFieldFilter(PointCloudFilter):
         elif self.field_label == "spherical_coordinates":
             data = pcd.spher
         elif self.field_label in pcd.scalar_fields:
-            data = pcd.scalar_fields[self.field_label].arr
+            data = cast(SF_T, pcd.scalar_fields[self.field_label]).arr
         elif hasattr(pcd, self.field_label):
             data = getattr(pcd, self.field_label)
         else:

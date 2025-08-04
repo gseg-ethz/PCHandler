@@ -1,20 +1,28 @@
 import copy
-import logging
-import pickle
 
 import numpy as np
 import pytest
 import open3d as o3d
 from pydantic import ValidationError
-from numpydantic.exceptions import DtypeError, ShapeError
-
+from numpydantic.exceptions import DtypeError
 
 from pchandler.geometry import PointCloudData
 from pchandler.geometry.scalar_fields import ScalarField, RGBFields, NormalFields
 from pchandler.geometry.scalar_field_manager import ScalarFieldManager
 from pchandler.geometry.optimal_shift import OptimizedShift
 
+from tests.geometry.test_coordinates import (
+    BaseTestCartesianCoordinates,
+    BaseTestNOSInit,
+    BaseTestNOSChange,
+    BaseTestConversions,
+    _known_spher,
+    _known_xyz,
+)
+
 N = 100
+_small_xyz = np.random.rand(N, 3)
+_large_xyz = np.random.rand(1_000_000, 3)
 
 def random_coordinates(scale: float, offset: float) -> np.ndarray:
     xyz_base = np.random.randn(N, 3)
@@ -37,30 +45,42 @@ def xyz_global_() -> np.typing.NDArray:
 def xyz_huge_() -> np.typing.NDArray:
     return random_coordinates(100_000, 0)
 
+@pytest.fixture(scope="function")
+def known_spher():
+    return _known_spher
+
+@pytest.fixture(scope="function")
+def small_xyz():
+    return _small_xyz
+
+@pytest.fixture(scope="function")
+def known_xyz():
+    return _known_xyz
+
+@pytest.fixture(scope="function")
+def large_xyz():
+    return _large_xyz
+
 @pytest.fixture(scope="function", autouse=True)
 def normals_() -> np.ndarray:
-    return np.random.rand(N, 3).astype(np.float32)
-
+    vals = np.random.rand(N, 3).astype(np.float32)
+    return vals / np.linalg.norm(vals, axis=1).reshape(-1, 1)
 
 @pytest.fixture(scope="function", autouse=True)
 def intensity_() -> np.ndarray:
     return np.random.rand(N).astype(np.float32)
 
-
 @pytest.fixture(scope="function", autouse=True)
 def reflectance_() -> np.ndarray:
     return np.random.rand(N).astype(np.float32)
-
 
 @pytest.fixture(scope="function", autouse=True)
 def scalar_field() -> ScalarField:
     return ScalarField(np.random.rand(N), name='test')
 
-
 @pytest.fixture(scope="function", autouse=True)
 def rgb_():
     return np.random.randint(0, 255, (N, 3), dtype=np.uint8)
-
 
 @pytest.fixture(scope="function", autouse=True)
 def sfs_():
@@ -78,12 +98,11 @@ def nos_mini_() -> OptimizedShift:
 @pytest.fixture(scope="function")
 def pcd(rgb_, normals_, intensity_, reflectance_) -> PointCloudData:
     return PointCloudData(
-        arr=random_coordinates(1, 0),
+        xyz=random_coordinates(1, 0),
         rgb=rgb_,
         normals=normals_,
         intensity=intensity_,
         reflectance=reflectance_)
-
 
 @pytest.fixture(scope="function")
 def pcd2(rgb_, normals_, intensity_) -> PointCloudData:
@@ -92,7 +111,6 @@ def pcd2(rgb_, normals_, intensity_) -> PointCloudData:
         rgb=rgb_,
         normals=normals_,
         intensity=intensity_)
-
 
 @pytest.fixture(scope="function")
 def pcd3(rgb_, normals_, reflectance_) -> PointCloudData:
@@ -128,7 +146,6 @@ def pcd_o3d():
 
     return pcd
 
-
 @pytest.fixture(scope="function")
 def pcd_o3d_tensor():
     xyz = (np.random.rand(10, 3) -0.5) * 50 + 20
@@ -145,138 +162,149 @@ def pcd_o3d_tensor():
 
     return pcd
 
-
-class TestPointCloudData:
-
-    class TestInitialisation:
-        def test_positional_coordinate_arg(self, xyz_):
-            pcd = PointCloudData(xyz_, numerical_optimization_shift=None)
-            assert np.all(pcd == xyz_)
-            assert np.all(pcd.arr == xyz_)
-
-        def test_alias_coordinate_arg(self, xyz_):
-            pcd = PointCloudData(xyz=xyz_, numerical_optimization_shift=None)
-            assert np.all(pcd == xyz_)
-            assert np.all(pcd.arr == xyz_)
-            pcd2 = PointCloudData(arr=xyz_, numerical_optimization_shift=None)
-            assert np.all(pcd2 == xyz_)
-            assert np.all(pcd2.arr == xyz_)
-
-        def test_keyword_coordinate_arg(self, xyz_):
-            pcd = PointCloudData(xyz=xyz_, numerical_optimization_shift=None)
-            assert np.all(pcd == xyz_)
-            assert np.all(pcd.arr == xyz_)
-
-        def test_rgb_keyword(self, xyz_, rgb_):
-            pcd = PointCloudData(xyz_, rgb=rgb_)
-            assert "rgb" in pcd.scalar_fields
-            assert np.allclose(pcd.rgb, rgb_)
-
-        def test_normals_keyword(self, xyz_, normals_):
-            pcd = PointCloudData(xyz_, normals=normals_)
-            assert "normals" in pcd.scalar_fields
-            assert np.allclose(pcd.normals, normals_)
-
-        def test_intensity_keyword(self, xyz_, intensity_):
-            pcd = PointCloudData(xyz_, intensity=intensity_)
-            vals = ScalarField(intensity_, name='test')
-            assert "intensity" in pcd.scalar_fields
-            assert np.allclose(pcd.intensity, vals)
-
-        def test_reflectance_keyword(self, xyz_, intensity_):
-            pcd = PointCloudData(xyz_, reflectance=intensity_)
-
-            vals = ScalarField(intensity_, name='test')
-            assert "reflectance" in pcd.scalar_fields
-            assert np.allclose(pcd.reflectance, vals)
-
-        def test_all_scalar_fields(self, xyz_, rgb_, normals_, intensity_):
-            pcd = PointCloudData(xyz_, rgb=rgb_, normals=normals_, intensity=intensity_, reflectance=intensity_)
-
-            for name in ("rgb", "normals", "intensity", "reflectance"):
-                assert name in pcd.scalar_fields
-
-        def test_socs_origin_keyword(self, xyz_):
-            pcd = PointCloudData(xyz_)
-            assert pcd.socs_origin is None
-
-            pcd = PointCloudData(xyz_, socs_origin=None)
-            assert pcd.socs_origin is None
-
-            pcd = PointCloudData(xyz_, socs_origin=np.ones(3))
-            assert np.allclose(pcd.socs_origin, np.ones(3))
-
-        def test_scalar_fields(self, xyz_, sfs_):
-            pcd = PointCloudData(xyz_)
-            assert pcd.scalar_fields == {}
-
-            pcd = PointCloudData(xyz_, scalar_fields=sfs_)
-            assert "test" in pcd.scalar_fields
-            assert np.all(pcd.scalar_fields["test"] == sfs_["test"])
-            assert isinstance(pcd.scalar_fields["test"], ScalarField)
-
-            test_array = np.random.rand(N)
-            pcd = PointCloudData(xyz_, scalar_fields={"test": ScalarField(test_array, name="test2")})
-            assert "test" in pcd.scalar_fields
-            assert np.all(pcd.scalar_fields["test"] == test_array)
-            assert pcd.scalar_fields["test"].name != "test2"
-            assert isinstance(pcd.scalar_fields["test"], ScalarField)
+@pytest.fixture(scope="function")
+def cart_obj(large_xyz) -> PointCloudData:
+    return PointCloudData(xyz=large_xyz, socs_origin=np.array([0, 0, 0]))
 
 
-    class TestInvalidValues:
-        def test_xyz(self, rgb_, normals_, sfs_):
-            # XYZ non_array object
-            with pytest.raises(ValidationError):
-                PointCloudData({"asb": 123}, rgb=rgb_, normals=normals_, scalar_fields=sfs_)
+class BaseTestPointCloudData:
+    cls: PointCloudData = PointCloudData
 
-            # Too many columns
-            with pytest.raises(ValidationError):
-                data = np.random.rand(N, 4).astype(np.float32)
-                PointCloudData(data, rgb=rgb_, normals=normals_, scalar_fields=sfs_)
+    def test_init_positional_coordinate_arg(self, xyz_):
+        pcd = self.cls(xyz_, numerical_optimization_shift=None)
+        assert np.all(pcd == xyz_)
+        assert np.all(pcd.arr == xyz_)
 
-            # Too many dimensions
-            with pytest.raises(ValidationError):
-                data = np.random.rand(N, 4, 3).astype(np.float32)
-                PointCloudData(data, rgb=rgb_, normals=normals_, scalar_fields=sfs_)
+    def test_init_alias_coordinate_arg(self, xyz_):
+        pcd = self.cls(xyz=xyz_, numerical_optimization_shift=None)
+        assert np.all(pcd == xyz_)
+        assert np.all(pcd.arr == xyz_)
+        # noinspection PyArgumentList
+        pcd2 = self.cls(arr=xyz_, numerical_optimization_shift=None)
+        assert np.all(pcd2 == xyz_)
+        assert np.all(pcd2.arr == xyz_)
 
-            # Too few dimensions
-            with pytest.raises(ValidationError):
-                data = np.random.rand(N, 2).astype(np.float32)
-                PointCloudData(data, rgb=rgb_, normals=normals_, scalar_fields=sfs_)
+    def test_init_keyword_coordinate_arg(self, xyz_):
+        pcd = self.cls(xyz=xyz_, numerical_optimization_shift=None)
+        assert np.all(pcd == xyz_)
+        assert np.all(pcd.arr == xyz_)
 
-        def test_rgb(self, xyz_, normals_, sfs_):
-            # rgb non_array
-            with pytest.raises(Exception) as e:
-                PointCloudData(xyz=xyz_, rgb="NotAnNdarray", normals=normals_, scalar_fields=sfs_)
-                assert type(e.value) in (ValueError, TypeError, AttributeError)
+    def test_init_rgb_keyword(self, xyz_, rgb_):
+        pcd = self.cls(xyz_, rgb=rgb_)
+        assert "rgb" in pcd.scalar_fields
+        assert np.allclose(pcd.rgb, rgb_)
 
-        def test_normals(self, xyz_, rgb_, sfs_):
-            # normals non_array
-            with pytest.raises(Exception) as e:
-                PointCloudData(xyz=xyz_, rgb=rgb_, normals=1, scalar_fields=sfs_)
-            assert type(e.value) in (ValueError, TypeError, AttributeError, ValidationError)
+    def test_init_normals_keyword(self, xyz_, normals_):
+        pcd = self.cls(xyz_, normals=normals_)
+        assert "normals" in pcd.scalar_fields
+        assert np.allclose(pcd.normals, normals_)
 
-        def test_intensity(self, xyz_, rgb_, normals_, reflectance_, sfs_):
-            # normals non_array
-            with pytest.raises(ValidationError) as e:
-                PointCloudData(xyz=xyz_, rgb=rgb_, normals=normals_, reflectance=reflectance_, intensity=1, scalar_fields=sfs_)
+    def test_init_intensity_keyword(self, xyz_, intensity_):
+        pcd = self.cls(xyz_, intensity=intensity_)
+        vals = ScalarField(intensity_, name='test')
+        assert "intensity" in pcd.scalar_fields
+        assert np.allclose(pcd.intensity, vals)
 
-        def test_reflectance(self, xyz_, rgb_, normals_, intensity_, sfs_):
-            # normals non_array
-            with pytest.raises(ValidationError) as e:
-                PointCloudData(xyz=xyz_, rgb=rgb_, normals=normals_, reflectance=1, intensity=intensity_, scalar_fields=sfs_)
+    def test_init_reflectance_keyword(self, xyz_, intensity_):
+        pcd = self.cls(xyz_, reflectance=intensity_)
 
-        def test_socs_origin(self, xyz_, rgb_, normals_, sfs_):
-            # spherical_coordinates_origin
-            with pytest.raises(Exception) as e:
-                PointCloudData(
-                    xyz=xyz_,
-                    rgb=rgb_,
-                    normals=normals_,
-                    scalar_fields=sfs_,
-                    socs_origin="NotAnOrigin",  #type: ignore
-                )
-            assert type(e.value) in (ValueError, TypeError, AttributeError, ValidationError)
+        vals = ScalarField(intensity_, name='test')
+        assert "reflectance" in pcd.scalar_fields
+        assert np.allclose(pcd.reflectance, vals)
+
+    def test_init_all_scalar_fields(self, xyz_, rgb_, normals_, intensity_):
+        pcd = self.cls(xyz_, rgb=rgb_, normals=normals_, intensity=intensity_, reflectance=intensity_)
+
+        for name in ("rgb", "normals", "intensity", "reflectance"):
+            assert name in pcd.scalar_fields
+
+    def test_init_socs_origin_keyword(self, xyz_):
+        pcd = self.cls(xyz_)
+        assert pcd.socs_origin is None
+
+        pcd = self.cls(xyz_, socs_origin=None)
+        assert pcd.socs_origin is None
+
+        pcd = self.cls(xyz_, socs_origin=np.ones(3))
+        assert np.allclose(pcd.socs_origin, np.ones(3))
+
+    def test_init_scalar_fields(self, xyz_, sfs_):
+        pcd = self.cls(xyz_)
+        assert pcd.scalar_fields.fields == {}
+
+        pcd = self.cls(xyz_, scalar_fields=sfs_)
+        assert "test" in pcd.scalar_fields
+        assert np.all(pcd.scalar_fields["test"] == sfs_["test"])
+        assert isinstance(pcd.scalar_fields["test"], ScalarField)
+
+        test_array = np.random.rand(N)
+        pcd = self.cls(xyz_, scalar_fields={"test": ScalarField(test_array, name="test2")})
+        assert "test" in pcd.scalar_fields
+        assert np.all(pcd.scalar_fields["test"] == test_array)
+        assert pcd.scalar_fields["test"].name != "test2"
+        assert isinstance(pcd.scalar_fields["test"], ScalarField)
+
+    def test_invalid_init_xyz(self, rgb_, normals_, sfs_):
+        # XYZ non_array object
+        with pytest.raises(ValidationError):
+            self.cls({"asb": 123}, rgb=rgb_, normals=normals_, scalar_fields=sfs_)
+
+        # Too many columns
+        with pytest.raises(ValidationError):
+            data = np.random.rand(N, 4).astype(np.float32)
+            self.cls(data, rgb=rgb_, normals=normals_, scalar_fields=sfs_)
+
+        # Too many dimensions
+        with pytest.raises(ValidationError):
+            data = np.random.rand(N, 4, 3).astype(np.float32)
+            self.cls(data, rgb=rgb_, normals=normals_, scalar_fields=sfs_)
+
+        # Too few dimensions
+        with pytest.raises(ValidationError):
+            data = np.random.rand(N, 2).astype(np.float32)
+            self.cls(data, rgb=rgb_, normals=normals_, scalar_fields=sfs_)
+
+    @pytest.mark.parametrize(("invalid_input", 'exception'),
+                             ((True, TypeError),
+                              ("N"*N, TypeError),
+                              (np.ones((N, 4)), ValidationError),
+                              (lambda x: x+1, TypeError),
+                              (int, TypeError)))
+    def test_invalid_init_sf_triplets(
+            self, xyz_, rgb_, normals_, reflectance_, intensity_, sfs_, invalid_input, exception
+    ):
+        with pytest.raises(exception):
+            self.cls(xyz=xyz_, rgb=invalid_input)
+
+        with pytest.raises(exception):
+            self.cls(xyz=xyz_, normals=invalid_input)
+
+
+    @pytest.mark.parametrize(("invalid_input", 'exception'),
+                             ((True, TypeError),
+                              ("NotAnArray", TypeError),
+                              (np.eye(3), ValidationError),
+                              (lambda x: x+1, TypeError),
+                              (int, TypeError)))
+    def test_invalid_init_sf_single(
+            self, xyz_, rgb_, normals_, reflectance_, intensity_, sfs_, invalid_input, exception
+    ):
+        with pytest.raises(exception):
+            self.cls(xyz=xyz_, intensity=invalid_input)
+
+        with pytest.raises(exception):
+            self.cls(xyz=xyz_, reflectance=invalid_input)
+
+    def test_setitem_method(self, pcd):
+        with pytest.raises(Exception):
+            pcd[0] = 123
+
+        with pytest.raises(Exception):
+            pcd['rgb'] = RGBFields(np.random.randint(0, 256, (len(pcd), 3), dtype=np.uint8))
+
+    def test_num_points(self, pcd):
+        assert len(pcd) == pcd.nbPoints == N
+
 
     class TestProperties:
         def test_rgb_getter(self, pcd):
@@ -342,28 +370,6 @@ class TestPointCloudData:
             assert isinstance(pcd2.scalar_fields, ScalarFieldManager)
             assert len(pcd2.scalar_fields) == 2
 
-    class TestCopy:
-        def test_deepcopy(self, pcd_shifted):
-            pcd_copy = pcd_shifted.copy(deep=True, link_to_same_NOS=True)
-            assert isinstance(pcd_copy, PointCloudData)
-            assert id(pcd_shifted.numerical_optimization_shift) == id(pcd_copy.numerical_optimization_shift)
-            assert np.allclose(pcd_copy.xyz, pcd_shifted.xyz)
-
-            # TODO: Rework the deepcopy of NOS
-            pcd_copy = pcd_shifted.copy(deep=True, link_to_same_NOS=False)
-            assert id(pcd_shifted.numerical_optimization_shift) != id(pcd_copy.numerical_optimization_shift)
-            assert np.allclose(pcd_copy.xyz, pcd_shifted.xyz)
-
-    class TestPickle:
-        def test_pcd_pickle(self, pcd_shifted):
-            pickle_pcd = pickle.dumps(pcd_shifted)
-            unpickled_pcd = pickle.loads(pickle_pcd)
-
-            assert isinstance(unpickled_pcd, PointCloudData)
-            assert np.allclose(unpickled_pcd.xyz, pcd_shifted.xyz)
-            assert unpickled_pcd.id == pcd_shifted.id
-            assert unpickled_pcd in pcd_shifted.numerical_optimization_shift
-
     class TestReduceSampleExtractMerge:
         class TestMaskGeneration:
             def test_ndarray(self, pcd):
@@ -426,12 +432,15 @@ class TestPointCloudData:
         def test_reduce(self, pcd):
             start_id = id(pcd)
             base_xyz = pcd.xyz.copy()
+            base_spher = pcd.spher.copy()
             base_rgb = pcd.rgb.copy()
             base_normal = pcd.normals.copy()
             base_intensities = copy.deepcopy(pcd.scalar_fields["intensity"])
 
             mask = np.zeros(len(pcd), dtype=np.bool_)
             mask[0:10] = True
+
+            assert 'spher' in pcd.__dict__
 
             pcd.reduce(mask)
 
@@ -441,6 +450,7 @@ class TestPointCloudData:
             assert start_id == end_id
 
             assert np.allclose(base_xyz[mask, :], pcd.xyz)
+            assert np.allclose(base_spher[mask, :], pcd.spher)
             assert np.allclose(base_rgb[mask], pcd.rgb)
             assert np.allclose(base_normal[mask], pcd.normals)
             assert np.allclose(base_intensities[mask], pcd.scalar_fields["intensity"].arr)
@@ -450,7 +460,7 @@ class TestPointCloudData:
             base_xyz = pcd.xyz.copy()
             base_rgb = pcd.rgb.copy()
             base_normal = pcd.normals.copy()
-            base_intensities = copy.deepcopy(pcd.scalar_fields["intensity"])
+            base_intensities = pcd.intensity.copy()
 
             mask = np.zeros(len(pcd), dtype=np.bool_)
             mask[0:10] = True
@@ -471,19 +481,16 @@ class TestPointCloudData:
             assert np.allclose(base_rgb[mask], new_pcd.rgb)
             assert np.allclose(base_normal[mask], new_pcd.normals)
             assert np.allclose(base_intensities[mask], new_pcd.scalar_fields["intensity"])
-            # assert pcd.optimized == new_pcd.optimized
-            if isinstance(pcd.socs_origin, np.ndarray):
-                assert np.all(pcd.socs_origin == new_pcd.socs_origin)
-            else:
-                assert pcd.socs_origin == new_pcd.socs_origin
+
             assert np.any(pcd.spher[mask, :] == new_pcd.spher)
 
         def test_extract(self, pcd):
             start_id = id(pcd)
             base_xyz = pcd.xyz.copy()
+            base_spher = pcd.spher.copy()
             base_rgb = pcd.rgb.copy()
             base_normal = pcd.normals.copy()
-            base_intensities = copy.deepcopy(pcd.scalar_fields["intensity"])
+            base_intensities = pcd.intensity.copy()
 
             mask = np.zeros(len(pcd), dtype=np.bool_)
             mask[0:10] = True
@@ -502,19 +509,19 @@ class TestPointCloudData:
             assert id(pcd.spher) != id(sampled_pcd.spher)
 
             assert np.all(base_xyz[~mask, :] == sampled_pcd.xyz)
+            assert np.all(base_spher[~mask, :] == sampled_pcd.spher)
             assert np.all(base_rgb[~mask] == sampled_pcd.rgb)
             assert np.allclose(base_normal[~mask], sampled_pcd.normals)
             assert np.all(base_intensities[~mask] == sampled_pcd.intensity)
             assert np.all(pcd.socs_origin == sampled_pcd.socs_origin)
-            # assert np.all(pcd.optimized == sampled_pcd.optimized)
             assert np.all(pcd.spher == sampled_pcd.spher)
 
             assert np.all(base_xyz[mask, :] == extracted_pcd.xyz)
+            assert np.all(base_spher[mask, :] == extracted_pcd.spher)
             assert np.all(base_rgb[mask] == extracted_pcd.rgb)
             assert np.all(base_normal[mask] == extracted_pcd.normals)
             assert np.all(base_intensities[mask] == extracted_pcd.intensity)
             assert np.all(pcd.socs_origin == extracted_pcd.socs_origin)
-            # assert np.all(pcd.optimized == extracted_pcd.optimized)
 
             assert len(extracted_pcd) + len(sampled_pcd) == base_xyz.shape[0]
             assert len(extracted_pcd) == 10
@@ -576,7 +583,24 @@ class TestPointCloudData:
             assert 'reflectance' not in merged_1.scalar_fields
 
 
-class TestOpen3DSupport:
+class BaseTestPcdCoordinates(BaseTestCartesianCoordinates):
+    cls = PointCloudData
+
+
+class BaseTestPcdNOSInit(BaseTestNOSInit):
+    cls = PointCloudData
+
+
+class BaseTestPcdNOSChange(BaseTestNOSChange):
+    cls = PointCloudData
+
+
+class BaseTestPcdConversions(BaseTestConversions):
+    cls = PointCloudData
+
+
+class BaseOpen3DSupport:
+    cls = PointCloudData
     def test_to_o3d(self, pcd: PointCloudData) -> None:
         obj = pcd.to_o3d(as_tensor=False)
         assert isinstance(obj, o3d.geometry.PointCloud)
@@ -591,17 +615,21 @@ class TestOpen3DSupport:
         assert not hasattr(obj, 'reflectance')
 
     def test_to_o3d_tensor(self, pcd: PointCloudData) -> None:
-        obj = pcd.to_o3d(as_tensor=True)
+        obj1 = pcd.to_o3d(as_tensor=True)
+        obj2 = self.cls(xyz=pcd.arr,
+                              scalar_fields=pcd.scalar_fields,
+                              numerical_optimization_shift=None).to_o3d(as_tensor=True)
 
-        assert isinstance(obj, o3d.t.geometry.PointCloud)
-        assert np.allclose(pcd.xyz, obj.point.positions.numpy())
-        for attr in ('normals', 'rgb', 'reflectance', 'intensity'):
-            assert getattr(pcd, attr) is None or hasattr(obj.point, attr)
-            assert getattr(pcd, attr) is None or np.allclose(getattr(pcd, attr), getattr(obj.point, attr).numpy())
+        for obj in (obj1, obj2):
+            assert isinstance(obj, o3d.t.geometry.PointCloud)
+            assert np.allclose(pcd.xyz, obj.point.positions.numpy())
+            for attr in ('normals', 'rgb', 'reflectance', 'intensity'):
+                assert getattr(pcd, attr) is None or hasattr(obj.point, attr)
+                assert getattr(pcd, attr) is None or np.allclose(getattr(pcd, attr), getattr(obj.point, attr).numpy())
 
     def test_from_o3d(self, pcd_o3d: o3d.geometry.PointCloud):
-        pcd = PointCloudData.from_o3d(pcd_o3d)
-        assert isinstance(pcd, PointCloudData)
+        pcd = self.cls.from_o3d(pcd_o3d)
+        assert isinstance(pcd, self.cls)
         assert pcd.intensity is None
         assert pcd.reflectance is None
         assert hasattr(pcd, 'rgb')
@@ -612,8 +640,8 @@ class TestOpen3DSupport:
         assert np.allclose(pcd.normals, np.asarray(pcd_o3d.normals))
 
     def test_from_o3d_tensor(self, pcd_o3d_tensor: o3d.t.geometry.PointCloud) -> None:
-        pcd = PointCloudData.from_o3d(pcd_o3d_tensor)
-        assert isinstance(pcd, PointCloudData)
+        pcd = self.cls.from_o3d(pcd_o3d_tensor)
+        assert isinstance(pcd, self.cls)
         assert hasattr(pcd, 'intensity')
         assert hasattr(pcd, 'reflectance')
         assert hasattr(pcd, 'rgb')
@@ -625,3 +653,31 @@ class TestOpen3DSupport:
         assert np.allclose(pcd.intensity.get_original_data(), pcd_o3d_tensor.point.intensity.numpy(), atol=1/255)
         assert np.allclose(pcd.xyz, pcd_o3d_tensor.point.positions.numpy())
         assert np.allclose(pcd.normals, pcd_o3d_tensor.point.normals.numpy())
+
+    def test_from_o3d_invalid(self, pcd):
+        with pytest.raises(TypeError):
+            self.cls.from_o3d(pcd)
+
+
+class TestPointCloudData(BaseTestPointCloudData):
+    pass
+
+
+class TestPcdCoordinates(BaseTestPcdCoordinates):
+    pass
+
+
+class TestPcdNOSInit(BaseTestPcdNOSInit):
+    pass
+
+
+class TestPcdNOSChange(BaseTestPcdNOSChange):
+    pass
+
+
+class TestPcdConversions(BaseTestPcdConversions):
+    pass
+
+
+class TestPcdO3DSupport(BaseOpen3DSupport):
+    pass

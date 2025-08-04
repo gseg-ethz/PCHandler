@@ -24,16 +24,53 @@ class TestAngle:
         # default display unit is the one passed in
         assert a.display_unit == unit
 
+
     def test_array_initialization_and_internal(self):
         arr = [0, 90, 180]
         a = Angle(arr, AngleUnit.DEGREE)
-        # internal_value stored in radians
         expected = np.array([0, np.pi/2, np.pi])
         np.testing.assert_allclose(a.internal_value, expected, rtol=1e-6)
-        # display_unit remains degree
+
         assert a.display_unit == AngleUnit.DEGREE
-        # type is AngleArray
         assert isinstance(a, AngleArray)
+
+        arr = np.array([0, 90, 180])
+        a = Angle(arr, AngleUnit.DEGREE)
+        expected = np.array([0, np.pi/2, np.pi])
+        np.testing.assert_allclose(a.internal_value, expected, rtol=1e-6)
+
+        assert arr.shape == a.shape
+
+        assert a.display_unit == AngleUnit.DEGREE
+        assert isinstance(a, AngleArray)
+
+        arr = Angle(Angle.parse('90deg'))
+        assert np.isclose(arr, np.pi/2)
+        assert isinstance(arr, Angle)
+
+
+
+    def test_invalid(self):
+        with pytest.raises(ValueError):
+            Angle.parse("invalid_string")
+
+        a = Angle([])
+
+        assert a.display_unit == AngleUnit.RAD
+        assert len(a._internal_value) == 0
+
+        a = Angle(1.0)
+        with pytest.raises(NotImplementedError):
+            a.__rmod__(3)
+
+        with pytest.raises(NotImplementedError):
+            a.__rtruediv__(3)
+
+        with pytest.raises(NotImplementedError):
+            a * Angle(3)
+
+
+
 
     def test_parse_various_inputs(self):
         # tuple form
@@ -74,15 +111,25 @@ class TestAngle:
             assert out == pytest.approx(expected)
 
     def test_in_unit_and_display_properties(self):
-        a = Angle(1.0, AngleUnit.RAD)
+        a = Angle(np.pi/2, AngleUnit.RAD)
         b = a.in_degrees()
+        c = a.in_radians()
+        d = a.in_gon()
         assert isinstance(b, Angle)
         assert b.display_unit == AngleUnit.DEGREE
+        assert c.display_unit == AngleUnit.RAD
+        assert d.display_unit == AngleUnit.GON
         # internal not changed
         assert float(a.internal_value) == float(b.internal_value)
+        assert float(b.internal_value) == float(c.internal_value)
+        assert float(c.internal_value) == float(d.internal_value)
         # changing display_unit in place
         a.display_unit = AngleUnit.GON
         assert a.display_unit == AngleUnit.GON
+
+        assert a.degrees == pytest.approx(90.0)
+        assert a.radians == pytest.approx(np.pi/2)
+        assert a.gon == pytest.approx(100.0)
 
     def test_repr_scalar(self):
         a = Angle(np.pi, AngleUnit.RAD)
@@ -149,6 +196,47 @@ class TestAngleArrayDirect:
         arr = AngleArray([0, 45, 90], AngleUnit.DEGREE)
         rep = repr(arr)
         assert "AngleArray(" in rep and "shape=(3,)" in rep and "unit=DEGREE" in rep
+
+    def test_other_methods(self):
+        arr = AngleArray([0, 45, 90], AngleUnit.DEGREE)
+        assert arr.min() == pytest.approx(0)
+        assert arr.max() == pytest.approx(np.pi/2)
+
+        b = arr + 3
+        assert np.all(b._internal_value == arr.radians+3)
+
+        with pytest.raises(NotImplementedError):
+            "asd" + arr
+
+        with pytest.raises(NotImplementedError):
+            "asd" - arr
+
+        with pytest.raises(NotImplementedError):
+            arr + 'abc'
+
+        with pytest.raises(NotImplementedError):
+            arr - 'abc'
+
+        with pytest.raises(NotImplementedError):
+            arr * Angle(2)
+
+
+    def test_str(self):
+        arr = AngleArray([0, 45, 90], AngleUnit.DEGREE)
+        assert str(arr) == "[ 0. 45. 90.] DEGREE"
+
+    def test___eq__(self):
+        deg = AngleArray([0, 45, 90], AngleUnit.DEGREE)
+        rad = AngleArray([0, np.pi/4, np.pi/2], AngleUnit.RAD)
+        gon = AngleArray([0, 50, 100], AngleUnit.GON)
+
+        assert np.allclose(deg, rad)
+        assert np.allclose(rad, deg)
+        assert np.allclose(deg, gon)
+        assert np.allclose(gon, deg)
+        assert np.allclose(rad, gon)
+        assert np.allclose(gon, rad)
+
 
 class TestAngleComparison:
 

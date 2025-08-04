@@ -29,7 +29,7 @@ class E57Handler(AbstractIOHandler):
     }
 
     @classmethod
-    def load(cls,
+    def load(cls,   # type: ignore[override]
              path: str | Path, /,
              retain_rgb: bool = True,
              retain_intensity: bool = True,
@@ -68,9 +68,10 @@ class E57Handler(AbstractIOHandler):
             raise ValueError(f"Input point cloud index passed is outside of the range [0, num_scans). Got {pcd_index}")
 
     @classmethod
-    def save(cls, path: str | Path, /, pcd: PointCloudData, **config) -> None:
+    def save(cls, path: str | Path, /, pcd: PointCloudData, **config) -> None:   # type: ignore[override]
         raise NotImplementedError
 
+    # TODO implement tests on file with multiple scans
     @classmethod
     def _load_all_e57_scans(cls, path, **kwargs) -> Generator[PointCloudData, None, None]:
         logger.debug(f"Loading multiple scans from E57 file: {path}")
@@ -82,7 +83,7 @@ class E57Handler(AbstractIOHandler):
             yield cls._load_single_e57(path, **kwargs)
 
     @classmethod
-    def _load_single_e57(cls,
+    def _load_single_e57(cls,   # type: ignore[override]
              path: str | Path, /,
              retain_rgb: bool = True,
              retain_intensity: bool = True,
@@ -95,23 +96,20 @@ class E57Handler(AbstractIOHandler):
                      f"{'\n    ' + RGB_NAMES.base if retain_rgb else ''}"
                      f"{'\n    ' + INTENSITY_NAMES.base if retain_intensity else ''}")
 
-        e57 = pye57.E57(str(path), mode="r")
 
-        try:
+        with pye57.E57(str(path), mode="r") as e57:
             header = e57.get_header(pcd_index)
 
-            expected_fields = tuple()
-
+            expected_fields: tuple = tuple()
             if retain_rgb:
                 expected_fields += ('colorRed', 'colorGreen', 'colorBlue')
-
             if retain_intensity:
                 expected_fields += ('intensity',)
 
             unsupported_fields = set(header.point_fields).difference(expected_fields)
 
             if len(unsupported_fields) > 0:
-                logger.warning(f"Fields discovered in file but are not supported by pye57: "
+                logger.warning(f"Fields discovered in file but are not supported by pye57 and will not be loaded: "
                                f"{('\n' + field for field in unsupported_fields)}")
 
             data = e57.read_scan(pcd_index,
@@ -120,9 +118,7 @@ class E57Handler(AbstractIOHandler):
                                  colors=retain_rgb,
                                  transform=read_transform)
 
-            pcd = PointCloudData(np.column_stack((data["cartesianX"],
-                                                  data["cartesianY"],
-                                                  data["cartesianZ"])))
+            pcd = PointCloudData(np.column_stack((data["cartesianX"], data["cartesianY"], data["cartesianZ"])))
 
             if retain_rgb:
                 if 'colorRed' in data:
@@ -136,11 +132,6 @@ class E57Handler(AbstractIOHandler):
                 else:
                     logger.warning('Could not read intensity information from point cloud')
 
-        except Exception as e:
-            raise e
-        else:
             logger.info(f"Successfully loaded scan {pcd_index} from E57 file: {path}")
-        finally:
-            e57.close()
 
         return pcd

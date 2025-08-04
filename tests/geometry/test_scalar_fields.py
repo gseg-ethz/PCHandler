@@ -18,6 +18,18 @@ from pchandler.geometry.scalar_fields import (
 )
 
 
+N = 100
+
+@pytest.fixture(scope='function')
+def nx3_uint8():
+    return RGBFields(np.random.randint(0, 256, (N, 3), dtype=np.uint8))
+
+@pytest.fixture(scope='function')
+def normals_float32():
+    vals = np.random.rand(N, 3).astype(np.float32)
+    vals = vals / np.linalg.norm(vals, axis=1).reshape(-1, 1)
+    return vals
+
 def test_lower_str_annotation():
     """
         Test name conversion to lowercase
@@ -27,7 +39,7 @@ def test_lower_str_annotation():
 
     """
     upper_name = "STEVE"
-    sf = ScalarField(np.ones(10), name=upper_name)
+    sf = ScalarField(np.ones(N), name=upper_name)
 
     assert isinstance(sf.name, str)
     assert sf.name != upper_name
@@ -57,7 +69,7 @@ class TestDtypeState:
 class TestScalarFieldClass:
     def test_keyword_init(self):
         a = ScalarField(
-            arr=np.ones(10).astype(np.float32),
+            arr=np.ones(N).astype(np.float32),
             name="Allen",
             origin_dtype=DtypeState(dtype=np.int32, lower=0, upper=1),
         )
@@ -69,22 +81,22 @@ class TestScalarFieldClass:
         assert isinstance(a, ScalarField)
 
     def test_positional_init(self):
-        a = ScalarField(np.ones(10), name="steve")
+        a = ScalarField(np.ones(N), name="steve")
 
         assert a.name == "steve"
-        assert np.all(a == np.ones(10))
+        assert np.all(a == np.ones(N))
 
     @pytest.mark.parametrize(
         ["array", "name", "origin_dtype"],
         (
-            (np.ones(10), True, None),
-            (np.ones(10), {"sas"}, None),
-            (np.ones(10), 1234.123, None),
-            (np.ones((10, 2)), "sty", None),
-            (np.ones((10, 4)), "steve", None),
-            (np.ones((10, 3, 3)), "asd", None),
-            (np.ones(10), "steve", True),
-            (np.ones(10), "steve", {"a": 2}),
+            (np.ones(N), True, None),
+            (np.ones(N), {"sas"}, None),
+            (np.ones(N), 1234.123, None),
+            (np.ones((N, 2)), "sty", None),
+            (np.ones((N, 4)), "steve", None),
+            (np.ones((N, 3, 3)), "asd", None),
+            (np.ones(N), "steve", True),
+            (np.ones(N), "steve", {"a": 2}),
         ),
     )
     def test_invalid_values(self, array, name, origin_dtype):
@@ -103,7 +115,7 @@ class TestScalarFieldClass:
         assert np.all(a.arr == array.squeeze())
 
     def test_init_from_self(self):
-        b = ScalarField(np.ones(10), name="test")
+        b = ScalarField(np.ones(N), name="test")
         c = ScalarField(b, name="second")
         assert np.all(b == c)
         assert b.name != c.name
@@ -114,7 +126,7 @@ class TestScalarFieldClass:
         assert e.name == c.name
         assert np.all(e.arr == c.arr)
 
-    @pytest.mark.parametrize("array", (np.ones((10, 2)), np.ones((10, 3))))
+    @pytest.mark.parametrize("array", (np.ones((N, 2)), np.ones((N, 3))))
     def test_invalid_shape(self, array):
         with pytest.raises(Exception) as e:
             ScalarField(array, name="a")
@@ -142,7 +154,7 @@ class TestScalarFieldClass:
 
 class TestTypeDefinedScalarFields:
     def test_normalised_int16(self):
-        array = np.random.randint(-(2**14), 2**13, 100, dtype=np.int16)
+        array = np.random.randint(-(2**14), 2**13, N, dtype=np.int16)
         b = NormalisedInt16ScalarField(array, name="temp")
         assert isinstance(b, NormalisedInt16ScalarField)
         assert np.all(b == array)
@@ -152,26 +164,26 @@ class TestTypeDefinedScalarFields:
         assert as_uint8.dtype == np.uint8
 
     def test_bool_valid(self):
-        array = np.random.randint(0, 1, 1000, dtype=np.bool_)
+        array = np.random.randint(0, 1, N, dtype=np.bool_)
         b = ScalarFieldBoolean(array, name="temp")
         assert isinstance(b, ScalarFieldBoolean)
         assert np.all(b == array)
 
     def test_bool_invalid(self):
-        array = np.random.randint(-128, 127, 100, dtype=np.int8)
+        array = np.random.randint(-128, 127, N, dtype=np.int8)
         with pytest.raises(Exception) as e:
             ScalarFieldBoolean(array)
         assert type(e.value) in (ValidationError, ValueError, TypeError)
 
     def test_scalar_uint8(self):
-        array = np.random.randint(0, 255, 1000, dtype=np.uint8)
+        array = np.random.randint(0, 255, N, dtype=np.uint8)
         b = ScalarFieldUint8(array, name="temp")
         assert isinstance(b, ScalarFieldUint8)
         assert np.all(b == array)
         assert b.dtype == np.uint8
 
     def test_scalar_float32(self):
-        array = np.random.rand(1000).astype(np.float32)
+        array = np.random.rand(N).astype(np.float32)
         b = ScalarFieldFloat32(array, name="temp")
         assert isinstance(b, ScalarFieldFloat32)
         assert np.all(b == array)
@@ -180,7 +192,7 @@ class TestTypeDefinedScalarFields:
 
 class TestRgbField:
     def test_positional_init(self):
-        data = np.random.randint(0, 255, (100, 3), dtype=np.uint8)
+        data = np.random.randint(0, 255, (N, 3), dtype=np.uint8)
         a = RGBFields(data)
 
         assert a.name == RGB_NAMES.base
@@ -191,7 +203,7 @@ class TestRgbField:
         assert a.name != "not_rgb"
 
     def test_keyword_init(self):
-        data = np.random.randint(0, 255, (100, 3), dtype=np.uint8)
+        data = np.random.randint(0, 255, (N, 3), dtype=np.uint8)
         a = RGBFields(arr=data)
 
         assert a.name == RGB_NAMES.base
@@ -202,7 +214,7 @@ class TestRgbField:
         assert a.name != "not_rgb"
 
     def test_invalid_shapes(self):
-        data = np.random.randint(0, 255, 100, dtype=np.uint8)
+        data = np.random.randint(0, 255, N, dtype=np.uint8)
         with pytest.raises(ValidationError):
             RGBFields(data)
 
@@ -214,7 +226,7 @@ class TestRgbField:
         assert type(e.value) in (ValidationError, TypeError)
 
     def test_properties(self):
-        data = np.random.randint(0, 255, (100, 3), dtype=np.uint8)
+        data = np.random.randint(0, 255, (N, 3), dtype=np.uint8)
         a = RGBFields(data)
 
         assert np.all(a.r == data[:, 0])
@@ -222,7 +234,7 @@ class TestRgbField:
         assert np.all(a.b == data[:, 2])
 
     def test_initialise_field_class_method(self):
-        data: np.ndarray = np.random.randint(0, 255, (100, 3), dtype=np.uint8)
+        data: np.ndarray = np.random.randint(0, 255, (N, 3), dtype=np.uint8)
         rgb1 = RGBFields.initialize(data.shape[0])
         assert np.all(rgb1 == np.zeros_like(data))
         assert np.uint8 == rgb1.dtype
@@ -257,50 +269,47 @@ class TestRgbField:
 
 
 class TestNormalsField:
-    def test_positional_init(self):
-        data = np.random.rand(100, 3).astype(np.float32)
-        a = NormalFields(data)
+    def test_positional_init(self, normals_float32):
+        a = NormalFields(normals_float32)
 
         assert a.name == NORMAL_NAMES.base
-        assert np.all(a == data)
+        assert np.all(a == normals_float32)
 
-        a = NormalFields(data, name="not_normals")
+        a = NormalFields(normals_float32, name="not_normals")
         assert a.name == NORMAL_NAMES.base
         assert a.name != "not_normals"
 
-    def test_keyword_init(self):
-        data = np.random.rand(100, 3).astype(np.float32)
-        a = NormalFields(arr=data)
+    def test_keyword_init(self, normals_float32):
+        a = NormalFields(arr=normals_float32)
 
         assert a.name == NORMAL_NAMES.base
-        assert np.all(a == data)
+        assert np.all(a == normals_float32)
 
-        a = NormalFields(arr=data, name="not_normals")
+        a = NormalFields(arr=normals_float32, name="not_normals")
         assert a.name == NORMAL_NAMES.base
         assert a.name != "not_normals"
 
     def test_invalid_shapes(self):
-        data = np.random.rand(100).astype(np.float32)
+        data = np.random.rand(N).astype(np.float32)
         with pytest.raises(ValidationError):
             NormalFields(data)
 
     def test_invalid_dtypes(self):
-        data = np.random.randint(0, 2, (100, 3), dtype=np.bool_)
+        data = np.random.randint(0, 2, (N, 3), dtype=np.bool_)
         with pytest.raises(Exception) as e:
             NormalFields(data)
 
         assert type(e.value) in (ValidationError, TypeError)
 
-    def test_properties(self):
-        data = np.random.rand(100, 3).astype(np.float32)
-        a = NormalFields(data)
+    def test_properties(self, normals_float32):
+        a = NormalFields(normals_float32)
 
-        assert np.all(a.nx == data[:, 0])
-        assert np.all(a.ny == data[:, 1])
-        assert np.all(a.nz == data[:, 2])
+        assert np.all(a.nx == normals_float32[:, 0])
+        assert np.all(a.ny == normals_float32[:, 1])
+        assert np.all(a.nz == normals_float32[:, 2])
 
     def test_initialise_field_class_method(self):
-        data = np.random.rand(100, 3).astype(np.float32)
+        data = np.random.rand(N, 3).astype(np.float32)
         data /= np.linalg.norm(data, axis=1).reshape(-1, 1)
         check_data = np.zeros_like(data)
         check_data[:, 2] = 1
@@ -334,8 +343,8 @@ class TestSegmentationField:
         assert b4.shape == (10,)
 
     def test_invalid_shapes(self):
-        a = np.random.randint(0, 100, (100, 3), dtype=np.uint8)
-        b = np.random.randint(0, 100, (100, 5), dtype=np.uint8)
+        a = np.random.randint(0, 100, (N, 3), dtype=np.uint8)
+        b = np.random.randint(0, 100, (N, 5), dtype=np.uint8)
 
         with pytest.raises(ValueError):
             SegmentationMap(arr=a, name="Segmentation")
@@ -345,10 +354,10 @@ class TestSegmentationField:
     @pytest.mark.parametrize(
         "array",
         (
-            np.random.randint(0, 2**14, 100, dtype=np.int16),
-            np.random.randint(0, 100, 100, dtype=np.uint32),
-            np.random.rand(100).astype(np.float32),
-            np.ones((100, 5), dtype=np.bool_),
+            np.random.randint(0, 2**14, N, dtype=np.int16),
+            np.random.randint(0, 100, N, dtype=np.uint32),
+            np.random.rand(N).astype(np.float32),
+            np.ones((N, 5), dtype=np.bool_),
         ),
     )
     def test_dtypes(self, array):

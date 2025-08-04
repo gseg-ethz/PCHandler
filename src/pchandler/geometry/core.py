@@ -1,54 +1,75 @@
 from __future__ import annotations
 
-from typing import Optional, Self, Callable, overload, Literal, Unpack
+from typing import Optional, Self, overload, Literal, cast, Sequence, Any
 import logging
 
 import numpy as np
-import numpy.typing as npt
 import open3d as o3d
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, field_validator, field_serializer
 
 from pchandler.base_types import Array_Nx3_T, IndexLike, VectorT, Array_Nx3_Float_T, Array_Nx3_Uint8_T, ArrayT
-from pchandler.geometry.coordinates import CartesianCoordinates, CartesianKw
-
-from pchandler.geometry.scalar_field_manager import ScalarFieldManager
-from pchandler.geometry.scalar_fields import (NormalFields, RGBFields, ScalarField, NormalisedInt16ScalarField,
-                                              ScalarFieldTriplet)
+from pchandler.geometry.coordinates import CartesianCoordinates
+from pchandler.geometry.scalar_field_manager import ScalarFieldManager, SF_T
+from pchandler.geometry.scalar_fields import (
+    NormalFields,
+    RGBFields,
+    ScalarField,
+    ScalarFieldTriplet,
+)
 
 logger = logging.getLogger(__name__)
 
-class PointCloudDataKw(CartesianKw, total=False):
-    scalar_fields: Optional[ScalarFieldManager[ScalarField | ScalarFieldTriplet]]
-    rgb: Optional[npt.NDArray[np.uint8 | np.float32 | np.float64]]
-    normals: Optional[npt.NDArray[np.float32 | np.float64]]
-    intensity: Optional[npt.NDArray[np.uint16 | np.float32 | np.float64]]
-    reflectance: Optional[npt.NDArray[np.uint16 | np.float32 | np.float64]]
+RgbInputT = Optional[RGBFields | Array_Nx3_Float_T | Array_Nx3_Uint8_T]
+NormalInputT = Optional[NormalFields | Array_Nx3_Float_T]
+IntensityInputT = Optional[VectorT | ArrayT]
+ReflectanceInputT = Optional[VectorT | ArrayT]
+SFM_T = Optional[ScalarFieldManager | dict[str, ScalarField | ScalarFieldTriplet | Array_Nx3_T | VectorT | Sequence]]
+
 
 class PointCloudData(CartesianCoordinates):
+    """
 
-    # transform_ledger: Annotated[
-    #     TransformLedger,
-    #     Field(default_factory=TransformLedger),
-    #     BeforeValidator(lambda value: value if not isinstance(value, TransformLedger) else TransformLedger(**value))
-    # ]
-    scalar_fields: ScalarFieldManager[ScalarField | ScalarFieldTriplet] = Field(default_factory=ScalarFieldManager)
+    Parameters
+    ----------
+    xyz
+    rgb
+    normals
+    intensity
+    reflectance
+    scalar_fields
+    """
+    scalar_fields: ScalarFieldManager = Field(default_factory=ScalarFieldManager)
 
-    # “input‐only” fields that need to be folded into the ScalarFieldManager
-    rgb_input: Optional[npt.NDArray[np.uint8 | np.float32 | np.float64]] = Field(
-        None, alias="rgb", exclude=True, repr=False
-    )
-    normals_input: Optional[npt.NDArray[np.float32 | np.float64]] = Field(
-        None, alias="normals", exclude=True, repr=False
-    )
-    intensity_input: Optional[npt.NDArray[np.uint16 | np.float32 | np.float64]] = Field(
-        None, alias="intensity", exclude=True, repr=False
-    )
-    reflectance_input: Optional[npt.NDArray[np.uint16 | np.float32 | np.float64]] = Field(
-        None, alias="reflectance", exclude=True, repr=False
-    )
+    def __init__(self,
+                 /,
+                 xyz=None,
+                 *,
+                 rgb: RgbInputT = None,
+                 normals: NormalInputT = None,
+                 intensity: IntensityInputT = None,
+                 reflectance: ReflectanceInputT = None,
+                 scalar_fields: SFM_T = None,
+                 **kwargs: Any):
 
-    def __init__(self, xyz=None, **kwargs: Unpack[PointCloudDataKw]):
-        super().__init__(xyz=xyz, **kwargs)
+        kwargs = {} | kwargs
+        kwargs['scalar_fields'] = scalar_fields if not None else None
+
+        super().__init__(xyz=xyz, **kwargs) # type: ignore[call-overload]
+
+        self.scalar_fields.parent = self
+        self.scalar_fields.validate_lengths()
+
+        if rgb is not None:
+            self.rgb = rgb
+
+        if normals is not None:
+            self.normals = normals
+
+        if intensity is not None:
+            self.intensity = intensity
+
+        if reflectance is not None:
+            self.reflectance = reflectance
 
     @property
     def nbPoints(self) -> int:
@@ -56,30 +77,17 @@ class PointCloudData(CartesianCoordinates):
 
     @field_validator('scalar_fields', mode="before")
     @classmethod
-    def _convert_scalar_fields(cls, value):
-        logger.debug(f"Running `_convert_scalar_fields` validator on {cls}")
-        if not isinstance(value, ScalarFieldManager):
+    def convert_sfm(cls, value):
+        if isinstance(value, dict):
             value = ScalarFieldManager(fields=value)
+        elif value is None:
+            value = ScalarFieldManager()
         return value
 
-    @model_validator(mode="after")
-    def ensure_scalar_field_manager_pointer(self) -> Self:
-        """Revalidate model to ensure that the weakref points to the correct object"""
-
-        self.scalar_fields.parent = self
-        return self
-
-    @model_validator(mode="after")
-    def _move_into_scalar_fields(self) -> Self:
-        logger.debug(f"Running `_move_into_scalar_fields` validator on {self}")
-        # map any provided “_input” into the scalar_fields manager
-        for name in ("rgb", "normals", "intensity", "reflectance"):
-            inp = getattr(self, f"{name}_input", None)
-            if inp is not None:
-                setattr(self, name, inp)
-                delattr(self, f"{name}_input")
-                # setattr(self, f"{name}_input", None)
-        return self
+    @field_serializer('scalar_fields')
+    def drop_parent_weakref(self, scalar_fields: ScalarFieldManager):
+        scalar_fields._parent = None
+        return scalar_fields
 
     @property
     def normals(self: Self) -> Optional[NormalFields]:
@@ -106,12 +114,15 @@ class PointCloudData(CartesianCoordinates):
         self.scalar_fields.intensity = value
 
     @property
-    def reflectance(self: Self) -> Optional[NormalisedInt16ScalarField]:
+    def reflectance(self: Self) -> Optional[ScalarField]:
         return self.scalar_fields.reflectance
 
     @reflectance.setter
     def reflectance(self, value: Optional[VectorT | ScalarField]) -> None:
         self.scalar_fields.reflectance = value
+
+    def __setattr__(self, key, value):
+        super().__setattr__(key, value)
 
     def __setitem__(self, key: IndexLike, value: ArrayT | PointCloudData) -> None:
         raise IndexError(
@@ -122,26 +133,13 @@ class PointCloudData(CartesianCoordinates):
     def __hash__(self) -> int:
         return id(self)
 
-    def __reduce__(self):
-        base_fn, base_args = super().__reduce__()
-
-        state_dict, = base_args
-        return (
-            PointCloudData._reconstruct_scalar_field_link,
-            (base_fn, state_dict),
-        )
-
-    @staticmethod
-    def _reconstruct_scalar_field_link(
-            base_fn: Callable[[dict], PointCloudData],
-            state: dict,
-      ):
-        obj = base_fn(state)
-
+    @classmethod
+    def _reconstruct(cls, state: dict) -> Self:
+        obj: Self = super(cls, cls)._reconstruct(state)
         obj.scalar_fields.parent = obj
         return obj
 
-    def sample(self, mask: npt.NDArray[np.bool_|np.integer]) -> PointCloudData:
+    def sample(self, mask: IndexLike) -> PointCloudData:
         mask = self.create_mask(mask)
         sample = self.copy(
             self.arr[mask, :],
@@ -152,24 +150,20 @@ class PointCloudData(CartesianCoordinates):
         )
         return sample
 
-    def reduce(self, mask: npt.NDArray[np.bool_|np.integer]) -> None:
+    def reduce(self, mask: IndexLike) -> None:
         super().reduce(mask)
         self.scalar_fields.reduce(mask)
         if 'spher' in self.__dict__:
             self.__dict__['spher'] = self.__dict__['spher'][mask]
 
-    def extract(self, mask: npt.NDArray[np.bool_|np.integer]) -> Self:
+    def extract(self, mask: IndexLike) -> Self:
         extracted = super().extract(mask)
-        if 'spher' in extracted.__dict__:
-            extracted.__dict__['spher'] = extracted.__dict__['spher'][mask]
         return extracted
 
     @classmethod
-    def merge(cls, *pcds: PointCloudData) -> PointCloudData:
-        # Check for same optimization shift
+    def merge(cls, *pcds: Self, **kwargs,) -> Self:
         scalar_fields = ScalarFieldManager.merge([pcd.scalar_fields for pcd in pcds])
-        return super().merge(*pcds, scalar_fields=scalar_fields)
-
+        return super(cls, cls).merge(*pcds, scalar_fields=scalar_fields, **kwargs)
 
     @overload
     def to_o3d(self, as_tensor: Literal[False] = ...) -> o3d.geometry.PointCloud: ...
@@ -179,17 +173,6 @@ class PointCloudData(CartesianCoordinates):
     def to_o3d(self, as_tensor: bool = False) -> o3d.geometry.PointCloud | o3d.t.geometry.PointCloud:
         """
             Converts the point cloud to an Open3D `PointCloud` object.
-
-            Returns
-            -------
-            o3d.geometry.PointCloud
-                An Open3D representation of the point cloud.
-            pcd_o3d = o3d.geometry.PointCloud()
-            if self.global_coordinate_shift is None:
-                pcd_o3d.points = o3d.utility.Vector3dVector(self.xyz)
-            else:
-                pcd_o3d.points = o3d.utility.Vector3dVector((self.xyz + self.global_coordinate_shift).astype(np.float64))
-            return pcd_o3d
         """
         if self.numerical_optimization_shift is not None:
             pcd = self.copy(update={
@@ -205,16 +188,16 @@ class PointCloudData(CartesianCoordinates):
 
             for sf_name in set(self.scalar_fields.keys()):
                 if self.scalar_fields[sf_name] is not None:
-                    setattr(pcd_o3d.point, sf_name, o3d.core.Tensor(self.scalar_fields[sf_name].arr))
+                    setattr(pcd_o3d.point, sf_name, o3d.core.Tensor(cast(SF_T, self.scalar_fields[sf_name]).arr))
 
         else:
             pcd_o3d = o3d.geometry.PointCloud()
             pcd_o3d.points = o3d.utility.Vector3dVector(pcd.xyz)
 
-            if 'rgb' in self.scalar_fields:
+            if self.rgb is not None:
                 pcd_o3d.colors = o3d.utility.Vector3dVector(self.rgb.as_normalised_float32())
 
-            if 'normals' in self.scalar_fields:
+            if self.normals is not None:
                 pcd_o3d.normals = o3d.utility.Vector3dVector(self.normals)
 
             for sf_name in set(self.scalar_fields.keys()).difference({'rgb', 'normals'}):
@@ -245,6 +228,7 @@ class PointCloudData(CartesianCoordinates):
                 return cls(np.asarray(pcd_o3d.points), spherical_coordinates_origin=scan_center)
         """
 
+        # Tensor object -> everything is a field
         if isinstance(pcd_o3d, o3d.t.geometry.PointCloud):
             pcd = PointCloudData(pcd_o3d.point.positions.numpy())
 
@@ -252,13 +236,14 @@ class PointCloudData(CartesianCoordinates):
                 if name != 'positions':
                     setattr(pcd, name, value.numpy())
 
+        # Original o3d object -> Other fields not supported
         elif isinstance(pcd_o3d, o3d.geometry.PointCloud):
             pcd = PointCloudData(np.asarray(pcd_o3d.points))
             if len(pcd_o3d.colors):
-                pcd.rgb = pcd_o3d.colors
+                pcd.rgb = np.asarray(pcd_o3d.colors)
 
             if len(pcd_o3d.normals):
-                pcd.normals = pcd_o3d.normals
+                pcd.normals = np.asarray(pcd_o3d.normals)
 
         else:
             raise TypeError(f"Input point cloud is not an open 3d type but {type(pcd_o3d)=}")

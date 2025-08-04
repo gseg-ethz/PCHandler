@@ -3,7 +3,19 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from functools import cached_property
-from typing import Union, Optional, Self, Any, Type, TypeVar, Unpack, TypedDict, NotRequired, overload, MutableMapping
+from typing import (
+    Union,
+    Optional,
+    Self,
+    Any,
+    Type,
+    TypeVar,
+    TypedDict,
+    NotRequired,
+    MutableMapping,
+    overload,
+    Unpack,
+)
 import uuid
 
 import numpy as np
@@ -32,7 +44,7 @@ CartesianT  = TypeVar("CartesianT", bound="CartesianCoordinates")
 
 class Abstract3dKw(TypedDict, total=False):
     project_transformation: NotRequired[Array_4x4_T]
-    socs_origin: NotRequired[Vector_3_T]
+    socs_origin: NotRequired[Optional[Vector_3_T]]
 
 
 class CartesianKw(Abstract3dKw, total=False):
@@ -113,22 +125,22 @@ class CartesianCoordinates(Abstract3dCoordinates):
     )
 
     @overload
-    def __init__(self, *, xyz: Array_Nx3_T|Self, **kwargs: Unpack[CartesianKw]): ...
+    def __init__(self, /, xyz: Array_Nx3_T|Self, **kwargs: Unpack[CartesianKw]): ...
 
     @overload
-    def __init__(self, *, arr: Array_Nx3_T|Self, **kwargs: Unpack[CartesianKw]): ...
+    def __init__(self, /, **kwargs: Unpack[CartesianKwFull]): ...
 
-    def __init__(self, xyz=None, **kwargs: Unpack[CartesianKwFull]):
+    def __init__(self, /, xyz: Optional[Array_Nx3_T|Self] = None, **kwargs: Unpack[CartesianKwFull]):
         # Accept xyz/arr as a positional argument
         if xyz is not None:
             if "arr" in kwargs:
-                raise TypeError("Cannot pass both positional and keyword for xyz/arr")
+                raise ValueError("Cannot pass both positional and keyword for xyz/arr")
             kwargs["arr"] = xyz
 
         prev_shift: Optional[OptimizedShift] = kwargs.pop("_shift_applied_by", None)
         super().__init__(**kwargs)  # type: ignore[misc]
 
-        # Set the private attribute after initialisation
+        # Set the private attribute after initialization
         object.__setattr__(self, "_shift_applied_by", prev_shift)
 
         self.compute_unshifted_bbox()
@@ -149,27 +161,27 @@ class CartesianCoordinates(Abstract3dCoordinates):
         """
         Handles the different cases of self.numerical_optimization_shift and self._shift_applied_by that are passed
 
-        Case 1 - prev_shift is None and NOS is None
+        Case 1 - prev_shift is None, NOS is None
           Basic init, register to NOS
 
-        Case 2 - prev_shift is None and NOS exists
+        Case 2 - prev_shift is None, NOS exists
           Revert to prev_shift, convert to float64, unregister prev_shift
 
-        Case 3 - prev_shift exists and NOS is None
+        Case 3 - prev_shift exists, NOS is None
           register to NOS
 
-        Case 4 - prev_shift exists and NOS exists
+        Case 4 - prev_shift exists, NOS exists
           If same, register to NOS. Else, apply difference, unregister prev, register NOS
         """
         prev_shift = self._shift_applied_by
         if self.numerical_optimization_shift is not None:
             self._register_with_shift_at_osm() # This could possibly set self.nos to None
 
-        # Case 1 - Typical initialisation with numerical_optimization_shift = None
+        # Case 1 - Initialisation with NOS = None
         if prev_shift is None and self.numerical_optimization_shift is None:
             return
 
-        # Case 2 - Typical initialization with a NOS kwarg
+        # Case 2 - Initialization with a NOS value
         elif prev_shift is None and self.numerical_optimization_shift is not None:
             self.update_shift(-self.numerical_optimization_shift.value)
 
@@ -179,15 +191,12 @@ class CartesianCoordinates(Abstract3dCoordinates):
             prev_shift.unregister(self)
 
         # Case 4 - Case when pcd has been pickled but another optimization shift is provided,
-        # or has changed since it was pickled
+        #          or has changed since it was pickled
         elif prev_shift is not None and self.numerical_optimization_shift is not None:
             if prev_shift is not self.numerical_optimization_shift:
                 delta_shift = prev_shift.value - self.numerical_optimization_shift.value
                 self.update_shift(delta_shift)
                 prev_shift.unregister(self)
-
-        else:
-            raise RuntimeError("Unknown edge case found.")
 
         object.__setattr__(self, "_shift_applied_by", self.numerical_optimization_shift)
 
@@ -208,8 +217,8 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
     def _register_with_shift_at_osm(self) -> None:
         """
-        This function tries to register its numerical_optimization_shift with the osm. The osm determines if this is
-        valid and possibly returns a different shift, or None if infeasible.
+        This function tries to register its numerical_optimization_shift with the osm.
+        The osm determines if this is valid and possibly returns a different shift, or None if infeasible.
 
         Returns
         -------
@@ -217,11 +226,11 @@ class CartesianCoordinates(Abstract3dCoordinates):
         """
         osm = OptimizedShiftManager()
         try:
-            shift = osm.register_with(self, self.numerical_optimization_shift)
+            shift = osm.register_coordinates_to_shift(self, self.numerical_optimization_shift)  # type: ignore[arg-type]
             if shift is not self.numerical_optimization_shift:
-                logger.info(f"The provided numerical_optimization_shift was not feasible and needed to be replaced"
-                            f"by a new one.")
+                logger.info(f"The input numerical_optimization_shift was not feasible and was replaced by a new one.")
                 object.__setattr__(self, "numerical_optimization_shift", shift)
+
         except OptimizedShiftManager.ShiftNotFeasibleError:
             logger.warning("No numerical_optimization_shift was feasible. Will continue in float64 mode.")
             object.__setattr__(self, "numerical_optimization_shift", None)
@@ -257,7 +266,8 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
         return obj
 
-    def copy(self: Self,
+    # noinspection PyPep8Naming
+    def copy(self: Self,    #type: ignore[override]
              array: Optional[npt.NDArray[np.floating] | Self] = None,
              *,
              deep: bool = True,
@@ -265,36 +275,50 @@ class CartesianCoordinates(Abstract3dCoordinates):
              link_to_same_NOS: bool = True,
              **kwargs: dict[str, Any]) -> Self:
         """
-        Produce a deep or shallow copy of the model. Updates the model also if parameter is parsed.
+        Produce a deep or shallow copy of the model. Updates the model also if this parameter is parsed.
         """
 
         update = {} if update is None else update
 
-        if array is not None and not isinstance(array, CartesianCoordinates | np.ndarray):
-            raise TypeError(f"Invalid type of array passed: {type(array)}. Should be CartesianCoordinates or np.ndarray")
-
         if link_to_same_NOS and "numerical_optimization_shift" not in update:
             update["numerical_optimization_shift"] = self.numerical_optimization_shift
+
         update["_shift_applied_by"] = self._shift_applied_by # TODO: Rework structure!
         update["id"] = None
 
         return super().copy(array=array, deep=deep, update=update, **kwargs)
 
-    # TODO this supports merging of tiled data. Not tested over registration / transformation etc.
     @classmethod
     def merge(cls: Type[Self], *cart_coords: Self , **kwargs) -> Self:
-        if len(cart_coords) == 1:
-            return cart_coords[0].copy()
-        if len(set(cart_coord.numerical_optimization_shift for cart_coord in cart_coords)) > 1:
-            logger.info(f"{type(cart_coords[0])} objects do not share a common numerical optimization shift object.")
-            bbox_pts = np.vstack(tuple(cart_coord.unshifted_bbox for cart_coord in cart_coords))
 
-            if cart_coords[0].numerical_optimization_shift.check_addibility(bbox_pts):
-                logger.info(f"Linking to numerical optimization shift of first instance.")
+        if len(cart_coords) == 0:
+            raise ValueError("Cannot merge empty list of CartesianCoordinates")
+
+        elif len(cart_coords) == 1:
+            return cart_coords[0].copy()
+
+        elif len(set(cart_coord.numerical_optimization_shift for cart_coord in cart_coords)) > 1:
+            logger.info(
+                f"{type(cart_coords[0])} objects do not share a common numerical optimization shift object."
+            )
+            bbox_pts = np.vstack(
+                tuple(np.array(cart_coord.unshifted_bbox) for cart_coord in cart_coords)
+            )
+
+            if (cart_coords[0].numerical_optimization_shift and
+                    cart_coords[0].numerical_optimization_shift.check_addibility(bbox_pts)):
+                logger.info(
+                    f"Linking to numerical optimization shift of first instance."
+                )
                 common_nos = cart_coords[0].numerical_optimization_shift
+
+            # TODO is there a way to merge without creating an optimal shift?
             elif OptimizedShiftManager().is_shift_possible(bbox_pts):
-                logger.info(f"Creating new numerical optimization shift instance.")
+                logger.info(
+                    f"Creating new numerical optimization shift instance."
+                )
                 common_nos = OptimizedShift()
+
             else:
                 logger.info(f"Unable to create new numerical optimization shift instance applicable to all points.")
                 common_nos = None
@@ -308,8 +332,11 @@ class CartesianCoordinates(Abstract3dCoordinates):
             cart_coords = tuple(cart_coord_copies)
 
         new_arr = np.vstack(tuple(cart_coord.arr for cart_coord in cart_coords))
+        # TODO discuss the best way to handle this - the common NOS needs to be removed from the new_arr to
+        #  make the merge with different NOS work
+        # TODO also consider the case of pcds without NOS
         return cls(
-            arr=new_arr,
+            xyz=new_arr,
             numerical_optimization_shift=cart_coords[0].numerical_optimization_shift,
             socs_origin=None,
             project_transformation=None,
@@ -318,47 +345,8 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
     @property
     def numerically_optimized(self) -> bool:
-        # TODO close to zero
-        return not (self.numerical_optimization_shift is None or self.numerical_optimization_shift.value)
-
-    # @model_validator(mode="wrap")
-    # @classmethod
-    # def numeric_optimization(
-    #         cls,
-    #         data: Any,
-    #         handler: ModelWrapValidatorHandler[Self],
-    #         info: ValidationInfo
-    # ) -> Self:
-    #     # Create new Shift instance on Ellipsis
-    #     # if isinstance(data, dict) and (
-    #     #         not "numerical_optimization_shift" in data or data["numerical_optimization_shift"] is Ellipsis
-    #     # ):
-    #     #     data["numerical_optimization_shift"] = OptimizedShift()
-    #     logger.debug(f"Running `numeric_optimization` validator on {data.__class__}")
-    #     instance = handler(data)
-    #
-    #     if not instance._shift_applied and instance.numerical_optimization_shift is not None:
-    #         osm = OptimizedShiftManager()
-    #         try:
-    #             shift = osm.register_with(instance, instance.numerical_optimization_shift)
-    #             if shift is not instance.numerical_optimization_shift:
-    #                 logger.info(f"The provided numerical_optimization_shift was not feasible and needed to"
-    #                             f"be replaced by a new one.")
-    #
-    #                 object.__setattr__(instance, "numerical_optimization_shift", shift)
-    #
-    #             # Use `object.__setattr` to bypass each change re-calling the validator
-    #             object.__setattr__(instance, "arr",
-    #                                (instance.arr - instance.numerical_optimization_shift.value).astype(np.float32))
-    #             if instance.socs_origin is not None:
-    #                 object.__setattr__(instance, "socs_origin", instance.socs_origin - instance.numerical_optimization_shift.value)
-    #         except OptimizedShiftManager.ShiftNotFeasibleError:
-    #             logger.warning("No numerical_optimization_shift was feasible. Will continue in float64 mode.")
-    #             object.__setattr__(instance, "numerical_optimization_shift", None)
-    #
-    #         object.__setattr__(instance, "_shift_applied", True)
-    #
-    #     return instance
+        return not (self.numerical_optimization_shift is None
+                    or np.allclose(self.numerical_optimization_shift.value, 0))
 
     @property
     def x(self) -> npt.NDArray[np.floating]:
@@ -375,12 +363,6 @@ class CartesianCoordinates(Abstract3dCoordinates):
     @property
     def xyz(self) -> npt.NDArray[np.floating]:
         return self.arr
-    #
-    # @xyz.setter
-    # def xyz(self, value: npt.NDArray[np.floating]):
-    #     # if self.model_config['frozen']:
-    #     #     raise ValueError('Cannot edit XYZ coordinates of frozen object')
-    #     self.arr = value
 
     @property
     def yxz(self) -> npt.NDArray[np.floating]:
@@ -389,7 +371,6 @@ class CartesianCoordinates(Abstract3dCoordinates):
     @cached_property
     def spher(self) -> npt.NDArray[np.floating]:
         if self.socs_origin is None:
-            logger.warning("Scan center of point cloud is ambiguous and results can not be guaranteed")
             return xyz2rhv(self.arr, np.zeros(3, dtype=np.float32))
         return xyz2rhv(self.arr, self.socs_origin)
 
@@ -417,22 +398,6 @@ class CartesianCoordinates(Abstract3dCoordinates):
     def fov(self) -> FoV:
         return FoV.from_angles(self.hz, self.v)
 
-    @property
-    def numerically_optimized(self) -> bool:
-        return not (
-                self.numerical_optimization_shift is None
-                or np.allclose(self.numerical_optimization_shift.value, [0, 0, 0])
-        )
-
-    # def to_spherical(self) -> SphericalCoordinates:
-    #     spherical = SphericalCoordinates(**self.model_dump(exclude={"arr"}) | {"arr": self.spher})
-    #     delattr(self, "spher")
-    #     return spherical
-
-    @classmethod
-    def from_spherical(cls, spher: Array_Nx3_T) -> Self:
-        return cls(arr=rhv2xyz(spher))
-
     def rotate(self, rotation: Array_3x3_T) -> None:
         self.arr = (rotation @ self.T).T
 
@@ -444,6 +409,20 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
     def transform(self, affine: Array_4x4_T = None) -> None:
         self.arr = (affine @ self.H.T).T[:, :3]
+
+    @classmethod
+    def from_spherical(cls, spher: Array_Nx3_T) -> Self:
+        return cls(xyz=rhv2xyz(spher))
+
+    # @classmethod
+    # def from_spherical(cls, spher: SphericalCoordinates) -> SphericalCoordinates:
+    #     return cls(**spher.model_dump(exclude={"arr"}) | {"arr": self.xyz})
+
+    # def to_spherical(self) -> SphericalCoordinates:
+    #     spherical = SphericalCoordinates(**self.model_dump(exclude={"arr"}) | {"arr": self.spher})
+    #     delattr(self, "spher")
+    #     return spherical
+
 
 # class SphericalCoordinates(Abstract3dCoordinates):
 #     arr: Annotated[Array_Nx3_T, Field(validation_alias="spher"), BeforeValidator(validate_spherical_angles)]
@@ -506,11 +485,8 @@ class CartesianCoordinates(Abstract3dCoordinates):
 #         delattr(cartesian, "spher")
 #         return spherical
 
-
-
-
 @validate_call(config=DEFAULT_CONFIG)
-def rhv2xyz(spher: Array_Nx3_T|ArrayNx3, scan_origin: Optional[Vector_3_T] = None) -> Array_Nx3_T:
+def rhv2xyz(spher: Array_Nx3_T, scan_origin: Optional[Vector_3_T] = None) -> Array_Nx3_T:
     xyz: np.ndarray = np.zeros_like(spher)
     xyz[:, 0] = spher[:, 0] * np.sin(spher[:, 2]) * np.cos(spher[:, 1])
     xyz[:, 1] = spher[:, 0] * np.sin(spher[:, 2]) * np.sin(spher[:, 1])
@@ -519,7 +495,7 @@ def rhv2xyz(spher: Array_Nx3_T|ArrayNx3, scan_origin: Optional[Vector_3_T] = Non
     return xyz if scan_origin is None else xyz + scan_origin
 
 @validate_call(config=DEFAULT_CONFIG)
-def xyz2rhv(xyz: Array_Nx3_T|ArrayNx3, scan_origin: Optional[Vector_3_T] = None) -> Array_Nx3_T:
+def xyz2rhv(xyz: Array_Nx3_T, scan_origin: Optional[Vector_3_T] = None) -> Array_Nx3_T:
     spher: np.ndarray = np.zeros_like(xyz)
 
     if scan_origin is not None:

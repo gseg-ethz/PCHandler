@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Self, Iterable, NamedTuple, Optional
+from typing import TYPE_CHECKING, Self, Iterable, NamedTuple, Optional, Sequence
 
 import alphashape
 import numpy as np
@@ -54,14 +54,14 @@ def get_outline_polygon(pcd: PointCloudData, plane: str, alpha_value: float = 10
         case _:
             raise ValueError
 
-    # Normalize the points
+    # Normalise the points
     proj_pts_mean = proj_pts.mean(axis=0)
     proj_pts_scale = proj_pts.max(axis=0) - proj_pts.min(axis=0)
     proj_pts_norm = (proj_pts - proj_pts_mean) / proj_pts_scale
     if nb_points > 0:
         proj_pts_norm = proj_pts_norm[np.random.permutation(proj_pts_norm.shape[0])[:nb_points], :]
 
-    # Add noise to reduce risk of underdefined dimensionality
+    # Add noise to reduce the risk of underdefined dimensionality
     noise = np.random.normal(scale=1e-6, size=proj_pts_norm.shape)
     proj_pts_norm = proj_pts_norm + noise
 
@@ -74,20 +74,21 @@ def get_outline_polygon(pcd: PointCloudData, plane: str, alpha_value: float = 10
     if not isinstance(als, Polygon):
         raise NotImplementedError
 
-    if pcd.optimized_shift is not None:
+    if pcd.numerical_optimization_shift is not None:
         match plane:
             case "xy":
-                gs = pcd.optimized_shift.value[:2]
+                gs = pcd.numerical_optimization_shift.value[:2]
             case "xz":
-                gs = pcd.optimized_shift.value[[0, 2]]
+                gs = pcd.numerical_optimization_shift.value[[0, 2]]
             case "yz":
-                gs = pcd.optimized_shift.value[1:]
+                gs = pcd.numerical_optimization_shift.value[1:]
             case _:
                 raise ValueError
         als = translate(als, *gs)
 
     return als
 
+# TODO could change this to a frozen basemodel with validation
 class MinMaxPoints(NamedTuple):
     minimum: Vector_3_T
     maximum: Vector_3_T
@@ -106,7 +107,7 @@ class MinMaxPoints(NamedTuple):
         return cls(min_point, max_point)
 
     @classmethod
-    def from_minmax_points(cls, minmax_points: Iterable[Self]) -> Self:
+    def from_minmax_points(cls, minmax_points: Iterable[Self|Array_Nx3_T]) -> Self:
         arr = Array_Nx3_T(np.vstack(tuple(minmax_points)))
         return cls.from_points(arr)
 

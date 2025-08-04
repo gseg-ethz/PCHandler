@@ -17,6 +17,12 @@ class TestLasHandler(BaseLoadSave):
     folder = BaseLoadSave.folder / 'LAS'
     reference = folder / 'XYZ_RGB_Normals_Intensity_SFs.las'
 
+    def test_save(self, tmp_path):
+        super()._save(tmp_path)
+
+    def test_load_all(self):
+        super()._load_all()
+
     def test_save_no_optimal_shift(self):
         # Test for coverage
         pcd = PointCloudData(np.round(np.random.rand(100,3)*1000, decimals=3), numerical_optimization_shift=None)

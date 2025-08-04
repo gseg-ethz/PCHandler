@@ -142,7 +142,6 @@ def convert_slice_to_integer_range(selection: slice, length: int) -> Array_Integ
     if start is None:
         # If `step` is positive, start at 0. if `step` is negative, start from the end of the array
         start = 0 if step > 0 else length - 1
-
     elif start < 0:
         # Convert negative addresses to positive address
         start += length
@@ -160,6 +159,7 @@ def convert_slice_to_integer_range(selection: slice, length: int) -> Array_Integ
     return np.arange(start=start, stop=stop, step=step)
 
 
+# TODO decide if to remove
 def validate_in_range(value: ArrayT, target_min: float, target_max: float) -> None:
     value = np.asarray(value)
     val_min: float | int = value.min()
@@ -254,15 +254,21 @@ def _normalize_base(array: ArrayT, dtype: npt.DTypeLike) -> ArrayT:
     return array
 
 
-FuncT = Callable[[npt.ArrayLike], T]
+def normalize_uint8(array: ArrayT) -> Array_Uint8_T:
+    return _normalize_base(array, np.uint8)
 
-# TODO write tests that ensure the input array is not changed
+def normalize_uint16(array: ArrayT) -> Array_Uint16_T:
+    return _normalize_base(array, np.uint16)
 
-normalize_uint8: FuncT[Array_Uint8_T] = lambda array: _normalize_base(array, np.uint8)
-normalize_uint16: FuncT[Array_Uint16_T] = lambda array: _normalize_base(array, np.uint16)
-normalize_int8: FuncT[Array_Int8_T] = lambda array: _normalize_base(array, np.int8)
-normalize_int16: FuncT[Array_Int16_T] = lambda array: _normalize_base(array, np.int16)
-normalize_int32: FuncT[Array_Int32_T] = lambda array: _normalize_base(array, np.int32)
-normalize_int64: FuncT[Array_Int64_T] = lambda array: _normalize_base(array, np.int64)
-normalize_float32: FuncT[Array_Float32_T] = lambda array: _normalize_base(array, np.float32)
-normalize_float64: FuncT[Array_Float64_T] = lambda array: _normalize_base(array, np.float64)
+def normalize_int8(array: ArrayT) -> Array_Int8_T:
+    return _normalize_base(array, np.int8)
+
+def normalize_int16(array: ArrayT) -> Array_Int16_T:
+    return _normalize_base(array, np.int16)
+
+def normalize_int32(array: ArrayT) -> Array_Int32_T:
+    return _normalize_base(array, np.int32)
+
+def normalize_int64(array: ArrayT) -> Array_Int64_T:
+    return _normalize_base(array, np.int64)
+

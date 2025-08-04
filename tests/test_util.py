@@ -21,15 +21,30 @@ class TestConvertAngle:
         expected_deg = np.array([180, 90, 45])
         np.testing.assert_array_almost_equal(convert_angles(rad_values, AngleUnit.RAD, AngleUnit.DEGREE), expected_deg)
 
+    def test_deg_to_rad(self):
+        deg_values = np.array([180, 90, 45])
+        rad_values = np.array([np.pi, np.pi / 2, np.pi / 4])
+        np.testing.assert_array_almost_equal(convert_angles(deg_values, AngleUnit.DEGREE, AngleUnit.RAD), rad_values)
+
     def test_deg_to_gon(self):
         deg_values = np.array([180, 90, 45])
         expected_gon = np.array([200, 100, 50])
         np.testing.assert_array_almost_equal(convert_angles(deg_values, AngleUnit.DEGREE, AngleUnit.GON), expected_gon)
 
+    def test_gon_to_deg(self):
+        gon_values = np.array([200, 100, 50])
+        expected_deg = np.array([180, 90, 45])
+        np.testing.assert_array_almost_equal(convert_angles(gon_values, AngleUnit.GON, AngleUnit.DEGREE), expected_deg)
+
     def test_gon_to_rad(self):
         gon_values = np.array([200, 100, 50])
         expected_rad = np.array([np.pi, np.pi / 2, np.pi / 4])
         np.testing.assert_array_almost_equal(convert_angles(gon_values, AngleUnit.GON, AngleUnit.RAD), expected_rad)
+
+    def test_rad_to_gon(self):
+        rad_values = np.array([np.pi, np.pi / 2, np.pi / 4])
+        expected_gon = np.array([200, 100, 50])
+        np.testing.assert_array_almost_equal(convert_angles(rad_values, AngleUnit.RAD, AngleUnit.GON), expected_gon)
 
     def test_same_unit_conversion(self):
         values = np.array([1, 2, 3])
@@ -52,3 +67,11 @@ class TestConvertAngle:
         expected = np.array([180, 90])
         np.testing.assert_array_almost_equal(values, expected)
 
+    def test_invalid_unit(self):
+        values = np.array([np.pi, np.pi / 2])
+
+        with pytest.raises(ValueError):
+            convert_angles(values, "invalid_source", AngleUnit.DEGREE, out=values)
+
+        with pytest.raises(ValueError):
+            convert_angles(values, AngleUnit.RAD, "invalid_target", out=values)

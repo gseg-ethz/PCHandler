@@ -10,25 +10,6 @@ base_directory = Path(__file__).resolve().parent.parent
 
 
 @pytest.fixture(scope='session')
-def ten_rows_txt(tmp_path_factory):
-    file = tmp_path_factory.mktemp("data") / 'temp.txt'
-    with open(file, 'w') as f:
-        f.write('//X Y Z\n')
-        f.write('10\n')
-        f.write('1,2,3\n')
-        f.write('4,5,6\n')
-        f.write('7,8,9\n')
-        f.write('10,11,12\n')
-        f.write('13,14,15\n')
-        f.write('16,17,18\n')
-        f.write('19,20,21\n')
-        f.write('22,23,24\n')
-        f.write('25,26,27\n')
-        f.write('28,29,30')
-    yield file
-    file.unlink(missing_ok=True)
-
-@pytest.fixture(scope='session')
 def no_points_number_line(tmp_path_factory):
     file = tmp_path_factory.mktemp("data") / 'temp.txt'
     with open(file, 'w') as f:
@@ -142,6 +123,12 @@ class TestCsvHandler(BaseLoadSave):
     cls = CsvHandler
     folder = BaseLoadSave.folder / 'TXT'
     reference = folder / 'XYZ_RGB_Normals_Intensity_SFs.txt'
+
+    def test_save(self, tmp_path):
+        super()._save(tmp_path)
+
+    def test_load_all(self):
+        super()._load_all()
 
     def test_number_points_line(self, no_points_number_line: Path, fake_number_points: Path):
         _, number_points = _get_header(no_points_number_line)

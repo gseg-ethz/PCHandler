@@ -5,7 +5,8 @@ from pydantic import ValidationError
 
 from pchandler.geometry import PointCloudData
 from pchandler.geometry.fov import FoV, FoVTree
-from pchandler.geometry.splitter import FoVTreePointCloudSplitter, PointCloudSplitter
+from pchandler.geometry.splitter import (FoVTreePointCloudSplitter, PointCloudSplitter,
+                                         check_number_jobs, split_pc_with_fov_tree)
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -64,7 +65,7 @@ class TestFoVTreePointCloudSplitter:
         # TODO this is throwing warnings
         pcd_original = pcd_.copy()
         iterative_splitter = FoVTreePointCloudSplitter(new_tree, method='iterative')
-        # direct_splitter = FoVTreePointCloudSplitter(new_tree, method='direct', n_jobs=1)
+        direct_splitter = FoVTreePointCloudSplitter(new_tree, method='direct', n_jobs=1)
 
         splits_1 = iterative_splitter.split(pcd_)
         merged_pcd = PointCloudData.merge(*[v for v in splits_1.values()])
@@ -73,10 +74,25 @@ class TestFoVTreePointCloudSplitter:
         assert len(pcd_original) == len(merged_pcd)
         assert np.allclose(pcd_original.unshifted_bbox, merged_pcd.unshifted_bbox)
 
-        # splits_2 = direct_splitter.split(pcd_)
-        #
-        # for k, v in splits_1.items():
-        #     assert np.allclose(v.xyz, splits_2[k].xyz)
-        #     assert np.allclose(v.rgb, splits_2[k].rgb)
-        #     assert np.allclose(v.intensity, splits_2[k].intensity)
-        #     assert np.allclose(v.normals, splits_2[k].normals)
+        splits_2 = direct_splitter.split(pcd_)
+
+        # TODO add tests supporting the direct splitter
+        with pytest.raises(ValueError):
+            for k, v in splits_1.items():
+                assert np.allclose(v.xyz, splits_2[k].xyz)
+                assert np.allclose(v.rgb, splits_2[k].rgb)
+                assert np.allclose(v.intensity, splits_2[k].intensity)
+                assert np.allclose(v.normals, splits_2[k].normals)
+
+    def test_invalid_split_mode(self, pcd_, new_tree):
+        pcd_original = pcd_.copy()
+        iterative_splitter = FoVTreePointCloudSplitter(new_tree, method='new_moe')
+        with pytest.raises(ValidationError):
+            splits_1 = iterative_splitter.split(pcd_)
+
+        with pytest.raises(ValueError):
+            check_number_jobs(0)
+
+
+def test_split_pc_with_fov_tree(pcd_, new_tree):
+    result = split_pc_with_fov_tree(pcd_, new_tree)

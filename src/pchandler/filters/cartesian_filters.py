@@ -22,6 +22,18 @@ logger = logging.getLogger(__name__.split(".")[0])
 PlaneStrings = Literal["xy", "xz", "yz"]
 
 
+def _get_offset(pcd: PointCloudData, mode: Literal["local", "global"] = "local") -> Vector_3_T:
+    if mode == "local":
+        return np.zeros(shape=(3,))
+    elif mode == "global":
+        if pcd.numerical_optimization_shift is None:
+            return np.zeros(shape=(3,))
+        else:
+            return pcd.numerical_optimization_shift.value
+    else:
+        raise ValueError(f"Invalid mode: {mode}")
+
+
 class BoxFilter(PointCloudFilter):
     @validate_variables
     def __init__(self, minimum: Vector_3_T, maximum: Vector_3_T):
@@ -37,15 +49,10 @@ class BoxFilter(PointCloudFilter):
         return self.maximum - self.minimum
 
     def mask(self, pcd: PointCloudData, mode: Literal["local", "global"] = "local") -> npt.NDArray[np.bool_]:
-        if mode == "local":
-            offset = np.zeros(shape=(3,))
-        elif mode == "global":
-            offset = np.zeros(shape=(3,)) if pcd.numerical_optimization_shift is None else pcd.numerical_optimization_shift.value
-
+        offset = _get_offset(pcd, mode)
 
         min_corner = self.minimum - offset
         max_corner = self.maximum - offset
-
 
         min_corner[self.extents == 0] = -np.inf
         max_corner[self.extents == 0] = np.inf
@@ -60,12 +67,9 @@ class SphereFilter(PointCloudFilter):
         self.radius = radius
 
     def mask(self, pcd: PointCloudData, mode: Literal["local", "global"] = "local") -> npt.NDArray[np.bool_]:
-        if mode == "local":
-            offset = np.zeros(shape=(3,))
-        elif mode == "global":
-            offset = np.zeros(shape=(3,)) if pcd.numerical_optimization_shift is None else pcd.numerical_optimization_shift.value
-        point = self.sphere_center - offset
+        offset = _get_offset(pcd, mode)
 
+        point = self.sphere_center - offset
 
         distances_to_point: npt.NDArray[np.float64|np.float32] = np.linalg.norm(pcd.xyz - point, axis=1)
         return distances_to_point <= self.radius
@@ -85,10 +89,7 @@ class PolygonFilter(PointCloudFilter):
         else:
             dims = [1, 2]
 
-        if mode == "local":
-            offset = np.zeros(shape=(3,))
-        elif mode == "global":
-            offset = np.zeros(shape=(3,)) if pcd.numerical_optimization_shift is None else pcd.numerical_optimization_shift.value
+        offset = _get_offset(pcd, mode)
 
         polygon = translate(self.polygon, *(-1 * offset[dims]))
 

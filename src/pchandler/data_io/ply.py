@@ -15,7 +15,7 @@ class PlyHandler(AbstractIOHandler):
     FORMATS = [".ply"]
 
     @classmethod
-    def load(
+    def load(   # type: ignore[override]
         cls,
         path: str | Path,
         /,
@@ -26,9 +26,7 @@ class PlyHandler(AbstractIOHandler):
     ) -> PointCloudData:
         logger.info(f"Loading PLY file: {path}")
 
-        with open(path, "rb") as f:
-            plydata = PlyData.read(f)
-
+        plydata = PlyData.read(path)
 
         num_points = plydata["vertex"].count
         logger.debug(f"PLY file {path} contains {num_points} points")
@@ -41,8 +39,9 @@ class PlyHandler(AbstractIOHandler):
 
         return pcd
 
+
     @classmethod
-    def save(
+    def save(   # type: ignore[override]
         cls,
         /,
         pcd: PointCloudData,
@@ -52,7 +51,7 @@ class PlyHandler(AbstractIOHandler):
         prefix: str = "scalar_",
         revert_sf_types: bool = False,
         as_ascii: bool = False,
-        **config,
+        **config: dict[str, Any]
     ) -> None:
 
         path = Path(path)
@@ -70,10 +69,6 @@ class PlyHandler(AbstractIOHandler):
             ],
         )
 
-        if not path.parent.exists():
-            path.parent.mkdir(parents=True, exist_ok=True)
-            logger.debug(f"Created {path.parent} folder")
+        PlyData([element], text=as_ascii).write(path)
 
-        with open(path, mode="wb+") as f:
-            PlyData([element], text=as_ascii).write(f"{str(path)}")
         logger.info(f"PLY file saved successfully: {path}")

@@ -22,8 +22,8 @@ ValidatedPolygonT = Annotated[
 ]
 
 class DtypeDict(TypedDict):
-    names: LowerStr
-    formats: npt.DTypeLike
+    names: list[LowerStr]
+    formats: list[npt.DTypeLike]
 
 # TODO improve naming and setup of all these numpydantic types
 ArrayDtypes = (Integer, Float, Bool)
@@ -83,20 +83,20 @@ Vector_Int8_T = NDArray[Shape["*"], Int8]
 Vector_Uint16_T = NDArray[Shape["*"], UInt16]
 Vector_Uint8_T = NDArray[Shape["*"], UInt8]             # Single RGB field
 
+Vector_4_T = NDArray[Shape["4"], ArrayDtypes]           # FoV as vector
 Vector_3_T = NDArray[Shape["3"], ArrayDtypes]           # 3D coordinate
 Vector_2_T = NDArray[Shape["2"], ArrayDtypes]           # Image coordinate
 
 Vector_IndexT = NDArray[Shape["*"], IndexDtypes]
 
 IndexLike = Union[int, slice, npt.NDArray[np.bool_], npt.NDArray[np.integer], Sequence]
-VectorIndexLike = Union[int, slice, Sequence, Vector_IndexT]
 
 def make_ndarray_type(
         *dimensions: Optional[int | str],
         dtype: Optional[npt.DTypeLike] = None
 ) -> type[NDArray[Any, Any]]:
     """
-    Helper function to generate the numpydantic type for a ndarray.
+    Helper function to _generate the numpydantic type for a ndarray.
 
     Calling 'make_ndarray_type(None, 3, dtype=np.float32)' would return a numpydantic dtype corresponding to an array
     of shape (N, 3) with dtype = np.float32 and would provide pydantic validation on this

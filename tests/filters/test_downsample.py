@@ -81,17 +81,24 @@ class TestVoxelDownsampleFilter:
             VoxelDownsample(1.3, True)  #type: ignore
 
     def test_mask(self, voxel_downsample, pcd_all):
-        expected_size = ((1 / voxel_downsample.voxel_size)+1) ** 3
-        pcd = voxel_downsample.sample(pcd_all)
+        for name in ('constant', 'linear'):
+            voxel_downsample.weighting_method = name
+            expected_size = ((1 / voxel_downsample.voxel_size)+1) ** 3
+            pcd = voxel_downsample.sample(pcd_all)
 
-        assert 1331 == expected_size
+            assert len(pcd) == expected_size
+            assert isinstance(pcd, PointCloudData)
 
-        assert len(pcd) == expected_size
+            # TODO tests for spacing between voxel centers
 
-        assert isinstance(pcd, PointCloudData)
+    def test_invalid(self, voxel_downsample, pcd_all):
+        voxel_downsample.weighting_method = "nearest"
+        with pytest.raises(NotImplementedError):
+            voxel_downsample.sample(pcd_all)
 
-        # TODO test for spacing between voxel centers
-
+        voxel_downsample.weighting_method = "CustomMethod"
+        with pytest.raises(ValueError):
+            voxel_downsample.sample(pcd_all)
 
 class TestAngleBinDownsample:
     def test_init(self, angle_bin_downsample):
@@ -101,7 +108,7 @@ class TestAngleBinDownsample:
         assert np.all(angle_bin_downsample.angle_bin_size == 0.1)
         assert np.all(angle_bin_downsample.weighting_method == "linear")
 
-    def test_invalid_init(self, angle_bin_downsample):
+    def test_invalid_init(self, angle_bin_downsample, pcd_all):
         with pytest.raises(TypeError):
             angle_bin_downsample('abc')
 
@@ -117,15 +124,28 @@ class TestAngleBinDownsample:
         with pytest.raises(ValueError):
             AngleBinDownsample(1.3, True)   #type: ignore
 
+        angle_bin_downsample.weighting_method = "nearest"
+        with pytest.raises(NotImplementedError):
+            angle_bin_downsample.sample(pcd_all)
+
+        angle_bin_downsample.weighting_method = "CustomMethod"
+        with pytest.raises(ValueError):
+            angle_bin_downsample.sample(pcd_all)
+
     def test_mask(self, angle_bin_downsample, pcd_all):
-        pcd = angle_bin_downsample.sample(pcd_all)
+        # TODO fix test to avoid stochastic impacts affecting pass/fail
+        for name in ('linear', 'constant'):
+            angle_bin_downsample.weighting_method = name
+            pcd = angle_bin_downsample.sample(pcd_all)
 
-        bin_size = angle_bin_downsample.angle_bin_size
+            bin_size = angle_bin_downsample.angle_bin_size
 
-        max_bins = (np.pi/bin_size) * np.pi / bin_size
+            max_bins = (np.pi/bin_size) * np.pi / bin_size
 
-        assert len(pcd) <= max_bins
+            assert len(pcd) <= max_bins
 
-        assert len(pcd) < len(pcd_all)
-        assert len(np.unique(pcd.hz)) == len(pcd.hz)
-        assert len(np.unique(pcd.v)) == len(pcd.v)
+            assert len(pcd) < len(pcd_all)
+            assert len(np.unique(pcd.hz)) == len(pcd.hz)
+            assert len(np.unique(pcd.v)) == len(pcd.v)
+
+    # TODO better tests on verifying the algorithms

@@ -1,12 +1,12 @@
 import re
 from collections.abc import Sequence
 from functools import total_ordering
-from typing import Any, Generator, Self, overload
+from typing import Any, Generator, Self, cast
 
 import numpy as np
 from numpy.typing import NDArray
 
-from pchandler.base_types import ArrayT
+from pchandler.base_types import ArrayT, Array_Float_T
 from pchandler.util import AngleUnit, convert_angles
 
 
@@ -24,22 +24,20 @@ class AngleBase:
     _INTERNAL_UNIT = AngleUnit.RAD
 
     def __init__(self, value: float | ArrayT, unit: AngleUnit):
-        # convert_angles(rad,
-        #                source_unit=unit,
-        #                target_unit=AngleUnit.RAD,
-        #                out=rad)
-        arr = np.array(value, dtype=float)
-        convert_angles(arr, source_unit=unit, target_unit=self._INTERNAL_UNIT, out=arr)
-        self._internal_value = arr
+        value = np.array(value, dtype=float)
+        # noinspection PyTypeChecker
+        convert_angles(value, source_unit=unit, target_unit=self._INTERNAL_UNIT, out=value)
+        self._internal_value = value
         self._display_unit = unit
 
-    def to(self, unit: AngleUnit) -> float | NDArray[np.floating]:
+    def to(self, unit: AngleUnit) -> Array_Float_T:
         """
         Convert stored radians → `unit`.
         Returns either a scalar float (if input was scalar)
-        or an ndarray of floats.
+        or a ndarray of floats.
         """
         arr = self._internal_value.copy()
+        # noinspection PyTypeChecker
         convert_angles(arr, source_unit=self._INTERNAL_UNIT, target_unit=unit, out=arr)
         return arr.item() if arr.ndim == 0 else arr
 
@@ -64,31 +62,32 @@ class AngleBase:
         self._display_unit = unit
 
     @property
-    def internal_value(self) -> float | NDArray[np.floating]:
+    def internal_value(self) -> float|Array_Float_T:
         return self._internal_value
 
     @property
-    def display_value(self) -> float | NDArray[np.floating]:
+    def display_value(self) -> Array_Float_T:
         out = self._internal_value.copy()
+        # noinspection PyTypeChecker
         convert_angles(out, self._INTERNAL_UNIT, self._display_unit, out=out)
         return out
 
     @property
-    def degrees(self) -> float | NDArray[np.floating]:
+    def degrees(self) -> float | Array_Float_T:
         return self.to(AngleUnit.DEGREE)
 
     def in_degrees(self) -> Self:
         return self.in_unit(AngleUnit.DEGREE)
 
     @property
-    def radians(self) -> float | NDArray[np.floating]:
+    def radians(self) -> float | Array_Float_T:
         return self.to(AngleUnit.RAD)
 
     def in_radians(self) -> Self:
         return self.in_unit(AngleUnit.RAD)
 
     @property
-    def gon(self) -> float | NDArray[np.floating]:
+    def gon(self) -> float | Array_Float_T:
         return self.to(AngleUnit.GON)
 
     def in_gon(self) -> Self:
@@ -101,6 +100,12 @@ class AngleBase:
         """
         return np.array(self._internal_value, dtype=dtype)
 
+    def min(self):
+        return np.array(self).min()
+
+    def max(self):
+        return np.array(self).max()
+
     def __add__(self, other) -> Self:
         try:
             if isinstance(other, AngleBase):
@@ -110,7 +115,7 @@ class AngleBase:
         except Exception:
             raise NotImplementedError(f"Add not defined between type: {type(other)} and {type(self)}")
 
-        new_instance = Angle(new_val, self._INTERNAL_UNIT)
+        new_instance = type(self)(new_val, self._INTERNAL_UNIT)
         new_instance.display_unit = self.display_unit
         return new_instance
 
@@ -166,15 +171,12 @@ class AngleBase:
         #     vals = np.divide(other, self.to(self.display_unit))
         #     return Angle(vals, self.display_unit)
 
-    @overload
-    def __mod__(self, other: Self) -> float: ...
-
     def __mod__(self, other: Any) -> Self | float:
         if isinstance(other, AngleBase):
             raise NotImplementedError(f"Modulo not defined between two AngleBase types.")
         # return self.__binary_op(other, np.mod)
         mod_val = self.display_value % other
-        return Angle(mod_val, self.display_unit)
+        return type(self)(mod_val, self.display_unit)
 
     def __rmod__(self, other):
         raise NotImplementedError(f"Modulo not defined for divisor as AngleBase.")
@@ -212,16 +214,16 @@ class AngleBase:
         rad = self.to(AngleUnit.RAD)
         # 2) either hash the float directly (exact), or
         #    quantize it to avoid weird float artifacts:
-        quant = round(rad, 10)
+        quant = np.round(rad, 10)
         return hash(quant)
 
     def __reduce__(self):
-        return (_rebuild_angle, (type(self), self.display_value, self._display_unit))
+        return _rebuild_angle, (type(self), self.display_value, self._display_unit)
 
 
 class Angle(AngleBase):
 
-    def __new__(cls, value: float | ArrayT, unit: AngleUnit = AngleUnit.RAD):
+    def __new__(cls, value: float | Array_Float_T | str, unit: AngleUnit = AngleUnit.RAD):
         """
         Selects Angle or AngleArray based on if value is scalar or an array.
         """
@@ -242,7 +244,7 @@ class Angle(AngleBase):
     def parse(cls, v: Any) -> Self:
         # 0) is already Angle
         if isinstance(v, AngleBase):
-            return v
+            return cast(Self, v)
         # 1) (value, unit) tuple
         if isinstance(v, tuple) and len(v) == 2 and isinstance(v[1], AngleUnit):
             return cls(v[0], v[1])
@@ -319,9 +321,6 @@ class Angle(AngleBase):
 class AngleArray(AngleBase):
     """Represents an N‑D array of angles."""
 
-    def __init__(self, value, unit=AngleUnit.RAD):
-        pass
-
     def __new__(cls, arr: ArrayT, unit: AngleUnit = AngleUnit.RAD):
         arr = np.array(arr, dtype=float)
         inst = super().__new__(cls)
@@ -364,21 +363,6 @@ class AngleArray(AngleBase):
         vals = self.to(self._display_unit)
         preview = np.array2string(vals, threshold=4)
         return f"{preview} {self.display_unit.name}"
-
-    def _compare(self, other, op):
-        # Pull out the raw float/array to compare
-        if isinstance(other, AngleBase):
-            if self._INTERNAL_UNIT == other._INTERNAL_UNIT:
-                lhs = self._internal_value
-                rhs = other._internal_value
-            else:
-                lhs = self._internal_value
-                rhs = other.to(self._INTERNAL_UNIT)
-        else:
-            lhs = self.display_value
-            rhs = other
-        # op is a ufunc like np.equal, np.less, etc.
-        return op(lhs, rhs)
 
     def __eq__(self, other):
         if isinstance(other, AngleBase):

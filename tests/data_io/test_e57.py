@@ -15,10 +15,12 @@ class TestE57Handler(BaseLoadSave):
     folder = BaseLoadSave.folder / 'E57'
     reference = folder / 'XYZ_RGB_Normals_Intensity.e57'
 
-    def test_save(self):
+    def test_save(self, tmp_path):
         with pytest.raises(NotImplementedError):
-            super().test_save()
+            super()._save(tmp_path)
 
+    def test_load_all(self):
+        super()._load_all()
 
 # class TestE57Handler:
 #     file_1 = base_directory / ".."/ "data" / "test_target_intensity_normals_rgb.e57"

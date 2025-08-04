@@ -10,12 +10,11 @@ from typing import (
     MutableMapping,
     Optional,
     Self,
-    cast,
     TypedDict,
     NotRequired,
     Unpack,
     TypeVar,
-    Generic
+    cast
 )
 
 import numpy as np
@@ -29,7 +28,6 @@ from .base_types import (
     Array_Nx2_T,
     Array_Nx3_T,
     IndexLike,
-    VectorIndexLike,
     Vector_IndexT,
     VectorT,
     BoolArrayT,
@@ -53,7 +51,7 @@ SelfT = TypeVar('SelfT', bound='BaseArray')
 logger = logging.getLogger(__name__)
 
 
-class BaseArray(Generic[SelfT], ABC, BaseModel):
+class BaseArray(ABC, BaseModel):
     """
     BaseArray is designed to be a subclassable, automatic validator for array-based classes.
     It is built around a combination of the Pydantic and Numpydantic libraries.
@@ -443,7 +441,7 @@ class BaseArray(Generic[SelfT], ABC, BaseModel):
         """
         return self.arr != other
 
-    def copy(self: Self,
+    def copy(self: Self,    # type: ignore[override]
              array: npt.NDArray[Any] | Self | None = None,
              *,
              deep: bool = True,
@@ -606,26 +604,31 @@ class FixedLengthArray(NumericMixins):
         for i in self.arr:
             yield i
 
-    def create_mask(self, selection: VectorIndexLike) -> NDArray[np.bool_] | NDArray[np.int_]:
+    def create_mask(self, selection: IndexLike) -> NDArray[np.bool_] | NDArray[np.int_]:
         """Creates a boolean vector mask that corresponds to row indices"""
 
-        if isinstance(selection, slice):    # Case 1: slice object
+        # Case 1: slice object
+        if isinstance(selection, slice):
             vector_mask = convert_slice_to_integer_range(selection=selection, length=len(self))
 
-        elif isinstance(selection, int):    # Case 2: single integer
+        # Case 2: single integer
+        elif isinstance(selection, int):
             vector_mask = np.array([selection])
 
-        else:                               # Case 3: numpy arrays and sequences
+        # Case 3: numpy arrays and sequences
+        else:
             if isinstance(selection, np.ndarray):
-                selection = np.atleast_1d(selection.squeeze())
+                selection = cast(np.ndarray, np.atleast_1d(selection.squeeze()))
             vector_mask = Vector_IndexT(selection)
 
-        if vector_mask.dtype == np.bool_:     # Case 3a: Boolean
+        # Case 3a: Boolean
+        if vector_mask.dtype == np.bool_:
             if vector_mask.shape[0] != len(self):
                 raise ValueError(f"Mask has wrong number of points. Mask:{vector_mask.size}  != array:{len(self)}")
             return vector_mask
 
-        else:                               # Case 3b: Integer
+        # Case 3b: Integer
+        else:
             mask = np.zeros(len(self), dtype=np.bool_)
             mask[vector_mask] = True
 

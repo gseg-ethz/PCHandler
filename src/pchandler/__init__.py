@@ -135,6 +135,7 @@ __author__ = "Nicholas Meyer"
 __email__ = "meyernic@ethz.ch"
 
 import logging
+from logging import config as logconfig
 
 from . import data_io, geometry, filters, spherical, util
 from ._version import __version__
@@ -158,4 +159,4 @@ if not logging.getLogger().hasHandlers():
         },
         "loggers": {"root": {"level": "WARNING", "handlers": ["stderr"]}},
     }
-    logging.config.dictConfig(config)
+    logconfig.dictConfig(config)

@@ -32,7 +32,6 @@ FoVSplitMethodT = Literal['iterative'] | Literal['direct']
 NumberJobsT = Annotated[int, Field(gt=-cpus, le=cpus), BeforeValidator(check_number_jobs)]
 
 
-
 class PointCloudSplitter(ABC):
     @abstractmethod
     def split(self, pcd: PointCloudData) -> dict[str, PointCloudData]:
@@ -160,14 +159,15 @@ class FoVTreePointCloudSplitter(PointCloudSplitter):
         if fov_tree.is_leaf():
             return {fov_tree.identifier: pcd}, []
 
-        child_tasks = []
-        for child in fov_tree.children.values():
-            child_pcd = FoVFilter(child.node).extract(pcd)
-            # child_pcd = pcd.extract_angles(child.node)
-            if self.remove_empty and len(child_pcd) == 0:
-                continue
-            child_tasks.append((child_pcd, child))
-        return {}, child_tasks
+        child_tasks: list[tuple[PointCloudData, FoVTree]] = []
+        if fov_tree.children is not None:
+            for child in fov_tree.children.values():
+                child_pcd = FoVFilter(child.node).extract(pcd)
+                # child_pcd = pcd.extract_angles(child.node)
+                if self.remove_empty and len(child_pcd) == 0:
+                    continue
+                child_tasks.append((child_pcd, child))
+        return dict(), child_tasks
 
 
 def split_pc_with_fov_tree(

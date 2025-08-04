@@ -76,9 +76,6 @@ class TestPydantic:
             name: str = Field(default="test", exclude=True)
             arr: list[int] = Field(default_factory=lambda: [1, 2, 3])
 
-            def method_not_in_dict(self):
-                pass
-
         a = A()
 
         assert len(a.__dict__.keys()) == 3
