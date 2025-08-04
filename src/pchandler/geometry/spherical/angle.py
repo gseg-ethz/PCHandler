@@ -6,8 +6,8 @@ from typing import Any, Generator, Self, cast
 import numpy as np
 from numpy.typing import NDArray
 
-from pchandler.base_types import ArrayT, Array_Float_T
-from pchandler.util import AngleUnit, convert_angles
+from GSEGUtils.base_types import ArrayT, Array_Float_T
+from GSEGUtils.util import AngleUnit, convert_angles
 
 
 def _rebuild_angle(cls, internal_value, display_unit):

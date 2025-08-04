@@ -5,12 +5,13 @@ import logging
 import numpy as np
 import laspy                # type: ignore[import-untyped]
 
-from pchandler.data_io.core import AbstractIOHandler, _get_rgb_or_normal_field_names
-from pchandler.constants import RGB_NAMES, NORMAL_NAMES, INTENSITY_NAMES, XYZ_NAMES
-from pchandler.geometry import PointCloudData
-from pchandler.validators import normalize_uint16
-from pchandler.base_types import Vector_3_T
-from pchandler.geometry.optimal_shift import OptimizedShift
+from GSEGUtils.validators import normalize_uint16
+from GSEGUtils.base_types import Vector_3_T
+
+from .core import AbstractIOHandler, _get_rgb_or_normal_field_names
+from ..constants import RGB_NAMES, NORMAL_NAMES, INTENSITY_NAMES, XYZ_NAMES
+from ..geometry import PointCloudData
+from ..geometry.optimal_shift import OptimizedShift
 
 logger = logging.getLogger(__name__.split(".")[0])
 

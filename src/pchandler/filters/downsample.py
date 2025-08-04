@@ -7,13 +7,13 @@ import numpy as np
 import numpy.typing as npt
 from pydantic import Field, PositiveFloat
 
-from pchandler.util import unique_rows_fast
-from pchandler.geometry.core import PointCloudData
-from pchandler.geometry.scalar_field_manager import ScalarFieldManager
+from GSEGUtils.util import unique_rows_fast
+from GSEGUtils.constants import validate_variables
 
-from pchandler.filters.core import PointCloudFilter
-from pchandler.constants import validate_variables
-from pchandler.geometry.coordinates import rhv2xyz
+from .core import PointCloudFilter
+from ..core import PointCloudData
+from ..scalar_fields import ScalarFieldManager
+from ..geometry.coordinates import rhv2xyz
 
 logger = logging.getLogger(__name__.split(".")[0])
 

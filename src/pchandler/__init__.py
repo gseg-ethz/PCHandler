@@ -125,6 +125,7 @@ applications in 3D data analysis, GIS, and computer vision.
 __all__ = [
     "data_io",
     "geometry",
+    "scalar_fields",
     "filters",
     "spherical",
     "util",
@@ -137,7 +138,9 @@ __email__ = "meyernic@ethz.ch"
 import logging
 from logging import config as logconfig
 
-from . import data_io, geometry, filters, spherical, util
+from GSEGUtils import util
+from . import data_io, geometry, filters, scalar_fields
+from .geometry import spherical
 from ._version import __version__
 
 logger = logging.getLogger(__name__.split(".")[0])

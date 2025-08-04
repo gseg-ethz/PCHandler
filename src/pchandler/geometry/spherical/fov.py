@@ -94,10 +94,11 @@ from pydantic import (
     model_validator
 )
 
-from pchandler.constants import DEFAULT_CONFIG, EPS, PI, TWO_PI, validate_variables
-from pchandler.spherical.angle import Angle, AngleArray
+from GSEGUtils.base_types import VectorT
+from GSEGUtils.constants import DEFAULT_CONFIG, EPS, PI, TWO_PI, validate_variables
 
-from pchandler.base_types import VectorT
+from .angle import Angle, AngleArray
+
 
 logger = logging.getLogger(__name__.split(".")[0])
 

@@ -7,8 +7,8 @@ import open3d as o3d
 from pydantic import Field, PositiveInt
 
 
-from pchandler.geometry.core import PointCloudData
-from pchandler.filters.core import PointCloudFilter
+from ..core import PointCloudData
+from .core import PointCloudFilter
 
 logger = logging.getLogger(__name__.split(".")[0])
 

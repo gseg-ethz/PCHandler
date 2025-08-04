@@ -5,9 +5,9 @@ import logging
 import numpy as np
 import numpy.typing as npt
 
-from pchandler.data_io.core import AbstractIOHandler
-from pchandler.constants import XYZ_NAMES, RGB_NAMES
-from pchandler.geometry import PointCloudData
+from .core import AbstractIOHandler
+from ..constants import XYZ_NAMES, RGB_NAMES
+from ..geometry import PointCloudData
 
 logger = logging.getLogger(__name__.split(".")[0])
 

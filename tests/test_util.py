@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 
-from pchandler.util import AngleUnit, convert_angles
+from GSEGUtils.util import AngleUnit, convert_angles
 
 class TestUtil:
     def test_bypass_immutability_decorator(self):

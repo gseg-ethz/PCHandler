@@ -1,8 +1,8 @@
 from pathlib import Path
 import logging
 
-from pchandler.data_io.core import AbstractIOHandler
-from pchandler.geometry import PointCloudData
+from .core import AbstractIOHandler
+from ..geometry import PointCloudData
 
 logger = logging.getLogger(__name__.split(".")[0])
 

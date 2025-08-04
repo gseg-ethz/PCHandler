@@ -1,111 +1,12 @@
 from __future__ import annotations
 
-from typing import Annotated, Union, Sequence, Any, Optional, TypeAlias, SupportsIndex, TypedDict
+from typing import Annotated, Sequence
 
-import numpy as np
-import numpy.typing as npt
-from numpydantic import NDArray, Shape
-from numpydantic.dtype import (
-    Bool, Float, Integer,
-    Float32, Float64,
-    Int8, Int16, Int32, Int64, SignedInteger,
-    UInt8, UInt16, UInt32, UnsignedInteger
-)
-from pydantic import BeforeValidator, StringConstraints
+from numpy import floating, integer
+from numpy.typing import NDArray
+from pydantic import BeforeValidator
 from shapely import Polygon
 
-LowerStr = Annotated[str, StringConstraints(strip_whitespace=True, to_lower=True)]
-SfNameT = Optional[LowerStr]
-
 ValidatedPolygonT = Annotated[
-    Sequence | npt.NDArray[np.floating | np.integer] | Polygon, BeforeValidator(lambda x: Polygon(x))
+    Sequence | NDArray[floating | integer] | Polygon, BeforeValidator(lambda x: Polygon(x))
 ]
-
-class DtypeDict(TypedDict):
-    names: list[LowerStr]
-    formats: list[npt.DTypeLike]
-
-# TODO improve naming and setup of all these numpydantic types
-ArrayDtypes = (Integer, Float, Bool)
-IndexDtypes = (Integer, Bool)
-BoolArrayT: TypeAlias = npt.NDArray[np.bool_]
-
-ShapeLikeT: TypeAlias = SupportsIndex | Sequence[SupportsIndex]
-NumberLikeT: TypeAlias = complex | np.number | np.bool
-
-ArrayT = NDArray[Shape["*, ..."], ArrayDtypes] # Arrays of any shape but support integers, floats and booleans
-
-Array_Float32_T = NDArray[Shape["*, ..."], Float32]
-Array_Float64_T = NDArray[Shape["*, ..."], Float64]
-Array_Float_T = NDArray[Shape["*, ..."], Float]
-
-Array_Integer_T = NDArray[Shape["*, ..."], Integer]
-
-Array_SignedInteger_T = NDArray[Shape["*, ..."], SignedInteger]
-Array_Int8_T = NDArray[Shape["*, ..."], Int8]
-Array_Int16_T = NDArray[Shape["*, ..."], Int16]
-Array_Int32_T = NDArray[Shape["*, ..."], Int32]
-Array_Int64_T = NDArray[Shape["*, ..."], Int64]
-
-Array_UnsignedInteger_T = NDArray[Shape["*, ..."], UnsignedInteger]
-Array_Uint8_T = NDArray[Shape["*, ..."], UInt8]
-Array_Uint16_T = NDArray[Shape["*, ..."], UInt16]
-Array_Uint32_T = NDArray[Shape["*, ..."], UInt32]
-
-Array_Bool_T = NDArray[Shape["*, ..."], Bool]
-
-Array_NxM_T = NDArray[Shape["*, *"], ArrayDtypes]       # Intensity/depth image
-Array_NxM_3_T = NDArray[Shape["*, *, 3"], ArrayDtypes]  # RGB image
-
-Array_Nx2_T = NDArray[Shape["*, 2"], ArrayDtypes]       # Image coordinates
-
-Array_Nx3_T = NDArray[Shape["*, 3"], ArrayDtypes]       # 3D Coordinates / normals
-Array_Nx3_Float_T = NDArray[Shape["*, 3"], Float]
-Array_Nx3_Float32_T = NDArray[Shape["*, 3"], Float32]   # Optimised coordinates
-Array_Nx3_Uint8_T = NDArray[Shape["*, 3"], UInt8]       # RGB
-
-Array_3x3_T = NDArray[Shape["4, 4"], ArrayDtypes]       # Rotation Matrix
-
-Array_4x4_T = NDArray[Shape["4, 4"], ArrayDtypes]       # Affine Transformation
-
-VectorT = NDArray[Shape["*"], ArrayDtypes]
-
-Vector_Bool_T = NDArray[Shape["*"], Bool]               # Mask or boolean vector
-
-Vector_Float_T = NDArray[Shape["*"], Float]
-Vector_Float64_T = NDArray[Shape["3"], Float64]
-Vector_Float32_T = NDArray[Shape["*"], Float32]         # Normal vector field
-
-Vector_Int32_T = NDArray[Shape["*"], Int32]
-Vector_Int16_T = NDArray[Shape["*"], Int16]
-Vector_Int8_T = NDArray[Shape["*"], Int8]
-
-Vector_Uint16_T = NDArray[Shape["*"], UInt16]
-Vector_Uint8_T = NDArray[Shape["*"], UInt8]             # Single RGB field
-
-Vector_4_T = NDArray[Shape["4"], ArrayDtypes]           # FoV as vector
-Vector_3_T = NDArray[Shape["3"], ArrayDtypes]           # 3D coordinate
-Vector_2_T = NDArray[Shape["2"], ArrayDtypes]           # Image coordinate
-
-Vector_IndexT = NDArray[Shape["*"], IndexDtypes]
-
-IndexLike = Union[int, slice, npt.NDArray[np.bool_], npt.NDArray[np.integer], Sequence]
-
-def make_ndarray_type(
-        *dimensions: Optional[int | str],
-        dtype: Optional[npt.DTypeLike] = None
-) -> type[NDArray[Any, Any]]:
-    """
-    Helper function to _generate the numpydantic type for a ndarray.
-
-    Calling 'make_ndarray_type(None, 3, dtype=np.float32)' would return a numpydantic dtype corresponding to an array
-    of shape (N, 3) with dtype = np.float32 and would provide pydantic validation on this
-    """
-    if len(dimensions) == 0:
-        shape_list = ["*", "..."]
-    else:
-        shape_list = [str(x) if x is not None else "*" for x in dimensions]
-
-    result : type[NDArray[Any, Any]] = NDArray[Shape[", ".join(shape_list)], dtype if dtype is not None else Any]
-
-    return result

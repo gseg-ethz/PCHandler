@@ -1,16 +1,17 @@
 from __future__ import annotations
 
-from typing import Optional, Self, overload, Literal, cast, Sequence, Any
+from typing import Optional, Self, overload, Literal, cast, Sequence, Any, TypeAlias
 import logging
 
 import numpy as np
 import open3d as o3d
 from pydantic import Field, field_validator, field_serializer
 
-from pchandler.base_types import Array_Nx3_T, IndexLike, VectorT, Array_Nx3_Float_T, Array_Nx3_Uint8_T, ArrayT
-from pchandler.geometry.coordinates import CartesianCoordinates
-from pchandler.geometry.scalar_field_manager import ScalarFieldManager, SF_T
-from pchandler.geometry.scalar_fields import (
+from GSEGUtils.base_types import Array_Nx3_T, IndexLike, VectorT, Array_Nx3_Float_T, Array_Nx3_Uint8_T, ArrayT
+
+from .geometry.coordinates import CartesianCoordinates
+from .scalar_fields.sf_manager import ScalarFieldManager, SF_T
+from .scalar_fields.core import (
     NormalFields,
     RGBFields,
     ScalarField,
@@ -19,11 +20,12 @@ from pchandler.geometry.scalar_fields import (
 
 logger = logging.getLogger(__name__)
 
-RgbInputT = Optional[RGBFields | Array_Nx3_Float_T | Array_Nx3_Uint8_T]
-NormalInputT = Optional[NormalFields | Array_Nx3_Float_T]
-IntensityInputT = Optional[VectorT | ArrayT]
-ReflectanceInputT = Optional[VectorT | ArrayT]
-SFM_T = Optional[ScalarFieldManager | dict[str, ScalarField | ScalarFieldTriplet | Array_Nx3_T | VectorT | Sequence]]
+RgbInputT: TypeAlias = Optional[RGBFields | Array_Nx3_Float_T | Array_Nx3_Uint8_T]
+NormalInputT: TypeAlias = Optional[NormalFields | Array_Nx3_Float_T]
+IntensityInputT: TypeAlias = Optional[VectorT | ArrayT]
+ReflectanceInputT: TypeAlias = Optional[VectorT | ArrayT]
+SFM_T: TypeAlias = Optional[ScalarFieldManager |
+                            dict[str, ScalarField | ScalarFieldTriplet | Array_Nx3_T | VectorT | Sequence]]
 
 
 class PointCloudData(CartesianCoordinates):

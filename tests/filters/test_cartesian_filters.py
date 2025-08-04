@@ -4,7 +4,7 @@ from shapely.geometry import box
 from pydantic import ValidationError
 import numpy as np
 
-from pchandler.geometry.core import PointCloudData
+from pchandler.core import PointCloudData
 from pchandler.geometry.optimal_shift import OptimizedShift
 from pchandler.filters.cartesian_filters import BoxFilter, SphereFilter, PolygonFilter
 

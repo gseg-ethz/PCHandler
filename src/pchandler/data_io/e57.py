@@ -5,9 +5,9 @@ import logging
 import numpy as np
 import pye57        # type: ignore[import-untyped]
 
-from pchandler.data_io.core import AbstractIOHandler
-from pchandler.constants import INTENSITY_NAMES, RGB_NAMES
-from pchandler.geometry import PointCloudData
+from .core import AbstractIOHandler
+from ..constants import INTENSITY_NAMES, RGB_NAMES
+from ..geometry import PointCloudData
 
 logger = logging.getLogger(__name__.split(".")[0])
 

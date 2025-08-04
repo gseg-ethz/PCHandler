@@ -4,7 +4,7 @@ import numpy as np
 from pydantic import ValidationError
 
 from pchandler.constants import RGB_NAMES, NORMAL_NAMES
-from pchandler.validators import linear_map_dtype, normalize_self
+from GSEGUtils.validators import linear_map_dtype, normalize_self
 from pchandler.geometry.scalar_fields import (
     DtypeState,
     ScalarField,

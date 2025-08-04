@@ -1,33 +1,30 @@
-"""
-GPU module for pchandler.geometry.filters
-
-Provides functions that use GPU acceleration (via cudf and cuspatial) to filter point clouds.
 # """
+# GPU module for pchandler.geometry.filters
+#
+# Provides functions that use GPU acceleration (via cudf and cuspatial) to filter point clouds.
+# # """
 #
 # import gc
 # import logging
 #
-# from typing import Annotated, Any
 #
 # try:
 #     import cudf
 #     import cuspatial
 #     import geopandas as gpd
+#
 # except RuntimeError:
 #     pass
 # except ImportError:
 #     raise ImportError("pchandler.geometry.filters.gpu requires the ‘cuda11’ or ‘cuda12’ extra (`pip install pchandler[cuda11]`).")
 #
-# import numpy as np
-# from numpy.typing import NDArray
 # from shapely.geometry import Polygon
-# from pydantic import BeforeValidator
 #
-# from ..geometry.core import PointCloudData
-# from .core import PointCloudFilter
+# from pchandler.core import PointCloudData
+# from pchandler.filters.core import PointCloudFilter
 # from .cartesian_filters import PlaneStrings
 # from ..constants import validate_variables
-# from ..base_types import ValidatedPolygonT
+# from ..base_types import ValidatedPolygonT, Vector_Bool_T
 #
 # logger = logging.getLogger(__name__.split(".")[0])
 #
@@ -38,7 +35,7 @@ Provides functions that use GPU acceleration (via cudf and cuspatial) to filter 
 #         self.polygon: Polygon = polygon
 #         self.plane = plane
 #
-#     def mask(self, pcd: PointCloudData) -> NDArray:
+#     def mask(self, pcd: PointCloudData) -> Vector_Bool_T:
 #         if self.plane not in ('xy', 'xz', 'yz'):
 #             raise ValueError("Invalid plane. Choose 'xy', 'xz', or 'yz'.")
 #
@@ -46,13 +43,13 @@ Provides functions that use GPU acceleration (via cudf and cuspatial) to filter 
 #             {character: getattr(pcd, character).astype(float) for character in self.plane}
 #         )
 #
-#         if pcd.global_coordinate_shift is not None:
+#         if pcd.numerical_optimization_shift is not None:
 #             if self.plane == "xy":
-#                 global_shift = -pcd.global_coordinate_shift[:2]
+#                 global_shift = -pcd.numerical_optimization_shift[:2]
 #             elif self.plane == "xz":
-#                 global_shift = -pcd.global_coordinate_shift[[0, 2]]
+#                 global_shift = -pcd.numerical_optimization_shift[[0, 2]]
 #             else:
-#                 global_shift = -pcd.global_coordinate_shift[1:]
+#                 global_shift = -pcd.numerical_optimization_shift[1:]
 #             self.polygon = gpd.GeoSeries([self.polygon]).translate(*global_shift).iloc[0]
 #
 #         polygon_gpu = cuspatial.GeoSeries(gpd.GeoSeries([self.polygon]))
@@ -71,7 +68,7 @@ Provides functions that use GPU acceleration (via cudf and cuspatial) to filter 
 #     def __init__(self, polygon: ValidatedPolygonT):
 #         self.polygon: Polygon = polygon
 #
-#     def mask(self, pcd: PointCloudData) -> NDArray:
+#     def mask(self, pcd: PointCloudData) -> Vector_Bool_T:
 #         proj_pts = cudf.DataFrame(
 #             {"x": pcd.hz.astype(float), "y": pcd.v.astype(float)}
 #         ).interleave_columns()

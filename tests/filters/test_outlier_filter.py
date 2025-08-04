@@ -1,8 +1,6 @@
-import pytest
-
 import numpy as np
 
-from pchandler.geometry.core import PointCloudData
+from pchandler.core import PointCloudData
 from pchandler.geometry.coordinates import rhv2xyz
 
 from pchandler.filters.outlier_filter import SphericalOutlierFilter, CartesianOutlierFilter

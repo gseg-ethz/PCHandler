@@ -3,8 +3,8 @@ import pickle
 import pytest
 import numpy as np
 
-from pchandler.spherical.angle import Angle, AngleArray
-from pchandler.util import AngleUnit
+from pchandler.geometry.spherical import Angle, AngleArray
+from GSEGUtils.util import AngleUnit
 
 import math
 
