@@ -1,87 +1,77 @@
-import pytest
-
-from shapely.geometry import box
-from pydantic import ValidationError
 import numpy as np
+import pytest
+from pydantic import ValidationError
+from shapely.geometry import Polygon, box
 
-from pchandler.filters.gpu import *
-
-
-@pytest.fixture(scope="function")
-def simple_array():
-    return np.array([[-2, -2, -2],
-                     [-1, -1, -1],
-                     [-0.4, -0.3, -0.2],
-                     [1, 1, 1],
-                     [2, 2, 2]])
+from pchandler.filters import PolygonFilterGPU, SphericalPolygonFilterGPU
+from pchandler.geometry import PointCloudData
+from pchandler.geometry.coordinates import rhv2xyz
 
 
-@pytest.fixture(scope="function")
-def sphere_filter():
-    return SphereFilter(np.array([0.5, 0.5, 0.5]), 1.3)
+@pytest.fixture(scope="function", autouse=True)
+def sphere_pcd_():
+    rhv = np.column_stack(
+        (
+            np.random.uniform(low=5, high=10, size=100),
+            np.random.uniform(low=np.pi / 2, high=2 * np.pi / 3, size=100),
+            np.random.uniform(low=0, high=np.pi / 2, size=100),
+        )
+    )
+    rhv = np.vstack(
+        (
+            rhv,
+            np.array([[10, -np.pi / 2, np.pi / 2]]),
+        )
+    )
+    pcd = PointCloudData(xyz=rhv2xyz(rhv))
+    return pcd
 
 
-@pytest.fixture(scope="function")
-def polygon_filter():
-    polygon = box(-0.31, -0.31, 1.3, 1.3)
-    return PolygonFilter(polygon, 'xy')
+@pytest.fixture(scope="function", autouse=True)
+def sphere_polygon_():
+    return Polygon([[0.0, 0.0], [np.pi, 0.0], [np.pi, np.pi], [0.0, np.pi]])
 
 
-class TestGPUSphereFilter:
-    def test_init(self, sphere_filter):
-        assert hasattr(sphere_filter, "sphere_center")
-        assert hasattr(sphere_filter, "radius")
-        assert np.all(sphere_filter.sphere_center == 0.5)
-        assert np.all(sphere_filter.radius == 1.3)
+@pytest.fixture(scope="function", autouse=True)
+def xyz_pcd_():
+    xyz = np.column_stack(
+        (
+            np.random.uniform(low=0.1, high=9.9, size=100),
+            np.random.uniform(low=0.1, high=4.9, size=100),
+            np.random.uniform(low=0, high=100, size=100),
+        )
+    )
+    xyz = np.vstack(
+        (
+            xyz,
+            np.array([[-10, -10, 10]]),
+        )
+    )
+    pcd = PointCloudData(xyz=xyz)
+    return pcd
 
-    def test_invalid_init(self, sphere_filter):
+
+@pytest.fixture(scope="function", autouse=True)
+def xy_polygon_():
+    return Polygon([[0.0, 0.0], [10.0, 0.0], [10.0, 5.0], [0.0, 5.0]])
+
+
+class TestSphericalPolygonFilterGPU:
+    def test_init(self, sphere_polygon_, sphere_pcd_):
+        sphere_filter = SphericalPolygonFilterGPU(sphere_polygon_)
+        mask = sphere_filter.mask(sphere_pcd_)
+        assert all(mask[:-1])
+        assert not mask[-1]
+
+
+class TestPolygonFilterGPU:
+    def test_init(self, xy_polygon_, xyz_pcd_):
+        polygon_filter = PolygonFilterGPU(xy_polygon_, "xy")
+        assert polygon_filter.plane == "xy"
+        mask = polygon_filter.mask(xyz_pcd_)
+        assert all(mask[:-1])
+        assert not mask[-1]
+
+    def test_invalid_init(self, xy_polygon_):
         with pytest.raises(ValueError):
-            SphereFilter(np.array([0, 1, 1, 1]), 1.2)
-
-        with pytest.raises(ValidationError):
-            SphereFilter(np.array([0, 1, 1]), "Fasb")
-
-    @pytest.mark.parametrize('kwargs', ({}, {'optimized_shift': None}))
-    def test_mask(self, sphere_filter, simple_array, kwargs):
-        pcd = PointCloudData(simple_array, **kwargs)
-        mask = sphere_filter.mask(pcd)
-
-        assert mask.shape == (pcd.shape[0],)
-        assert mask.dtype == np.bool_
-        assert isinstance(mask, np.ndarray)
-        assert np.all(mask == np.array([False, False, False, True, False]))
-
-
-class TestGPUPolygonFilter:
-    def test_init(self, polygon_filter):
-        assert hasattr(polygon_filter, "polygon")
-        assert hasattr(polygon_filter, "plane")
-        assert np.all(polygon_filter.polygon == box(-0.31, -0.31, 1.3, 1.3))
-        assert np.all(polygon_filter.plane == 'xy')
-
-    def test_invalid_init(self):
-        with pytest.raises(ValueError):
-            PolygonFilter(box(0, 0, 1, 1), 'zzz')
-
-        with pytest.raises(ValidationError):
-            PolygonFilter('asdsa', 'xy')
-
-
-    @pytest.mark.parametrize('kwargs', ({}, {'optimized_shift': None}))
-    def test_mask(self, polygon_filter, simple_array, kwargs):
-        pcd = PointCloudData(simple_array, **kwargs)
-        mask = polygon_filter.mask(pcd)
-
-        assert mask.shape == (pcd.shape[0],)
-        assert mask.dtype == np.bool_
-        assert isinstance(mask, np.ndarray)
-        assert np.all(mask == np.array([False, False, False, True, False]))
-
-        # Only yz plane will be different as x is the larget value to be filtered
-        polygon_filter.plane = 'xz'
-        mask2 = polygon_filter.mask(pcd)
-        assert np.allclose(mask2, mask)
-
-        polygon_filter.plane = 'yz'
-        mask3 = polygon_filter.mask(pcd)
-        assert not np.allclose(mask3, mask)
+            polygon_filter = PolygonFilterGPU(xy_polygon_, "abc")
