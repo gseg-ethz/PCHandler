@@ -94,7 +94,6 @@ class ScalarFieldManager:
                     )
         else:
             logger.info("No parent point cloud to validate scalar field lengths against")
-            # TODO it could be added to validate against the first field if it exists
 
     def __len__(self) -> int:
         return len(self.fields)
@@ -194,9 +193,10 @@ class ScalarFieldManager:
     @parent.setter
     def parent(self, parent: PointCloudData):
         if self._parent is not None and self._parent() is not parent:
-            logger.warning(f"Parent already set as {self._parent()}. Will be overwritten by {parent}!", stack_info=True,
-                           stacklevel=1)
+            logger.warning(f"Parent already set as {self._parent()}. "
+                           f"Will be overwritten by {parent}!", stack_info=True, stacklevel=1)
         self._parent = weakref.ref(parent)
+        self.validate_lengths()
 
     @property
     def shape(self) -> tuple[int, int]:

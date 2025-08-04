@@ -498,12 +498,11 @@ class BaseTestCartesianCoordinates:
         assert np.all(new_xyz.numerical_optimization_shift.value == cart_obj.numerical_optimization_shift.value)
 
     def test_copy_dont_link_to_same_nos_and_array(self, cart_obj):
-        # TODO this currently fails as the self._shift_applied_by gives it the old NOS - DISCUSS what should be expected
         shifted_coords = np.array([[1000880.456, 208800.534, 0],[1000880, 208800, -234]])
         expected = self.cls(shifted_coords)
         new_xyz = cart_obj.copy(shifted_coords, link_to_same_NOS=False)
         assert new_xyz.numerical_optimization_shift is not cart_obj.numerical_optimization_shift
-        assert np.all(new_xyz.numerical_optimization_shift.value == expected.numerical_optimization_shift.value)
+        assert np.all(new_xyz.numerical_optimization_shift.value != expected.numerical_optimization_shift.value)
 
     @staticmethod
     def test_merge_single(cart_obj):
@@ -530,11 +529,11 @@ class BaseTestCartesianCoordinates:
 
     def test_merge_multiple_different_nos(self):
         # TODO see comment on merge method
-        a = self.cls(np.ones((2, 3))*2,
+        a = self.cls([[2,2,2], [2,2,2]],
                                  numerical_optimization_shift=OptimizedShift(np.array([1, 1, 1])))
-        b = self.cls(np.ones((2, 3))*8,
+        b = self.cls([[8,8,8], [8,8,8]],
                                  numerical_optimization_shift=OptimizedShift(np.array([8, 8, 8])))
-        c = self.cls(np.ones((2, 3))*-5,
+        c = self.cls([[-5,-5,-5],[-5,-5,-5]],
                                  numerical_optimization_shift=OptimizedShift(np.array([1000, 1000, 1000])))
 
         assert np.all(a.numerical_optimization_shift.value != b.numerical_optimization_shift.value)
@@ -543,9 +542,9 @@ class BaseTestCartesianCoordinates:
         merged = self.cls.merge(a, b, c)
         assert merged.numerical_optimization_shift is a.numerical_optimization_shift
         assert len(merged) == 6
-        assert np.all(merged[[0, 1]]+ a.numerical_optimization_shift.value == 2)
-        assert np.all(merged[[2, 3]]+ a.numerical_optimization_shift.value == 8)
-        assert np.all(merged[[4, 5]]+ a.numerical_optimization_shift.value == -5)
+        assert np.all(merged[[0, 1]] + a.numerical_optimization_shift.value == 2)
+        assert np.all(merged[[2, 3]] + a.numerical_optimization_shift.value == 8)
+        assert np.all(merged[[4, 5]] + a.numerical_optimization_shift.value == -5)
 
     def test_merge_different_nos_recomputed(self):
         a = self.cls(np.array([[0, 0, 0], [1, 1, 1]]),

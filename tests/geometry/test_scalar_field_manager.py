@@ -190,9 +190,10 @@ class TestSfmValidators:
         # Case throws error due to mismatch field lengths
         invalid_fields = {'rgb': base_sfm.rgb, 'invalid': invalid_size}
         sfm = ScalarFieldManager(fields=invalid_fields)
-        sfm.parent = pcd
+
+        # Throws error when assigned and lengths don'e match
         with pytest.raises(ValueError):
-            sfm.validate_lengths()
+            sfm.parent = pcd
 
 
 class TestSfmDunderMethods:

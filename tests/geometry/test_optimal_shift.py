@@ -293,6 +293,7 @@ class TestOptimizedShift:
         new_value = shift.value.copy()
 
         # Case 3 - Shift has moved, create new
+        # TODO this test needs to be fixed
         with pytest.raises(OptimizedShiftManager.ShiftUUIDAlreadyTaken):
             func(*state)
 

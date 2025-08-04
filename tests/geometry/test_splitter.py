@@ -86,8 +86,8 @@ class TestFoVTreePointCloudSplitter:
 
     def test_invalid_split_mode(self, pcd_, new_tree):
         pcd_original = pcd_.copy()
-        iterative_splitter = FoVTreePointCloudSplitter(new_tree, method='new_moe')
         with pytest.raises(ValidationError):
+            iterative_splitter = FoVTreePointCloudSplitter(new_tree, method='new_moe')
             splits_1 = iterative_splitter.split(pcd_)
 
         with pytest.raises(ValueError):

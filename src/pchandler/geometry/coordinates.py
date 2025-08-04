@@ -312,7 +312,6 @@ class CartesianCoordinates(Abstract3dCoordinates):
                 )
                 common_nos = cart_coords[0].numerical_optimization_shift
 
-            # TODO is there a way to merge without creating an optimal shift?
             elif OptimizedShiftManager().is_shift_possible(bbox_pts):
                 logger.info(
                     f"Creating new numerical optimization shift instance."
@@ -332,14 +331,12 @@ class CartesianCoordinates(Abstract3dCoordinates):
             cart_coords = tuple(cart_coord_copies)
 
         new_arr = np.vstack(tuple(cart_coord.arr for cart_coord in cart_coords))
-        # TODO discuss the best way to handle this - the common NOS needs to be removed from the new_arr to
-        #  make the merge with different NOS work
-        # TODO also consider the case of pcds without NOS
         return cls(
             xyz=new_arr,
             numerical_optimization_shift=cart_coords[0].numerical_optimization_shift,
             socs_origin=None,
             project_transformation=None,
+            _shift_applied_by=cart_coords[0].numerical_optimization_shift,
             **kwargs
         )
 

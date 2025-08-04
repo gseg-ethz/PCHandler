@@ -123,8 +123,6 @@ class VoxelDownsample:
 
         centroids, sfm, _, _ = _calculate_centroids_and_weights(self, unique, ndim, unique_inverse, values, pcd)
 
-        # TODO: add functionality to manage weights of scalar fields better. e.g. Normals
-
         new_pcd = pcd.copy(array=centroids,
                            update={"scalar_fields": sfm, "unshifted_bbox": None,},
                            link_to_same_NOS=True)
@@ -154,29 +152,6 @@ class AngleBinDownsample:
             / weight_sum
         )
         coords = rhv2xyz(np.hstack((ranges[:, np.newaxis], centroids)), pcd.socs_origin)
-
-        # # Average scalar fields
-        # averaged_scalar_fields = {}
-        # for field_name, field_values in self.scalar_fields.items():
-        #     # Compute the sum of scalar values within each voxel
-        #     scalar_sum = np.bincount(unique_inverse, weights=field_values, minlength=unique.shape[0])
-        #     # Compute the average
-        #     averaged_scalar_fields[field_name] = (scalar_sum / counts).astype(field_values.dtype)
-
-        # object.__setattr__(self, "xyz", centroids)
-        # if self._spherical_coordinates_calculated:
-        #     object.__delattr__(self, "spherical_coordinates")
-        #     object.__setattr__(self, "_spherical_coordinates_calculated", False)
-        #
-        # # Todo: Add functionality
-        # logger.warn("Normals, and colors are not retained during `voxel_downsample`!")
-        # object.__setattr__(self, 'color', None)
-        # object.__setattr__(self, 'normals', None)
-        # # for field_name in self.scalar_fields.keys():
-        # #     del self.scalar_fields[field_name]
-        # # self.scalar_fields.clear()
-        #
-        # return
 
         # coords = SphericalCoordinates(arr=np.hstack((ranges[:, np.newaxis], centroids)))
         new_pcd = pcd.copy(array=coords, update={"scalar_fields": sfm, "unshifted_bbox": None,}, link_to_same_NOS=True)

@@ -164,18 +164,11 @@ class FoV(BaseModel):
     def from_angles(cls, horizontal: VectorT | AngleArray, vertical: VectorT | AngleArray) -> Self:
         return cls(left=horizontal.min(), top=vertical.min(), right=horizontal.max(), bottom=vertical.max())
 
-    # TODO decide on which iterator, this follows the python __iter__ convention better
     def __iter__(self) -> Generator[tuple[str, Angle], None, None]:
-    # def __iter__(self) -> Generator[Angle, None, None]:
-        # Return in order of left, top, right, bottom (minx, miny, maxx, maxy)
         yield 'left', self.left
         yield 'top', self.top
         yield 'right', self.right
         yield 'bottom', self.bottom
-    #     yield self.left
-    #     yield self.top
-    #     yield self.right
-    #     yield self.bottom
 
     @property
     def crosses_pi(self) -> bool:
@@ -600,28 +593,8 @@ class FoVTree:
 
         return cls(identifier, fov, fov_children)
 
-    # TODO: Rework quadrants as special case of generalized split on shape tuple.
-    # @staticmethod
-    # def quadrant_split(tiles: list[list[FoV]]):
-    #     # q1 = tiles[:len(tiles) // 2]
-    #     # q2 = tiles[len(tiles) // 2:]
-    #     # q11 = [row[:len(row)//2] for row in q1]
-    #     # q12 = [row[len(row)//2:] for row in q1]
-    #     # q21 = [row[:len(row) // 2] for row in q2]
-    #     # q22 = [row[len(row) // 2:] for row in q2]
-    #     # quadrant_FoV = FoV(horizontal_min=q11[0][0].horizontal_min,
-    #     #                    elevation_min=q11[0][0].elevation_min,
-    #     #                    horizontal_max=q22[-1][-1].horizontal_max,
-    #     #                    elevation_max=q22[-1][-1].elevation_max)
-    #
-    #     FoVTree.quadrant_split(q11)
-    #     FoVTree.quadrant_split(q12)
-    #     FoVTree.quadrant_split(q21)
-    #     FoVTree.quadrant_split(q22)
-    #
-    #     pass
 
-
+    # TODO - Reimplement Low priority / Historical
     # @classmethod
     # def build_by_splitting(cls, fov: FoV, target_ratio: float, target_fov_extent: tuple[tuple[float, float], str],
     #                        max_denominator: int, identifier: str = "") -> Self:
