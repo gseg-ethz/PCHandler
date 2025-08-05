@@ -5,6 +5,9 @@ from typing import Any, Literal, Optional, Self, Sequence, cast, overload
 
 import numpy as np
 import open3d as o3d
+
+from pydantic import Field, field_serializer, field_validator
+
 from GSEGUtils.base_types import (
     Array_Nx3_Float_T,
     Array_Nx3_T,
@@ -13,7 +16,6 @@ from GSEGUtils.base_types import (
     IndexLike,
     VectorT,
 )
-from pydantic import Field, field_serializer, field_validator
 
 from pchandler.geometry.coordinates import CartesianCoordinates
 from pchandler.scalar_fields import (
