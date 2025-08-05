@@ -3,8 +3,8 @@ import pytest
 from pydantic import ValidationError
 from shapely.geometry import Polygon, box
 
+from pchandler import PointCloudData
 from pchandler.filters import PolygonFilterGPU, SphericalPolygonFilterGPU
-from pchandler.geometry import PointCloudData
 from pchandler.geometry.coordinates import rhv2xyz
 
 

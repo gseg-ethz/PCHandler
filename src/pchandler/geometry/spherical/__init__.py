@@ -1,34 +1,17 @@
-"""
-Public API for pchandler.geometry.
-Re-exports key classes and functions from the submodules.
-"""
-
 from __future__ import annotations
 
 import importlib
 from typing import TYPE_CHECKING
 
-__all__ = [
-    "splitter",
-    "util",
-    "coordinates",
-    "transforms",
-    "spherical",
-]
+__all__ = []
 
-_lazy_map = {
-    # "get_outline_polygon": "util",
-    "OptimizedShiftManager": "optimal_shift",
-    "OptimizedShift": "optimal_shift",
-}
+_lazy_map = {"Angle": "angle", "AngleArray": "angle", "FoV": "fov", "FoVTree": "fov"}
 
 __all__ = __all__ + list(_lazy_map)
 
 if TYPE_CHECKING:
-    from . import coordinates, spherical, splitter, transforms, util
-    from .optimal_shift import OptimizedShift, OptimizedShiftManager
-
-    # from .util import get_outline_polygon
+    from .angle import Angle, AngleArray
+    from .fov import FoV, FoVTree
 
 
 def __getattr__(name: str):

@@ -1,15 +1,20 @@
 import copy
+import gc
 import logging
 from weakref import ReferenceType
-import gc
 
 import numpy as np
 import pytest
 
-from pchandler.geometry import PointCloudData
-from pchandler.scalar_fields.scalar_field_manager import ScalarFieldManager
-from pchandler.scalar_fields.scalar_fields import ScalarField, RGBFields, NormalFields, AbstractScalarField, \
-    NormalisedInt16ScalarField
+from pchandler import PointCloudData
+from pchandler.scalar_fields import ScalarFieldManager
+from pchandler.scalar_fields.scalar_fields import (
+    AbstractScalarField,
+    NormalFields,
+    NormalisedInt16ScalarField,
+    RGBFields,
+    ScalarField,
+)
 
 N = 40
 
@@ -18,25 +23,31 @@ N = 40
 def rgb_field() -> RGBFields:
     return RGBFields(np.random.randint(0, 255, (N, 3), dtype=np.uint8))
 
+
 @pytest.fixture(scope="function", autouse=True)
 def normals_field() -> NormalFields:
     return NormalFields(np.random.rand(N, 3).astype(np.float32))
+
 
 @pytest.fixture(scope="function", autouse=True)
 def intensity_field() -> ScalarField:
     return ScalarField(np.random.rand(N), name="intensity")
 
+
 @pytest.fixture(scope="function", autouse=True)
 def reflectance_field() -> ScalarField:
     return ScalarField(np.random.rand(N), name="reflectance")
+
 
 @pytest.fixture(scope="function", autouse=True)
 def scalar_field() -> ScalarField:
     return ScalarField(np.random.rand(N), name="test")
 
+
 @pytest.fixture(scope="function", autouse=True)
 def invalid_size() -> ScalarField:
     return ScalarField(np.random.rand(N + 10), name="test")
+
 
 @pytest.fixture(scope="function", autouse=True)
 def pcd() -> PointCloudData:
@@ -45,10 +56,7 @@ def pcd() -> PointCloudData:
 
 @pytest.fixture(scope="function", autouse=True)
 def empty_sfm(pcd) -> ScalarFieldManager:
-    return ScalarFieldManager(
-        parent=pcd,
-        fields={}
-    )
+    return ScalarFieldManager(parent=pcd, fields={})
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -63,6 +71,7 @@ def base_sfm(rgb_field, normals_field, scalar_field, intensity_field, reflectanc
             scalar_field.name: scalar_field,
         },
     )
+
 
 @pytest.fixture(scope="function", autouse=True)
 def no_parent_sfm(rgb_field, normals_field, scalar_field, intensity_field, reflectance_field) -> ScalarFieldManager:
@@ -188,7 +197,7 @@ class TestSfmValidators:
         assert "No parent point cloud to validate scalar field lengths against" in caplog.text
 
         # Case throws error due to mismatch field lengths
-        invalid_fields = {'rgb': base_sfm.rgb, 'invalid': invalid_size}
+        invalid_fields = {"rgb": base_sfm.rgb, "invalid": invalid_size}
         sfm = ScalarFieldManager(fields=invalid_fields)
 
         # Throws error when assigned and lengths don'e match
@@ -245,13 +254,13 @@ class TestSfmDunderMethods:
 
         # Sequence is used for the values
         list_obj = np.ones(N).tolist()
-        base_sfm['seq1'] = list_obj
-        assert np.all(base_sfm['seq1'] == 1)
-        assert isinstance(base_sfm['seq1'], ScalarField)
+        base_sfm["seq1"] = list_obj
+        assert np.all(base_sfm["seq1"] == 1)
+        assert isinstance(base_sfm["seq1"], ScalarField)
 
         # Invalid length sf
         with pytest.raises(ValueError):
-            base_sfm['invalid'] = np.ones(14)
+            base_sfm["invalid"] = np.ones(14)
 
     def test_delitem(self, base_sfm):
         assert "intensity" in base_sfm
@@ -307,7 +316,7 @@ class TestGeneralProperties:
 
     def test_num_points(self, empty_sfm, base_sfm, no_parent_sfm):
         assert no_parent_sfm.num_points == -1
-        this_pcd = PointCloudData(np.random.rand(100, 3), scalar_field={'abc': np.random.rand(100)})
+        this_pcd = PointCloudData(np.random.rand(100, 3), scalar_field={"abc": np.random.rand(100)})
         sfm = copy.deepcopy(this_pcd.scalar_fields)
         del this_pcd
         gc.collect()
@@ -334,7 +343,7 @@ class TestSpecialNamedProperties:
 
     def test_normals_setter(self, empty_sfm):
         array = np.random.rand(N, 3).astype(np.float32)
-        array = array / np.linalg.norm(array, axis=1).reshape(-1,1)
+        array = array / np.linalg.norm(array, axis=1).reshape(-1, 1)
         empty_sfm.normals = array
         assert hasattr(empty_sfm, "normals")
         assert np.allclose(empty_sfm.normals, array)
@@ -364,6 +373,7 @@ class TestSpecialNamedProperties:
         assert hasattr(empty_sfm, "reflectance")
         assert np.allclose(empty_sfm.reflectance, array)
         assert empty_sfm.reflectance.dtype == array.dtype
+
 
 class TestSampleExtractReduce:
     def test_sample(self, base_sfm):
@@ -421,7 +431,6 @@ class TestSampleExtractReduce:
         assert np.all(sample.rgb == extracted.rgb)
 
 
-
 class TestExtraFieldMethods:
     def test_add_field(self, base_sfm, scalar_field):
         data = scalar_field.copy(deep=True)
@@ -453,10 +462,10 @@ class TestNamedFieldHandlers:
         g = ScalarField(np.random.randint(0, 255, N, dtype=np.uint8), name="g")
         blue = ScalarField(np.random.randint(0, 255, N, dtype=np.uint8), name="blue")
         b = ScalarField(np.random.randint(0, 255, N, dtype=np.uint8), name="b")
-        color = RGBFields(np.random.randint(0, 255, (N,3), dtype=np.uint8), name="color")
-        colour = RGBFields(np.random.randint(0, 255, (N,3), dtype=np.uint8), name="colour")
-        colors = RGBFields(np.random.randint(0, 255, (N,3), dtype=np.uint8), name="colors")
-        colours = RGBFields(np.random.randint(0, 255, (N,3), dtype=np.uint8), name="colours")
+        color = RGBFields(np.random.randint(0, 255, (N, 3), dtype=np.uint8), name="color")
+        colour = RGBFields(np.random.randint(0, 255, (N, 3), dtype=np.uint8), name="colour")
+        colors = RGBFields(np.random.randint(0, 255, (N, 3), dtype=np.uint8), name="colors")
+        colours = RGBFields(np.random.randint(0, 255, (N, 3), dtype=np.uint8), name="colours")
         float_vec_target = np.linspace(0, 255, N, endpoint=True).astype(np.float32)
         rf = ScalarField(float_vec_target / 255, name="rf")
         gf = ScalarField(float_vec_target / 255, name="gf")
@@ -483,26 +492,24 @@ class TestNamedFieldHandlers:
             base_sfm.add_field(sf)
             assert not hasattr(base_sfm, sf.name)
             assert sf.name not in base_sfm
-            assert np.allclose(getattr(base_sfm.rgb, order[i]), np.ceil(sf*255), atol=1)
+            assert np.allclose(getattr(base_sfm.rgb, order[i]), np.ceil(sf * 255), atol=1)
 
         for sf in (color, colors, colour, colours):
             base_sfm.add_field(sf)
             assert np.all(sf == base_sfm.rgb)
 
-
         # Test reversed
-        base_sfm['bgr'] = colour
+        base_sfm["bgr"] = colour
         assert np.all(base_sfm.rgb == colour[:, [2, 1, 0]])
-        assert np.all(base_sfm['bgr'] == colour)
+        assert np.all(base_sfm["bgr"] == colour)
 
         # Test access of scalar on empty
-        assert empty_sfm['r'] is None
+        assert empty_sfm["r"] is None
 
         with pytest.raises(KeyError):
-            base_sfm._get_rgb('invalid')
+            base_sfm._get_rgb("invalid")
         with pytest.raises(KeyError):
-            base_sfm._set_rgb('invalid', colour)
-
+            base_sfm._set_rgb("invalid", colour)
 
     def test_normal_handlers(self, base_sfm, empty_sfm):
         nx = ScalarField(np.random.rand(N).astype(np.float32), name="nx")
@@ -527,33 +534,29 @@ class TestNamedFieldHandlers:
             assert np.allclose(sf, base_sfm.normals)
 
         # Test reversed
-        base_sfm['nznynx'] = normal
+        base_sfm["nznynx"] = normal
         assert np.all(base_sfm.normals == normal.arr[:, [2, 1, 0]])
-        assert np.all(base_sfm['nznynx'] == normal)
+        assert np.all(base_sfm["nznynx"] == normal)
 
         # Test access of scalar on empty
-        assert empty_sfm['nx'] is None
+        assert empty_sfm["nx"] is None
 
         with pytest.raises(KeyError):
-            base_sfm._get_normals('invalid')
+            base_sfm._get_normals("invalid")
         with pytest.raises(KeyError):
-            base_sfm._set_normals('invalid', normal)
+            base_sfm._set_normals("invalid", normal)
 
 
 class TestClassMethods:
     def test_merge_valid(self, intensity_field, rgb_field, reflectance_field, normals_field, scalar_field):
-        cloud1 = ScalarFieldManager(parent=None, fields={
-            "intensity": intensity_field,
-            "rgb": rgb_field,
-            "reflectance": reflectance_field
-        })
+        cloud1 = ScalarFieldManager(
+            parent=None, fields={"intensity": intensity_field, "rgb": rgb_field, "reflectance": reflectance_field}
+        )
 
-        cloud2 = ScalarFieldManager(parent=None, fields={
-            "rgb": rgb_field,
-            "reflectance": reflectance_field,
-            "normals": normals_field,
-            "test": scalar_field
-        })
+        cloud2 = ScalarFieldManager(
+            parent=None,
+            fields={"rgb": rgb_field, "reflectance": reflectance_field, "normals": normals_field, "test": scalar_field},
+        )
 
         merged = ScalarFieldManager.merge([cloud1, cloud2])
 

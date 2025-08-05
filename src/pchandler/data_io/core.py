@@ -1,45 +1,42 @@
 import copy
 import logging
-
 from abc import ABC, abstractmethod
 from pathlib import Path
-
-from typing import Mapping, Callable, Optional, Any, Generator, Sequence, cast
+from typing import Any, Callable, Generator, Mapping, Optional, Sequence, cast
 
 import numpy as np
 import numpy.typing as npt
 from numpy._typing._dtype_like import _DTypeDict
 
-from pchandler.base_types import Array_Nx3_T,DtypeDict
+from pchandler import PointCloudData
+from pchandler.base_types import Array_Nx3_T, DtypeDict
 from pchandler.constants import (
+    COMMON_FIELD_NAMES,
     INTENSITY_NAMES,
-    RGB_NAMES,
     NORMAL_NAMES,
     REFLECTANCE_NAMES,
+    RGB_NAMES,
     XYZ_NAMES,
     NameConstantsTriplet,
-    COMMON_FIELD_NAMES
 )
-from pchandler.geometry.core import PointCloudData
-from pchandler.scalar_fields.scalar_field_manager import SF_T
-from pchandler.scalar_fields.scalar_fields import (
+from pchandler.scalar_fields import (
+    SF_T,
+    NormalFields,
+    RGBFields,
     ScalarField,
     ScalarFieldTriplet,
-    RGBFields,
-    NormalFields,
-    DtypeState
 )
-
+from pchandler.scalar_fields.scalar_fields import DtypeState
 
 logger = logging.getLogger(__name__.split(".")[0])
 
-BaseDataT =  Mapping[str, npt.NDArray[Any]] | npt.NDArray[Any]
+BaseDataT = Mapping[str, npt.NDArray[Any]] | npt.NDArray[Any]
 SUPPORTED_TYPES = (".ply", ".las", ".laz", ".txt", ".csv", ".pts", ".e57")
 
 
-def find_point_cloud_in_directory(directory_path: Path,
-                                  pcd_file_types: Sequence[str] = SUPPORTED_TYPES,
-                                  include_subdirectories: bool = True) -> list[Path]:
+def find_point_cloud_in_directory(
+    directory_path: Path, pcd_file_types: Sequence[str] = SUPPORTED_TYPES, include_subdirectories: bool = True
+) -> list[Path]:
     """
     (Recursively) searches a directory for point cloud files with specific extensions.
 
@@ -78,42 +75,41 @@ class AbstractIOHandler(ABC):
     FORMATS: list[str] = []
 
     @classmethod
-    def find_pcds_in_directory(cls, directory_path: str|Path, include_subdirectories: bool = True) -> list[Path]:
+    def find_pcds_in_directory(cls, directory_path: str | Path, include_subdirectories: bool = True) -> list[Path]:
         return find_point_cloud_in_directory(Path(directory_path), cls.FORMATS, include_subdirectories)
 
     @classmethod
     @abstractmethod
-    def load(cls,
-             /,
-             path: str|Path,
-             scalar_fields: Optional[list[str]] = None,
-             remove_prefix: bool = True,
-             prefix: str = 'scalar_',
-             **config: dict[str, Any]
-             ) -> PointCloudData | Generator[PointCloudData, None, None]: ...
+    def load(
+        cls,
+        /,
+        path: str | Path,
+        scalar_fields: Optional[list[str]] = None,
+        remove_prefix: bool = True,
+        prefix: str = "scalar_",
+        **config: dict[str, Any],
+    ) -> PointCloudData | Generator[PointCloudData, None, None]: ...
 
     @classmethod
     @abstractmethod
-    def save(cls,
-             /,
-             pcd: PointCloudData,
-             path: str | Path,
-             scalar_fields: Optional[list[str]] = None,
-             add_prefix: bool = False,
-             prefix: str = 'scalar_',
-             revert_sf_types: bool = False,
-             **config: dict[str, Any]) -> None: ...
+    def save(
+        cls,
+        /,
+        pcd: PointCloudData,
+        path: str | Path,
+        scalar_fields: Optional[list[str]] = None,
+        add_prefix: bool = False,
+        prefix: str = "scalar_",
+        revert_sf_types: bool = False,
+        **config: dict[str, Any],
+    ) -> None: ...
 
     @classmethod
     def _validate_field_selection(
-            cls,
-            input_selection: list[str] | None,
-            header_fields: list[str],
-            remove_prefix: bool,
-            prefix: str
+        cls, input_selection: list[str] | None, header_fields: list[str], remove_prefix: bool, prefix: str
     ) -> dict[str, str]:
 
-        prefix = prefix if remove_prefix else ''
+        prefix = prefix if remove_prefix else ""
 
         headers = _clean_field_names(header_fields, _clean_header_name, prefix=prefix)
 
@@ -123,11 +119,10 @@ class AbstractIOHandler(ABC):
             if len(headers) > 0:
                 return headers
 
-            raise ValueError(f'Unable to resolve field names without header info or user selection.')
+            raise ValueError(f"Unable to resolve field names without header info or user selection.")
 
         if len(selection) == 0 or set(selection.values()).issubset(headers.values()):
             return selection
-
 
         # User input is a subset of the 'cleaned' names - lowercase, prefix removed etc.
         elif set(selection.values()).issubset(headers.keys()):
@@ -135,8 +130,10 @@ class AbstractIOHandler(ABC):
 
         # Unmatched keys
         else:
-            raise ValueError(f"Unhandled combination of selected fields and those found in the file header:\n"
-                             f"   {headers=}, {selection=}")
+            raise ValueError(
+                f"Unhandled combination of selected fields and those found in the file header:\n"
+                f"   {headers=}, {selection=}"
+            )
 
     @classmethod
     def extract_xyz(cls, data: BaseDataT, num_points: int) -> Array_Nx3_T:
@@ -149,7 +146,7 @@ class AbstractIOHandler(ABC):
 
     @classmethod
     def extract_scalar_fields(
-            cls, pcd: PointCloudData, data: BaseDataT, num_points: int, field_names: dict[str, str]
+        cls, pcd: PointCloudData, data: BaseDataT, num_points: int, field_names: dict[str, str]
     ) -> None:
 
         sf_keys = list(field_names.keys())
@@ -179,10 +176,9 @@ class AbstractIOHandler(ABC):
             pcd.scalar_fields.create_field(field, data[field_names[field]])
 
     @staticmethod
-    def _extract_scalar_field_triplet(data: BaseDataT,
-                                      n: int, field_names: list[str],
-                                      sf_class: type[SF_T],
-                                      field_name_map: dict[str, str]) -> SF_T|None:
+    def _extract_scalar_field_triplet(
+        data: BaseDataT, n: int, field_names: list[str], sf_class: type[SF_T], field_name_map: dict[str, str]
+    ) -> SF_T | None:
         array = np.empty((n, 3), dtype=data[field_name_map[field_names[0]]].dtype)
 
         for i, name in enumerate(field_names):
@@ -195,7 +191,7 @@ class AbstractIOHandler(ABC):
         return sf_class(array)
 
     @staticmethod
-    def _extract_scalar_field(data: BaseDataT, name: str, field_name_map: dict[str, str]) -> ScalarField|None:
+    def _extract_scalar_field(data: BaseDataT, name: str, field_name_map: dict[str, str]) -> ScalarField | None:
         arr = data[field_name_map[name]]
 
         if np.all(arr == 0):
@@ -205,10 +201,7 @@ class AbstractIOHandler(ABC):
         return ScalarField(arr, name=name, origin_dtype=DtypeState.generate(arr))
 
     @classmethod
-    def _generate_struct_dtype(cls,
-                               pcd: PointCloudData,
-                               scalar_fields: list[str],
-                               revert_sf_types: bool) -> DtypeDict:
+    def _generate_struct_dtype(cls, pcd: PointCloudData, scalar_fields: list[str], revert_sf_types: bool) -> DtypeDict:
 
         # Leverage dict to avoid any duplicates of using 'rgb' or 'r', 'g', 'b', for example
         dtype_dict = DtypeDict(names=[], formats=[])
@@ -219,8 +212,8 @@ class AbstractIOHandler(ABC):
             xyz_dtype = pcd.xyz.dtype
 
         for name in XYZ_NAMES.char:
-            dtype_dict['names'].append(name)
-            dtype_dict['formats'].append(xyz_dtype)
+            dtype_dict["names"].append(name)
+            dtype_dict["formats"].append(xyz_dtype)
 
         for field in scalar_fields:
             name_set = None
@@ -233,51 +226,51 @@ class AbstractIOHandler(ABC):
             if isinstance(name_set, NameConstantsTriplet):
                 if field in (RGB_NAMES.names + NORMAL_NAMES.names) and getattr(pcd, name_set.base) is not None:
                     for name in name_set.char:
-                        dtype_dict['names'].append(name)
-                        dtype_dict['formats'].append(_get_sf_dtype(getattr(pcd, name_set.base), revert_sf_types))
+                        dtype_dict["names"].append(name)
+                        dtype_dict["formats"].append(_get_sf_dtype(getattr(pcd, name_set.base), revert_sf_types))
 
                 # r, g, b, red, green, blue
                 elif field in (RGB_NAMES.char + RGB_NAMES.words) and pcd.rgb is not None:
-                    dtype_dict['names'].append(field[0])   # Force it to 'r', 'g', 'b'
-                    dtype_dict['formats'].append(_get_sf_dtype(pcd.rgb, revert_sf_types))
+                    dtype_dict["names"].append(field[0])  # Force it to 'r', 'g', 'b'
+                    dtype_dict["formats"].append(_get_sf_dtype(pcd.rgb, revert_sf_types))
 
                 # rf, gf, bf
                 elif field in RGB_NAMES.float and pcd.rgb is not None:
-                    dtype_dict['names'].append(field)   # Force it to 'r', 'g', 'b'
-                    dtype_dict['formats'].append(np.float32)
+                    dtype_dict["names"].append(field)  # Force it to 'r', 'g', 'b'
+                    dtype_dict["formats"].append(np.float32)
 
-                elif field in (NORMAL_NAMES.char + NORMAL_NAMES.words)and pcd.normals is not None:
-                    dtype_dict['names'].append(field[0]+field[-1])
-                    dtype_dict['formats'].append(_get_sf_dtype(pcd.normals, revert_sf_types))
+                elif field in (NORMAL_NAMES.char + NORMAL_NAMES.words) and pcd.normals is not None:
+                    dtype_dict["names"].append(field[0] + field[-1])
+                    dtype_dict["formats"].append(_get_sf_dtype(pcd.normals, revert_sf_types))
 
             # General scalar fields
             elif field in pcd.scalar_fields.fields:
-                dtype_dict['names'].append(field)
-                dtype_dict['formats'].append(_get_sf_dtype(cast(SF_T, pcd.scalar_fields[field]),
-                                                           revert_sf_types))
+                dtype_dict["names"].append(field)
+                dtype_dict["formats"].append(_get_sf_dtype(cast(SF_T, pcd.scalar_fields[field]), revert_sf_types))
 
         return dtype_dict
 
     @classmethod
-    def _generate_structured_array(cls,
-                                   pcd: PointCloudData,
-                                   scalar_fields: Optional[list[str]],
-                                   add_prefix: bool,
-                                   prefix: str,
-                                   revert_sf_types: bool
-                                   ) -> npt.NDArray[Any]:
+    def _generate_structured_array(
+        cls,
+        pcd: PointCloudData,
+        scalar_fields: Optional[list[str]],
+        add_prefix: bool,
+        prefix: str,
+        revert_sf_types: bool,
+    ) -> npt.NDArray[Any]:
 
-        prefix = prefix if add_prefix else ''
+        prefix = prefix if add_prefix else ""
 
         if scalar_fields is None:
             scalar_fields = list(pcd.scalar_fields.keys())
 
         dtype_dict = cls._generate_struct_dtype(pcd, scalar_fields, revert_sf_types)
 
-        sf_names = copy.deepcopy(dtype_dict['names'])
-        for i, name in enumerate(dtype_dict['names']):
+        sf_names = copy.deepcopy(dtype_dict["names"])
+        for i, name in enumerate(dtype_dict["names"]):
             if (name not in RGB_NAMES.all) and (name not in NORMAL_NAMES.all) and (name not in XYZ_NAMES.all):
-                dtype_dict['names'][i] = prefix + name
+                dtype_dict["names"][i] = prefix + name
 
         array = np.empty((len(pcd),), dtype=cast(_DTypeDict, dtype_dict))
 
@@ -302,8 +295,9 @@ class AbstractIOHandler(ABC):
 
         return array
 
+
 def _get_rgb_or_normal_field_names(input_names: list[str], target_field: NameConstantsTriplet) -> list[str]:
-    """ Get matching rgb or normal field names from eligible names in the target field.
+    """Get matching rgb or normal field names from eligible names in the target field.
 
     Ensures the output fields are still in order and are a subset of the appropriate target field
 
@@ -326,8 +320,10 @@ def _get_rgb_or_normal_field_names(input_names: list[str], target_field: NameCon
         identified_triplet = list(target_field.triplets[valid_names_set.index(identified_names)])
 
     elif len(identified_names := identified_names.intersection(target_field.all)) >= 1:
-        logger.info(f"Only a full list of RGB or Normal triplet fields supported. "
-                    f"A partial or mixed list was passed: {identified_names}.")
+        logger.info(
+            f"Only a full list of RGB or Normal triplet fields supported. "
+            f"A partial or mixed list was passed: {identified_names}."
+        )
         return list()
 
     else:
@@ -340,10 +336,12 @@ def _get_rgb_or_normal_field_names(input_names: list[str], target_field: NameCon
 
     return identified_triplet
 
-def _get_sf_dtype(scalar_field: ScalarField|ScalarFieldTriplet, revert_sf_types: bool) -> npt.DTypeLike:
+
+def _get_sf_dtype(scalar_field: ScalarField | ScalarFieldTriplet, revert_sf_types: bool) -> npt.DTypeLike:
     if revert_sf_types:
         return scalar_field.origin_dtype.dtype
     return scalar_field.dtype
+
 
 def _clean_field_names(column_names: list[str], func: Callable, **kwargs) -> dict[str, str]:
     cleaned_names = dict()
@@ -361,8 +359,10 @@ def _clean_field_names(column_names: list[str], func: Callable, **kwargs) -> dic
 
     return cleaned_names
 
+
 def _clean_string(name: str) -> str:
     return name.strip().lower()
+
 
 def _clean_header_name(original_name: str, prefix: str) -> str:
     cleaned_name = _clean_string(original_name)

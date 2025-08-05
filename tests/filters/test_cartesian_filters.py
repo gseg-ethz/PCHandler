@@ -1,34 +1,32 @@
-import pytest
-
-from shapely.geometry import box
-from pydantic import ValidationError
 import numpy as np
+import pytest
+from pydantic import ValidationError
+from shapely.geometry import box
 
-from pchandler.geometry.core import PointCloudData
-from pchandler.geometry.optimal_shift import OptimizedShift
-from pchandler.filters.cartesian_filters import BoxFilter, SphereFilter, PolygonFilter
+from pchandler import PointCloudData
+from pchandler.filters import BoxFilter, PolygonFilter, SphereFilter
+from pchandler.geometry import OptimizedShift
 
 
 @pytest.fixture(scope="function")
 def simple_array():
-    return np.array([[-2, -2, -2],
-                     [-1, -1, -1],
-                     [-0.4, -0.3, -0.2],
-                     [1, 1, 1],
-                     [2, 2, 2]])
+    return np.array([[-2, -2, -2], [-1, -1, -1], [-0.4, -0.3, -0.2], [1, 1, 1], [2, 2, 2]])
+
 
 @pytest.fixture(scope="function")
 def box_filter():
     return BoxFilter(-np.ones(3), np.ones(3))
 
+
 @pytest.fixture(scope="function")
 def sphere_filter():
     return SphereFilter(np.array([0.5, 0.5, 0.5]), 1.3)
 
+
 @pytest.fixture(scope="function")
 def polygon_filter():
     polygon = box(-0.31, -0.31, 1.3, 1.3)
-    return PolygonFilter(polygon, 'xy')
+    return PolygonFilter(polygon, "xy")
 
 
 class TestBoxFilter:
@@ -40,18 +38,23 @@ class TestBoxFilter:
         assert np.all(box_filter.minimum == -1)
         assert np.all(box_filter.maximum == 1)
 
-    @pytest.mark.parametrize('maximum', (np.zeros(3), np.array([2, 0, 1])))
+    @pytest.mark.parametrize("maximum", (np.zeros(3), np.array([2, 0, 1])))
     def test_invalid_init(self, maximum):
         with pytest.raises(ValueError):
             BoxFilter(np.ones(3), maximum)
 
-    @pytest.mark.parametrize('kwargs', ({},
-                                        {'numerical_optimization_shift': None},
-                                        {'numerical_optimization_shift': OptimizedShift(np.array([1000, 2000, 300]))}))
+    @pytest.mark.parametrize(
+        "kwargs",
+        (
+            {},
+            {"numerical_optimization_shift": None},
+            {"numerical_optimization_shift": OptimizedShift(np.array([1000, 2000, 300]))},
+        ),
+    )
     def test_mask(self, box_filter: BoxFilter, kwargs, simple_array):
         array = PointCloudData(simple_array, **kwargs)
         if array.numerical_optimization_shift is not None:
-            mask = box_filter.mask(array, mode='global')
+            mask = box_filter.mask(array, mode="global")
         else:
             mask = box_filter.mask(array)
         assert mask.shape == (array.shape[0],)
@@ -61,7 +64,7 @@ class TestBoxFilter:
 
     def test_mask_without_shift_on_global(self, simple_array, box_filter: BoxFilter):
         array = PointCloudData(simple_array, numerical_optimization_shift=None)
-        mask = box_filter.mask(array, mode='global')
+        mask = box_filter.mask(array, mode="global")
         assert np.all(mask == np.array([False, True, True, True, False]))
 
 
@@ -79,7 +82,7 @@ class TestSphereFilter:
         with pytest.raises(ValidationError):
             SphereFilter(np.array([0, 1, 1]), "False")
 
-    @pytest.mark.parametrize('kwargs', ({}, {'optimized_shift': None}))
+    @pytest.mark.parametrize("kwargs", ({}, {"optimized_shift": None}))
     def test_mask(self, sphere_filter, simple_array, kwargs):
         pcd = PointCloudData(simple_array, **kwargs)
         mask = sphere_filter.mask(pcd)
@@ -95,17 +98,16 @@ class TestPolygonFilter:
         assert hasattr(polygon_filter, "polygon")
         assert hasattr(polygon_filter, "plane")
         assert np.all(polygon_filter.polygon == box(-0.31, -0.31, 1.3, 1.3))
-        assert np.all(polygon_filter.plane == 'xy')
+        assert np.all(polygon_filter.plane == "xy")
 
     def test_invalid_init(self):
         with pytest.raises(ValueError):
-            PolygonFilter(box(0, 0, 1, 1), 'zzz')   #type: ignore
+            PolygonFilter(box(0, 0, 1, 1), "zzz")  # type: ignore
 
         with pytest.raises(ValidationError):
-            PolygonFilter('NotAPolygon', 'xy')
+            PolygonFilter("NotAPolygon", "xy")
 
-
-    @pytest.mark.parametrize('kwargs', ({}, {'optimized_shift': None}))
+    @pytest.mark.parametrize("kwargs", ({}, {"optimized_shift": None}))
     def test_mask(self, polygon_filter, simple_array, kwargs):
         pcd = PointCloudData(simple_array, **kwargs)
         mask = polygon_filter.mask(pcd)
@@ -116,15 +118,16 @@ class TestPolygonFilter:
         assert np.all(mask == np.array([False, False, False, True, False]))
 
         # Only yz plane will be different as x is the largest value to be filtered
-        polygon_filter.plane = 'xz'
+        polygon_filter.plane = "xz"
         mask2 = polygon_filter.mask(pcd)
         assert np.allclose(mask2, mask)
 
-        polygon_filter.plane = 'yz'
+        polygon_filter.plane = "yz"
         mask3 = polygon_filter.mask(pcd)
         assert not np.allclose(mask3, mask)
 
+
 def test_invalid_offset_mode(box_filter):
-    pcd = PointCloudData(np.ones((10,3)))
+    pcd = PointCloudData(np.ones((10, 3)))
     with pytest.raises(ValueError):
-        box_filter.mask(pcd, mode='invalid')    # type: ignore
+        box_filter.mask(pcd, mode="invalid")  # type: ignore

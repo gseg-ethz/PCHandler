@@ -1,49 +1,57 @@
-import pytest
+from typing import Callable
 
+import numpy as np
+import pytest
 from pydantic import ValidationError
 
-from pchandler.filters.core import *
+from pchandler import PointCloudData
+from pchandler.filters import GenericFieldFilter, PointCloudFilter
 
-@pytest.fixture(scope='function', autouse=True)
+
+@pytest.fixture(scope="function", autouse=True)
 def pcd_all():
-    xyz = np.random.rand(100,3)
-    rgb = np.random.randint(0, 256, (100,3), dtype=np.uint8)
-    normals = np.random.rand(100,3)
+    xyz = np.random.rand(100, 3)
+    rgb = np.random.randint(0, 256, (100, 3), dtype=np.uint8)
+    normals = np.random.rand(100, 3)
     intensity = np.random.randint(0, 1000, (100,), dtype=np.uint16)
     pcd = PointCloudData(xyz, rgb=rgb, normals=normals, intensity=intensity)
     return pcd
 
 
-@pytest.fixture(scope='function', autouse=True)
+@pytest.fixture(scope="function", autouse=True)
 def pcd_only_coords():
-    return PointCloudData(np.random.rand(100,3))
+    return PointCloudData(np.random.rand(100, 3))
+
 
 class TestAbstractPointCloudFilter:
     def test_abstract_methods(self, pcd_only_coords):
-        for name in ('mask', 'reduce', 'sample'):
+        for name in ("mask", "reduce", "sample"):
             assert hasattr(PointCloudFilter, name)
 
         with pytest.raises(TypeError):
             PointCloudFilter()
 
         # Not implemented Methods
-        assert PointCloudFilter.mask(None, pcd_only_coords) == None     # type: ignore
-
+        assert PointCloudFilter.mask(None, pcd_only_coords) == None  # type: ignore
 
 
 class TestGenericFieldFilter:
     def test_initialisation(self):
-        field_filter = GenericFieldFilter('dummy', lambda x: x > 5)
+        field_filter = GenericFieldFilter("dummy", lambda x: x > 5)
 
-        assert field_filter.field_label == 'dummy'
+        assert field_filter.field_label == "dummy"
         assert isinstance(field_filter.filter_func, Callable)
 
-
-    @pytest.mark.parametrize('name,attr', (('spherical_coordinates', 'spher'),
-                                           ('intensity', 'intensity'),
-                                           ('cartesian_coordinates', 'xyz'),
-                                           ('xyz', 'xyz'),
-                                           ('rgb', 'rgb')))
+    @pytest.mark.parametrize(
+        "name,attr",
+        (
+            ("spherical_coordinates", "spher"),
+            ("intensity", "intensity"),
+            ("cartesian_coordinates", "xyz"),
+            ("xyz", "xyz"),
+            ("rgb", "rgb"),
+        ),
+    )
     def test_mask_method(self, name, attr, pcd_all, pcd_only_coords):
         field_filter = GenericFieldFilter(name, lambda x: np.ones_like(x, dtype=np.bool_))
         mask = field_filter.mask(pcd_all)
@@ -51,8 +59,8 @@ class TestGenericFieldFilter:
         assert mask.dtype == np.bool_
 
     def test_all_methods(self, pcd_only_coords):
-        field_filter = GenericFieldFilter('sf1', lambda x: x < 0.5)
-        pcd_only_coords.scalar_fields.create_field('sf1', np.linspace(0, 1, len(pcd_only_coords)))
+        field_filter = GenericFieldFilter("sf1", lambda x: x < 0.5)
+        pcd_only_coords.scalar_fields.create_field("sf1", np.linspace(0, 1, len(pcd_only_coords)))
         pcd1 = pcd_only_coords.copy()
         pcd2 = pcd_only_coords.copy()
 
@@ -69,9 +77,8 @@ class TestGenericFieldFilter:
         assert np.all(sample == extracted)
         assert np.all(pcd1 == field_filter.sample(pcd_only_coords))
 
-
     def test_invalid_mask(self, pcd_only_coords):
-        field_filter = GenericFieldFilter('rgb', lambda x: np.ones_like(x, dtype=np.bool_))
+        field_filter = GenericFieldFilter("rgb", lambda x: np.ones_like(x, dtype=np.bool_))
 
         with pytest.raises(ValueError):
             field_filter.mask(pcd_only_coords)
@@ -80,10 +87,8 @@ class TestGenericFieldFilter:
             GenericFieldFilter([1, 2, 3], lambda x: x)
 
         with pytest.raises(ValidationError):
-            GenericFieldFilter('rgb', 23)
+            GenericFieldFilter("rgb", 23)
 
         with pytest.raises(ValueError):
-            field_filter.field_label = 'non-existant'
+            field_filter.field_label = "non-existant"
             field_filter.mask(pcd_only_coords)
-
-

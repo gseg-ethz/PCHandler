@@ -2,16 +2,16 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Callable, cast, Annotated, Sequence
+from typing import Annotated, Callable, Sequence, cast
 
 import numpy as np
 import numpy.typing as npt
+from GSEGUtils.constants import validate_variables
 from pydantic import BeforeValidator
 from shapely import Polygon
 
-from GSEGUtils.constants import validate_variables
-from pchandler.geometry.core import PointCloudData
-from pchandler.scalar_fields.scalar_field_manager import SF_T
+from pchandler import PointCloudData
+from pchandler.scalar_fields import SF_T
 
 logger = logging.getLogger(__name__.split(".")[0])
 

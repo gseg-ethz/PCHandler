@@ -1,35 +1,35 @@
-import pytest
 import numpy as np
-
+import pytest
+from GSEGUtils.validators import linear_map_dtype, normalize_self
 from pydantic import ValidationError
 
-from GSEGUtils.validators import linear_map_dtype, normalize_self
-
-from pchandler.constants import RGB_NAMES, NORMAL_NAMES
+from pchandler.constants import NORMAL_NAMES, RGB_NAMES
 from pchandler.scalar_fields.scalar_fields import (
     DtypeState,
+    NormalFields,
+    NormalisedInt16ScalarField,
+    RGBFields,
     ScalarField,
     ScalarFieldBoolean,
-    RGBFields,
-    NormalFields,
-    SegmentationMap,
-    NormalisedInt16ScalarField,
+    ScalarFieldFloat32,
     ScalarFieldUint8,
-    ScalarFieldFloat32
+    SegmentationMap,
 )
-
 
 N = 100
 
-@pytest.fixture(scope='function')
+
+@pytest.fixture(scope="function")
 def nx3_uint8():
     return RGBFields(np.random.randint(0, 256, (N, 3), dtype=np.uint8))
 
-@pytest.fixture(scope='function')
+
+@pytest.fixture(scope="function")
 def normals_float32():
     vals = np.random.rand(N, 3).astype(np.float32)
     vals = vals / np.linalg.norm(vals, axis=1).reshape(-1, 1)
     return vals
+
 
 def test_lower_str_annotation():
     """
@@ -102,14 +102,11 @@ class TestScalarFieldClass:
     )
     def test_invalid_values(self, array, name, origin_dtype):
         with pytest.raises(Exception) as e:
-            _ = ScalarField(array, name=name, origin_dtype=origin_dtype) # type: ignore
+            _ = ScalarField(array, name=name, origin_dtype=origin_dtype)  # type: ignore
 
         assert type(e.value) in (ValidationError, ValueError, TypeError)
 
-    @pytest.mark.parametrize("array", (np.ones(1),
-                                       np.ones(1000),
-                                       np.ones((1000, 1)),
-                                       np.ones((1, 1, 1, 1, 1))))
+    @pytest.mark.parametrize("array", (np.ones(1), np.ones(1000), np.ones((1000, 1)), np.ones((1, 1, 1, 1, 1))))
     def test_valid_shape(self, array):
         a = ScalarField(array, name="a")
         assert a.arr.shape == (array.size,)
@@ -123,7 +120,7 @@ class TestScalarFieldClass:
 
         e = ScalarField(c)
         assert id(e) != id(c)
-        assert id(e.arr) == id(c.arr)   # Pass by reference expected
+        assert id(e.arr) == id(c.arr)  # Pass by reference expected
         assert e.name == c.name
         assert np.all(e.arr == c.arr)
 
@@ -220,7 +217,7 @@ class TestRgbField:
             RGBFields(data)
 
     def test_invalid_dtypes(self):
-        data = np.array([[1+2j, 3+4j, 5+6j], [1+2j, 3+4j, 5+6j], [1+2j, 3+4j, 5+6j]])
+        data = np.array([[1 + 2j, 3 + 4j, 5 + 6j], [1 + 2j, 3 + 4j, 5 + 6j], [1 + 2j, 3 + 4j, 5 + 6j]])
         with pytest.raises(Exception) as e:
             RGBFields(data)
 
@@ -245,15 +242,18 @@ class TestRgbField:
         assert np.uint8 == rgb2.dtype
         assert np.all(rgb2 == data)
 
-    @pytest.mark.parametrize('arr', (
-        np.random.rand(10000, 3),
-        np.random.rand(10000, 3) * 2 - 1,
-        np.random.rand(10000, 3) * (2 ** 8 - 1),
-        np.random.randint(-2 ** 7, 2 ** 7, (10000, 3)).astype(np.float32),
-        np.random.randint(-2 ** 7, 2 ** 7, (10000, 3), dtype=np.int8),
-        np.random.randint(0, 2 ** 16, (10000, 3), dtype=np.uint16),
-        np.random.randint(0, 2 ** 8, (10000, 3), dtype=np.uint8),
-    ))
+    @pytest.mark.parametrize(
+        "arr",
+        (
+            np.random.rand(10000, 3),
+            np.random.rand(10000, 3) * 2 - 1,
+            np.random.rand(10000, 3) * (2**8 - 1),
+            np.random.randint(-(2**7), 2**7, (10000, 3)).astype(np.float32),
+            np.random.randint(-(2**7), 2**7, (10000, 3), dtype=np.int8),
+            np.random.randint(0, 2**16, (10000, 3), dtype=np.uint16),
+            np.random.randint(0, 2**8, (10000, 3), dtype=np.uint8),
+        ),
+    )
     def test_normalized(self, arr):
         rgb = RGBFields(arr)
         original: np.ndarray = rgb.get_original_data()
@@ -263,7 +263,7 @@ class TestRgbField:
         if np.issubdtype(arr.dtype, np.floating):
             atol = 1
         else:
-            atol = (2 ** original_bits // 2 ** target_bits)
+            atol = 2**original_bits // 2**target_bits
             atol += 1
 
         assert np.allclose(arr, original, atol=atol)

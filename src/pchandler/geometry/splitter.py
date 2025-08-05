@@ -1,27 +1,30 @@
 import logging
-from abc import ABC, abstractmethod
-from typing import Literal, Annotated
 import warnings
+from abc import ABC, abstractmethod
+from typing import Annotated, Literal
 
 import numpy as np
-from joblib import Parallel, delayed, parallel_config, cpu_count
-from pydantic import Field, BeforeValidator
-
 from GSEGUtils.constants import validate_variables
+from joblib import Parallel, cpu_count, delayed, parallel_config
+from pydantic import BeforeValidator, Field
 
-from pchandler.filters.spherical_coordinate_filters import FoVFilter
-from pchandler.geometry.fov import FoV, FoVTree
-from pchandler.geometry.core import PointCloudData
+from pchandler import PointCloudData
+from pchandler.filters import FoVFilter
+from pchandler.geometry.spherical import FoV, FoVTree
 
 logger = logging.getLogger(__name__.split(".")[0])
+
 
 def check_number_jobs(n_jobs: int):
     if n_jobs == 0:
         raise ValueError("n_jobs must be -1 or a positive integer value. Zero is not valid.")
 
     if n_jobs > cpu_count():
-        warnings.warn(f"Maximum number of jobs entered [{n_jobs}] is greater than the number of cores. "
-                      f"Using the maximum available CPU count instead = {cpu_count()}", stacklevel=2)
+        warnings.warn(
+            f"Maximum number of jobs entered [{n_jobs}] is greater than the number of cores. "
+            f"Using the maximum available CPU count instead = {cpu_count()}",
+            stacklevel=2,
+        )
         return cpu_count()
 
     return n_jobs
@@ -29,7 +32,7 @@ def check_number_jobs(n_jobs: int):
 
 cpus = cpu_count()
 
-FoVSplitMethodT = Literal['iterative'] | Literal['direct']
+FoVSplitMethodT = Literal["iterative"] | Literal["direct"]
 NumberJobsT = Annotated[int, Field(gt=-cpus, le=cpus), BeforeValidator(check_number_jobs)]
 
 
@@ -43,10 +46,13 @@ class FoVTreePointCloudSplitter(PointCloudSplitter):
     # Todo: Check how validate_variables interacts with initializers...got weird errors
     # DISCUSS: Still relevant?
     @validate_variables
-    def __init__(self, fov_tree: FoVTree,
-                 remove_empty: bool = True,
-                 n_jobs: NumberJobsT = -1,
-                 method: FoVSplitMethodT = "iterative"):
+    def __init__(
+        self,
+        fov_tree: FoVTree,
+        remove_empty: bool = True,
+        n_jobs: NumberJobsT = -1,
+        method: FoVSplitMethodT = "iterative",
+    ):
         """
         Initialize the splitter with configuration options.
 
@@ -82,7 +88,7 @@ class FoVTreePointCloudSplitter(PointCloudSplitter):
             case "direct":
                 splits = self._direct_split(pcd, self.fov_tree)
             case _:
-                raise ValueError(f'Invalid method passed for the splitting: {self.method}')
+                raise ValueError(f"Invalid method passed for the splitting: {self.method}")
 
         return splits
 

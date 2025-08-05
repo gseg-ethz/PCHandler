@@ -1,18 +1,17 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Self, Iterable, NamedTuple, Optional, Sequence
+from typing import TYPE_CHECKING, Iterable, NamedTuple, Optional, Self
 
 import alphashape
 import numpy as np
-
 from shapely.affinity import scale, translate
 from shapely.geometry import MultiPolygon, Polygon
 
-from pchandler.base_types import Vector_3_T, Array_Nx3_T
+from pchandler.base_types import Array_Nx3_T, Vector_3_T
 
 if TYPE_CHECKING:
-    from .core import PointCloudData
+    from pchandler import PointCloudData
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -88,6 +87,7 @@ def get_outline_polygon(pcd: PointCloudData, plane: str, alpha_value: float = 10
 
     return als
 
+
 # TODO could change this to a frozen basemodel with validation
 class MinMaxPoints(NamedTuple):
     minimum: Vector_3_T
@@ -107,7 +107,7 @@ class MinMaxPoints(NamedTuple):
         return cls(min_point, max_point)
 
     @classmethod
-    def from_minmax_points(cls, minmax_points: Iterable[Self|Array_Nx3_T]) -> Self:
+    def from_minmax_points(cls, minmax_points: Iterable[Self | Array_Nx3_T]) -> Self:
         arr = Array_Nx3_T(np.vstack(tuple(minmax_points)))
         return cls.from_points(arr)
 

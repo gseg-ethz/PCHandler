@@ -1,14 +1,21 @@
+import numpy as np
 import pytest
-
 from pydantic import ValidationError
 
-from pchandler.filters.downsample import *
+# from pchandler.filters.downsample import *
+from pchandler import PointCloudData
+from pchandler.filters import (
+    AngleBinDownsample,
+    RandomDownsampleFilter,
+    VoxelDownsample,
+)
 
 N = 100000
 
-@pytest.fixture(scope='function', autouse=True)
+
+@pytest.fixture(scope="function", autouse=True)
 def pcd_all():
-    xyz = np.random.rand(N,3)
+    xyz = np.random.rand(N, 3)
     rgb = np.random.randint(0, 256, (N, 3), dtype=np.uint8)
     normals = np.random.rand(N, 3)
     intensity = np.random.randint(0, 1000, (N,), dtype=np.uint16)
@@ -16,21 +23,24 @@ def pcd_all():
     return pcd
 
 
-@pytest.fixture(scope='function', autouse=True)
+@pytest.fixture(scope="function", autouse=True)
 def pcd_only_coords():
-    return PointCloudData(np.random.rand(100,3))
+    return PointCloudData(np.random.rand(100, 3))
+
 
 @pytest.fixture(scope="function")
 def random_downsample_filter():
     return RandomDownsampleFilter(0.5)
 
+
 @pytest.fixture(scope="function")
 def voxel_downsample():
-    return VoxelDownsample(0.1, 'constant')
+    return VoxelDownsample(0.1, "constant")
+
 
 @pytest.fixture(scope="function")
 def angle_bin_downsample():
-    return AngleBinDownsample(0.1, 'linear')
+    return AngleBinDownsample(0.1, "linear")
 
 
 class TestRandomDownSampleFilter:
@@ -39,14 +49,13 @@ class TestRandomDownSampleFilter:
         assert hasattr(RandomDownsampleFilter, "sample")
         assert np.all(random_downsample_filter.size == 0.5)
 
-    @pytest.mark.parametrize('size', (1.2, -1, 1000, False))
+    @pytest.mark.parametrize("size", (1.2, -1, 1000, False))
     def test_invalid_init(self, random_downsample_filter, size):
         with pytest.raises(ValueError):
             RandomDownsampleFilter(size)
 
-
     def test_mask(self, random_downsample_filter, pcd_all):
-        expected_size = int(np.round(0.5*len(pcd_all)))
+        expected_size = int(np.round(0.5 * len(pcd_all)))
         mask = random_downsample_filter.mask(pcd_all)
 
         assert mask.shape == (pcd_all.shape[0],)
@@ -66,24 +75,24 @@ class TestVoxelDownsampleFilter:
 
     def test_invalid_init(self, voxel_downsample):
         with pytest.raises(TypeError):
-            voxel_downsample('abc')
+            voxel_downsample("abc")
 
         with pytest.raises(ValidationError):
-            VoxelDownsample(0.1, 'asdasd')  #type: ignore
+            VoxelDownsample(0.1, "asdasd")  # type: ignore
 
         with pytest.raises(ValueError):
-            VoxelDownsample(0, 'constant')
+            VoxelDownsample(0, "constant")
 
         with pytest.raises(ValueError):
-            VoxelDownsample(-1.3, 'constant')
+            VoxelDownsample(-1.3, "constant")
 
         with pytest.raises(ValueError):
-            VoxelDownsample(1.3, True)  #type: ignore
+            VoxelDownsample(1.3, True)  # type: ignore
 
     def test_mask(self, voxel_downsample, pcd_all):
-        for name in ('constant', 'linear'):
+        for name in ("constant", "linear"):
             voxel_downsample.weighting_method = name
-            expected_size = ((1 / voxel_downsample.voxel_size)+1) ** 3
+            expected_size = ((1 / voxel_downsample.voxel_size) + 1) ** 3
             pcd = voxel_downsample.sample(pcd_all)
 
             assert len(pcd) == expected_size
@@ -100,6 +109,7 @@ class TestVoxelDownsampleFilter:
         with pytest.raises(ValueError):
             voxel_downsample.sample(pcd_all)
 
+
 class TestAngleBinDownsample:
     def test_init(self, angle_bin_downsample):
         assert hasattr(angle_bin_downsample, "angle_bin_size")
@@ -110,19 +120,19 @@ class TestAngleBinDownsample:
 
     def test_invalid_init(self, angle_bin_downsample, pcd_all):
         with pytest.raises(TypeError):
-            angle_bin_downsample('abc')
+            angle_bin_downsample("abc")
 
         with pytest.raises(ValidationError):
-            AngleBinDownsample(0.1, 'asdasd')   #type: ignore
+            AngleBinDownsample(0.1, "asdasd")  # type: ignore
 
         with pytest.raises(ValueError):
-            AngleBinDownsample(0, 'constant')
+            AngleBinDownsample(0, "constant")
 
         with pytest.raises(ValueError):
-            AngleBinDownsample(-1.3, 'constant')
+            AngleBinDownsample(-1.3, "constant")
 
         with pytest.raises(ValueError):
-            AngleBinDownsample(1.3, True)   #type: ignore
+            AngleBinDownsample(1.3, True)  # type: ignore
 
         angle_bin_downsample.weighting_method = "nearest"
         with pytest.raises(NotImplementedError):
@@ -134,13 +144,13 @@ class TestAngleBinDownsample:
 
     def test_mask(self, angle_bin_downsample, pcd_all):
         # TODO fix test to avoid stochastic impacts affecting pass/fail
-        for name in ('linear', 'constant'):
+        for name in ("linear", "constant"):
             angle_bin_downsample.weighting_method = name
             pcd = angle_bin_downsample.sample(pcd_all)
 
             bin_size = angle_bin_downsample.angle_bin_size
 
-            max_bins = (np.pi/bin_size) * np.pi / bin_size
+            max_bins = (np.pi / bin_size) * np.pi / bin_size
 
             assert len(pcd) <= max_bins
 

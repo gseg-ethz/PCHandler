@@ -2,20 +2,18 @@ import logging
 from typing import Annotated
 
 import numpy as np
-from numpy.typing import NDArray
 import open3d as o3d
+from numpy.typing import NDArray
 from pydantic import Field, PositiveInt
 
-
-from pchandler.geometry.core import PointCloudData
-from pchandler.filters.core import PointCloudFilter
+from pchandler import PointCloudData
+from pchandler.filters import PointCloudFilter
 
 logger = logging.getLogger(__name__.split(".")[0])
 
+
 class BaseOutlierFilter(PointCloudFilter):
-    def __init__(self,
-                 std_ratio: Annotated[float, Field(gt=0, le=1)]  = 0.95,
-                 number_of_neighbours: PositiveInt = 13):
+    def __init__(self, std_ratio: Annotated[float, Field(gt=0, le=1)] = 0.95, number_of_neighbours: PositiveInt = 13):
         self.std_ratio = std_ratio
         self.number_of_neighbours = number_of_neighbours
 
@@ -24,6 +22,7 @@ class BaseOutlierFilter(PointCloudFilter):
         _, inliers = pcd.remove_statistical_outlier(self.number_of_neighbours, self.std_ratio, True)
         mask[inliers] = True
         return mask
+
 
 class SphericalOutlierFilter(BaseOutlierFilter):
     """

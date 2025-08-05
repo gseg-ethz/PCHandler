@@ -1,12 +1,11 @@
 import tempfile
-
-import numpy as np
-
 from pathlib import Path
 
-from pchandler.data_io.las import LasHandler
-from pchandler.geometry.core import PointCloudData
+import numpy as np
 from GSEGUtils.validators import normalize_uint16
+
+from pchandler import PointCloudData
+from pchandler.data_io import Las as LasHandler
 from tests.data_io.test_core import BaseLoadSave
 
 base_directory = Path(__file__).resolve().parent.parent
@@ -14,8 +13,8 @@ base_directory = Path(__file__).resolve().parent.parent
 
 class TestLasHandler(BaseLoadSave):
     cls = LasHandler
-    folder = BaseLoadSave.folder / 'LAS'
-    reference = folder / 'XYZ_RGB_Normals_Intensity_SFs.las'
+    folder = BaseLoadSave.folder / "LAS"
+    reference = folder / "XYZ_RGB_Normals_Intensity_SFs.las"
 
     def test_save(self, tmp_path):
         super()._save(tmp_path)
@@ -25,9 +24,9 @@ class TestLasHandler(BaseLoadSave):
 
     def test_save_no_optimal_shift(self):
         # Test for coverage
-        pcd = PointCloudData(np.round(np.random.rand(100,3)*1000, decimals=3), numerical_optimization_shift=None)
+        pcd = PointCloudData(np.round(np.random.rand(100, 3) * 1000, decimals=3), numerical_optimization_shift=None)
 
-        las_file = tempfile.NamedTemporaryFile(suffix='.las', delete_on_close=False)
+        las_file = tempfile.NamedTemporaryFile(suffix=".las", delete_on_close=False)
         with las_file as fp:
             LasHandler.save(pcd, Path(fp.name))
             las_pcd = LasHandler.load(Path(fp.name))
@@ -40,14 +39,15 @@ class TestLasHandler(BaseLoadSave):
 
         assert len(pcd_w_shift) == len(pcd_no_shift)
         assert not np.allclose(pcd_w_shift.xyz, pcd_no_shift.xyz)
-        assert np.allclose(pcd_w_shift.xyz + pcd_w_shift.numerical_optimization_shift.value, pcd_no_shift.xyz, atol=0.0001)
-
+        assert np.allclose(
+            pcd_w_shift.xyz + pcd_w_shift.numerical_optimization_shift.value, pcd_no_shift.xyz, atol=0.0001
+        )
 
     def test_intensity_normalisation(self):
         i = np.random.rand(100)
-        pcd = PointCloudData(np.random.rand(100,3), intensity=i.copy())
+        pcd = PointCloudData(np.random.rand(100, 3), intensity=i.copy())
 
-        las_file = tempfile.NamedTemporaryFile(suffix='.las', delete_on_close=False)
+        las_file = tempfile.NamedTemporaryFile(suffix=".las", delete_on_close=False)
         with las_file as fp:
             LasHandler.save(pcd, Path(fp.name))
             las_pcd = LasHandler.load(Path(fp.name))

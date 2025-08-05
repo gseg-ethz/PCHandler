@@ -1,15 +1,15 @@
+import copy
 import gc
 import pickle
 import uuid
 import weakref
-import copy
 
 import numpy as np
 import pytest
 
+from pchandler import PointCloudData
+from pchandler.geometry import OptimizedShift, OptimizedShiftManager
 from pchandler.geometry.coordinates import CartesianCoordinates
-from pchandler.geometry import PointCloudData
-from pchandler.geometry.optimal_shift import OptimizedShiftManager, OptimizedShift
 from pchandler.geometry.util import MinMaxPoints
 
 
@@ -17,42 +17,52 @@ def random_coordinates(scale: float, offset: float) -> np.ndarray:
     xyz_base = np.random.randn(100, 3).astype(np.float32)
     return (xyz_base * np.float32(scale) + np.float32(offset)).astype(np.float64)
 
+
 @pytest.fixture(scope="function", autouse=True)
 def scale_large() -> float:
     return float(2**33)
+
 
 @pytest.fixture(scope="function", autouse=True)
 def scale_small() -> float:
     return float(10**3)
 
+
 @pytest.fixture(scope="function", autouse=True)
 def offset_large() -> float:
     return float(2**49)
 
+
 @pytest.fixture(scope="function", autouse=True)
 def offset_small() -> float:
     return float(10**4) * 2.3
+
 
 @pytest.fixture(scope="function", autouse=True)
 def coords_no_shift(scale_small: float):
     xyz = random_coordinates(scale_small, 0)
     return xyz
 
+
 @pytest.fixture(scope="function", autouse=True)
 def coords_shift(scale_small: float, offset_small: float) -> np.ndarray:
     return random_coordinates(scale_small, offset_small)
+
 
 @pytest.fixture(scope="function", autouse=True)
 def coords_shift2(scale_small: float, offset_large: float) -> np.ndarray:
     return random_coordinates(scale_small, offset_large)
 
+
 @pytest.fixture(scope="function", autouse=True)
 def coords_unshiftable(scale_large, offset_small) -> np.ndarray:
     return random_coordinates(scale_large, offset_small)
 
+
 @pytest.fixture(scope="function", autouse=True)
 def coords_unshiftable2(scale_large, offset_large) -> np.ndarray:
     return random_coordinates(scale_large, offset_large)
+
 
 @pytest.fixture(autouse=True)
 def clear_instantiated_osm():
@@ -61,17 +71,21 @@ def clear_instantiated_osm():
     OptimizedShiftManager._instances = {}
     assert len(OptimizedShiftManager._instances) == 0
 
+
 @pytest.fixture(scope="function")
 def pcd(coords_shift) -> PointCloudData:
     return PointCloudData(coords_shift, numerical_optimization_shift=None)
+
 
 @pytest.fixture(scope="function")
 def osm() -> OptimizedShiftManager:
     return OptimizedShiftManager()
 
+
 @pytest.fixture(scope="function")
 def opt_shift() -> OptimizedShift:
     return OptimizedShift(np.array([1, 2, 3]))
+
 
 class TestOptimizedShift:
 
@@ -94,7 +108,7 @@ class TestOptimizedShift:
         initial_uuid = opt_shift.uuid
         assert np.allclose(pcd.xyz, xyz - initial_value)
 
-        new_value = np.array([10,20,30])
+        new_value = np.array([10, 20, 30])
         opt_shift.value = new_value
         assert opt_shift.uuid != initial_uuid
         assert pcd._shift_applied_by.uuid == opt_shift.uuid
@@ -107,17 +121,16 @@ class TestOptimizedShift:
         initial_uuid = opt_shift.uuid
         assert np.allclose(pcd.xyz, xyz - initial_value)
 
-        new_value = np.array([100_000,200_000,300_000])
+        new_value = np.array([100_000, 200_000, 300_000])
         with pytest.raises(OptimizedShiftManager.ShiftNotFeasibleError):
             opt_shift.value = new_value
-
 
     def test___contains__(self, opt_shift):
         pcd = PointCloudData(np.random.rand(100, 3), numerical_optimization_shift=opt_shift)
         assert len(opt_shift._member_coordinate_sets) == 1
         assert pcd in opt_shift
 
-        pcd2 = PointCloudData(np.random.rand(100, 3)+1000, numerical_optimization_shift=opt_shift)
+        pcd2 = PointCloudData(np.random.rand(100, 3) + 1000, numerical_optimization_shift=opt_shift)
         assert len(opt_shift._member_coordinate_sets) == 2
         assert pcd2 in opt_shift
 
@@ -145,7 +158,7 @@ class TestOptimizedShift:
         func, state = xyz.__reduce__()
         assert func == type(xyz)._reconstruct
         dumped = xyz.model_dump()
-        for k,v in state[0].items():
+        for k, v in state[0].items():
             if isinstance(v, np.ndarray):
                 assert np.all(v == dumped[k])
             else:
@@ -208,8 +221,10 @@ class TestOptimizedShift:
         assert np.all(pcd2.numerical_optimization_shift.value == value_before)
 
     def test_register_invalid_attempted(self):
-        a = PointCloudData(np.array([[0, 0, 0], [1, 1, 1]]),
-                           numerical_optimization_shift=OptimizedShift(np.array([-9000, -9000, -9000])))
+        a = PointCloudData(
+            np.array([[0, 0, 0], [1, 1, 1]]),
+            numerical_optimization_shift=OptimizedShift(np.array([-9000, -9000, -9000])),
+        )
         with pytest.raises(OptimizedShiftManager.ShiftNotFeasibleError):
             a.numerical_optimization_shift.register(PointCloudData(a - 1_045_000.456))
 
@@ -242,10 +257,14 @@ class TestOptimizedShift:
         assert len(opt_shift._member_coordinate_sets) == 3
 
     def test_compute_new_shift(self):
-        a = PointCloudData(np.array([[0, 0, 0], [1, 1, 1]]),
-                           numerical_optimization_shift=OptimizedShift(np.array([-9000, -9000, -9000])))
-        b = PointCloudData(np.array([[0, 0, 0], [1, 1, 1]]) + 5000,
-                           numerical_optimization_shift=OptimizedShift(np.array([14_000, 14_000, 14_000])))
+        a = PointCloudData(
+            np.array([[0, 0, 0], [1, 1, 1]]),
+            numerical_optimization_shift=OptimizedShift(np.array([-9000, -9000, -9000])),
+        )
+        b = PointCloudData(
+            np.array([[0, 0, 0], [1, 1, 1]]) + 5000,
+            numerical_optimization_shift=OptimizedShift(np.array([14_000, 14_000, 14_000])),
+        )
 
         shift_a = a.numerical_optimization_shift._shift.copy()
         shift_b = b.numerical_optimization_shift._shift.copy()
@@ -259,10 +278,15 @@ class TestOptimizedShift:
         assert np.all(shift_b != new_shift)
 
     def test_compute_and_apply_shift_delta(self, opt_shift, coords_shift):
-        a = PointCloudData(np.array([[0, 0, 0], [1, 1, 1]]), socs_origin=np.zeros(3),
-                           numerical_optimization_shift=OptimizedShift(np.array([-9000, -9000, -9000])))
-        b = PointCloudData(np.array([[0, 0, 0], [1, 1, 1]]) + 5000,
-                           numerical_optimization_shift=OptimizedShift(np.array([14_000, 14_000, 14_000])))
+        a = PointCloudData(
+            np.array([[0, 0, 0], [1, 1, 1]]),
+            socs_origin=np.zeros(3),
+            numerical_optimization_shift=OptimizedShift(np.array([-9000, -9000, -9000])),
+        )
+        b = PointCloudData(
+            np.array([[0, 0, 0], [1, 1, 1]]) + 5000,
+            numerical_optimization_shift=OptimizedShift(np.array([14_000, 14_000, 14_000])),
+        )
 
         coords_a = a.arr.copy()
         shift_a = a.numerical_optimization_shift._shift.copy()
@@ -272,7 +296,7 @@ class TestOptimizedShift:
 
         assert np.all(a.socs_origin == -new_shift)
         assert np.all(coords_a - new_shift == a.arr - a.numerical_optimization_shift)
-        assert np.all(a.numerical_optimization_shift._shift == shift_a)     # Shift is not updated yet
+        assert np.all(a.numerical_optimization_shift._shift == shift_a)  # Shift is not updated yet
 
     def test_reconstruct_no_change(self, osm):
         shift = OptimizedShift(np.array([1, 2, 3]))
@@ -323,7 +347,7 @@ class TestOptimizedShift:
         initial_uuid = opt_shift.uuid
 
         pcd_pickled = pickle.dumps(pcd)
-        opt_shift.value = np.array([0,0,0])
+        opt_shift.value = np.array([0, 0, 0])
 
         pcd_unpickled = pickle.loads(pcd_pickled)
         assert np.allclose(xyz, pcd.xyz - opt_shift.value, atol=1e-5, rtol=1e-5)
@@ -335,8 +359,8 @@ class TestMinMaxPoints:
     def test_class_attributes(self):
         min_max_pts = MinMaxPoints(np.zeros(3), np.ones(3))
 
-        assert hasattr(min_max_pts, 'minimum')
-        assert hasattr(min_max_pts, 'maximum')
+        assert hasattr(min_max_pts, "minimum")
+        assert hasattr(min_max_pts, "maximum")
         assert np.all(min_max_pts.minimum == 0)
         assert np.all(min_max_pts.maximum == 1)
 
@@ -356,7 +380,7 @@ class TestMinMaxPoints:
         assert np.allclose(min_max.maximum, high)
 
     def test_from_points_method(self):
-        array = np.random.rand(100,3)
+        array = np.random.rand(100, 3)
         min_max = MinMaxPoints.from_minmax_points(array)
 
         assert isinstance(min_max, MinMaxPoints)
@@ -366,9 +390,7 @@ class TestMinMaxPoints:
     def test_from_minmax_points_method(self):
         pts_minmax = []
         for i in range(7):
-            pts_minmax.append(
-                MinMaxPoints(minimum=np.ones(3) * -i, maximum=np.ones(3) * i)
-            )
+            pts_minmax.append(MinMaxPoints(minimum=np.ones(3) * -i, maximum=np.ones(3) * i))
 
         minmax = MinMaxPoints.from_minmax_points(pts_minmax)
         assert np.all(minmax.minimum == -6)
@@ -453,7 +475,8 @@ class TestOptimizedShiftManager:
         assert len(added_shifts) == 0
 
     def test_is_shift_needed_method(
-            self, osm, coords_shift, coords_shift2, coords_no_shift, coords_unshiftable, coords_unshiftable2):
+        self, osm, coords_shift, coords_shift2, coords_no_shift, coords_unshiftable, coords_unshiftable2
+    ):
         assert osm.is_shift_needed(coords_shift)
         assert osm.is_shift_needed(coords_shift2)
         assert osm.is_shift_needed(coords_unshiftable)
@@ -461,7 +484,8 @@ class TestOptimizedShiftManager:
         assert not osm.is_shift_needed(coords_no_shift)
 
     def test_is_shift_possible(
-            self, osm, coords_shift, coords_shift2, coords_no_shift, coords_unshiftable, coords_unshiftable2):
+        self, osm, coords_shift, coords_shift2, coords_no_shift, coords_unshiftable, coords_unshiftable2
+    ):
         assert osm.is_shift_possible(coords_shift)
         assert osm.is_shift_possible(coords_shift2)
         assert osm.is_shift_possible(coords_no_shift)
@@ -486,7 +510,7 @@ def test_pcd_optimized_shift_general(osm):
     assert len(pcd.numerical_optimization_shift) == 1
 
     # Add and change
-    xyz2 = np.random.rand(100, 3) + np.array([6000,-1000, 2000])
+    xyz2 = np.random.rand(100, 3) + np.array([6000, -1000, 2000])
     pcd2 = PointCloudData(xyz2, numerical_optimization_shift=pcd.numerical_optimization_shift)
     shift_2 = pcd2.numerical_optimization_shift.value.copy()
 
@@ -509,4 +533,3 @@ def test_pcd_optimized_shift_general(osm):
     assert pcd.numerical_optimization_shift is not pcd3.numerical_optimization_shift
 
     assert np.any(shift_3 != shift_2)
-

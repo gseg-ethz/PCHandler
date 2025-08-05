@@ -5,8 +5,8 @@ from typing import Any, Optional
 
 from plyfile import PlyData, PlyElement  # type: ignore
 
+from pchandler import PointCloudData
 from pchandler.data_io.core import AbstractIOHandler
-from pchandler.geometry import PointCloudData
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -15,7 +15,7 @@ class PlyHandler(AbstractIOHandler):
     FORMATS = [".ply"]
 
     @classmethod
-    def load(   # type: ignore[override]
+    def load(  # type: ignore[override]
         cls,
         path: str | Path,
         /,
@@ -39,9 +39,8 @@ class PlyHandler(AbstractIOHandler):
 
         return pcd
 
-
     @classmethod
-    def save(   # type: ignore[override]
+    def save(  # type: ignore[override]
         cls,
         /,
         pcd: PointCloudData,
@@ -51,7 +50,7 @@ class PlyHandler(AbstractIOHandler):
         prefix: str = "scalar_",
         revert_sf_types: bool = False,
         as_ascii: bool = False,
-        **config: dict[str, Any]
+        **config: dict[str, Any],
     ) -> None:
 
         path = Path(path)

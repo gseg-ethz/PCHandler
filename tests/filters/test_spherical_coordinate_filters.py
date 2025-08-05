@@ -1,21 +1,21 @@
-import pytest
-
 import numpy as np
+import pytest
 from shapely.geometry.polygon import Polygon
 
-from pchandler.geometry.core import PointCloudData
+from pchandler import PointCloudData
+from pchandler.filters import FoVFilter, RangeFilter, SphericalPolygonFilter
 from pchandler.geometry.coordinates import rhv2xyz
-from pchandler.geometry.fov import FoV
-from pchandler.filters import SphericalPolygonFilter, RangeFilter, FoVFilter
+from pchandler.geometry.spherical import FoV
 
-@pytest.fixture(scope='function')
+
+@pytest.fixture(scope="function")
 def pcd():
-    return PointCloudData(
-        np.random.rand(100000,3)*10)
+    return PointCloudData(np.random.rand(100000, 3) * 10)
+
 
 class TestRangeFilter:
     def test_range_filter(self, pcd):
-        range_filter = RangeFilter(low=10, high = 70)
+        range_filter = RangeFilter(low=10, high=70)
         pcd_filtered = range_filter.extract(pcd)
         assert len(pcd_filtered) < 100000
         assert np.all(pcd_filtered.r >= 10)
@@ -38,6 +38,7 @@ class TestSphericalPolygonFilter:
         assert pcd_filtered.v.min() >= 0.6
         assert pcd_filtered.v.max() <= 1.2
 
+
 class TestFoVFilter:
     def test_fov_filter(self, pcd):
         hz = np.linspace(-np.pi, np.pi, 10)
@@ -51,7 +52,7 @@ class TestFoVFilter:
 
         fov_filter = FoVFilter(fov)
         expected_mask = np.zeros(10, dtype=np.bool_)
-        expected_mask[[3,4,5]] = True
+        expected_mask[[3, 4, 5]] = True
         mask = fov_filter.mask(pcd)
         assert np.all(mask == expected_mask)
         pcd_filtered = fov_filter.extract(pcd)

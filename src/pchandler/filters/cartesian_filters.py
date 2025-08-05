@@ -3,17 +3,15 @@ from typing import Literal
 
 import numpy as np
 import numpy.typing as npt
-from shapely import contains_xy         # type: ignore[import-untyped]
-from shapely.affinity import translate  # type: ignore[import-untyped]
-from shapely.geometry import Polygon    # type: ignore[import-untyped]
-
-from pydantic import PositiveFloat
-
 from GSEGUtils.constants import validate_variables
+from pydantic import PositiveFloat
+from shapely import contains_xy  # type: ignore[import-untyped]
+from shapely.affinity import translate  # type: ignore[import-untyped]
+from shapely.geometry import Polygon  # type: ignore[import-untyped]
 
-from pchandler.geometry.core import PointCloudData
-from pchandler.filters.core import PointCloudFilter, ValidatedPolygonT
+from pchandler import PointCloudData
 from pchandler.base_types import Vector_3_T
+from pchandler.filters import PointCloudFilter, ValidatedPolygonT
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -37,8 +35,10 @@ class BoxFilter(PointCloudFilter):
     @validate_variables
     def __init__(self, minimum: Vector_3_T, maximum: Vector_3_T):
         if np.any(minimum >= maximum):
-            raise ValueError(f"Cannot create box filter where minimum corner is greater than the maximum corner"
-                             f"\n {minimum=} vs {maximum=}")
+            raise ValueError(
+                f"Cannot create box filter where minimum corner is greater than the maximum corner"
+                f"\n {minimum=} vs {maximum=}"
+            )
 
         self.minimum = minimum
         self.maximum = maximum
@@ -70,7 +70,7 @@ class SphereFilter(PointCloudFilter):
 
         point = self.sphere_center - offset
 
-        distances_to_point: npt.NDArray[np.float64|np.float32] = np.linalg.norm(pcd.xyz - point, axis=1)
+        distances_to_point: npt.NDArray[np.float64 | np.float32] = np.linalg.norm(pcd.xyz - point, axis=1)
         return distances_to_point <= self.radius
 
 
@@ -91,7 +91,6 @@ class PolygonFilter(PointCloudFilter):
         offset = _get_offset(pcd, mode)
 
         polygon = translate(self.polygon, *(-1 * offset[dims]))
-
 
         mask: npt.NDArray[np.bool_] = contains_xy(polygon, pcd.xyz[:, dims[0]], pcd.xyz[:, dims[1]])
         return mask

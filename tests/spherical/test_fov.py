@@ -1,39 +1,41 @@
-import pytest
-
-import numpy as np
 import math
 
+import numpy as np
+import pytest
+from GSEGUtils.constants import EPS, PI
+from GSEGUtils.util import AngleUnit, _deg2rad, _rad2deg, _rad2gon
 from pydantic import ValidationError
 
-from pchandler.spherical import Angle
-from pchandler.geometry.core import PointCloudData
-from pchandler.geometry.fov import FoV, FoVTree
-from GSEGUtils.constants import PI, EPS
-from GSEGUtils.util import AngleUnit, _rad2deg, _rad2gon, _deg2rad
+from pchandler import PointCloudData
+from pchandler.geometry.spherical import Angle, FoV, FoVTree
 
 
 @pytest.fixture(scope="function", autouse=True)
 def pcd():
     return PointCloudData(np.random.rand(10000, 3))
 
+
 @pytest.fixture(scope="function")
 def fov_rad_values():
-    return np.array([-PI/2, PI/2, PI/8, (7/8)*PI ])
+    return np.array([-PI / 2, PI / 2, PI / 8, (7 / 8) * PI])
+
 
 @pytest.fixture(scope="function")
 def fov_deg_values(fov_rad_values):
     return _rad2deg(fov_rad_values)
 
+
 @pytest.fixture(scope="function")
 def fov_gon_values(fov_rad_values):
     return _rad2gon(fov_rad_values)
+
 
 class TestFov:
 
     def test_init(self, fov_rad_values, fov_deg_values, fov_gon_values):
         for unit, values in zip(
-                (AngleUnit.DEGREE, AngleUnit.RAD, AngleUnit.GON),
-                (fov_deg_values, fov_rad_values, fov_gon_values)):
+            (AngleUnit.DEGREE, AngleUnit.RAD, AngleUnit.GON), (fov_deg_values, fov_rad_values, fov_gon_values)
+        ):
 
             left = Angle(values[0], unit=unit)
             right = Angle(values[1], unit=unit)
@@ -41,16 +43,18 @@ class TestFov:
             bottom = Angle(values[3], unit=unit)
             fov = FoV(left=left, right=right, top=top, bottom=bottom)
 
-            assert math.isclose(fov.left.radians, -PI/2)
-            assert math.isclose(fov.right.radians, PI/2)
-            assert math.isclose(fov.top.radians, PI/8)
-            assert math.isclose(fov.bottom.radians, (7/8)*PI)
+            assert math.isclose(fov.left.radians, -PI / 2)
+            assert math.isclose(fov.right.radians, PI / 2)
+            assert math.isclose(fov.top.radians, PI / 8)
+            assert math.isclose(fov.bottom.radians, (7 / 8) * PI)
 
         # Init from floats -> Assumed to be radians
-        fov = FoV(left=float(fov_rad_values[0]),
-                  right=float(fov_rad_values[1]),
-                  top=float(fov_rad_values[2]),
-                  bottom=float(fov_rad_values[3]))
+        fov = FoV(
+            left=float(fov_rad_values[0]),
+            right=float(fov_rad_values[1]),
+            top=float(fov_rad_values[2]),
+            bottom=float(fov_rad_values[3]),
+        )
 
         assert math.isclose(fov.left.radians, -PI / 2)
         assert math.isclose(fov.right.radians, PI / 2)
@@ -61,7 +65,7 @@ class TestFov:
         fov = FoV(left="0deg", right="90deg", top="0rad", bottom="200gon")
 
         assert math.isclose(fov.left, Angle(0))
-        assert math.isclose(fov.right, Angle(np.pi/2))
+        assert math.isclose(fov.right, Angle(np.pi / 2))
         assert math.isclose(fov.top, Angle(0))
         assert math.isclose(fov.bottom, Angle(np.pi))
 
@@ -83,12 +87,7 @@ class TestFov:
             FoV(left=0, right=1, top=2, bottom={"200deg": 1000})
 
     def test_construct_without_bounds(self, fov_rad_values):
-        fov = FoV.construct_without_bounds_check(
-                left=100,
-                right=300,
-                top=200,
-                bottom=199
-        )
+        fov = FoV.construct_without_bounds_check(left=100, right=300, top=200, bottom=199)
 
         assert fov.left.radians == 100
         assert fov.right.radians == 300
@@ -97,12 +96,7 @@ class TestFov:
 
     def test_construct_without_bounds_invalid_inputs(self):
         with pytest.raises(ValueError):
-            FoV.construct_without_bounds_check(
-                left=100,
-                right=200,
-                top=200,
-                bottom={"Not a": "Valid Angle"}
-            )
+            FoV.construct_without_bounds_check(left=100, right=200, top=200, bottom={"Not a": "Valid Angle"})
 
     def test_from_angles(self):
         hz = np.array([-1.7, 0.2, -3.1, 3.0, 2.0, 1.3])
@@ -116,18 +110,15 @@ class TestFov:
         assert fov.bottom == 2.9
 
     def test_iter(self):
-        fov = FoV(left = -0.12, top = 0.45, right = 1.23, bottom = 2.78)
+        fov = FoV(left=-0.12, top=0.45, right=1.23, bottom=2.78)
 
-        expected_values = {"left": -0.12,
-                           "top": 0.45,
-                           "right": 1.23,
-                           "bottom": 2.78}
+        expected_values = {"left": -0.12, "top": 0.45, "right": 1.23, "bottom": 2.78}
 
         for key, val in fov:
             assert expected_values[key] == val
 
     def test_crosses_pi(self):
-        fov_crosses_pi = FoV(left=3.01, right=-2.8, top = 0.3, bottom=2.78)
+        fov_crosses_pi = FoV(left=3.01, right=-2.8, top=0.3, bottom=2.78)
         assert fov_crosses_pi.crosses_pi
 
     def test_width(self):
@@ -158,9 +149,9 @@ class TestFov:
         assert math.isclose(center[1], 1.4)
 
         # Test crossing pi
-        fov = FoV(left=PI-0.1, right=-PI+0.3, top=0.4, bottom=2.4)
+        fov = FoV(left=PI - 0.1, right=-PI + 0.3, top=0.4, bottom=2.4)
         center = fov.center()
-        assert math.isclose(center[0], -PI+0.1)
+        assert math.isclose(center[0], -PI + 0.1)
         assert math.isclose(center[1], 1.4)
 
         fov = FoV(left="170deg", right="-150deg", top=0.4, bottom=2.4)
@@ -202,7 +193,7 @@ class TestFov:
         assert math.isclose(intersect.bottom, 2.2)
 
     def test_ratio(self):
-        fov = FoV(top=0, bottom=1/3, left=0, right=1)
+        fov = FoV(top=0, bottom=1 / 3, left=0, right=1)
         ratio = fov.ratio()
         assert isinstance(ratio, (float, int))
         assert math.isclose(ratio, 3)
@@ -210,12 +201,12 @@ class TestFov:
     def test_extend_to_ratio(self):
         n = 10_000
         np.random.seed(42)
-        top_samples = np.random.uniform(low=0.0, high=np.pi/2, size=n)
-        bottom_samples = np.random.uniform(low=np.pi/2, high=np.pi, size=n)
+        top_samples = np.random.uniform(low=0.0, high=np.pi / 2, size=n)
+        bottom_samples = np.random.uniform(low=np.pi / 2, high=np.pi, size=n)
         left_samples = np.random.uniform(low=-np.pi, high=0, size=n)
         right_samples = np.random.uniform(low=0, high=np.pi, size=n)
         ratios = np.random.randint(low=1, high=10, size=n) / np.random.randint(low=1, high=10, size=n)
-        angle_samples = zip(left_samples,right_samples,top_samples,bottom_samples, ratios)
+        angle_samples = zip(left_samples, right_samples, top_samples, bottom_samples, ratios)
 
         for angles in angle_samples:
             fov = FoV(left=angles[0], right=angles[1], top=angles[2], bottom=angles[3])
@@ -235,16 +226,16 @@ class TestFov:
         assert len(splits) == 8
         # assert np.allclose([split.height() for split in splits])
         for i, split in enumerate(splits):
-            assert math.isclose(split.width(), (fov.right - fov.left)/2)
-            assert math.isclose(split.height(), (fov.bottom - fov.top)/4)
+            assert math.isclose(split.width(), (fov.right - fov.left) / 2)
+            assert math.isclose(split.height(), (fov.bottom - fov.top) / 4)
             if i > 0:
                 if i == 4:
-                    assert split.right > splits[i-1].right
-                    assert split.left > splits[i-1].left
+                    assert split.right > splits[i - 1].right
+                    assert split.left > splits[i - 1].left
 
                 if i % 4:
-                    assert split.top > splits[i-1].top
-                    assert split.bottom > splits[i-1].bottom
+                    assert split.top > splits[i - 1].top
+                    assert split.bottom > splits[i - 1].bottom
 
         splits = fov.split((1, 1))
         assert splits[0] is fov
@@ -270,7 +261,6 @@ class TestFov:
 
         fov = FoV(top="0.4rad", bottom=2.4, right=1.3, left=0.3)
         fov_by_extent = FoV(left="0deg", top="0gon", right=0.3, bottom=0.45)
-
 
         tiles = fov.tile(fov_by_extent, expand_to_integer_multiple=True)
         # Check left to right first
@@ -327,23 +317,28 @@ class TestFov:
         assert repr(fov) == str(fov)
         assert repr(fov).startswith("FoV(")
 
-@pytest.fixture(scope='function')
+
+@pytest.fixture(scope="function")
 def new_fov() -> FoV:
     return FoV(left=0.3, top=0.4, right=1.3, bottom=2.4)
 
-@pytest.fixture(scope='function')
+
+@pytest.fixture(scope="function")
 def new_fov2() -> FoV:
     return FoV(left=0.5, top=0.6, right=1.7, bottom=2.2)
 
-@pytest.fixture(scope='function')
+
+@pytest.fixture(scope="function")
 def fov_center() -> tuple[float, float]:
     return 0.5, 0.7
 
-@pytest.fixture(scope='function')
+
+@pytest.fixture(scope="function")
 def fov_extent() -> tuple[float, float]:
     return 0.2, 1.2
 
-@pytest.fixture(scope='function')
+
+@pytest.fixture(scope="function")
 def new_extent_as_fov() -> FoV:
     return FoV(left=0.3, top=0.4, right=0.4, bottom=0.6)
 

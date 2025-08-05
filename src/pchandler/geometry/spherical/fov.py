@@ -73,37 +73,29 @@ import warnings
 from dataclasses import dataclass, field
 from fractions import Fraction
 from itertools import chain
-from typing import (
-    Any,
-    Generator,
-    Iterable,
-    Optional,
-    Self,
-    cast,
-    TypeAlias
-)
+from typing import Any, Generator, Iterable, Optional, Self, TypeAlias, cast
 
 import numpy as np
+from GSEGUtils.constants import DEFAULT_CONFIG, EPS, PI, TWO_PI, validate_variables
 from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
     NonNegativeFloat,
     field_validator,
+    model_validator,
     validate_call,
-    model_validator
 )
 
-from GSEGUtils.constants import DEFAULT_CONFIG, EPS, PI, TWO_PI, validate_variables
-
-from pchandler.spherical.angle import Angle, AngleArray
 from pchandler.base_types import VectorT
+from pchandler.geometry.spherical import Angle, AngleArray
 
 logger = logging.getLogger(__name__.split(".")[0])
 
 AngleLikeT: TypeAlias = Angle | float | str
-v_limits = (float(0-EPS), float(PI+EPS))
-hz_limits = (float(-PI-EPS), float(PI+EPS))
+v_limits = (float(0 - EPS), float(PI + EPS))
+hz_limits = (float(-PI - EPS), float(PI + EPS))
+
 
 class FoV(BaseModel):
     """
@@ -115,6 +107,7 @@ class FoV(BaseModel):
     This is designed to be more compatible with spherical angle projections to image coordinate systems.
 
     """
+
     model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True)
 
     left: Angle = Field(..., description="Hz ∈ [–π, +π]")
@@ -136,7 +129,7 @@ class FoV(BaseModel):
             raise ValueError(f"Horizontal angle {hz.radians} not in [-π, π]")
         return hz
 
-    @field_validator('top', 'bottom', mode="after")
+    @field_validator("top", "bottom", mode="after")
     def _check_elevation(cls, v: Angle) -> Angle:
         if not 0 - EPS <= v.internal_value <= np.pi + EPS:
             raise ValueError(f"Top angle {v.radians} not in [0, π]")
@@ -156,7 +149,7 @@ class FoV(BaseModel):
             left=Angle.parse(left),
             top=Angle.parse(top),
             right=Angle.parse(right),
-            bottom=Angle.parse(bottom)
+            bottom=Angle.parse(bottom),
         )
         return new_instance
 
@@ -165,10 +158,10 @@ class FoV(BaseModel):
         return cls(left=horizontal.min(), top=vertical.min(), right=horizontal.max(), bottom=vertical.max())
 
     def __iter__(self) -> Generator[tuple[str, Angle], None, None]:
-        yield 'left', self.left
-        yield 'top', self.top
-        yield 'right', self.right
-        yield 'bottom', self.bottom
+        yield "left", self.left
+        yield "top", self.top
+        yield "right", self.right
+        yield "bottom", self.bottom
 
     @property
     def crosses_pi(self) -> bool:
@@ -202,9 +195,9 @@ class FoV(BaseModel):
 
     @classmethod
     @validate_call(config=cast(ConfigDict, DEFAULT_CONFIG | {"validate_return_type": False}))
-    def from_center_with_extent(cls,
-                                centerpoint: tuple[Angle|float, Angle|float],
-                                extent: tuple[Angle|float, Angle|float]) -> Self:
+    def from_center_with_extent(
+        cls, centerpoint: tuple[Angle | float, Angle | float], extent: tuple[Angle | float, Angle | float]
+    ) -> Self:
         """
         Creates an FoV instance from a center point and angular extent.
 
@@ -343,16 +336,22 @@ class FoV(BaseModel):
         if shape[0] == shape[1] == 1:
             return [self]
 
-        horizontal_borders = cast(AngleArray, Angle(
-            np.linspace(
-                start=self.left.radians, stop=self.right.radians, num=shape[0] + 1, endpoint=True, retstep=False
-            )
-        ))
-        vertical_borders = cast(AngleArray, Angle(
-            np.linspace(
-                start=self.top.radians, stop=self.bottom.radians, num=shape[1] + 1, endpoint=True, retstep=False
-            )
-        ))
+        horizontal_borders = cast(
+            AngleArray,
+            Angle(
+                np.linspace(
+                    start=self.left.radians, stop=self.right.radians, num=shape[0] + 1, endpoint=True, retstep=False
+                )
+            ),
+        )
+        vertical_borders = cast(
+            AngleArray,
+            Angle(
+                np.linspace(
+                    start=self.top.radians, stop=self.bottom.radians, num=shape[1] + 1, endpoint=True, retstep=False
+                )
+            ),
+        )
         # TODO check if a bug on AngleArray initialisation when used in place above
         # horizontal_borders.display_unit = self.left.display_unit
         # vertical_borders.display_unit = self.top.display_unit
@@ -394,13 +393,11 @@ class FoV(BaseModel):
 
         # TODO check if these functions should actually be AngleArray and default units
         horizontal_steps = cast(
-            AngleArray,
-            Angle(np.append(np.arange(self.left, self.right, target_extent.width()), self.right))
+            AngleArray, Angle(np.append(np.arange(self.left, self.right, target_extent.width()), self.right))
         )
 
         elevation_steps = cast(
-            AngleArray,
-            Angle(np.append(np.arange(self.top, self.bottom, target_extent.height()), self.bottom))
+            AngleArray, Angle(np.append(np.arange(self.top, self.bottom, target_extent.height()), self.bottom))
         )
 
         horizontal_bins = list(zip(horizontal_steps[:-1], horizontal_steps[1:]))
@@ -592,7 +589,6 @@ class FoVTree:
         fov_children = {k: v for k, v in fov_children.items() if v is not None}
 
         return cls(identifier, fov, fov_children)
-
 
     # TODO - Reimplement Low priority / Historical
     # @classmethod

@@ -3,13 +3,21 @@ from __future__ import annotations
 import logging
 import weakref
 from collections import Counter
-from collections.abc import ItemsView, ValuesView, KeysView
-from typing import TYPE_CHECKING, Iterable, Iterator, Self, overload, Optional, cast, TypeAlias, Sized
+from collections.abc import ItemsView, KeysView, ValuesView
+from typing import (
+    TYPE_CHECKING,
+    Iterable,
+    Iterator,
+    Optional,
+    Self,
+    Sized,
+    TypeAlias,
+    cast,
+    overload,
+)
 
 import numpy as np
-
 from GSEGUtils.base_arrays import BaseArray
-from GSEGUtils.validators import normalize_uint8
 from GSEGUtils.base_types import (
     Array_Nx3_Float32_T,
     Array_Nx3_Float_T,
@@ -17,24 +25,30 @@ from GSEGUtils.base_types import (
     Array_Nx3_Uint8_T,
     Array_Uint8_T,
     IndexLike,
-    VectorT,
+    Vector_Bool_T,
     Vector_Float32_T,
     Vector_Uint8_T,
-    Vector_Bool_T
+    VectorT,
 )
+from GSEGUtils.validators import normalize_uint8
 
-from pchandler.constants import  RGB_NAMES, NORMAL_NAMES, INTENSITY_NAMES, REFLECTANCE_NAMES
+from pchandler.constants import (
+    INTENSITY_NAMES,
+    NORMAL_NAMES,
+    REFLECTANCE_NAMES,
+    RGB_NAMES,
+)
 from pchandler.scalar_fields.scalar_fields import (
+    AbstractScalarField,
+    DtypeState,
     LowerStr,
     NormalFields,
     RGBFields,
     ScalarField,
-    AbstractScalarField,
-    DtypeState
 )
 
 if TYPE_CHECKING:
-    from pchandler.geometry.core import PointCloudData
+    from pchandler import PointCloudData
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -43,6 +57,7 @@ SFLikeT: TypeAlias = SF_T | VectorT | Array_Nx3_T
 RGBLikeT: TypeAlias = Array_Nx3_Uint8_T | Vector_Uint8_T | RGBFields
 NormalLikeT: TypeAlias = Array_Nx3_Float32_T | Vector_Float32_T | NormalFields
 SFMLikeT: TypeAlias = dict[str, SFLikeT]
+
 
 class ScalarFieldManager:
     """
@@ -53,7 +68,7 @@ class ScalarFieldManager:
     _parent: Optional[weakref.ReferenceType[PointCloudData]]
     fields: dict[str, SF_T]
 
-    def __init__(self, fields: Optional[SFMLikeT|Self]=None, *, parent: Optional[PointCloudData]=None) -> None:
+    def __init__(self, fields: Optional[SFMLikeT | Self] = None, *, parent: Optional[PointCloudData] = None) -> None:
         self._parent = weakref.ref(parent) if parent is not None else None
 
         if fields is None:
@@ -84,9 +99,7 @@ class ScalarFieldManager:
         if self.parent:
             for field in self.values():
                 if len(field) != len(self.parent):
-                    raise ValueError(
-                        f"Scalar field '{field}' length does not match the number of points {len(field)}"
-                    )
+                    raise ValueError(f"Scalar field '{field}' length does not match the number of points {len(field)}")
         else:
             logger.info("No parent point cloud to validate scalar field lengths against")
 
@@ -140,7 +153,7 @@ class ScalarFieldManager:
         origin_dtype = DtypeState.generate(value) if origin_dtype is None else origin_dtype
 
         if self.num_points > 0 and self.num_points != value.shape[0]:
-            raise ValueError( f"Scalar field length does not equal #points: {self.num_points} != {value.shape[0]}")
+            raise ValueError(f"Scalar field length does not equal #points: {self.num_points} != {value.shape[0]}")
 
         if name in RGB_NAMES.all:
             self._set_rgb(name, value, origin_dtype=origin_dtype)
@@ -149,12 +162,12 @@ class ScalarFieldManager:
             self._set_normals(name, value, origin_dtype=origin_dtype)
 
         elif name in INTENSITY_NAMES.all:
-            self.fields[INTENSITY_NAMES.base] = (
-                ScalarField(value, name=INTENSITY_NAMES.base, origin_dtype=origin_dtype))
+            self.fields[INTENSITY_NAMES.base] = ScalarField(value, name=INTENSITY_NAMES.base, origin_dtype=origin_dtype)
 
         elif name in REFLECTANCE_NAMES.all:
-            self.fields[REFLECTANCE_NAMES.base] = (
-                ScalarField(value, name=REFLECTANCE_NAMES.base, origin_dtype=origin_dtype))
+            self.fields[REFLECTANCE_NAMES.base] = ScalarField(
+                value, name=REFLECTANCE_NAMES.base, origin_dtype=origin_dtype
+            )
 
         else:
             self.fields[name] = ScalarField(value, name=name, origin_dtype=origin_dtype)
@@ -188,8 +201,11 @@ class ScalarFieldManager:
     @parent.setter
     def parent(self, parent: PointCloudData):
         if self._parent is not None and self._parent() is not parent:
-            logger.warning(f"Parent already set as {self._parent()}. "
-                           f"Will be overwritten by {parent}!", stack_info=True, stacklevel=1)
+            logger.warning(
+                f"Parent already set as {self._parent()}. " f"Will be overwritten by {parent}!",
+                stack_info=True,
+                stacklevel=1,
+            )
         self._parent = weakref.ref(parent)
         self.validate_lengths()
 
@@ -252,7 +268,7 @@ class ScalarFieldManager:
         if len(self) == 0:
             return type(self)(fields={})
 
-        parent: PointCloudData|None = self._parent() if self._parent is not None else None
+        parent: PointCloudData | None = self._parent() if self._parent is not None else None
 
         if parent:
             bool_mask: Vector_Bool_T = parent.create_mask(mask)
@@ -328,12 +344,12 @@ class ScalarFieldManager:
                 self.rgb = RGBFields.initialize(self.num_points)
 
             index = RGB_NAMES.get_position(name)
-            self.rgb.arr[:, index] = Vector_Uint8_T(value) # Perform validation as it's being assigned directly
+            self.rgb.arr[:, index] = Vector_Uint8_T(value)  # Perform validation as it's being assigned directly
 
         else:
             raise KeyError(f"Unknown key made it into _handle_rgb : {name}")
 
-    def _set_normals( self, name: LowerStr, value: NormalLikeT, origin_dtype: Optional[DtypeState] = None ) -> None:
+    def _set_normals(self, name: LowerStr, value: NormalLikeT, origin_dtype: Optional[DtypeState] = None) -> None:
         if name in NORMAL_NAMES.names:
             self.fields[NORMAL_NAMES.base] = NormalFields(value, origin_dtype=cast(DtypeState, origin_dtype))
 

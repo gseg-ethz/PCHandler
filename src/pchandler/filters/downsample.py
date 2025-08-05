@@ -1,19 +1,18 @@
 from __future__ import annotations
 
 import logging
-from typing import Literal, Annotated, cast
+from typing import Annotated, Literal, cast
 
 import numpy as np
 import numpy.typing as npt
+from GSEGUtils.constants import validate_variables
+from GSEGUtils.util import unique_rows_fast
 from pydantic import Field, PositiveFloat
 
-from GSEGUtils.util import unique_rows_fast
-from GSEGUtils.constants import validate_variables
-
-from pchandler.geometry.core import PointCloudData
-from pchandler.scalar_fields.scalar_field_manager import ScalarFieldManager
-from pchandler.filters.core import PointCloudFilter
+from pchandler import PointCloudData
+from pchandler.filters import PointCloudFilter
 from pchandler.geometry.coordinates import rhv2xyz
+from pchandler.scalar_fields import ScalarFieldManager
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -21,46 +20,50 @@ WeightingMethods = Literal["nearest", "constant", "linear"]
 
 
 def _computed_weighted_values(
-        obj: VoxelDownsample|AngleBinDownsample,
-        pcd: PointCloudData,
-        unique_inverse: npt.NDArray[np.int32|np.int64],
-        weights: npt.NDArray[np.float32],
-        unique) -> tuple[ScalarFieldManager, npt.NDArray[np.int32|np.int64]]:
+    obj: VoxelDownsample | AngleBinDownsample,
+    pcd: PointCloudData,
+    unique_inverse: npt.NDArray[np.int32 | np.int64],
+    weights: npt.NDArray[np.float32],
+    unique,
+) -> tuple[ScalarFieldManager, npt.NDArray[np.int32 | np.int64]]:
     weight_sum = np.bincount(unique_inverse, weights=weights, minlength=unique.shape[0])
 
     sfm: ScalarFieldManager = ScalarFieldManager()
 
     for field_name, field_values in pcd.scalar_fields.items():
         # Compute weighted-sum of scalar values within each voxel
-        if field_name in ('rgb', 'normals'):
+        if field_name in ("rgb", "normals"):
             scalar_sum: np.ndarray = np.zeros((unique.shape[0], 3))
 
             for i in range(3):
-                scalar_sum[:, i] = np.bincount(unique_inverse,
-                                               weights=field_values.arr[:, i] * weights,
-                                               minlength=unique.shape[0])
+                scalar_sum[:, i] = np.bincount(
+                    unique_inverse, weights=field_values.arr[:, i] * weights, minlength=unique.shape[0]
+                )
 
             if weight_sum.ndim == 1:
                 weight_sum = weight_sum[:, None]
 
-            if field_name == 'rgb':
-                logger.warning(f'RGB colours are not retained. '
-                               f'A weighted value is taken using {obj.weighting_method=}')
+            if field_name == "rgb":
+                logger.warning(
+                    f"RGB colours are not retained. " f"A weighted value is taken using {obj.weighting_method=}"
+                )
 
-            elif field_name == 'normals':
-                logger.warning(f'Normals are not retained. '
-                               f'A weighted value is taken using {obj.weighting_method=}'
-                               f'These values may not be very representative of the data')
+            elif field_name == "normals":
+                logger.warning(
+                    f"Normals are not retained. "
+                    f"A weighted value is taken using {obj.weighting_method=}"
+                    f"These values may not be very representative of the data"
+                )
 
         else:
-            scalar_sum = np.bincount(unique_inverse,
-                                     weights=cast(np.ndarray, field_values * weights),
-                                     minlength=unique.shape[0])
+            scalar_sum = np.bincount(
+                unique_inverse, weights=cast(np.ndarray, field_values * weights), minlength=unique.shape[0]
+            )
             weight_sum = weight_sum.reshape(-1)
 
-        sfm[field_name] = type(field_values)(scalar_sum / weight_sum,
-                                             name=field_name,
-                                             origin_dtype=field_values.origin_dtype)
+        sfm[field_name] = type(field_values)(
+            scalar_sum / weight_sum, name=field_name, origin_dtype=field_values.origin_dtype
+        )
 
     return sfm, weight_sum
 
@@ -123,9 +126,14 @@ class VoxelDownsample:
 
         centroids, sfm, _, _ = _calculate_centroids_and_weights(self, unique, ndim, unique_inverse, values, pcd)
 
-        new_pcd = pcd.copy(array=centroids,
-                           update={"scalar_fields": sfm, "unshifted_bbox": None,},
-                           link_to_same_NOS=True)
+        new_pcd = pcd.copy(
+            array=centroids,
+            update={
+                "scalar_fields": sfm,
+                "unshifted_bbox": None,
+            },
+            link_to_same_NOS=True,
+        )
 
         return new_pcd
 
@@ -144,15 +152,20 @@ class AngleBinDownsample:
             ((values + self.angle_bin_size / 2) // self.angle_bin_size).astype(np.int32)
         )
 
-        centroids, sfm, weights, weight_sum = (
-            _calculate_centroids_and_weights(self, unique, ndim, unique_inverse, values, pcd))
-
-        ranges = (
-            np.bincount(unique_inverse, weights=pcd.r * weights, minlength=unique.shape[0])
-            / weight_sum
+        centroids, sfm, weights, weight_sum = _calculate_centroids_and_weights(
+            self, unique, ndim, unique_inverse, values, pcd
         )
+
+        ranges = np.bincount(unique_inverse, weights=pcd.r * weights, minlength=unique.shape[0]) / weight_sum
         coords = rhv2xyz(np.hstack((ranges[:, np.newaxis], centroids)), pcd.socs_origin)
 
         # coords = SphericalCoordinates(arr=np.hstack((ranges[:, np.newaxis], centroids)))
-        new_pcd = pcd.copy(array=coords, update={"scalar_fields": sfm, "unshifted_bbox": None,}, link_to_same_NOS=True)
+        new_pcd = pcd.copy(
+            array=coords,
+            update={
+                "scalar_fields": sfm,
+                "unshifted_bbox": None,
+            },
+            link_to_same_NOS=True,
+        )
         return new_pcd

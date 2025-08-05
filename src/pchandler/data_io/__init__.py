@@ -1,16 +1,52 @@
-from .csv import CsvHandler as Csv
-from .e57 import E57Handler as E57
-from .las import LasHandler as Las
-from .ply import PlyHandler as Ply
-from .pcd import PcdHandler as Pcd
+from __future__ import annotations
 
-from .core import find_point_cloud_in_directory
+import importlib
+from typing import TYPE_CHECKING
 
 __all__ = [
-    "Csv",
-    "E57",
-    "Las",
-    "Ply",
-    # "Pcd",
-    "find_point_cloud_in_directory",
+    "core",
 ]
+
+_lazy_map: dict[str, str | tuple[str, str]] = {
+    "Csv": ("csv", "CsvHandler"),
+    "E57": ("e57", "E57Handler"),
+    "Las": ("las", "LasHandler"),
+    "Ply": ("ply", "PlyHandler"),
+    # "Pcd": ("pcd", "PcdHandler"),
+    "find_point_cloud_in_directory": "core",
+}
+
+__all__ = __all__ + list(_lazy_map)
+
+if TYPE_CHECKING:
+    from . import core
+
+    # from .pcd import PcdHandler as Pcd
+    from .core import find_point_cloud_in_directory
+    from .csv import CsvHandler as Csv
+    from .e57 import E57Handler as E57
+    from .las import LasHandler as Las
+    from .ply import PlyHandler as Ply
+
+
+def __getattr__(name: str):
+    if name in _lazy_map:
+        if isinstance(_lazy_map[name], str):
+            module = importlib.import_module(f"{__name__}.{_lazy_map[name]}")
+            val = getattr(module, name)
+        else:  # Case Tuple
+            module_name, real_name = _lazy_map[name]
+            module = importlib.import_module(f"{__name__}.{module_name}")
+            val = getattr(module, real_name)
+    else:
+        try:
+            val = importlib.import_module(f"{__name__}.{name}")
+        except ModuleNotFoundError:
+            raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    globals()[name] = val
+    return val
+
+
+def __dir__():
+    # so tab-completion / introspection shows the lazy names
+    return sorted(set(__all__) | set(globals().keys()))

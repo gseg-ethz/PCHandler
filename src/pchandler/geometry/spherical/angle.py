@@ -4,10 +4,10 @@ from functools import total_ordering
 from typing import Any, Generator, Self, cast
 
 import numpy as np
+from GSEGUtils.util import AngleUnit, convert_angles
 from numpy.typing import NDArray
 
-from pchandler.base_types import ArrayT, Array_Float_T
-from GSEGUtils.util import AngleUnit, convert_angles
+from pchandler.base_types import Array_Float_T, ArrayT
 
 
 def _rebuild_angle(cls, internal_value, display_unit):
@@ -62,7 +62,7 @@ class AngleBase:
         self._display_unit = unit
 
     @property
-    def internal_value(self) -> float|Array_Float_T:
+    def internal_value(self) -> float | Array_Float_T:
         return self._internal_value
 
     @property

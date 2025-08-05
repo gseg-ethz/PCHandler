@@ -1,11 +1,8 @@
-import pytest
-
 import numpy as np
 
-from pchandler.geometry.core import PointCloudData
+from pchandler import PointCloudData
+from pchandler.filters import CartesianOutlierFilter, SphericalOutlierFilter
 from pchandler.geometry.coordinates import rhv2xyz
-
-from pchandler.filters.outlier_filter import SphericalOutlierFilter, CartesianOutlierFilter
 
 
 class TestSphericalOutlierFilter:
@@ -24,10 +21,7 @@ class TestSphericalOutlierFilter:
         xyz_out = rhv2xyz(rhv_out)
         points_w_outliers = np.vstack((main_cluster, xyz_out))
 
-        xyz = PointCloudData(
-            points_w_outliers,
-            numerical_optimization_shift=None
-        )
+        xyz = PointCloudData(points_w_outliers, numerical_optimization_shift=None)
 
         filter_spherical = SphericalOutlierFilter(std_ratio=0.95, number_of_neighbours=3)
         filtered_pcd = filter_spherical.extract(xyz)
@@ -38,19 +32,17 @@ class TestSphericalOutlierFilter:
         assert len(xyz) == num_outliers
         assert np.allclose(xyz, xyz_out)
 
+
 class TestCartesianOutlierFilter:
     def test_cartesian_outlier_filter(self):
         main_cluster = np.random.rand(100000, 3) * 10
         num_outliers = 100  # Number of outliers
-        outliers_low = np.random.uniform(low=-100, high=-50, size=(int(num_outliers/2), 3))
-        outliers_high = np.random.uniform(low=50, high=100, size=(int(num_outliers/2), 3))
+        outliers_low = np.random.uniform(low=-100, high=-50, size=(int(num_outliers / 2), 3))
+        outliers_high = np.random.uniform(low=50, high=100, size=(int(num_outliers / 2), 3))
         outliers = np.vstack((outliers_low, outliers_high))
         points_with_outliers = np.vstack((main_cluster, outliers))
 
-        xyz = PointCloudData(
-            points_with_outliers,
-            numerical_optimization_shift=None
-        )
+        xyz = PointCloudData(points_with_outliers, numerical_optimization_shift=None)
 
         filter_spherical = CartesianOutlierFilter(std_ratio=0.95, number_of_neighbours=3)
         filtered_pcd = filter_spherical.extract(xyz)

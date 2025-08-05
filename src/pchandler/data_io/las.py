@@ -1,33 +1,34 @@
+import logging
 from pathlib import Path
 from typing import Optional
-import logging
 
+import laspy  # type: ignore[import-untyped]
 import numpy as np
-import laspy                # type: ignore[import-untyped]
-
-from GSEGUtils.validators import normalize_uint16
 from GSEGUtils.base_types import Vector_3_T
+from GSEGUtils.validators import normalize_uint16
 
+from pchandler import PointCloudData
+from pchandler.constants import INTENSITY_NAMES, NORMAL_NAMES, RGB_NAMES, XYZ_NAMES
 from pchandler.data_io.core import AbstractIOHandler, _get_rgb_or_normal_field_names
-from pchandler.constants import RGB_NAMES, NORMAL_NAMES, INTENSITY_NAMES, XYZ_NAMES
-from pchandler.geometry import PointCloudData
-from pchandler.geometry.optimal_shift import OptimizedShift
+from pchandler.geometry import OptimizedShift
 
 logger = logging.getLogger(__name__.split(".")[0])
 
 
 class LasHandler(AbstractIOHandler):
-    FORMATS = ['.las', '.laz']
+    FORMATS = [".las", ".laz"]
 
     @classmethod
-    def load(cls,   # type: ignore[override]
-             path: str | Path, /,
-             scalar_fields: Optional[list[str]] = None,
-             remove_prefix: bool = True,
-             prefix: str = 'scalar_',
-             force_no_numerical_shift: bool = False,
-             **config
-             ) -> PointCloudData:
+    def load(
+        cls,  # type: ignore[override]
+        path: str | Path,
+        /,
+        scalar_fields: Optional[list[str]] = None,
+        remove_prefix: bool = True,
+        prefix: str = "scalar_",
+        force_no_numerical_shift: bool = False,
+        **config,
+    ) -> PointCloudData:
 
         logger.info(f"Loading LAZ file: {path}")
 
@@ -47,16 +48,18 @@ class LasHandler(AbstractIOHandler):
         return pcd
 
     @classmethod
-    def save(cls,   # type: ignore[override]
-             pcd: PointCloudData,
-             path: str | Path,
-             /,
-             scalar_fields: Optional[list[str]] = None,
-             add_prefix: bool = True,
-             prefix: str = 'scalar_',
-             revert_sf_types: bool = False,
-             scales: Vector_3_T = np.array([0.0001, 0.0001, 0.0001]),
-             **config) -> None:
+    def save(
+        cls,  # type: ignore[override]
+        pcd: PointCloudData,
+        path: str | Path,
+        /,
+        scalar_fields: Optional[list[str]] = None,
+        add_prefix: bool = True,
+        prefix: str = "scalar_",
+        revert_sf_types: bool = False,
+        scales: Vector_3_T = np.array([0.0001, 0.0001, 0.0001]),
+        **config,
+    ) -> None:
 
         logger.info(f"Attempting to write to LAS/LAZ file: {path}")
         if pcd.numerical_optimization_shift is None:
@@ -72,16 +75,16 @@ class LasHandler(AbstractIOHandler):
         # Can use the check on the base name as named scalar_fields should match the pcd object names
         if RGB_NAMES.base in scalar_fields:
             index = scalar_fields.index(RGB_NAMES.base)
-            scalar_fields = scalar_fields[:index] + list(RGB_NAMES.char) + scalar_fields[index+1:]
+            scalar_fields = scalar_fields[:index] + list(RGB_NAMES.char) + scalar_fields[index + 1 :]
 
         if NORMAL_NAMES.base in scalar_fields:
             index = scalar_fields.index(NORMAL_NAMES.base)
-            scalar_fields = scalar_fields[:index] + list(NORMAL_NAMES.char) + scalar_fields[index+1:]
+            scalar_fields = scalar_fields[:index] + list(NORMAL_NAMES.char) + scalar_fields[index + 1 :]
 
         # Set the base coordinates of the LAS point cloud as well as offsets and scales
         las = laspy.create()
         las.change_scaling(scales=scales, offsets=offsets)
-        las.xyz = pcd.xyz+offsets
+        las.xyz = pcd.xyz + offsets
 
         # RGB values
         if (rgb_fields := _get_rgb_or_normal_field_names(scalar_fields, RGB_NAMES)) and pcd.rgb:
@@ -105,7 +108,7 @@ class LasHandler(AbstractIOHandler):
                 las.intensity = normalize_uint16(pcd.intensity)
 
         # Clear the previous sfs used
-        for name in (XYZ_NAMES.char + tuple(rgb_fields) + tuple(intensity_fields)):
+        for name in XYZ_NAMES.char + tuple(rgb_fields) + tuple(intensity_fields):
             if name in scalar_fields:
                 scalar_fields.remove(name)
 

@@ -15,6 +15,7 @@ _lazy_map = {
     "SphereFilter": "cartesian_filters",
     "GenericFieldFilter": "core",
     "PointCloudFilter": "core",
+    "ValidatedPolygonT": "core",
     "AngleBinDownsample": "downsample",
     "RandomDownsampleFilter": "downsample",
     "VoxelDownsample": "downsample",
@@ -33,7 +34,7 @@ __all__ = list(_lazy_map)
 
 if TYPE_CHECKING:
     from .cartesian_filters import BoxFilter, PolygonFilter, SphereFilter
-    from .core import GenericFieldFilter, PointCloudFilter
+    from .core import GenericFieldFilter, PointCloudFilter, ValidatedPolygonT
     from .downsample import AngleBinDownsample, RandomDownsampleFilter, VoxelDownsample
     from .gpu import PolygonFilterGPU, SphericalPolygonFilterGPU
     from .outlier_filter import CartesianOutlierFilter, SphericalOutlierFilter

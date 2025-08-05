@@ -1,21 +1,24 @@
 import copy
 
 import numpy as np
-import pytest
 import open3d as o3d
-from pydantic import ValidationError
+import pytest
 from numpydantic.exceptions import DtypeError
+from pydantic import ValidationError
 
-from pchandler.geometry import PointCloudData
-from pchandler.scalar_fields.scalar_fields import ScalarField, RGBFields, NormalFields
-from pchandler.scalar_fields.scalar_field_manager import ScalarFieldManager
-from pchandler.geometry.optimal_shift import OptimizedShift
-
+from pchandler import PointCloudData
+from pchandler.geometry import OptimizedShift
+from pchandler.scalar_fields import (
+    NormalFields,
+    RGBFields,
+    ScalarField,
+    ScalarFieldManager,
+)
 from tests.geometry.test_coordinates import (
     BaseTestCartesianCoordinates,
-    BaseTestNOSInit,
-    BaseTestNOSChange,
     BaseTestConversions,
+    BaseTestNOSChange,
+    BaseTestNOSInit,
     _known_spher,
     _known_xyz,
 )
@@ -23,6 +26,7 @@ from tests.geometry.test_coordinates import (
 N = 100
 _small_xyz = np.random.rand(N, 3)
 _large_xyz = np.random.rand(1_000_000, 3)
+
 
 def random_coordinates(scale: float, offset: float) -> np.ndarray:
     xyz_base = np.random.randn(N, 3)
@@ -33,92 +37,100 @@ def random_coordinates(scale: float, offset: float) -> np.ndarray:
 def xyz_() -> np.ndarray:
     return random_coordinates(10, 0)
 
+
 @pytest.fixture(scope="function", autouse=True)
 def xyz_local_() -> np.typing.NDArray:
     return random_coordinates(1, 0)
+
 
 @pytest.fixture(scope="function", autouse=True)
 def xyz_global_() -> np.typing.NDArray:
     return random_coordinates(1, 100_000)
 
+
 @pytest.fixture(scope="function", autouse=True)
 def xyz_huge_() -> np.typing.NDArray:
     return random_coordinates(100_000, 0)
+
 
 @pytest.fixture(scope="function")
 def known_spher():
     return _known_spher
 
+
 @pytest.fixture(scope="function")
 def small_xyz():
     return _small_xyz
+
 
 @pytest.fixture(scope="function")
 def known_xyz():
     return _known_xyz
 
+
 @pytest.fixture(scope="function")
 def large_xyz():
     return _large_xyz
+
 
 @pytest.fixture(scope="function", autouse=True)
 def normals_() -> np.ndarray:
     vals = np.random.rand(N, 3).astype(np.float32)
     return vals / np.linalg.norm(vals, axis=1).reshape(-1, 1)
 
+
 @pytest.fixture(scope="function", autouse=True)
 def intensity_() -> np.ndarray:
     return np.random.rand(N).astype(np.float32)
+
 
 @pytest.fixture(scope="function", autouse=True)
 def reflectance_() -> np.ndarray:
     return np.random.rand(N).astype(np.float32)
 
+
 @pytest.fixture(scope="function", autouse=True)
 def scalar_field() -> ScalarField:
-    return ScalarField(np.random.rand(N), name='test')
+    return ScalarField(np.random.rand(N), name="test")
+
 
 @pytest.fixture(scope="function", autouse=True)
 def rgb_():
     return np.random.randint(0, 255, (N, 3), dtype=np.uint8)
+
 
 @pytest.fixture(scope="function", autouse=True)
 def sfs_():
     array = np.random.rand(N)
     return {"test": array}
 
+
 @pytest.fixture(scope="function", autouse=True)
 def nos_() -> OptimizedShift:
     return OptimizedShift(np.array([50000, 10000, 0]))
 
+
 @pytest.fixture(scope="function", autouse=True)
 def nos_mini_() -> OptimizedShift:
-    return OptimizedShift(np.array([1,2,3]))
+    return OptimizedShift(np.array([1, 2, 3]))
+
 
 @pytest.fixture(scope="function")
 def pcd(rgb_, normals_, intensity_, reflectance_) -> PointCloudData:
     return PointCloudData(
-        xyz=random_coordinates(1, 0),
-        rgb=rgb_,
-        normals=normals_,
-        intensity=intensity_,
-        reflectance=reflectance_)
+        xyz=random_coordinates(1, 0), rgb=rgb_, normals=normals_, intensity=intensity_, reflectance=reflectance_
+    )
+
 
 @pytest.fixture(scope="function")
 def pcd2(rgb_, normals_, intensity_) -> PointCloudData:
-    return PointCloudData(
-        xyz=random_coordinates(1, 0),
-        rgb=rgb_,
-        normals=normals_,
-        intensity=intensity_)
+    return PointCloudData(xyz=random_coordinates(1, 0), rgb=rgb_, normals=normals_, intensity=intensity_)
+
 
 @pytest.fixture(scope="function")
 def pcd3(rgb_, normals_, reflectance_) -> PointCloudData:
-    return PointCloudData(
-        xyz=random_coordinates(1, 0),
-        rgb=rgb_,
-        normals=normals_,
-        reflectance=reflectance_)
+    return PointCloudData(xyz=random_coordinates(1, 0), rgb=rgb_, normals=normals_, reflectance=reflectance_)
+
 
 @pytest.fixture(scope="function")
 def pcd_shifted(rgb_, normals_, reflectance_, nos_) -> PointCloudData:
@@ -129,14 +141,15 @@ def pcd_shifted(rgb_, normals_, reflectance_, nos_) -> PointCloudData:
         rgb=rgb_,
         normals=normals_,
         reflectance=reflectance_,
-        numerical_optimization_shift= nos_,
+        numerical_optimization_shift=nos_,
     )
+
 
 @pytest.fixture(scope="function")
 def pcd_o3d():
-    xyz = np.random.rand(10,3)
-    rgb = np.ones((10,3))
-    normals = np.random.rand(10,3)
+    xyz = np.random.rand(10, 3)
+    rgb = np.ones((10, 3))
+    normals = np.random.rand(10, 3)
     normals /= np.linalg.norm(normals, axis=1)[:, None]
 
     pcd = o3d.geometry.PointCloud()
@@ -146,9 +159,10 @@ def pcd_o3d():
 
     return pcd
 
+
 @pytest.fixture(scope="function")
 def pcd_o3d_tensor():
-    xyz = (np.random.rand(10, 3) -0.5) * 50 + 20
+    xyz = (np.random.rand(10, 3) - 0.5) * 50 + 20
     rgb = np.ones((10, 3)).astype(np.float32)
     intensity = np.random.rand(10) * 255
     normals = np.random.rand(10, 3)
@@ -161,6 +175,7 @@ def pcd_o3d_tensor():
     pcd.point.intensity = o3d.core.Tensor(intensity)
 
     return pcd
+
 
 @pytest.fixture(scope="function")
 def cart_obj(large_xyz) -> PointCloudData:
@@ -201,14 +216,14 @@ class BaseTestPointCloudData:
 
     def test_init_intensity_keyword(self, xyz_, intensity_):
         pcd = self.cls(xyz_, intensity=intensity_)
-        vals = ScalarField(intensity_, name='test')
+        vals = ScalarField(intensity_, name="test")
         assert "intensity" in pcd.scalar_fields
         assert np.allclose(pcd.intensity, vals)
 
     def test_init_reflectance_keyword(self, xyz_, intensity_):
         pcd = self.cls(xyz_, reflectance=intensity_)
 
-        vals = ScalarField(intensity_, name='test')
+        vals = ScalarField(intensity_, name="test")
         assert "reflectance" in pcd.scalar_fields
         assert np.allclose(pcd.reflectance, vals)
 
@@ -264,14 +279,18 @@ class BaseTestPointCloudData:
             data = np.random.rand(N, 2).astype(np.float32)
             self.cls(data, rgb=rgb_, normals=normals_, scalar_fields=sfs_)
 
-    @pytest.mark.parametrize(("invalid_input", 'exception'),
-                             ((True, TypeError),
-                              ("N"*N, TypeError),
-                              (np.ones((N, 4)), ValidationError),
-                              (lambda x: x+1, TypeError),
-                              (int, TypeError)))
+    @pytest.mark.parametrize(
+        ("invalid_input", "exception"),
+        (
+            (True, TypeError),
+            ("N" * N, TypeError),
+            (np.ones((N, 4)), ValidationError),
+            (lambda x: x + 1, TypeError),
+            (int, TypeError),
+        ),
+    )
     def test_invalid_init_sf_triplets(
-            self, xyz_, rgb_, normals_, reflectance_, intensity_, sfs_, invalid_input, exception
+        self, xyz_, rgb_, normals_, reflectance_, intensity_, sfs_, invalid_input, exception
     ):
         with pytest.raises(exception):
             self.cls(xyz=xyz_, rgb=invalid_input)
@@ -279,15 +298,18 @@ class BaseTestPointCloudData:
         with pytest.raises(exception):
             self.cls(xyz=xyz_, normals=invalid_input)
 
-
-    @pytest.mark.parametrize(("invalid_input", 'exception'),
-                             ((True, TypeError),
-                              ("NotAnArray", TypeError),
-                              (np.eye(3), ValidationError),
-                              (lambda x: x+1, TypeError),
-                              (int, TypeError)))
+    @pytest.mark.parametrize(
+        ("invalid_input", "exception"),
+        (
+            (True, TypeError),
+            ("NotAnArray", TypeError),
+            (np.eye(3), ValidationError),
+            (lambda x: x + 1, TypeError),
+            (int, TypeError),
+        ),
+    )
     def test_invalid_init_sf_single(
-            self, xyz_, rgb_, normals_, reflectance_, intensity_, sfs_, invalid_input, exception
+        self, xyz_, rgb_, normals_, reflectance_, intensity_, sfs_, invalid_input, exception
     ):
         with pytest.raises(exception):
             self.cls(xyz=xyz_, intensity=invalid_input)
@@ -300,11 +322,10 @@ class BaseTestPointCloudData:
             pcd[0] = 123
 
         with pytest.raises(Exception):
-            pcd['rgb'] = RGBFields(np.random.randint(0, 256, (len(pcd), 3), dtype=np.uint8))
+            pcd["rgb"] = RGBFields(np.random.randint(0, 256, (len(pcd), 3), dtype=np.uint8))
 
     def test_num_points(self, pcd):
         assert len(pcd) == pcd.nbPoints == N
-
 
     class TestProperties:
         def test_rgb_getter(self, pcd):
@@ -349,7 +370,7 @@ class BaseTestPointCloudData:
             assert isinstance(pcd.intensity, ScalarField)
             assert pcd.intensity.ndim == 1
             assert pcd.intensity.dtype == np.float32
-            assert np.allclose(pcd.intensity.get_original_data(), new_data, atol=1/2**16)
+            assert np.allclose(pcd.intensity.get_original_data(), new_data, atol=1 / 2**16)
 
         def test_reflectance_setter(self, pcd):
             new_data = np.random.rand(N)
@@ -357,7 +378,7 @@ class BaseTestPointCloudData:
             assert isinstance(pcd.reflectance, ScalarField)
             assert pcd.reflectance.ndim == 1
             assert pcd.reflectance.dtype == np.float32
-            assert np.allclose(pcd.reflectance.get_original_data(), new_data, atol=1/2**16)
+            assert np.allclose(pcd.reflectance.get_original_data(), new_data, atol=1 / 2**16)
 
         def test_sf_input_as_scalar_fields(self, xyz_, rgb_, normals_):
             scalar_fields = ScalarFieldManager()
@@ -422,12 +443,12 @@ class BaseTestPointCloudData:
             def test_invalid_float_array(self, pcd):
                 bad_mask = np.random.rand(len(pcd))
                 with pytest.raises(DtypeError):
-                    pcd.create_mask(bad_mask)   #type: ignore
+                    pcd.create_mask(bad_mask)  # type: ignore
 
             def test_invalid_selection_type(self, pcd):
                 bad_index_type = "NotAMask"
                 with pytest.raises(DtypeError):
-                    pcd.create_mask(bad_index_type) #type: ignore
+                    pcd.create_mask(bad_index_type)  # type: ignore
 
         def test_reduce(self, pcd):
             start_id = id(pcd)
@@ -440,7 +461,7 @@ class BaseTestPointCloudData:
             mask = np.zeros(len(pcd), dtype=np.bool_)
             mask[0:10] = True
 
-            assert 'spher' in pcd.__dict__
+            assert "spher" in pcd.__dict__
 
             pcd.reduce(mask)
 
@@ -546,7 +567,6 @@ class BaseTestPointCloudData:
             assert pcd_extract.normals.shape == (1, 3)
             assert pcd_extract.intensity.shape == (1,)
 
-
         def test_none_fields(self, xyz_):
             ref_pcd = PointCloudData(xyz_, scalar_fields=ScalarFieldManager(parent=None))
             this_pcd = ref_pcd.copy()
@@ -577,10 +597,10 @@ class BaseTestPointCloudData:
 
             assert len(merged_1) == len(pcd) + len(pcd2) + len(pcd3)
 
-            assert 'rgb' in merged_1.scalar_fields
-            assert 'normals' in merged_1.scalar_fields
-            assert 'intensity' not in merged_1.scalar_fields
-            assert 'reflectance' not in merged_1.scalar_fields
+            assert "rgb" in merged_1.scalar_fields
+            assert "normals" in merged_1.scalar_fields
+            assert "intensity" not in merged_1.scalar_fields
+            assert "reflectance" not in merged_1.scalar_fields
 
 
 class BaseTestPcdCoordinates(BaseTestCartesianCoordinates):
@@ -601,29 +621,30 @@ class BaseTestPcdConversions(BaseTestConversions):
 
 class BaseOpen3DSupport:
     cls = PointCloudData
+
     def test_to_o3d(self, pcd: PointCloudData) -> None:
         obj = pcd.to_o3d(as_tensor=False)
         assert isinstance(obj, o3d.geometry.PointCloud)
-        for name in ('points', 'colors', 'normals'):
+        for name in ("points", "colors", "normals"):
             assert hasattr(obj, name)
 
         assert np.allclose(np.asarray(obj.points), pcd.xyz)
         assert np.allclose(np.asarray(obj.normals), pcd.normals)
         assert np.allclose(np.asarray(obj.colors), pcd.rgb.as_normalised_float32())
 
-        assert not hasattr(obj, 'intensity')
-        assert not hasattr(obj, 'reflectance')
+        assert not hasattr(obj, "intensity")
+        assert not hasattr(obj, "reflectance")
 
     def test_to_o3d_tensor(self, pcd: PointCloudData) -> None:
         obj1 = pcd.to_o3d(as_tensor=True)
-        obj2 = self.cls(xyz=pcd.arr,
-                              scalar_fields=pcd.scalar_fields,
-                              numerical_optimization_shift=None).to_o3d(as_tensor=True)
+        obj2 = self.cls(xyz=pcd.arr, scalar_fields=pcd.scalar_fields, numerical_optimization_shift=None).to_o3d(
+            as_tensor=True
+        )
 
         for obj in (obj1, obj2):
             assert isinstance(obj, o3d.t.geometry.PointCloud)
             assert np.allclose(pcd.xyz, obj.point.positions.numpy())
-            for attr in ('normals', 'rgb', 'reflectance', 'intensity'):
+            for attr in ("normals", "rgb", "reflectance", "intensity"):
                 assert getattr(pcd, attr) is None or hasattr(obj.point, attr)
                 assert getattr(pcd, attr) is None or np.allclose(getattr(pcd, attr), getattr(obj.point, attr).numpy())
 
@@ -632,8 +653,8 @@ class BaseOpen3DSupport:
         assert isinstance(pcd, self.cls)
         assert pcd.intensity is None
         assert pcd.reflectance is None
-        assert hasattr(pcd, 'rgb')
-        assert hasattr(pcd, 'normals')
+        assert hasattr(pcd, "rgb")
+        assert hasattr(pcd, "normals")
 
         assert np.allclose(pcd.rgb, 255)
         assert np.allclose(pcd.xyz, np.asarray(pcd_o3d.points))
@@ -642,15 +663,15 @@ class BaseOpen3DSupport:
     def test_from_o3d_tensor(self, pcd_o3d_tensor: o3d.t.geometry.PointCloud) -> None:
         pcd = self.cls.from_o3d(pcd_o3d_tensor)
         assert isinstance(pcd, self.cls)
-        assert hasattr(pcd, 'intensity')
-        assert hasattr(pcd, 'reflectance')
-        assert hasattr(pcd, 'rgb')
-        assert hasattr(pcd, 'normals')
+        assert hasattr(pcd, "intensity")
+        assert hasattr(pcd, "reflectance")
+        assert hasattr(pcd, "rgb")
+        assert hasattr(pcd, "normals")
 
         assert np.allclose(pcd.rgb, 255)
         assert pcd.intensity.max() <= 2**15
-        assert pcd.intensity.min() >= -2**15
-        assert np.allclose(pcd.intensity.get_original_data(), pcd_o3d_tensor.point.intensity.numpy(), atol=1/255)
+        assert pcd.intensity.min() >= -(2**15)
+        assert np.allclose(pcd.intensity.get_original_data(), pcd_o3d_tensor.point.intensity.numpy(), atol=1 / 255)
         assert np.allclose(pcd.xyz, pcd_o3d_tensor.point.positions.numpy())
         assert np.allclose(pcd.normals, pcd_o3d_tensor.point.normals.numpy())
 

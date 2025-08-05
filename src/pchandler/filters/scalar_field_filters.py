@@ -2,27 +2,22 @@ import logging
 from typing import Annotated, cast
 
 import numpy as np
-from numpy.typing import NDArray
-
-from pydantic import NonNegativeFloat, Field
-
 from GSEGUtils.constants import validate_variables
+from numpy.typing import NDArray
+from pydantic import Field, NonNegativeFloat
 
-from pchandler.geometry.core import PointCloudData
-from pchandler.filters.core import PointCloudFilter
-from pchandler.scalar_fields.scalar_field_manager import SF_T
-
+from pchandler import PointCloudData
+from pchandler.filters import PointCloudFilter
+from pchandler.scalar_fields import SF_T
 
 logger = logging.getLogger(__name__.split(".")[0])
 
 PercentileT = Annotated[NonNegativeFloat, Field(lt=100.0)]
 
+
 class ScalarFieldFilter(PointCloudFilter):
     @validate_variables
-    def __init__(self,
-                 field_label: str,
-                 lower_bound: float = -np.inf,
-                 upper_bound: float = np.inf) -> None:
+    def __init__(self, field_label: str, lower_bound: float = -np.inf, upper_bound: float = np.inf) -> None:
         self.field_label = field_label
         self.lower_bound = lower_bound
         self.upper_bound = upper_bound
@@ -37,14 +32,15 @@ class ScalarFieldFilter(PointCloudFilter):
 
 class ScalarFieldPercentileFilter(PointCloudFilter):
     @validate_variables
-    def __init__(self,
-                 field_label: str,
-                 lower_percentile: PercentileT = 0,
-                 upper_percentile: PercentileT = 100) -> None:
+    def __init__(
+        self, field_label: str, lower_percentile: PercentileT = 0, upper_percentile: PercentileT = 100
+    ) -> None:
 
         if lower_percentile > upper_percentile:
-            raise ValueError(f"Lower percentile value ({lower_percentile}) must be less than the "
-                             f"upper percentile value ({upper_percentile}")
+            raise ValueError(
+                f"Lower percentile value ({lower_percentile}) must be less than the "
+                f"upper percentile value ({upper_percentile}"
+            )
 
         self.field_label = field_label
         self.lower_percentile = lower_percentile

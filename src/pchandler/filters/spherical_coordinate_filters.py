@@ -5,10 +5,9 @@ from numpy.typing import NDArray
 from shapely import contains_xy
 from shapely.geometry import Polygon
 
-from pchandler.geometry.fov import FoV
-from pchandler.geometry.core import PointCloudData
-
-from pchandler.filters.core import PointCloudFilter
+from pchandler import PointCloudData
+from pchandler.filters import PointCloudFilter
+from pchandler.geometry.spherical import FoV
 
 logger = logging.getLogger(__name__.split(".")[0])
 

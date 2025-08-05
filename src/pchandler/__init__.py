@@ -122,42 +122,54 @@ This modular design ensures that `pchandler` is both extensible and scalable, ma
 applications in 3D data analysis, GIS, and computer vision.
 """
 
-__all__ = [
-    "data_io",
-    "geometry",
-    "filters",
-    "spherical",
-    "scalar_fields",
-    "__version__"
-]
+from __future__ import annotations
+
+import importlib
+from typing import TYPE_CHECKING
 
 __author__ = "Nicholas Meyer"
 __email__ = "meyernic@ethz.ch"
 
-import logging
-from logging import config as logconfig
+__all__ = [
+    "data_io",
+    "geometry",
+    "filters",
+    "scalar_fields",
+    "base_types",
+    "constants",
+    "__author__",
+    "__email__",
+]
 
-from . import data_io, geometry, filters, spherical, scalar_fields
-from .geometry import core
-from ._version import __version__
+_lazy_map = {
+    "PointCloudData": "core",
+    "__version__": "_version",
+    "version": "_version",
+    "__version_tuple__": "_version",
+    "version_tuple": "_version",
+}
 
-logger = logging.getLogger(__name__.split(".")[0])
-logging.captureWarnings(True)
+__all__ = __all__ + list(_lazy_map)
 
-if not logging.getLogger().hasHandlers():
-    config = {
-        "version": 1,
-        "disable_existing_loggers": False,
-        "formatters": {
-            "simple": {"format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"},
-            "detailed": {
-                "format": "[%(levelname)s|%(module)s|L%(lineno)d] %(asctime)s: %(message)s",
-                "datefmt": "%Y-%m-%dT%H:%M:%S%z",
-            },
-        },
-        "handlers": {
-            "stderr": {"class": "logging.StreamHandler", "formatter": "detailed", "stream": "ext://sys.stderr"}
-        },
-        "loggers": {"root": {"level": "WARNING", "handlers": ["stderr"]}},
-    }
-    logconfig.dictConfig(config)
+if TYPE_CHECKING:
+    from . import base_types, constants, data_io, filters, geometry, scalar_fields
+    from ._version import __version__, __version_tuple__, version, version_tuple
+    from .core import PointCloudData
+
+
+def __getattr__(name: str):
+    if name in _lazy_map:
+        module = importlib.import_module(f"{__name__}.{_lazy_map[name]}")
+        val = getattr(module, name)
+    else:
+        try:
+            val = importlib.import_module(f"{__name__}.{name}")
+        except ModuleNotFoundError:
+            raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    globals()[name] = val
+    return val
+
+
+def __dir__():
+    # so tab-completion / introspection shows the lazy names
+    return sorted(set(__all__) | set(globals().keys()))

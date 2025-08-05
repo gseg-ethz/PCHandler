@@ -1,39 +1,45 @@
-import pytest
-
 import numpy as np
+import pytest
 from pydantic import ValidationError
 
-from pchandler.geometry import PointCloudData
-from pchandler.geometry.fov import FoV, FoVTree
-from pchandler.geometry.splitter import (FoVTreePointCloudSplitter, PointCloudSplitter,
-                                         check_number_jobs, split_pc_with_fov_tree)
+from pchandler import PointCloudData
+from pchandler.geometry.spherical import FoV, FoVTree
+from pchandler.geometry.splitter import (
+    FoVTreePointCloudSplitter,
+    PointCloudSplitter,
+    check_number_jobs,
+    split_pc_with_fov_tree,
+)
 
 
 @pytest.fixture(scope="function", autouse=True)
 def pcd_() -> PointCloudData:
     return PointCloudData(
-        np.random.rand(100,3)*100,
+        np.random.rand(100, 3) * 100,
         intensity=np.random.randint(-200, 200, (100,), dtype=np.int16),
-        rgb=np.random.randint(0, 256, (100,3), dtype=np.uint8),
-        normals=np.random.rand(100,3)
+        rgb=np.random.randint(0, 256, (100, 3), dtype=np.uint8),
+        normals=np.random.rand(100, 3),
     )
 
-@pytest.fixture(scope='function')
+
+@pytest.fixture(scope="function")
 def new_fov() -> FoV:
     return FoV(left=0.3, top=0.4, right=1.3, bottom=2.4)
 
-@pytest.fixture(scope='function')
+
+@pytest.fixture(scope="function")
 def tile_extent() -> FoV:
     return FoV(left=0, right=0.1, top=1.3, bottom=1.4)
 
-@pytest.fixture(scope='function')
+
+@pytest.fixture(scope="function")
 def new_tree(new_fov, tile_extent) -> FoVTree:
     return FoVTree.build_from_tiles(new_fov.tile(tile_extent))
 
 
 class TestAbstractPcdSplitter:
     def test_abstract_methods(self):
-        assert hasattr(PointCloudSplitter, 'split')
+        assert hasattr(PointCloudSplitter, "split")
 
 
 class TestFoVTreePointCloudSplitter:
@@ -50,22 +56,22 @@ class TestFoVTreePointCloudSplitter:
             FoVTreePointCloudSplitter(new_tree, n_jobs=100)
 
         with pytest.raises(TypeError):
-            FoVTreePointCloudSplitter(new_tree, n_jobs="NotANumber")    # type: ignore
+            FoVTreePointCloudSplitter(new_tree, n_jobs="NotANumber")  # type: ignore
 
         with pytest.raises(ValidationError):
-            FoVTreePointCloudSplitter(new_tree, remove_empty=123)       # type: ignore
+            FoVTreePointCloudSplitter(new_tree, remove_empty=123)  # type: ignore
 
         with pytest.raises(ValidationError):
             FoVTreePointCloudSplitter(new_tree, method=123)
 
         with pytest.raises(ValidationError):
-            FoVTreePointCloudSplitter(new_tree, method='Not_valid')
+            FoVTreePointCloudSplitter(new_tree, method="Not_valid")
 
     def test_split(self, pcd_, new_tree):
         # TODO this is throwing warnings
         pcd_original = pcd_.copy()
-        iterative_splitter = FoVTreePointCloudSplitter(new_tree, method='iterative')
-        direct_splitter = FoVTreePointCloudSplitter(new_tree, method='direct', n_jobs=1)
+        iterative_splitter = FoVTreePointCloudSplitter(new_tree, method="iterative")
+        direct_splitter = FoVTreePointCloudSplitter(new_tree, method="direct", n_jobs=1)
 
         splits_1 = iterative_splitter.split(pcd_)
         merged_pcd = PointCloudData.merge(*[v for v in splits_1.values()])
@@ -87,7 +93,7 @@ class TestFoVTreePointCloudSplitter:
     def test_invalid_split_mode(self, pcd_, new_tree):
         pcd_original = pcd_.copy()
         with pytest.raises(ValidationError):
-            iterative_splitter = FoVTreePointCloudSplitter(new_tree, method='new_moe')
+            iterative_splitter = FoVTreePointCloudSplitter(new_tree, method="new_moe")
             splits_1 = iterative_splitter.split(pcd_)
 
         with pytest.raises(ValueError):

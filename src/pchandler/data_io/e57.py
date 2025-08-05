@@ -1,13 +1,13 @@
+import logging
 from pathlib import Path
 from typing import Generator, Optional
-import logging
 
 import numpy as np
-import pye57        # type: ignore[import-untyped]
+import pye57  # type: ignore[import-untyped]
 
-from pchandler.data_io.core import AbstractIOHandler
+from pchandler import PointCloudData
 from pchandler.constants import INTENSITY_NAMES, RGB_NAMES
-from pchandler.geometry import PointCloudData
+from pchandler.data_io.core import AbstractIOHandler
 
 logger = logging.getLogger(__name__.split(".")[0])
 

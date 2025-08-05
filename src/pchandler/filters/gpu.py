@@ -7,7 +7,7 @@ Provides functions that use GPU acceleration (via cudf and cuspatial) to filter 
 import copy
 import gc
 import logging
-from typing import Annotated, Any, Optional
+from typing import Optional
 
 _HAS_GPU: bool = False
 _GPU_IMPORT_ERROR: Optional[Exception] = None
@@ -21,15 +21,13 @@ except (ImportError, RuntimeError) as e:
 else:
     _HAS_GPU = True
 
-import numpy as np
+from GSEGUtils.constants import validate_variables
 from numpy.typing import NDArray
-from pydantic import BeforeValidator
 from shapely.geometry import Polygon
 
-from GSEGUtils.constants import validate_variables
-from ..geometry.core import PointCloudData
-from .cartesian_filters import PlaneStrings
-from .core import PointCloudFilter, ValidatedPolygonT
+from pchandler import PointCloudData
+from pchandler.filters.cartesian_filters import PlaneStrings
+from pchandler.filters.core import PointCloudFilter, ValidatedPolygonT
 
 logger = logging.getLogger(__name__.split(".")[0])
 
