@@ -10,7 +10,7 @@ from GSEGUtils.constants import validate_variables
 
 from pchandler.geometry.core import PointCloudData
 from pchandler.filters.core import PointCloudFilter
-from pchandler.geometry.scalar_field_manager import SF_T
+from pchandler.scalar_fields.scalar_field_manager import SF_T
 
 
 logger = logging.getLogger(__name__.split(".")[0])

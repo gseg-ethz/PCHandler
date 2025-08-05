@@ -7,8 +7,8 @@ from pydantic import ValidationError
 from numpydantic.exceptions import DtypeError
 
 from pchandler.geometry import PointCloudData
-from pchandler.geometry.scalar_fields import ScalarField, RGBFields, NormalFields
-from pchandler.geometry.scalar_field_manager import ScalarFieldManager
+from pchandler.scalar_fields.scalar_fields import ScalarField, RGBFields, NormalFields
+from pchandler.scalar_fields.scalar_field_manager import ScalarFieldManager
 from pchandler.geometry.optimal_shift import OptimizedShift
 
 from tests.geometry.test_coordinates import (

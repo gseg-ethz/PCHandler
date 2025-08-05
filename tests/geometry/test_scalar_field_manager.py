@@ -7,8 +7,8 @@ import numpy as np
 import pytest
 
 from pchandler.geometry import PointCloudData
-from pchandler.geometry.scalar_field_manager import ScalarFieldManager
-from pchandler.geometry.scalar_fields import ScalarField, RGBFields, NormalFields, AbstractScalarField, \
+from pchandler.scalar_fields.scalar_field_manager import ScalarFieldManager
+from pchandler.scalar_fields.scalar_fields import ScalarField, RGBFields, NormalFields, AbstractScalarField, \
     NormalisedInt16ScalarField
 
 N = 40

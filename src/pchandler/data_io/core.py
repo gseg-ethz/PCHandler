@@ -21,8 +21,8 @@ from pchandler.constants import (
     COMMON_FIELD_NAMES
 )
 from pchandler.geometry.core import PointCloudData
-from pchandler.geometry.scalar_field_manager import SF_T
-from pchandler.geometry.scalar_fields import (
+from pchandler.scalar_fields.scalar_field_manager import SF_T
+from pchandler.scalar_fields.scalar_fields import (
     ScalarField,
     ScalarFieldTriplet,
     RGBFields,

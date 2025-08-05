@@ -6,7 +6,7 @@ from pydantic import ValidationError
 from GSEGUtils.validators import linear_map_dtype, normalize_self
 
 from pchandler.constants import RGB_NAMES, NORMAL_NAMES
-from pchandler.geometry.scalar_fields import (
+from pchandler.scalar_fields.scalar_fields import (
     DtypeState,
     ScalarField,
     ScalarFieldBoolean,

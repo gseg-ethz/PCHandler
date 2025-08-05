@@ -24,7 +24,7 @@ from GSEGUtils.base_types import (
 )
 
 from pchandler.constants import  RGB_NAMES, NORMAL_NAMES, INTENSITY_NAMES, REFLECTANCE_NAMES
-from pchandler.geometry.scalar_fields import (
+from pchandler.scalar_fields.scalar_fields import (
     LowerStr,
     NormalFields,
     RGBFields,

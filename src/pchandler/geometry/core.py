@@ -7,10 +7,10 @@ import numpy as np
 import open3d as o3d
 from pydantic import Field, field_validator, field_serializer
 
-from pchandler.base_types import Array_Nx3_T, IndexLike, VectorT, Array_Nx3_Float_T, Array_Nx3_Uint8_T, ArrayT
+from GSEGUtils.base_types import Array_Nx3_T, IndexLike, VectorT, Array_Nx3_Float_T, Array_Nx3_Uint8_T, ArrayT
 from pchandler.geometry.coordinates import CartesianCoordinates
-from pchandler.geometry.scalar_field_manager import ScalarFieldManager, SF_T
-from pchandler.geometry.scalar_fields import (
+from pchandler.scalar_fields.scalar_field_manager import ScalarFieldManager, SF_T
+from pchandler.scalar_fields.scalar_fields import (
     NormalFields,
     RGBFields,
     ScalarField,

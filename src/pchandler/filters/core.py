@@ -6,13 +6,12 @@ from typing import Callable, cast, Annotated, Sequence
 
 import numpy as np
 import numpy.typing as npt
-from numpy import typing as npt
 from pydantic import BeforeValidator
 from shapely import Polygon
 
 from GSEGUtils.constants import validate_variables
 from pchandler.geometry.core import PointCloudData
-from pchandler.geometry.scalar_field_manager import SF_T
+from pchandler.scalar_fields.scalar_field_manager import SF_T
 
 logger = logging.getLogger(__name__.split(".")[0])
 

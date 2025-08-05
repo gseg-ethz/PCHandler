@@ -11,7 +11,7 @@ from GSEGUtils.util import unique_rows_fast
 from GSEGUtils.constants import validate_variables
 
 from pchandler.geometry.core import PointCloudData
-from pchandler.geometry.scalar_field_manager import ScalarFieldManager
+from pchandler.scalar_fields.scalar_field_manager import ScalarFieldManager
 from pchandler.filters.core import PointCloudFilter
 from pchandler.geometry.coordinates import rhv2xyz
 

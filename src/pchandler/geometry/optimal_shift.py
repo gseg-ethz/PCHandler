@@ -16,7 +16,7 @@ from GSEGUtils.constants import validate_variables
 from .util import MinMaxPoints
 
 if TYPE_CHECKING:
-    from .core import CartesianCoordinates
+    from .coordinates import CartesianCoordinates
 
 logger = logging.getLogger(__name__)
 
