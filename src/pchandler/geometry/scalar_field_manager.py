@@ -8,9 +8,9 @@ from typing import TYPE_CHECKING, Iterable, Iterator, Self, overload, Optional, 
 
 import numpy as np
 
-from pchandler.base_arrays import BaseArray
-
-from pchandler.base_types import (
+from GSEGUtils.base_arrays import BaseArray
+from GSEGUtils.validators import normalize_uint8
+from GSEGUtils.base_types import (
     Array_Nx3_Float32_T,
     Array_Nx3_Float_T,
     Array_Nx3_T,
@@ -22,12 +22,8 @@ from pchandler.base_types import (
     Vector_Uint8_T,
     Vector_Bool_T
 )
-from pchandler.constants import (
-    RGB_NAMES,
-    NORMAL_NAMES,
-    INTENSITY_NAMES,
-    REFLECTANCE_NAMES
-)
+
+from pchandler.constants import  RGB_NAMES, NORMAL_NAMES, INTENSITY_NAMES, REFLECTANCE_NAMES
 from pchandler.geometry.scalar_fields import (
     LowerStr,
     NormalFields,
@@ -36,7 +32,6 @@ from pchandler.geometry.scalar_fields import (
     AbstractScalarField,
     DtypeState
 )
-from pchandler.validators import normalize_uint8
 
 if TYPE_CHECKING:
     from pchandler.geometry.core import PointCloudData

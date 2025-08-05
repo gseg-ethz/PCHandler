@@ -18,7 +18,6 @@ from pchandler.constants import (
     REFLECTANCE_NAMES,
     XYZ_NAMES,
     NameConstantsTriplet,
-    NameConstantsSingle,
     COMMON_FIELD_NAMES
 )
 from pchandler.geometry.core import PointCloudData

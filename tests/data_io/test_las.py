@@ -6,7 +6,7 @@ from pathlib import Path
 
 from pchandler.data_io.las import LasHandler
 from pchandler.geometry.core import PointCloudData
-from pchandler.validators import normalize_uint16
+from GSEGUtils.validators import normalize_uint16
 from tests.data_io.test_core import BaseLoadSave
 
 base_directory = Path(__file__).resolve().parent.parent

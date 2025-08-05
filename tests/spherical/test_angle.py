@@ -4,7 +4,7 @@ import pytest
 import numpy as np
 
 from pchandler.spherical.angle import Angle, AngleArray
-from pchandler.util import AngleUnit
+from GSEGUtils.util import AngleUnit
 
 import math
 

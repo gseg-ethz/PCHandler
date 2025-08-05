@@ -9,12 +9,11 @@ from shapely.geometry import Polygon    # type: ignore[import-untyped]
 
 from pydantic import PositiveFloat
 
-from pchandler.constants import validate_variables
+from GSEGUtils.constants import validate_variables
 
 from pchandler.geometry.core import PointCloudData
-from pchandler.filters.core import PointCloudFilter
-from pchandler.base_types import Vector_3_T, ValidatedPolygonT
-
+from pchandler.filters.core import PointCloudFilter, ValidatedPolygonT
+from pchandler.base_types import Vector_3_T
 
 logger = logging.getLogger(__name__.split(".")[0])
 

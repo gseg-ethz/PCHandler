@@ -24,9 +24,9 @@ from pydantic import Field, validate_call, PrivateAttr, AliasChoices, UUID4
 
 from pchandler.geometry.fov import FoV
 from pchandler.geometry.util import MinMaxPoints
-from pchandler.base_arrays import ArrayNx2, ArrayNx3, FixedLengthArray
-from pchandler.base_types import Array_4x4_T, Vector_3_T, Array_Nx3_T, Array_3x3_T, IndexLike
-from pchandler.constants import DEFAULT_CONFIG
+from GSEGUtils.base_arrays import ArrayNx2, ArrayNx3, FixedLengthArray
+from GSEGUtils.base_types import Array_4x4_T, Vector_3_T, Array_Nx3_T, Array_3x3_T, IndexLike
+from GSEGUtils.constants import DEFAULT_CONFIG
 
 from .transforms import (
     Transform,

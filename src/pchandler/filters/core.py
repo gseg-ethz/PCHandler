@@ -1,11 +1,16 @@
+from __future__ import annotations
+
 import logging
 from abc import ABC, abstractmethod
-from typing import Callable, cast
+from typing import Callable, cast, Annotated, Sequence
 
 import numpy as np
 import numpy.typing as npt
+from numpy import typing as npt
+from pydantic import BeforeValidator
+from shapely import Polygon
 
-from pchandler.constants import validate_variables
+from GSEGUtils.constants import validate_variables
 from pchandler.geometry.core import PointCloudData
 from pchandler.geometry.scalar_field_manager import SF_T
 
@@ -108,3 +113,8 @@ class GenericFieldFilter(PointCloudFilter):
             raise ValueError(f"Field '{self.field_label}' does not exist in the point cloud.")
 
         return self.filter_func(data)
+
+
+ValidatedPolygonT = Annotated[
+    Sequence | npt.NDArray[np.floating | np.integer] | Polygon, BeforeValidator(lambda x: Polygon(x))
+]

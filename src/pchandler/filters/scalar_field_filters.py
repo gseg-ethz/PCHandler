@@ -6,10 +6,10 @@ from numpy.typing import NDArray
 
 from pydantic import NonNegativeFloat, Field
 
-from pchandler.geometry.core import PointCloudData
+from GSEGUtils.constants import validate_variables
 
+from pchandler.geometry.core import PointCloudData
 from pchandler.filters.core import PointCloudFilter
-from pchandler.constants import validate_variables
 from pchandler.geometry.scalar_field_manager import SF_T
 
 

@@ -11,15 +11,11 @@ from numpydantic.dtype import (
     Int8, Int16, Int32, Int64, SignedInteger,
     UInt8, UInt16, UInt32, UnsignedInteger
 )
-from pydantic import BeforeValidator, StringConstraints
-from shapely import Polygon
+from pydantic import StringConstraints
 
 LowerStr = Annotated[str, StringConstraints(strip_whitespace=True, to_lower=True)]
 SfNameT = Optional[LowerStr]
 
-ValidatedPolygonT = Annotated[
-    Sequence | npt.NDArray[np.floating | np.integer] | Polygon, BeforeValidator(lambda x: Polygon(x))
-]
 
 class DtypeDict(TypedDict):
     names: list[LowerStr]

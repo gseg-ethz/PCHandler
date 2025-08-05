@@ -8,7 +8,6 @@ import numpy as np
 from pchandler.constants import RGB_NAMES, INTENSITY_NAMES, NORMAL_NAMES, REFLECTANCE_NAMES
 from pchandler.geometry.scalar_fields import RGBFields, NormalFields
 from pchandler.geometry.core import PointCloudData
-
 from pchandler.data_io.core import (
     find_point_cloud_in_directory,
     AbstractIOHandler,

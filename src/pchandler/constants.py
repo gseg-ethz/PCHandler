@@ -3,12 +3,6 @@ from typing import Optional, NamedTuple
 from numpy import finfo, float32, pi
 from pydantic import ConfigDict, validate_call
 
-EPS = finfo(float32).eps
-
-PI = pi
-HALF_PI = pi * 0.5
-TWO_PI = pi * 2
-
 TripletT = tuple[str, str, str]
 
 
@@ -116,8 +110,3 @@ COMMON_FIELD_NAMES: tuple[NameConstantsSingle|NameConstantsTriplet, ...] = \
     (RGB_NAMES, NORMAL_NAMES, INTENSITY_NAMES, REFLECTANCE_NAMES)
 
 COMMON_FIELD_BASES = (field.base for field in COMMON_FIELD_NAMES)
-
-DEFAULT_CONFIG = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True, str_to_lower=True)
-VALIDATE_RETURN_CONFIG = DEFAULT_CONFIG | {'validate_return': True}
-
-validate_variables = validate_call(config=VALIDATE_RETURN_CONFIG)

@@ -8,8 +8,8 @@ from pydantic import ValidationError
 from pchandler.spherical import Angle
 from pchandler.geometry.core import PointCloudData
 from pchandler.geometry.fov import FoV, FoVTree
-from pchandler.constants import PI, EPS
-from pchandler.util import AngleUnit, _rad2deg, _rad2gon, _deg2rad
+from GSEGUtils.constants import PI, EPS
+from GSEGUtils.util import AngleUnit, _rad2deg, _rad2gon, _deg2rad
 
 
 @pytest.fixture(scope="function", autouse=True)

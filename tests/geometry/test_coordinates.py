@@ -8,8 +8,8 @@ import pytest
 from pydantic import ValidationError
 from scipy.spatial.transform import Rotation
 
-from pchandler.base_arrays import ArrayNx3
-from pchandler.constants import HALF_PI, PI
+from GSEGUtils.base_arrays import ArrayNx3
+from GSEGUtils.constants import HALF_PI, PI
 from pchandler.geometry.coordinates import (
     Abstract3dCoordinates,
     AbstractCoordinates,

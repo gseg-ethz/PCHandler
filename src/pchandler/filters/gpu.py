@@ -26,11 +26,10 @@ from numpy.typing import NDArray
 from pydantic import BeforeValidator
 from shapely.geometry import Polygon
 
-from ..base_types import ValidatedPolygonT
-from ..constants import validate_variables
+from GSEGUtils.constants import validate_variables
 from ..geometry.core import PointCloudData
 from .cartesian_filters import PlaneStrings
-from .core import PointCloudFilter
+from .core import PointCloudFilter, ValidatedPolygonT
 
 logger = logging.getLogger(__name__.split(".")[0])
 

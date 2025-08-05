@@ -127,7 +127,6 @@ __all__ = [
     "geometry",
     "filters",
     "spherical",
-    "util",
     "__version__"
 ]
 
@@ -137,7 +136,7 @@ __email__ = "meyernic@ethz.ch"
 import logging
 from logging import config as logconfig
 
-from . import data_io, geometry, filters, spherical, util
+from . import data_io, geometry, filters, spherical
 from ._version import __version__
 
 logger = logging.getLogger(__name__.split(".")[0])

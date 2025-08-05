@@ -36,6 +36,7 @@ dependencies = [
 #	"scipy ~= 1.15",
 	"shapely ~= 2.1",
 	"typing-extensions ~= 4.13",
+    "GSEGUtils @ git+https://github.com/gseg-ethz/GSEGUtils.git",
 ]
 
 [tool.setuptools.dynamic]
