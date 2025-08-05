@@ -4,8 +4,10 @@ from typing import Callable
 
 import numpy as np
 
-from GSEGUtils.constants import HALF_PI, PI, TWO_PI
-from GSEGUtils.validators import (
+from pchandler.constants import HALF_PI, PI, TWO_PI
+from pchandler.base_arrays import BaseArray
+from pchandler.geometry.scalar_fields import ScalarField
+from pchandler.validators import (
     validate_azimuth_angles,
     validate_inclination_angles,
     validate_spherical_angles,

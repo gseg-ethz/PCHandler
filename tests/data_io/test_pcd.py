@@ -3,7 +3,8 @@ import pytest
 from pathlib import Path
 
 from pchandler.data_io.pcd import PcdHandler
-from pchandler.core import PointCloudData
+from pchandler.geometry.core import PointCloudData
+from pchandler.validators import normalize_uint16
 from tests.data_io.test_core import BaseLoadSave
 
 base_directory = Path(__file__).resolve().parent.parent

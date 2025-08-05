@@ -5,18 +5,18 @@ import threading
 import uuid
 from uuid import UUID
 import weakref
-from typing import TYPE_CHECKING, ClassVar, Optional
+from typing import TYPE_CHECKING, ClassVar, Optional, cast
 import copy
 
 import numpy as np
-
-from GSEGUtils.base_types import Vector_3_T, Array_Nx3_T
-from GSEGUtils.constants import validate_variables
-
-from .util import MinMaxPoints
+from numpy.typing import NDArray
 
 if TYPE_CHECKING:
-    from ..core import CartesianCoordinates
+    from .core import CartesianCoordinates
+
+from .util import MinMaxPoints
+from pchandler.base_types import Vector_3_T, Array_Nx3_T
+from pchandler.constants import validate_variables
 
 logger = logging.getLogger(__name__)
 

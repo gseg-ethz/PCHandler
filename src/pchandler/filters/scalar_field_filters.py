@@ -6,12 +6,11 @@ from numpy.typing import NDArray
 
 from pydantic import NonNegativeFloat, Field
 
-from pchandler.core import PointCloudData
+from pchandler.geometry.core import PointCloudData
 
-from GSEGUtils.constants import validate_variables
-
-from .core import PointCloudFilter
-from ..scalar_fields.sf_types import SF_T
+from pchandler.filters.core import PointCloudFilter
+from pchandler.constants import validate_variables
+from pchandler.geometry.scalar_field_manager import SF_T
 
 
 logger = logging.getLogger(__name__.split(".")[0])

@@ -17,9 +17,10 @@ import numpy as np
 import numpy.typing as npt
 from pydantic import model_validator, field_validator, BeforeValidator
 
-from GSEGUtils.validators import normalize_min_max, normalize_uint8, normalize_int16
-from GSEGUtils.base_arrays import BaseVector, ArrayNx3, FixedLengthArray
-from GSEGUtils.base_types import (
+from pchandler.constants import NORMAL_NAMES, RGB_NAMES
+from pchandler.validators import normalize_min_max, normalize_uint8, normalize_int16
+from pchandler.base_arrays import BaseVector, ArrayNx3, FixedLengthArray
+from pchandler.base_types import (
     SfNameT,
     ArrayT,
     Array_Float32_T,
@@ -36,8 +37,6 @@ from GSEGUtils.base_types import (
     Vector_Uint16_T,
     LowerStr
 )
-
-from ..constants import NORMAL_NAMES, RGB_NAMES
 
 logger = logging.getLogger(__name__.split(".")[0])
 

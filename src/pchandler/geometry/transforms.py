@@ -13,8 +13,9 @@ from pydantic import (
     Field,
 )
 
-from GSEGUtils.base_arrays import BaseArray, FixedLengthArray, NumericMixins
-from GSEGUtils.base_types import Array_3x3_T, Array_4x4_T, Array_Float_T, Vector_3_T
+from pchandler.base_arrays import BaseArray, FixedLengthArray, NumericMixins
+from pchandler.base_types import Array_3x3_T, Array_4x4_T, Array_Float_T, Vector_3_T
+
 
 
 class _TransformArray(NumericMixins):

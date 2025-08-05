@@ -2,7 +2,7 @@ import pytest
 
 import numpy as np
 
-from pchandler.core import PointCloudData
+from pchandler.geometry.core import PointCloudData
 from pchandler.geometry.util import get_outline_polygon, MinMaxPoints
 
 @pytest.fixture(scope='function')

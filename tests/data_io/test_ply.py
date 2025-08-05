@@ -1,8 +1,11 @@
+from tempfile import NamedTemporaryFile
+
+import pytest
 from pathlib import Path
 
 import numpy as np
 
-from pchandler.core import PointCloudData
+from pchandler.geometry.core import PointCloudData
 from pchandler.data_io import Ply as PlyHandler
 from tests.data_io.test_core import BaseLoadSave
 

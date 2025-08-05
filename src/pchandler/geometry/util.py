@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Self, Iterable, NamedTuple, Optional
+from typing import TYPE_CHECKING, Self, Iterable, NamedTuple, Optional, Sequence
 
 import alphashape
 import numpy as np
@@ -9,10 +9,10 @@ import numpy as np
 from shapely.affinity import scale, translate
 from shapely.geometry import MultiPolygon, Polygon
 
-from GSEGUtils.base_types import Vector_3_T, Array_Nx3_T
+from pchandler.base_types import Vector_3_T, Array_Nx3_T
 
 if TYPE_CHECKING:
-    from pchandler.core import PointCloudData
+    from .core import PointCloudData
 
 logger = logging.getLogger(__name__.split(".")[0])
 

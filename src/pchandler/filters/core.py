@@ -5,10 +5,9 @@ from typing import Callable, cast
 import numpy as np
 import numpy.typing as npt
 
-from GSEGUtils.constants import validate_variables
-
-from ..core import PointCloudData
-from ..scalar_fields.sf_types import SF_T
+from pchandler.constants import validate_variables
+from pchandler.geometry.core import PointCloudData
+from pchandler.geometry.scalar_field_manager import SF_T
 
 logger = logging.getLogger(__name__.split(".")[0])
 

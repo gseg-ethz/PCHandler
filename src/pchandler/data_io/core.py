@@ -10,20 +10,20 @@ import numpy as np
 import numpy.typing as npt
 from numpy._typing._dtype_like import _DTypeDict
 
-from GSEGUtils.base_types import Array_Nx3_T,DtypeDict
-
-from ..constants import (
+from pchandler.base_types import Array_Nx3_T,DtypeDict
+from pchandler.constants import (
     INTENSITY_NAMES,
     RGB_NAMES,
     NORMAL_NAMES,
     REFLECTANCE_NAMES,
     XYZ_NAMES,
     NameConstantsTriplet,
+    NameConstantsSingle,
     COMMON_FIELD_NAMES
 )
-from ..core import PointCloudData
-from ..scalar_fields.sf_types import SF_T
-from ..scalar_fields.core import (
+from pchandler.geometry.core import PointCloudData
+from pchandler.geometry.scalar_field_manager import SF_T
+from pchandler.geometry.scalar_fields import (
     ScalarField,
     ScalarFieldTriplet,
     RGBFields,
