@@ -363,9 +363,12 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
     @cached_property
     def spher(self) -> npt.NDArray[np.floating]:
-        if self.socs_origin is None:
+        if self.socs_origin is not None:
+            return xyz2rhv(self.arr, self.socs_origin)
+        elif self.numerical_optimization_shift is not None:
+            return xyz2rhv(self.arr, -self.numerical_optimization_shift.value)
+        else:
             return xyz2rhv(self.arr, np.zeros(3, dtype=np.float32))
-        return xyz2rhv(self.arr, self.socs_origin)
 
     @property
     def r(self) -> npt.NDArray[np.floating]:

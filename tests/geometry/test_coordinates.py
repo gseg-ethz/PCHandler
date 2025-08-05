@@ -671,6 +671,24 @@ class BaseTestCartesianCoordinates:
         assert np.all(cart_obj.v == cart_obj.spher[:, 2])
         assert np.all(cart_obj._hz_v == cart_obj.spher[:, 1:])
 
+    def test_spher_w_nos_and_socs_combined(self):
+        coords = np.random.rand(100, 3) + 100_000
+        pcd0 = self.cls(coords, numerical_optimization_shift=None)
+        pcd1 = self.cls(coords)
+        pcd2 = self.cls(coords, numerical_optimization_shift=OptimizedShift([200, 200, 200]))
+        pcd3 = self.cls(coords + 10, socs_origin=[10, 10, 10])
+        pcd4 = self.cls(coords + 10, socs_origin=[10, 10, 10], numerical_optimization_shift=OptimizedShift([200, 200, 200]))
+        pcd5 = self.cls(coords + 10, socs_origin=[10, 10, 10], numerical_optimization_shift=None)
+        pcd6 = pcd4.copy()
+        pcd6.numerical_optimization_shift = OptimizedShift([100, 100, 100])
+
+        assert np.allclose(pcd0.spher, pcd1.spher)
+        assert np.allclose(pcd1.spher, pcd2.spher)
+        assert np.allclose(pcd2.spher, pcd3.spher)
+        assert np.allclose(pcd3.spher, pcd4.spher)
+        assert np.allclose(pcd4.spher, pcd5.spher)
+        assert np.allclose(pcd5.spher, pcd6.spher)
+
     @staticmethod
     def test_fov(cart_obj):
         assert isinstance(cart_obj.fov, FoV)
