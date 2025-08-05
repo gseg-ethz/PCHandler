@@ -811,15 +811,14 @@ class BaseTestNOSChange:
         assert np.allclose(pcd.unshifted_bbox.maximum, xyz_local_.max(axis=0))
 
     def test_applying_small_shift_after_default_instantiation_adjusts_coords(self, xyz_local_, nos_mini_):
-        # TODO there's a stochastic element that hits the allclose limit on occassion
-        pcd_local = self.cls(xyz=xyz_local_)
+        pcd_local = self.cls(xyz_local_)
         assert np.allclose(pcd_local.numerical_optimization_shift.value, [0, 0, 0])
         assert np.allclose(pcd_local.xyz, xyz_local_)
         assert np.allclose(pcd_local.unshifted_bbox.minimum, xyz_local_.min(axis=0))
         assert np.allclose(pcd_local.unshifted_bbox.maximum, xyz_local_.max(axis=0))
 
         pcd_local.numerical_optimization_shift = nos_mini_
-        assert np.allclose(pcd_local.xyz, xyz_local_ - nos_mini_.value)
+        assert np.allclose(pcd_local.xyz, xyz_local_ - nos_mini_.value, rtol=1e-5, atol=1e-6)
         assert np.allclose(pcd_local.unshifted_bbox.minimum, xyz_local_.min(axis=0))
         assert np.allclose(pcd_local.unshifted_bbox.maximum, xyz_local_.max(axis=0))
 
