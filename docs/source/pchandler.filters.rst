@@ -1,7 +1,7 @@
-pchandler.fov module
+pchandler.filters module
 ====================
 
-.. automodule:: pchandler.fov
+.. automodule:: pchandler.filters
    :members:
    :undoc-members:
    :show-inheritance:

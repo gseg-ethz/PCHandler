@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Literal, Optional, Self, Sequence, cast, overload
+from typing import Any, Literal, Optional, Self, Sequence, cast, overload, TypeAlias
 
 import numpy as np
 import open3d as o3d
@@ -36,19 +36,9 @@ ReflectanceInputT = Optional[VectorT | ArrayT]
 SFM_T = Optional[ScalarFieldManager | dict[str, ScalarField | ScalarFieldTriplet | Array_Nx3_T | VectorT | Sequence]]
 
 
+Open3DPointCloud: TypeAlias = o3d.geometry.PointCloud | o3d.t.geometry.PointCloud
+
 class PointCloudData(CartesianCoordinates):
-    """
-
-    Parameters
-    ----------
-    xyz
-    rgb
-    normals
-    intensity
-    reflectance
-    scalar_fields
-    """
-
     scalar_fields: ScalarFieldManager = Field(default_factory=ScalarFieldManager)
 
     def __init__(
@@ -86,11 +76,12 @@ class PointCloudData(CartesianCoordinates):
 
     @property
     def nbPoints(self) -> int:
+        """"""
         return len(self)
 
     @field_validator("scalar_fields", mode="before")
     @classmethod
-    def convert_sfm(cls, value):
+    def _convert_sfm(cls, value):
         if isinstance(value, dict):
             value = ScalarFieldManager(fields=value)
         elif value is None:
@@ -98,7 +89,7 @@ class PointCloudData(CartesianCoordinates):
         return value
 
     @field_serializer("scalar_fields")
-    def drop_parent_weakref(self, scalar_fields: ScalarFieldManager):
+    def _drop_parent_weakref(self, scalar_fields: ScalarFieldManager):
         scalar_fields._parent = None
         return scalar_fields
 
@@ -186,10 +177,16 @@ class PointCloudData(CartesianCoordinates):
     def to_o3d(self, as_tensor: Literal[False] = ...) -> o3d.geometry.PointCloud: ...
     @overload
     def to_o3d(self, as_tensor: Literal[True]) -> o3d.t.geometry.PointCloud: ...
-
     def to_o3d(self, as_tensor: bool = False) -> o3d.geometry.PointCloud | o3d.t.geometry.PointCloud:
         """
-        Converts the point cloud to an Open3D `PointCloud` object.
+
+        Parameters
+        ----------
+        as_tensor
+
+        Returns
+        -------
+
         """
         if self.numerical_optimization_shift is not None:
             pcd = self.copy(
@@ -222,25 +219,23 @@ class PointCloudData(CartesianCoordinates):
 
         return pcd_o3d
 
+    @overload
+    def from_o3d(self, pcd_o3d: o3d.geometry.PointCloud) -> PointCloudData: ...
+    @overload
+    def from_o3d(self, pcd_o3d: o3d.t.geometry.PointCloud) -> PointCloudData: ...
     @classmethod
-    def from_o3d(cls, pcd_o3d: o3d.geometry.PointCloud | o3d.t.geometry.PointCloud) -> PointCloudData:
+    def from_o3d(cls, pcd_o3d: Open3DPointCloud) -> PointCloudData:
         """
-        @classmethod
-        def from_o3d(cls, pcd_o3d: o3d.geometry.PointCloud, scan_center: Optional[NDArray[np.float_]] = None) -> Self:
-            Creates a `PointCloudData` instance from an Open3D `PointCloud`.
+        Converts an Open3D `PointCloud` object to PointCloudData object.
 
-            Parameters
-            ----------
-            pcd_o3d : o3d.geometry.PointCloud | o3d.t.geometry.PointCloud
-                An Open3D `PointCloud` object.
-            scan_center : np.ndarray, optional
-                The scan center for spherical coordinate calculations.
-
-            Returns
-            -------
+        Parameters
+        ----------
+        pcd_o3d: o3d.geometry.PointCloud or o3d.t.geometry.PointCloud
+            An Open3D point cloud.
+        Returns
+        -------
             PointCloudData
-                A new instance of the `PointCloudData` class.
-            return cls(np.asarray(pcd_o3d.points), spherical_coordinates_origin=scan_center)
+
         """
 
         # Tensor object -> everything is a field

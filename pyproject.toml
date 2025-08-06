@@ -81,7 +81,7 @@ Changelog = "https://github.com/gseg-ethz/PCHandler/blob/main/CHANGELOG.md"
 #DeSpAn = "DeSpAn.cli:main"
 
 [project.optional-dependencies]
-doc = ["sphinx ~= 5.1", "sphinx_rtd_theme"]
+doc = ["sphinx ~= 5.1", "sphinx_rtd_theme", "sphinx-autodoc-typehints"]
 dev = [
   "black~=23.1",            # formatter
   "isort~=5.12",            # import sorter

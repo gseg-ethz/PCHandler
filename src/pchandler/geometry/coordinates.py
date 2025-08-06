@@ -79,6 +79,21 @@ class Abstract2dCoordinates(ArrayNx2, AbstractCoordinates, ABC):
 class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates, ABC):
     project_transformation: Optional[Array_4x4_T] = None
     socs_origin: Optional[Vector_3_T] = None
+    """
+    Array with associated photographic information.
+
+    ...
+
+    Attributes
+    ----------
+    project_transformation : Array_4x4_T | None
+        Affine transformation array representing transform from scan coordinates to project coordinates.
+
+    socs_origin : Vector_3_T | None
+        Scan center coordinate in the current coordinate system.
+
+    """
+
 
     @property
     @abstractmethod
