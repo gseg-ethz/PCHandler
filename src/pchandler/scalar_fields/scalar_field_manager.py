@@ -50,6 +50,8 @@ from pchandler.scalar_fields.scalar_fields import (
 if TYPE_CHECKING:
     from pchandler import PointCloudData
 
+__all__ = ['ScalarFieldManager']
+
 logger = logging.getLogger(__name__.split(".")[0])
 
 SF_T: TypeAlias = RGBFields | NormalFields | ScalarField

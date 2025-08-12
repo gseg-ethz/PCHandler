@@ -1,45 +1,14 @@
 pchandler package
 =================
 
-Submodules
-----------
+.. currentmodule:: pchandler
 
-pchandler.data\_io module
--------------------------
+.. autosummary::
+   :toctree: .
+   :recursive:
 
-.. automodule:: pchandler.data_io
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-pchandler.fov module
---------------------
-
-.. automodule:: pchandler.fov
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-pchandler.geometry module
--------------------------
-
-.. automodule:: pchandler.geometry
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-pchandler.util module
----------------------
-
-.. automodule:: pchandler.util
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Module contents
----------------
-
-.. automodule:: pchandler
-   :members:
-   :undoc-members:
-   :show-inheritance:
+   core
+   data_io
+   filters
+   geometry
+   scalar_fields

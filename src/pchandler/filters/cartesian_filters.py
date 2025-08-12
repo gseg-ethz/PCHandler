@@ -10,7 +10,7 @@ from shapely.affinity import translate  # type: ignore[import-untyped]
 from shapely.geometry import Polygon  # type: ignore[import-untyped]
 
 from pchandler import PointCloudData
-from pchandler.base_types import Vector_3_T
+from GSEGUtils.base_types import Vector_3_T
 from pchandler.filters import PointCloudFilter, ValidatedPolygonT
 
 logger = logging.getLogger(__name__.split(".")[0])

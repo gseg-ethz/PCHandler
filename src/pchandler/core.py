@@ -1,3 +1,13 @@
+"""
+PCHandler contains various modules to make handling and analysing Point Cloud data easy.
+
+Key modules include:
+
+:core: Base PointCloudData class with built-in validation, scalar field management and optimal shift handling.
+:geometry: Key functionality and classes based around geometry including coordinate, angle and FoV classes
+:filters: Classes for easy filtering or segmenting a point cloud
+:data_io: Various handlers for the loading and saving of point cloud data
+"""
 from __future__ import annotations
 
 import logging
@@ -15,6 +25,7 @@ from GSEGUtils.base_types import (
     ArrayT,
     IndexLike,
     VectorT,
+    Vector_3_Float_T
 )
 
 from pchandler.geometry.coordinates import CartesianCoordinates
@@ -27,6 +38,8 @@ from pchandler.scalar_fields import (
     ScalarFieldTriplet,
 )
 
+__all__ = ['PointCloudData',]
+
 logger = logging.getLogger(__name__)
 
 RgbInputT = Optional[RGBFields | Array_Nx3_Float_T | Array_Nx3_Uint8_T]
@@ -37,18 +50,6 @@ SFM_T = Optional[ScalarFieldManager | dict[str, ScalarField | ScalarFieldTriplet
 
 
 class PointCloudData(CartesianCoordinates):
-    """
-
-    Parameters
-    ----------
-    xyz
-    rgb
-    normals
-    intensity
-    reflectance
-    scalar_fields
-    """
-
     scalar_fields: ScalarFieldManager = Field(default_factory=ScalarFieldManager)
 
     def __init__(
@@ -61,11 +62,26 @@ class PointCloudData(CartesianCoordinates):
         intensity: IntensityInputT = None,
         reflectance: ReflectanceInputT = None,
         scalar_fields: SFM_T = None,
+        socs_origin: Vector_3_Float_T = np.zeros(3, dtype=np.float32),
         **kwargs: Any,
     ):
+        """
+
+        Parameters
+        ----------
+        xyz : Array_Nx3_Float_T
+        rgb : RgbInputT
+        normals : NormalInputT
+        intensity : IntensityInputT
+        reflectance : ReflectanceInputT
+        scalar_fields : ScalarFieldManager
+        socs_origin: Vector_3_Float_T
+        kwargs : dict[str, Any]
+        """
 
         kwargs = {} | kwargs
         kwargs["scalar_fields"] = scalar_fields if not None else None
+        kwargs['socs_origin'] = socs_origin
 
         super().__init__(xyz=xyz, **kwargs)  # type: ignore[call-overload]
 
@@ -86,11 +102,18 @@ class PointCloudData(CartesianCoordinates):
 
     @property
     def nbPoints(self) -> int:
+        """Returns the number of points in the point cloud
+
+        Returns
+        -------
+        int
+        """
         return len(self)
 
     @field_validator("scalar_fields", mode="before")
     @classmethod
-    def convert_sfm(cls, value):
+    def _convert_sfm(cls, value):
+        """Ensure scalar_fields input is converted to a ScalarFieldManager"""
         if isinstance(value, dict):
             value = ScalarFieldManager(fields=value)
         elif value is None:
@@ -98,40 +121,79 @@ class PointCloudData(CartesianCoordinates):
         return value
 
     @field_serializer("scalar_fields")
-    def drop_parent_weakref(self, scalar_fields: ScalarFieldManager):
+    def _drop_parent_weakref(self, scalar_fields: ScalarFieldManager):
+        """Drop weakref to parent on serialization"""
         scalar_fields._parent = None
         return scalar_fields
 
     @property
-    def normals(self: Self) -> Optional[NormalFields]:
+    def normals(self: Self) -> NormalFields | None:
+        """Returns the normal field
+
+        Returns
+        -------
+        NormalFields | None
+        """
         return self.scalar_fields.normals
 
     @normals.setter
-    def normals(self, value: Optional[Array_Nx3_T | NormalFields]) -> None:
+    def normals(self, value: Optional[Array_Nx3_Float_T | NormalFields]) -> None:
+        """Set the normal field
+        Setting to `None` will clear the field
+
+        Parameters
+        ----------
+        value : Array_Nx3_Float_T | NormalFields | None
+
+        Returns
+        -------
+
+        """
         self.scalar_fields.normals = value
 
     @property
     def rgb(self) -> Optional[RGBFields]:
+        """Returns the RGB field
+
+        Returns
+        -------
+        RGBFields | None
+        """
         return self.scalar_fields.rgb
 
     @rgb.setter
     def rgb(self, value: Optional[Array_Nx3_Float_T | Array_Nx3_Uint8_T | RGBFields]) -> None:
+        """Set the RGB field
+        Setting to `None` will clear the field
+
+        Parameters
+        ----------
+        value : Array_Nx3_Float_T | Array_Nx3_Uint8_T | RGBFields | None
+
+        Returns
+        -------
+
+        """
         self.scalar_fields.rgb = value
 
     @property
     def intensity(self) -> Optional[ScalarField]:
+        """Returns the intensity field"""
         return self.scalar_fields.intensity
 
     @intensity.setter
     def intensity(self, value: Optional[VectorT | ScalarField]) -> None:
+        """Set the intensity field"""
         self.scalar_fields.intensity = value
 
     @property
     def reflectance(self: Self) -> Optional[ScalarField]:
+        """Returns the reflectance field"""
         return self.scalar_fields.reflectance
 
     @reflectance.setter
     def reflectance(self, value: Optional[VectorT | ScalarField]) -> None:
+        """Set the reflectance field"""
         self.scalar_fields.reflectance = value
 
     def __setattr__(self, key, value):

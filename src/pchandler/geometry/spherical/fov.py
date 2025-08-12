@@ -1,70 +1,3 @@
-"""
-``pchandler.fov``
-
-This module provides classes and methods for defining and manipulating Fields of View (FoVs) and hierarchical FoV trees.
-It is designed to facilitate the spatial partitioning, tiling, and merging of 3D regions based on angular constraints.
-The module supports flexible representation of angular units and integrates with external tools to enable hierarchical
-partitioning of FoVs.
-
-Key Features:
--------------
-- **FoV Class**:
-  - Represents rectangular angular regions in 3D space.
-  - Supports unit conversion between radians, degrees, and gradians (gon).
-  - Provides methods for splitting, merging, and calculating geometric properties such as aspect ratios and centers.
-
-- **FoVTree Class**:
-  - Implements a hierarchical tree structure for managing FoVs.
-  - Enables efficient spatial partitioning, depth-based querying, and merging operations.
-  - Compatible with tile-based FoV organization for large-scale datasets.
-
-- **Utility Methods**:
-  - Split a single FoV into multiple tiles or quadrants.
-  - Convert between tuple, dictionary, or NumPy array representations of FoV boundaries.
-  - Calculate optimal partitioning schemes for FoVs based on aspect ratios and angular extents.
-
-Dependencies:
--------------
-- ``numpy``: For numerical computations.
-- ``pchandler.util``: Provides utilities for angle unit conversion and numerical constants.
-
-Usage:
-------
-Example: Create an FoV and convert it between different representations:
-
-.. code-block:: python
-
-    from pchandler.fov import FoV
-
-    # Define a field of view in degrees
-    fov = FoV(horizontal_min=0, horizontal_max=90, elevation_min=-30, elevation_max=30, unit="deg")
-
-    # Convert to radians
-    fov_rad = fov.as_tuple(unit="rad")
-    print("FoV in radians:", fov_rad)
-
-    # Split the FoV into a 2x2 grid
-    sub_fovs = fov.split(shape=(2, 2))
-    print("Sub-FoVs:", sub_fovs)
-
-
-Example: Use a hierarchical FoV tree for spatial partitioning:
-
-.. code-block:: python
-
-    from pchandler.fov import FoV, FoVTree
-
-    # Create a base FoV
-    base_fov = FoV(horizontal_min=0, horizontal_max=90, elevation_min=-30, elevation_max=30, unit="deg")
-
-    # Split into tiles and build a tree
-    tiles = base_fov.tile(FoV(horizontal_min=0, horizontal_max=30, elevation_min=-10, elevation_max=10))
-    fov_tree = FoVTree.build_from_tiles(tiles)
-
-    # Query the depth of the tree
-    print("Tree depth:", fov_tree.depth())
-"""
-
 from __future__ import annotations
 
 import logging
@@ -87,8 +20,10 @@ from pydantic import (
     validate_call,
 )
 
-from pchandler.base_types import VectorT
+from GSEGUtils.base_types import VectorT
 from pchandler.geometry.spherical import Angle, AngleArray
+
+__all__ = ['FoV', 'FoVTree']
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -105,7 +40,6 @@ class FoV(BaseModel):
     Zenith / Vertical angles are in the range of [0, +PI] with 0 being at the zenith
 
     This is designed to be more compatible with spherical angle projections to image coordinate systems.
-
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True)
@@ -198,39 +132,22 @@ class FoV(BaseModel):
     def from_center_with_extent(
         cls, centerpoint: tuple[Angle | float, Angle | float], extent: tuple[Angle | float, Angle | float]
     ) -> Self:
-        """
-        Creates an FoV instance from a center point and angular extent.
+        """Creates an FoV instance from a center point and angular extent.
 
         Parameters
         ----------
-        centerpoint : tuple[float, float]
+        centerpoint: tuple[float, float]
             The (horizontal_angle, vertical_angle) center of the FoV in the specified unit.
-        extent : tuple[float, float]
+        extent: tuple[float, float]
             The angular extent (width, height) of the FoV in the specified unit.
 
         Returns
         -------
         FoV
-            A new FoV instance.
         """
         # hz_min = centerpoint[0] - extent[0] / 2
         # hz_max = centerpoint[0] + extent[0] / 2
         # v_min = centerpoint[1] - extent[1] / 2
-        """
-        Creates an FoV instance from a center point and angular extent.
-
-        Parameters
-        ----------
-        centerpoint : tuple[float, float]
-            The (horizontal_angle, vertical_angle) center of the FoV in the specified unit.
-        extent : tuple[float, float]
-            The angular extent (width, height) of the FoV in the specified unit.
-
-        Returns
-        -------
-        FoV
-            A new FoV instance.
-        """
         new_instance = cls.construct_without_bounds_check(
             left=centerpoint[0] - extent[0] / 2,
             right=centerpoint[0] + extent[0] / 2,
@@ -242,18 +159,15 @@ class FoV(BaseModel):
         # def union(self, fov2: Self) -> Self:
 
     def union(self, fov2: Self) -> Self:
-        """
-        Computes the union of this FoV with another.
+        """Computes the union of this FoV with another.
 
         Parameters
         ----------
         fov2 : FoV
-            Another FoV to compute the union with.
 
         Returns
         -------
         FoV
-            The smallest FoV enclosing both.
         """
         return type(self)(
             left=min(self.left, fov2.left),
@@ -269,12 +183,10 @@ class FoV(BaseModel):
         Parameters
         ----------
         fov2 : FoV
-            Another FoV to compute the intersection with.
 
         Returns
         -------
         FoV
-            The largest FoV contained within both.
         """
         return type(self)(
             left=max(self.left, fov2.left),
@@ -290,8 +202,7 @@ class FoV(BaseModel):
 
         Returns
         -------
-        float
-            The aspect ratio (width/height) of the FoV.
+        NonNegativeFloat
         """
         return self.width() / self.height()
 
@@ -330,7 +241,6 @@ class FoV(BaseModel):
         Returns
         -------
         list[FoV]
-            A list of smaller FoVs.
         """
         assert shape[0] > 0 and shape[1] > 0
         if shape[0] == shape[1] == 1:
@@ -496,7 +406,7 @@ class FoVTree:
         A unique identifier for this tree node.
     node : FoV
         The FoV associated with this tree node.
-    children : Optional[dict[str, FoVTree]]
+    children : dict[str, FoVTree] | None
         A dictionary of child nodes, if any.
     """
 
@@ -546,7 +456,6 @@ class FoVTree:
         Returns
         -------
         FoVTree
-            The root of the constructed tree.
         """
         assert min_children > 1
         if not tiles or not tiles[0]:

@@ -5,9 +5,9 @@ from typing import Any, Generator, Self, cast
 
 import numpy as np
 from GSEGUtils.util import AngleUnit, convert_angles
+from GSEGUtils.base_types import Array_Float_T, ArrayT
 from numpy.typing import NDArray
 
-from pchandler.base_types import Array_Float_T, ArrayT
 
 
 def _rebuild_angle(cls, internal_value, display_unit):

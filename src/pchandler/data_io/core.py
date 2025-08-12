@@ -9,7 +9,7 @@ import numpy.typing as npt
 from numpy._typing._dtype_like import _DTypeDict
 
 from pchandler import PointCloudData
-from pchandler.base_types import Array_Nx3_T, DtypeDict
+from GSEGUtils.base_types import Array_Nx3_T, DtypeDict
 from pchandler.constants import (
     COMMON_FIELD_NAMES,
     INTENSITY_NAMES,
@@ -17,7 +17,7 @@ from pchandler.constants import (
     REFLECTANCE_NAMES,
     RGB_NAMES,
     XYZ_NAMES,
-    NameConstantsTriplet,
+    _NameConstantsTriplet,
 )
 from pchandler.scalar_fields import (
     SF_T,
@@ -223,7 +223,7 @@ class AbstractIOHandler(ABC):
                     name_set = FIELD_NAMES
                     break
 
-            if isinstance(name_set, NameConstantsTriplet):
+            if isinstance(name_set, _NameConstantsTriplet):
                 if field in (RGB_NAMES.names + NORMAL_NAMES.names) and getattr(pcd, name_set.base) is not None:
                     for name in name_set.char:
                         dtype_dict["names"].append(name)
@@ -296,7 +296,7 @@ class AbstractIOHandler(ABC):
         return array
 
 
-def _get_rgb_or_normal_field_names(input_names: list[str], target_field: NameConstantsTriplet) -> list[str]:
+def _get_rgb_or_normal_field_names(input_names: list[str], target_field: _NameConstantsTriplet) -> list[str]:
     """Get matching rgb or normal field names from eligible names in the target field.
 
     Ensures the output fields are still in order and are a subset of the appropriate target field
