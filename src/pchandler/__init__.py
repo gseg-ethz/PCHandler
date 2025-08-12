@@ -1,3 +1,13 @@
+"""
+PCHandler contains various modules to make handling and analysing Point Cloud data easy.
+
+Key modules include:
+
+:core: Base PointCloudData class with built-in validation, scalar field management and optimal shift handling.
+:geometry: Key functionality and classes based around geometry including coordinate, angle and FoV classes
+:filters: Classes for easy filtering or segmenting a point cloud
+:data_io: Various handlers for the loading and saving of point cloud data
+"""
 
 from __future__ import annotations
 

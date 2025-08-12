@@ -29,12 +29,15 @@ extensions = [
     "sphinx.ext.intersphinx",
 ]
 
+# TODO fix the GSEGUtils once it's implemented to ReadTheDocs
 # Intersphinx Config
 intersphinx_mapping = {'open3d': ('https://www.open3d.org/docs/release/', None),
                        'python': ('https://docs.python.org/3/', None),
                        'numpy': ('https://numpy.org/doc/stable/', None),
                        'pydantic': ('https://docs.pydantic.dev/latest/', None),
-                       'numpydantic': ('https://numpydantic.readthedocs.io/en/latest/', None)}
+                       'numpydantic': ('https://numpydantic.readthedocs.io/en/latest/', None),
+                       'GSEGUtils': ('http://localhost:59603/GSEGUtils/docs/build/html/', '../libs/objects.inv'),}
+
 
 # General Config
 python_use_unqualified_type_name = True                # False
@@ -42,25 +45,32 @@ python_use_unqualified_type_name = True                # False
 # ======= Autodoc Config =========
 autoclass_content = 'both'                              # 'both'
 autodoc_class_signature = 'separated'                       # 'mixed' / 'separated
-autodoc_member_order = 'bysource'                       # 'alphabetical'
-autodoc_default_options = {             # {}
-    'exclude-members': 'model_config'
+autodoc_member_order = 'bysource'                       # 'alphabetical', 'bysource'
+autodoc_default_options = {
+    'members': True,
+    'undoc-members': True,
+    'private-members': True,
+    'special-members': '__init__',
+    'inherited-members': False,
+    # 'imported-members': True,
+    'exclude-members': 'model_config model_post_init _abc_impl, _reconstruct',
+    # 'ignore-module-all': False,
+    'member-order': 'bysource',
+    'show-inheritance': True,
 }
 autodoc_docstring_signature = True                      # True
 autodoc_mock_imports = []                               # []
-autodoc_typehints = 'both'                       # 'signature'
-autodoc_typehints_description_target = 'all'     # 'all', 'documented', 'documented_params'
-autodoc_type_aliases = {}                               # {}
-autodoc_typehints_format = 'short'                      # 'short'
+autodoc_typehints = 'description'                       # 'signature', 'description', 'none', 'both'
+autodoc_typehints_description_target = 'documented'     # 'all', 'documented', 'documented_params'
+autodoc_type_aliases = {
+    'VectorT': 'GSEGUtils.base_types.VectorT',
+}                               # {}
+autodoc_typehints_format = 'short'                      # 'short', 'fully-qualified'
 autodoc_preserve_defaults = True                        # False
 autodoc_use_type_comments = True                        # True
 autodoc_warningiserror = True                           # True
 autodoc_inherit_docstrings = True                       # True
-
 linkcheck_allowed_redirects = {}
-
-autosummary_generate = True
-
 
 # Defaults
 templates_path = ["_templates"]
@@ -74,4 +84,13 @@ def setup(app):
 
 rst_epilog = """
 .. |NDArray| replace:: :external+numpydantic:py:class:`NDArray <numpydantic.NDArray>`
+.. |o3d.geometry.PointCloud| replace:: :class:`o3d.geometry.PointCloud <open3d.geometry.PointCloud>`
+.. |o3d.t.geometry.PointCloud| replace:: :class:`o3d.t.geometry.PointCloud <open3d.t.geometry.PointCloud>`
+.. |VectorT| replace:: :attr:`VectorT <GSEGUtils.base_types.VectorT>`
+.. |Vector_3_Float_T| replace:: :attr:`Vector_3_Float_T <GSEGUtils.base_types.Vector_3_Float_T>`
+.. |Array_Nx3_T| replace:: :attr:`Array_Nx3_Float_T <GSEGUtils.base_types.Array_Nx3_Float_T>`
+.. |Array_Nx3_Float_T| replace:: :attr:`Array_Nx3_Float_T <GSEGUtils.base_types.Array_Nx3_Float_T>`
+.. |Array_Nx3_Float32_T| replace:: :attr:`Array_Nx3_Float32_T <GSEGUtils.base_types.Array_Nx3_Float32_T>`
+.. |Array_Nx3_Uint8_T| replace:: :attr:`Array_Nx3_Uint8_T <GSEGUtils.base_types.Array_Nx3_Uint8_T>`
+.. |ArrayT| replace:: :attr:`ArrayT <GSEGUtils.base_types.ArrayT>`
 """

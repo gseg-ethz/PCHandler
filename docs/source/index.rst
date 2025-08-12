@@ -130,6 +130,10 @@ applications in 3D data analysis, GIS, and computer vision.
    :maxdepth: 1
    :caption: Contents:
 
+   about
+   getting_started
+   examples
    pchandler
+
 
 

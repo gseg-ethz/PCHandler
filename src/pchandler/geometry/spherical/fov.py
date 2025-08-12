@@ -400,7 +400,7 @@ class FoVTree:
     """
     Represents a hierarchical tree structure for spatial partitioning of FoVs.
 
-    Attributes
+    Parameters
     ----------
     identifier : str
         A unique identifier for this tree node.

@@ -17,6 +17,7 @@ from typing import (
 )
 
 import numpy as np
+import numpy.typing as npt
 from GSEGUtils.base_arrays import BaseArray
 from GSEGUtils.base_types import (
     Array_Nx3_Float32_T,
@@ -45,6 +46,7 @@ from pchandler.scalar_fields.scalar_fields import (
     NormalFields,
     RGBFields,
     ScalarField,
+    SegmentationMap,
 )
 
 if TYPE_CHECKING:
@@ -54,23 +56,50 @@ __all__ = ['ScalarFieldManager']
 
 logger = logging.getLogger(__name__.split(".")[0])
 
-SF_T: TypeAlias = RGBFields | NormalFields | ScalarField
+#: Base scalar field TypeAlias
+SF_T: TypeAlias = RGBFields | NormalFields | ScalarField | SegmentationMap
+
+#: Scalar Field like TypeAlias, also supporting other arrays of similar shape
 SFLikeT: TypeAlias = SF_T | VectorT | Array_Nx3_T
+
+#: RGB like TypeAlias
 RGBLikeT: TypeAlias = Array_Nx3_Uint8_T | Vector_Uint8_T | RGBFields
+
+#: Normal like TypeAlias
 NormalLikeT: TypeAlias = Array_Nx3_Float32_T | Vector_Float32_T | NormalFields
+
+#: ScalarFieldManager like dict TypeAlias
 SFMLikeT: TypeAlias = dict[str, SFLikeT]
 
 
 class ScalarFieldManager:
-    """
-    Manages a collection of ScalarField objects, ensuring that all fields have the same
-    number of data points. Also provides a mechanism to select subsets of the fields.
+    """Manages scalar fields associated with a point cloud.
+
+    Contains mechanisms for adding, changing and removing scalar fields as well as validating lengths with respect to
+    a parent point cloud object.
+
+    Parameters
+    ----------
+    fields: dict[str, ScalarField|NormalFields|RGBFields]
+    _parent: weakref.ReferenceType[PointCloudData] | None
     """
 
     _parent: Optional[weakref.ReferenceType[PointCloudData]]
     fields: dict[str, SF_T]
 
     def __init__(self, fields: Optional[SFMLikeT | Self] = None, *, parent: Optional[PointCloudData] = None) -> None:
+        """Initialise the scalar field manager.
+
+        Ensures all fields passed are converted to ScalarField objects.
+
+        If a parent point cloud is provided, it is stored as a weakref and scalar field lengths will be validated
+        against it.
+
+        Parameters
+        ----------
+        fields: dict[str, ScalarField | NormalFields | RGBFields | np.ndarray] | ScalarFieldManager | None
+        parent: PointCloudData | None
+        """
         self._parent = weakref.ref(parent) if parent is not None else None
 
         if fields is None:
@@ -98,6 +127,12 @@ class ScalarFieldManager:
             raise TypeError(f"Unknown fields type: {type(fields)}")
 
     def validate_lengths(self):
+        """Check all scalar fields lengths match the number of points in the parent
+
+        Returns
+        -------
+
+        """
         if self.parent:
             for field in self.values():
                 if len(field) != len(self.parent):
@@ -186,22 +221,56 @@ class ScalarFieldManager:
         self.__dict__.update(state)
 
     def keys(self) -> KeysView[str]:
+        """Return the scalar field names stored in the manager.
+
+        Returns
+        -------
+        KeysView[str]
+        """
         return self.fields.keys()
 
     def values(self) -> ValuesView[SF_T]:
+        """Return the scalar field values stored in the manager.
+
+        Returns
+        -------
+        ValuesView[SF_T]
+        """
         return self.fields.values()
 
     def items(self) -> ItemsView[str, SF_T]:
+        """Return the scalar field names and values stored in the manager.
+
+        Returns
+        -------
+        ItemsView[str, SF_T]
+        """
         return self.fields.items()
 
     @property
-    def parent(self) -> Optional[PointCloudData]:
+    def parent(self) -> PointCloudData | None:
+        """Return the parent point cloud object.
+
+        Returns
+        -------
+        PointCloudData | None
+        """
         if self._parent is None:
             return None
         return self._parent()
 
     @parent.setter
-    def parent(self, parent: PointCloudData):
+    def parent(self, parent: PointCloudData) -> None:
+        """Set the parent point cloud object with a weakref.
+
+        Parameters
+        ----------
+        parent: PointCloudData
+
+        Returns
+        -------
+
+        """
         if self._parent is not None and self._parent() is not parent:
             logger.warning(
                 f"Parent already set as {self._parent()}. " f"Will be overwritten by {parent}!",
@@ -213,10 +282,24 @@ class ScalarFieldManager:
 
     @property
     def shape(self) -> tuple[int, int]:
+        """Return the shape of the scalar field manager.
+
+        The shape will be in the form (num_points, num_fields).
+
+        Returns
+        -------
+        tuple[int, int]
+        """
         return self.num_points, len(self)
 
     @property
     def num_points(self) -> int:
+        """Return the number of points in the parent point cloud. If np parent is set, return -1.
+
+        Returns
+        -------
+        int
+        """
         if self._parent is None:
             return -1
 
@@ -224,18 +307,50 @@ class ScalarFieldManager:
 
     @property
     def rgb(self) -> RGBFields | None:
-        return cast(RGBFields | None, self.fields.get(RGB_NAMES.base, None))
+        """Get the RGB fields.
+
+        Returns
+        -------
+        RGBFields | None
+        """
+        return self.fields.get(RGB_NAMES.base, None)
 
     @rgb.setter
-    def rgb(self, value: Optional[Array_Nx3_Uint8_T | Array_Nx3_Float32_T | RGBFields]) -> None:
+    def rgb(self, value: Array_Nx3_Uint8_T | Array_Nx3_Float32_T | RGBFields | None) -> None:
+        """Set the RGB fields. If set to None, the field will be deleted.
+
+        Parameters
+        ----------
+        value: Array_Nx3_Uint8_T | Array_Nx3_Float32_T | RGBFields | None
+
+        Returns
+        -------
+
+        """
         self[RGB_NAMES.base] = RGBFields(value) if value is not None else None
 
     @property
     def normals(self) -> NormalFields | None:
+        """Get the normals fields.
+
+        Returns
+        -------
+        NormalFields | None
+        """
         return cast(NormalFields | None, self.fields.get(NORMAL_NAMES.base, None))
 
     @normals.setter
     def normals(self, value: Optional[Array_Nx3_Float_T | NormalFields]):
+        """Set the normals fields.
+
+        Parameters
+        ----------
+        value
+
+        Returns
+        -------
+
+        """
         self[NORMAL_NAMES.base] = NormalFields(value) if value is not None else None
 
     @property
@@ -282,12 +397,35 @@ class ScalarFieldManager:
         return sample
 
     def add_field(self, sf_field: SF_T) -> None:
+        """
+
+        Parameters
+        ----------
+        sf_field
+
+        Returns
+        -------
+
+        """
         self[sf_field.name] = sf_field
 
     def remove_field(self, field_name: LowerStr) -> None:
         del self.fields[field_name.lower()]
 
     def create_field(self, name: str, data: VectorT | Array_Nx3_T) -> None:
+        """Create a scalar field from a name and array vector
+
+        Supports Array_Nx3_T in case users try to create RGB or Normal fields using this route
+
+        Parameters
+        ----------
+        name: str
+        data: |VectorT| | |Array_Nx3_T|
+
+        Returns
+        -------
+
+        """
         sf = ScalarField(data, name=name)
         self.add_field(sf)
 
@@ -371,6 +509,7 @@ class ScalarFieldManager:
 
     @classmethod
     def merge(cls, scalar_field_managers: Iterable[Self]) -> Self:
+
         sfm_key_sets = (set(sfm) for sfm in scalar_field_managers)
 
         if len(list(scalar_field_managers)) == 0:

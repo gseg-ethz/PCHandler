@@ -1,0 +1,9 @@
+{
+  "pythonVersion": "3.12",
+  "typeCheckingMode": "basic",
+  "reportMissingImports": "error",
+  "reportMissingModuleSource": "warning",
+  "venv": "PCHandler",
+
+  "include": ["src/pchandler", "scripts", "tests"]
+}

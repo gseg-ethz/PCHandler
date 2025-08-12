@@ -23,6 +23,7 @@ import numpy.typing as npt
 from GSEGUtils.base_arrays import ArrayNx2, ArrayNx3, FixedLengthArray
 from GSEGUtils.base_types import (
     Array_3x3_T,
+    Array_Nx3_Float_T,
     Array_4x4_T,
     Array_Nx3_T,
     IndexLike,
@@ -40,7 +41,7 @@ from pchandler.geometry.transforms import (
 )
 from pchandler.geometry.util import MinMaxPoints
 
-__all__ = ['CartesianCoordinates']
+__all__ = ['CartesianCoordinates', 'AbstractCoordinates', 'Abstract2dCoordinates', 'Abstract3dCoordinates']
 
 logger = logging.getLogger(__name__)
 
@@ -79,14 +80,9 @@ class Abstract2dCoordinates(ArrayNx2, AbstractCoordinates, ABC):
 
 
 class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates, ABC):
-    project_transformation: Optional[Array_4x4_T] = None
-    socs_origin: Optional[Vector_3_T] = None
-    """
-    Array with associated photographic information.
+    """ Abstract coordinates with support for a transformation to custom coordinate system and a scan center parameter.
 
-    ...
-
-    Attributes
+    Parameters
     ----------
     project_transformation : Array_4x4_T | None
         Affine transformation array representing transform from scan coordinates to project coordinates.
@@ -95,15 +91,18 @@ class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates, ABC):
         Scan center coordinate in the current coordinate system.
 
     """
-
+    project_transformation: Optional[Array_4x4_T] = None
+    socs_origin: Optional[Vector_3_T] = None
 
     @property
     @abstractmethod
     def xyz(self) -> npt.NDArray[np.floating]: ...
+    """Return the cartesian coordinates as XYZ"""
 
     @property
     @abstractmethod
     def spher(self) -> npt.NDArray[np.floating]: ...
+    """Return the spherical coordinates as RHV"""
 
     def __matmul__(self, other: Any) -> Self:
         raise NotImplementedError(
@@ -138,6 +137,18 @@ class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates, ABC):
 
 
 class CartesianCoordinates(Abstract3dCoordinates):
+    """ Cartesian Coordinate class with support for numerical optimizations and helper access methods.
+
+    Parameters
+    ----------
+    arr : Array_Nx3_T
+        Contains the raw coordinate data
+    unshifted_bbox : MinMaxPoints | None
+        Contains the original bbox of the point cloud when it was first initialized (without optimization shift)
+    numerical_optimization_shift : OptimizedShift | None
+        Contains the numerical optimization shift applied to the point cloud.
+
+    """
     arr: Array_Nx3_T = Field(..., validation_alias=AliasChoices("arr", "xyz"))
     unshifted_bbox: Optional[MinMaxPoints] = Field(default=None)
     _shift_applied_by: Optional[OptimizedShift] = PrivateAttr(default=None)
@@ -150,6 +161,20 @@ class CartesianCoordinates(Abstract3dCoordinates):
     def __init__(self, /, **kwargs: Unpack[CartesianKwFull]): ...
 
     def __init__(self, /, xyz: Optional[Array_Nx3_T | Self] = None, **kwargs: Unpack[CartesianKwFull]):
+        """
+        Default behavior of the CartesianCoordinates object is to automatically compute a numerical optimization
+        shift upon initialization. This attempts to reduce the point cloud data type to Float32 for reduced
+        memory usage and faster computations.
+
+        The user can set this to None if they want to force the coordinates to use the input precision end maintain
+        their original coordinate systems.
+
+        Parameters
+        ----------
+        xyz: Array_Nx3_T | Self
+        numerical_optimization_shift: OptimizedShift | None
+        kwargs: dict[str, Any]
+        """
         # Accept xyz/arr as a positional argument
         if xyz is not None:
             if "arr" in kwargs:
@@ -166,7 +191,17 @@ class CartesianCoordinates(Abstract3dCoordinates):
         self._process_shift()
 
     def compute_unshifted_bbox(self, overwrite: bool = False):
-        """Computes the bounding box for the point cloud's original coordinates"""
+        """Computes the bounding box for the point cloud's original coordinates
+
+        Parameters
+        ----------
+        overwrite: bool
+            Flag to indicate that these should be recomputed even if they exist.
+
+        Returns
+        -------
+
+        """
         if self.unshifted_bbox is None or overwrite:
             applied_shift = None if self._shift_applied_by is None else self._shift_applied_by.value
 
@@ -218,10 +253,32 @@ class CartesianCoordinates(Abstract3dCoordinates):
         object.__setattr__(self, "_shift_applied_by", self.numerical_optimization_shift)
 
     def reduce(self, index: IndexLike) -> None:
+        """Reduce the coordinates to a defined point set indicated by an index object.
+
+        Supports both numpy basic and advanced indexing.
+
+        Parameters
+        ----------
+        index: IndexLike
+
+        Returns
+        -------
+
+        """
         super().reduce(index)
         self.compute_unshifted_bbox(overwrite=True)  # In case limits have been reduced
 
     def sample(self, index: IndexLike) -> Self:
+        """Sample a copy of the coordinates using a predefined index object
+
+        Parameters
+        ----------
+        index: IndexLike
+
+        Returns
+        -------
+        CartesianCoordinates
+        """
         new_sample: Self = super().sample(index)
         new_sample.compute_unshifted_bbox(overwrite=True)
         return new_sample
@@ -265,6 +322,16 @@ class CartesianCoordinates(Abstract3dCoordinates):
         return id(self)
 
     def model_dump(self, **kwargs: Any) -> dict[str, Any]:
+        """Returns the CartesianCoordinates class/model dumped as a dictionary.
+
+        Parameters
+        ----------
+        kwargs: dict[str, Any]
+
+        Returns
+        -------
+        dict[str, Any]
+        """
         data = super().model_dump(**kwargs)
         data["_shift_applied_by"] = self._shift_applied_by
         return data
@@ -286,15 +353,33 @@ class CartesianCoordinates(Abstract3dCoordinates):
     # noinspection PyPep8Naming
     def copy(
         self: Self,  # type: ignore[override]
-        array: Optional[npt.NDArray[np.floating] | Self] = None,
+        array: Optional[Array_Nx3_Float_T | Self] = None,
         *,
         deep: bool = True,
         update: Optional[MutableMapping[str, Any]] = None,
         link_to_same_NOS: bool = True,
         **kwargs: dict[str, Any],
     ) -> Self:
-        """
-        Produce a deep or shallow copy of the model. Updates the model also if this parameter is parsed.
+        """Produce a deep or shallow copy of the model.
+
+        Updates the model also if this parameter is parsed.
+
+        Parameters
+        ----------
+        array: Array_Nx3_Float_T | Self
+            A new object will be created with all other parameters and have it's coordinates update with this array.
+        deep: bool
+            Flag to indicate if a deep copy should be made.
+        update: dict[str, Any] | None
+            Dictionary of parameters to update.
+        link_to_same_NOS: bool
+            Flag if the object should be tied to the same optimal shift object. Thus attached to the same coordinate
+            system.
+        kwargs: dict[str, Any]
+
+        Returns
+        -------
+        CartesianCoordinates
         """
 
         update = {} if update is None else update
@@ -309,7 +394,19 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
     @classmethod
     def merge(cls: Type[Self], *cart_coords: Self, **kwargs) -> Self:
+        """Merge multiple cartesian coordinate sets into one.
 
+        Attempts will be made to automatically resolve the numerical shift applied to each point cloud, if applied.
+
+        Parameters
+        ----------
+        cart_coords: CartesianCoordinates
+        kwargs: dict[str, Any]
+
+        Returns
+        -------
+        CartesianCoordinates
+        """
         if len(cart_coords) == 0:
             raise ValueError("Cannot merge empty list of CartesianCoordinates")
 
@@ -354,32 +451,39 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
     @property
     def numerically_optimized(self) -> bool:
+        """Flag if the coordinates are numerically optimized."""
         return not (
             self.numerical_optimization_shift is None or np.allclose(self.numerical_optimization_shift.value, 0)
         )
 
     @property
     def x(self) -> npt.NDArray[np.floating]:
+        """Return the X coordinate"""
         return self.arr[:, 0]
 
     @property
     def y(self) -> npt.NDArray[np.floating]:
+        """Return the Y coordinate"""
         return self.arr[:, 1]
 
     @property
     def z(self) -> npt.NDArray[np.floating]:
+        """Return the Z coordinate"""
         return self.arr[:, 2]
 
     @property
     def xyz(self) -> npt.NDArray[np.floating]:
+        """Return the XYZ coordinates as a numpy array"""
         return self.arr
 
     @property
     def yxz(self) -> npt.NDArray[np.floating]:
+        """Return the coordinates in YXZ order"""
         return self.xyz[:, [1, 0, 2]]
 
     @cached_property
     def spher(self) -> npt.NDArray[np.floating]:
+        """Re"""
         if self.socs_origin is not None:
             return xyz2rhv(self.arr, self.socs_origin)
         elif self.numerical_optimization_shift is not None:

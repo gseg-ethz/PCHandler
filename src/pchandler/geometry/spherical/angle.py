@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import re
 from collections.abc import Sequence
 from functools import total_ordering
@@ -11,6 +13,18 @@ from numpy.typing import NDArray
 
 
 def _rebuild_angle(cls, internal_value, display_unit):
+    """Reconstruct method for __reduce__
+
+    Parameters
+    ----------
+    cls: type[Angle] | type[AngleArray]
+    internal_value: float | ArrayT
+    display_unit: AngleUnit
+
+    Returns
+    -------
+    Angle | AngleArray
+    """
     # internal_value already in INTERNAL_UNIT (rad)
     obj = object.__new__(cls)
     AngleBase.__init__(obj, internal_value, display_unit)
@@ -19,22 +33,43 @@ def _rebuild_angle(cls, internal_value, display_unit):
 
 @total_ordering
 class AngleBase:
+    """
+    AngleBase class provides the basic functions for interacting with angles.
+
+    These include storage, unit conversion, comparison and numerical operations.
+    """
     __slots__ = ("_internal_value", "_display_unit")
 
     _INTERNAL_UNIT = AngleUnit.RAD
 
     def __init__(self, value: float | ArrayT, unit: AngleUnit):
+        """
+
+        Parameters
+        ----------
+        value: float | ArrayT
+        unit: AngleUnit
+        """
         value = np.array(value, dtype=float)
         # noinspection PyTypeChecker
         convert_angles(value, source_unit=unit, target_unit=self._INTERNAL_UNIT, out=value)
         self._internal_value = value
         self._display_unit = unit
 
+
     def to(self, unit: AngleUnit) -> Array_Float_T:
         """
         Convert stored radians → `unit`.
         Returns either a scalar float (if input was scalar)
         or a ndarray of floats.
+
+        Parameters
+        ----------
+        unit
+
+        Returns
+        -------
+
         """
         arr = self._internal_value.copy()
         # noinspection PyTypeChecker
@@ -45,6 +80,15 @@ class AngleBase:
         """
         Return a *view* of this object with the same underlying
         ._rad array in radians, but reporting a different unit.
+
+
+        Parameters
+        ----------
+        unit: AngleUnit
+
+        Returns
+        -------
+        Angle | AngleArray
         """
         # 1) Allocate a new empty instance of the same class
         new = object.__new__(type(self))
@@ -55,18 +99,22 @@ class AngleBase:
 
     @property
     def display_unit(self) -> AngleUnit:
+        """Display unit set for this angle(s)"""
         return self._display_unit
 
     @display_unit.setter
     def display_unit(self, unit: AngleUnit) -> None:
+        """Set the display unit for this angle(s)"""
         self._display_unit = unit
 
     @property
     def internal_value(self) -> float | Array_Float_T:
+        """Returns the underlying stored angle(s) (radians)"""
         return self._internal_value
 
     @property
     def display_value(self) -> Array_Float_T:
+        """Returns the angle(s) in the display unit (degrees, radians or gon)"""
         out = self._internal_value.copy()
         # noinspection PyTypeChecker
         convert_angles(out, self._INTERNAL_UNIT, self._display_unit, out=out)
@@ -74,23 +122,29 @@ class AngleBase:
 
     @property
     def degrees(self) -> float | Array_Float_T:
+        """Returns a copy of the angle(s) in degrees"""
         return self.to(AngleUnit.DEGREE)
 
     def in_degrees(self) -> Self:
+        """Returns a view of the angle(s) in degrees,"""
         return self.in_unit(AngleUnit.DEGREE)
 
     @property
     def radians(self) -> float | Array_Float_T:
+        """Returns a copy of the angle(s) in radians."""
         return self.to(AngleUnit.RAD)
 
     def in_radians(self) -> Self:
+        """Returns a view of the angle(s) in radians."""
         return self.in_unit(AngleUnit.RAD)
 
     @property
     def gon(self) -> float | Array_Float_T:
+        """Returns a copy of the angle(s) in gon units."""
         return self.to(AngleUnit.GON)
 
     def in_gon(self) -> Self:
+        """Returns a view of the angle(s) in gon units."""
         return self.in_unit(AngleUnit.GON)
 
     def __array__(self, dtype=None) -> NDArray:
@@ -100,10 +154,13 @@ class AngleBase:
         """
         return np.array(self._internal_value, dtype=dtype)
 
+    # DISCUSS should we return an angle object? That way the user can access the value in unit of choice
     def min(self):
+        """Returns the minimum value of the angle(s) in radians."""
         return np.array(self).min()
 
     def max(self):
+        """Returns the maximum value of the angle(s) in radians."""
         return np.array(self).max()
 
     def __add__(self, other) -> Self:
@@ -222,7 +279,9 @@ class AngleBase:
 
 
 class Angle(AngleBase):
-
+    """
+    Angle object represents a single angle.
+    """
     def __new__(cls, value: float | Array_Float_T | str, unit: AngleUnit = AngleUnit.RAD):
         """
         Selects Angle or AngleArray based on if value is scalar or an array.
@@ -237,21 +296,48 @@ class Angle(AngleBase):
         AngleBase.__init__(inst, arr, unit)
         return inst
 
-    def __init__(self, value, unit=AngleUnit.RAD):
+    def __init__(self, value: float, unit: AngleUnit=AngleUnit.RAD):
+        """
+
+        Parameters
+        ----------
+        value: float
+        unit: AngleUnit = AngleUnit.RAD
+        """
         super().__init__(value, unit)
 
     @classmethod
-    def parse(cls, v: Any) -> Self:
+    def parse(cls, value: Any) -> Self:
+        """Parser function to convert angle from a variety of input formats.
+
+        Supported formats include:
+
+        * Angle | AngleArray
+        * (value, unit) tuple
+        * single string "45deg", "0.5 rad", "200.4gon", etc.
+        * numpy scalar
+        * int | float
+        * numpy array
+        * list | tuple of numbers
+
+        Parameters
+        ----------
+        value: Any
+
+        Returns
+        -------
+        Angle | AngleArray
+        """
         # 0) is already Angle
-        if isinstance(v, AngleBase):
-            return cast(Self, v)
+        if isinstance(value, AngleBase):
+            return cast(Self, value)
         # 1) (value, unit) tuple
-        if isinstance(v, tuple) and len(v) == 2 and isinstance(v[1], AngleUnit):
-            return cls(v[0], v[1])
+        if isinstance(value, tuple) and len(value) == 2 and isinstance(value[1], AngleUnit):
+            return cls(value[0], value[1])
 
         # 2) single string "45deg", "0.5 rad", etc.
-        if isinstance(v, str):
-            m = re.match(r"^\s*([+-]?[0-9]*\.?[0-9]+)\s*(°|deg|rad|gon)\s*$", v, re.I)
+        if isinstance(value, str):
+            m = re.match(r"^\s*([+-]?[0-9]*\.?[0-9]+)\s*(°|deg|rad|gon)\s*$", value, re.I)
             if m:
                 val, suf = float(m.group(1)), m.group(2).lower()
                 unit = {
@@ -262,40 +348,40 @@ class Angle(AngleBase):
                 }[suf]
                 return cls(val, unit)
             else:
-                raise ValueError(f"Cannot parse angle from {v!r}")
+                raise ValueError(f"Cannot parse angle from {value!r}")
 
         # 3) numpy scalar
-        if isinstance(v, np.generic):
-            return cls(float(v), cls._INTERNAL_UNIT)
+        if isinstance(value, np.generic):
+            return cls(float(value), cls._INTERNAL_UNIT)
 
         # 4) bare Python scalar
-        if isinstance(v, (int, float)):
-            return cls(v, cls._INTERNAL_UNIT)
+        if isinstance(value, (int, float)):
+            return cls(value, cls._INTERNAL_UNIT)
 
         # 5) numpy array
-        if isinstance(v, np.ndarray):
-            return cls(v, cls._INTERNAL_UNIT)
+        if isinstance(value, np.ndarray):
+            return cls(value, cls._INTERNAL_UNIT)
 
         # 6) any other Sequence (list or tuple) but *not* a string
-        if isinstance(v, Sequence):
+        if isinstance(value, Sequence):
             # empty sequence → treat as empty array
-            if len(v) == 0:
+            if len(value) == 0:
                 return cls(np.array([], dtype=float), cls._INTERNAL_UNIT)
 
             # all‐numbers → straightforward array
-            if all(isinstance(x, (int, float, np.generic)) for x in v):
-                return cls(np.array(v, dtype=float), cls._INTERNAL_UNIT)
+            if all(isinstance(x, (int, float, np.generic)) for x in value):
+                return cls(np.array(value, dtype=float), cls._INTERNAL_UNIT)
 
             # all‐strings → parse each element and collect radians
-            if all(isinstance(x, str) for x in v):
-                parsed = [Angle.parse(x).internal_value for x in v]
+            if all(isinstance(x, str) for x in value):
+                parsed = [Angle.parse(x).internal_value for x in value]
                 return cls(np.array(parsed, dtype=float), cls._INTERNAL_UNIT)
 
             # mixed or unsupported → error out
-            raise ValueError(f"Cannot parse angle sequence: {v!r}")
+            raise ValueError(f"Cannot parse angle sequence: {value!r}")
 
         # 7) give up
-        raise ValueError(f"Cannot parse angle from {v!r}")
+        raise ValueError(f"Cannot parse angle from {value!r}")
 
     @classmethod
     def __get_validators__(cls) -> Generator:
@@ -329,6 +415,7 @@ class AngleArray(AngleBase):
 
     @property
     def shape(self) -> tuple[int, ...]:
+        """Returns the array shape"""
         return self._internal_value.shape
 
     def __len__(self) -> int:
