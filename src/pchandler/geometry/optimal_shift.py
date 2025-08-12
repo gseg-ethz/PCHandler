@@ -17,6 +17,8 @@ from pchandler.geometry.util import MinMaxPoints
 if TYPE_CHECKING:
     from pchandler.geometry.coordinates import CartesianCoordinates
 
+__all__ = ['OptimizedShiftManager', 'OptimizedShift']
+
 logger = logging.getLogger(__name__)
 
 

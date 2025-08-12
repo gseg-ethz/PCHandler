@@ -8,7 +8,7 @@ import numpy as np
 from shapely.affinity import scale, translate
 from shapely.geometry import MultiPolygon, Polygon
 
-from pchandler.base_types import Array_Nx3_T, Vector_3_T
+from GSEGUtils.base_types import Array_Nx3_T, Vector_3_T
 
 if TYPE_CHECKING:
     from pchandler import PointCloudData

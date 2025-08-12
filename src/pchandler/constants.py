@@ -1,12 +1,12 @@
 from typing import Optional, NamedTuple
 
-from numpy import finfo, float32, pi
-from pydantic import ConfigDict, validate_call
+__all__ = ['RGB_NAMES', 'NORMAL_NAMES', 'XYZ_NAMES', 'INTENSITY_NAMES', 'COMMON_FIELD_NAMES', 'COMMON_FIELD_BASES']
+
 
 TripletT = tuple[str, str, str]
 
 
-class NameConstantsSingle(NamedTuple):
+class _NameConstantsSingle(NamedTuple):
     base: str
     char: Optional[str] = None
     extra_names: tuple[str, ...] = ()
@@ -22,7 +22,7 @@ class NameConstantsSingle(NamedTuple):
         return self.names
 
 
-class NameConstantsTriplet(NamedTuple):
+class _NameConstantsTriplet(NamedTuple):
     base: str
     char: TripletT
     extra_names: tuple[str, ...] = ()
@@ -73,7 +73,7 @@ class NameConstantsTriplet(NamedTuple):
         raise ValueError("Could not find name in positional names")
 
 
-RGB_NAMES = NameConstantsTriplet(
+RGB_NAMES = _NameConstantsTriplet(
     base = "rgb",
     char = ("r", "g", "b"),
     words = ("red", "green", "blue"),
@@ -81,7 +81,7 @@ RGB_NAMES = NameConstantsTriplet(
     extra_names = ("colour", "colours", "color", "colors"),
     reverse = "bgr"
 )
-NORMAL_NAMES = NameConstantsTriplet(
+NORMAL_NAMES = _NameConstantsTriplet(
     base="normals",
     char=("nx", "ny", "nz"),
     words=("normalx", "normaly", "normalz"),
@@ -89,24 +89,24 @@ NORMAL_NAMES = NameConstantsTriplet(
     reverse="nznynx"
 )
 
-XYZ_NAMES = NameConstantsTriplet(
+XYZ_NAMES = _NameConstantsTriplet(
     base="xyz",
     char=("x", "y", "z"),
     extra_names=("cartesian", "cartesians", "coordinates", "coordinate"),
     reverse="zyx"
 )
 
-INTENSITY_NAMES = NameConstantsSingle(
+INTENSITY_NAMES = _NameConstantsSingle(
     base="intensity",
     char="i",
     extra_names=("intensities",)
 )
 
-REFLECTANCE_NAMES = NameConstantsSingle(
+REFLECTANCE_NAMES = _NameConstantsSingle(
     base="reflectance",
 )
 
-COMMON_FIELD_NAMES: tuple[NameConstantsSingle|NameConstantsTriplet, ...] = \
+COMMON_FIELD_NAMES: tuple[_NameConstantsSingle | _NameConstantsTriplet, ...] = \
     (RGB_NAMES, NORMAL_NAMES, INTENSITY_NAMES, REFLECTANCE_NAMES)
 
 COMMON_FIELD_BASES = (field.base for field in COMMON_FIELD_NAMES)

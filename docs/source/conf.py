@@ -5,8 +5,6 @@ import sys
 
 sys.path.insert(0, os.path.abspath("../../src"))
 
-import pchandler
-
 # Configuration file for the Sphinx documentation builder.
 #
 # For the full list of built-in configuration values, see the documentation:
@@ -23,28 +21,57 @@ author = "Nicholas Meyer"
 version = "1.0.1"  # x-release-please-version
 release = "1.0.1"  # x-release-please-version
 
-# -- General configuration ---------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 extensions = [
     "sphinx.ext.autodoc",  # For generating documentation from docstrings
     "sphinx.ext.napoleon",  # For Google-style and NumPy-style docstrings
     "sphinx.ext.autosummary",  # For summary tables
+    "sphinx.ext.intersphinx",
 ]
 
-napoleon_numpy_docstring = True
+# Intersphinx Config
+intersphinx_mapping = {'open3d': ('https://www.open3d.org/docs/release/', None),
+                       'python': ('https://docs.python.org/3/', None),
+                       'numpy': ('https://numpy.org/doc/stable/', None),
+                       'pydantic': ('https://docs.pydantic.dev/latest/', None),
+                       'numpydantic': ('https://numpydantic.readthedocs.io/en/latest/', None)}
+
+# General Config
+python_use_unqualified_type_name = True                # False
+
+# ======= Autodoc Config =========
+autoclass_content = 'both'                              # 'both'
+autodoc_class_signature = 'separated'                       # 'mixed' / 'separated
+autodoc_member_order = 'bysource'                       # 'alphabetical'
+autodoc_default_options = {             # {}
+    'exclude-members': 'model_config'
+}
+autodoc_docstring_signature = True                      # True
+autodoc_mock_imports = []                               # []
+autodoc_typehints = 'both'                       # 'signature'
+autodoc_typehints_description_target = 'all'     # 'all', 'documented', 'documented_params'
+autodoc_type_aliases = {}                               # {}
+autodoc_typehints_format = 'short'                      # 'short'
+autodoc_preserve_defaults = True                        # False
+autodoc_use_type_comments = True                        # True
+autodoc_warningiserror = True                           # True
+autodoc_inherit_docstrings = True                       # True
+
+linkcheck_allowed_redirects = {}
+
 autosummary_generate = True
 
+
+# Defaults
 templates_path = ["_templates"]
-autodoc_member_order = "groupwise"
 exclude_patterns = []
-
-autodoc_typehints = 'description'
-autodoc_typehints_format = 'short'
-python_use_unqualified_type_names = True
-
-# -- Options for HTML output -------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
-
 html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]
+
+
+def setup(app):
+    app.add_css_file('pchandler_theme.css')
+
+rst_epilog = """
+.. |NDArray| replace:: :external+numpydantic:py:class:`NDArray <numpydantic.NDArray>`
+"""
