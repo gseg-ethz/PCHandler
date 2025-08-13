@@ -33,15 +33,6 @@ hz_limits = (float(-PI - EPS), float(PI + EPS))
 
 
 class FoV(BaseModel):
-    """
-    Field of View is defined by the spherical angles from the scan origin coordinate system (SOCS).
-
-    Azimuths or Horizontal angles are in the range of [-PI, +PI] with +PI being a right rotation from the X-axis
-    Zenith / Vertical angles are in the range of [0, +PI] with 0 being at the zenith
-
-    This is designed to be more compatible with spherical angle projections to image coordinate systems.
-    """
-
     model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True)
 
     left: Angle = Field(..., description="Hz ∈ [–π, +π]")
@@ -50,6 +41,20 @@ class FoV(BaseModel):
     bottom: Angle = Field(..., description="V ∈ [0, +π]")
 
     def __init__(self, *, left: AngleLikeT, top: AngleLikeT, right: AngleLikeT, bottom: AngleLikeT):
+        """
+        Class containing the angular limits defining a field of view based in spherical coordinates.
+
+        Parameters
+        ----------
+        left: Angle
+            Hz ∈ [–π, +π]
+        right: Angle
+            Hz ∈ [–π, +π]
+        top: Angle
+            V ∈ [0, +π]
+        bottom: Angle
+            V ∈ [0, +π]
+        """
         super().__init__(left=left, top=top, right=right, bottom=bottom)
 
     @field_validator("left", "right", "top", "bottom", mode="before")
@@ -78,26 +83,20 @@ class FoV(BaseModel):
     def construct_without_bounds_check(
         cls, *, left: AngleLikeT, right: AngleLikeT, top: AngleLikeT, bottom: AngleLikeT
     ) -> Self:
-        """
-        Constructs an instance of the class without performing bounds checking on the input
-        parameters. Useful for advanced use cases where input validation is ensured or not
-        necessary.
+        """Constuct a FoV without bounds check.
+
+        Enables construction of FoV which cross over the FoV angular bounds
 
         Parameters
         ----------
         left : AngleLikeT
-            Left boundary angle.
         right : AngleLikeT
-            Right boundary angle.
         top : AngleLikeT
-            Top boundary angle.
         bottom : AngleLikeT
-            Bottom boundary angle.
 
         Returns
         -------
-        Self
-            An instance of the class.
+        FoV
         """
         new_instance = cls.model_construct(
             _fields_set={"left", "right", "top", "bottom"},
@@ -110,16 +109,16 @@ class FoV(BaseModel):
 
     @classmethod
     def from_angles(cls, horizontal: VectorT | AngleArray, vertical: VectorT | AngleArray) -> Self:
-        """
+        """Construct a FoV from horizontal and vertical angles.
 
         Parameters
         ----------
-        horizontal
-        vertical
+        horizontal: VectorT | AngleArray
+        vertical: VectorT | AngleArray
 
         Returns
         -------
-
+        FoV
         """
         return cls(left=horizontal.min(), top=vertical.min(), right=horizontal.max(), bottom=vertical.max())
 
@@ -131,72 +130,49 @@ class FoV(BaseModel):
 
     @property
     def crosses_pi(self) -> bool:
-        """
-        Checks if the range crosses the value of π on a circular scale.
-
-        If the `left` boundary of the range is greater than the `right` boundary,
-        this indicates the range crosses the wraparound point, such as on a circle
-        or modular arithmetic system.
+        """Check if the FoV horizontal range crosses the boundary +/- PI
 
         Returns
         -------
         bool
-            True if the range crosses π, otherwise False.
         """
         return self.left > self.right
 
     def width(self) -> Angle:
-        """
-        Calculate the angular width of an object.
-
-        This method determines the angular width of an object, taking into
-        account whether the angular range crosses the π boundary. If the range
-        crosses π, the calculation adjusts the result accordingly. Otherwise,
-        it calculates directly based on the left and right angle values.
+        """Return the angular width (horizontal angle) of the FoV
 
         Returns
         -------
         Angle
-            The computed angular width.
         """
         if self.crosses_pi:
             return Angle(TWO_PI) - (self.left - self.right)
         return self.right - self.left
 
     def height(self) -> Angle:
-        """
-        Calculates the height by subtracting the `top` from the `bottom`.
+        """Return the angular height (vertical angle) of the FoV
 
         Returns
         -------
         Angle
-            The calculated height.
         """
         return self.bottom - self.top
 
     def extent(self) -> tuple[Angle, Angle]:
-        """
-        Calculate the extent of the object in terms of width and height.
+        """Return the angular extent (width, height) of the FoV
 
         Returns
         -------
         tuple[Angle, Angle]
-            A tuple containing the width and height as angles.
         """
         return self.width(), self.height()
 
     def center(self) -> tuple[Angle, Angle]:
-        """
-        Calculate the geometric center of the current bounds.
-
-        This method computes the center coordinates based on the current
-        width and height of an object. Special handling is applied if the
-        object crosses the prime meridian (pi).
+        """Return the center of the FoV.
 
         Returns
         -------
-        tuple of Angle
-            A tuple containing the horizontal and vertical center angles.
+        tuple[Angle, Angle]
         """
         half_width = self.width() / 2
         half_height = self.height() / 2
@@ -222,9 +198,7 @@ class FoV(BaseModel):
         Parameters
         ----------
         centerpoint: tuple[float, float]
-            The (horizontal_angle, vertical_angle) center of the FoV in the specified unit.
         extent: tuple[float, float]
-            The angular extent (width, height) of the FoV in the specified unit.
 
         Returns
         -------
@@ -244,7 +218,7 @@ class FoV(BaseModel):
         # def union(self, fov2: Self) -> Self:
 
     def union(self, fov2: Self) -> Self:
-        """Computes the union of this FoV with another.
+        """Returns the union of this FoV with another.
 
         Parameters
         ----------
@@ -262,8 +236,7 @@ class FoV(BaseModel):
         )
 
     def intersect(self, fov2: Self) -> Self:
-        """
-        Computes the intersection of this FoV with another.
+        """Returns the intersection of this FoV with another.
 
         Parameters
         ----------
@@ -282,8 +255,7 @@ class FoV(BaseModel):
 
     @validate_variables
     def ratio(self) -> NonNegativeFloat:
-        """
-        Computes the width-to-height ratio of the FoV.
+        """Returns the width-to-height ratio of the FoV.
 
         Returns
         -------
@@ -293,35 +265,47 @@ class FoV(BaseModel):
 
     @validate_call(config=DEFAULT_CONFIG)
     def extend_to_ratio(self, ratio: float) -> Self:
+        """Extends the FoV to a specified ratio.
+
+        Parameters
+        ----------
+        ratio: float
+
+        Returns
+        -------
+        FoV
+        """
         if self.ratio() - ratio > EPS:
             target_vertical_extent = self.width() / ratio
-            new_fov = type(self).construct_without_bounds_check(
+
+            return type(self).construct_without_bounds_check(
                 left=self.left,
                 top=self.top,
                 right=self.right,
                 bottom=self.top + target_vertical_extent,
             )
+
         elif ratio - self.ratio() > EPS:
             target_horizontal_extent = self.height() * ratio
-            new_fov = type(self).construct_without_bounds_check(
+
+            return type(self).construct_without_bounds_check(
                 left=self.left,
                 top=self.top,
                 right=self.left + target_horizontal_extent,
                 bottom=self.bottom,
             )
+
         else:
-            new_fov = self
-        return new_fov
+            return self
 
     @validate_call(config=DEFAULT_CONFIG)
     def split(self, shape: tuple[int, int]) -> list[Self]:
-        """
-        Splits the FoV into smaller FoVs based on a grid shape.
+        """Split the FoV into smaller FoVs based on a grid shape.
 
         Parameters
         ----------
         shape : tuple[int, int]
-            The number of horizontal and vertical splits.
+            The number of horizontal and vertical splits respectively.
 
         Returns
         -------
@@ -365,20 +349,16 @@ class FoV(BaseModel):
 
     @validate_call(config=DEFAULT_CONFIG)
     def equal_tiles(self, width: Angle | float, height: Angle | float) -> list[Self]:
-        """
-        Divides a geographic region into equal tiles based on specified width and height.
+        """Divides a region into equal tiles based on a specified width and height.
 
         Parameters
         ----------
         width : Angle or float
-            The width of each tile. Must be a positive value.
         height : Angle or float
-            The height of each tile. Must be a positive value.
 
         Returns
         -------
-        list of Self
-            A list containing the divided tiles as instances of the class.
+        list[FoV]
         """
         assert float(width) > 0 and float(height) > 0
         # assert any(target < own for target, own in zip(target_extent[0], self.extent(target_extent[1])))
@@ -391,26 +371,21 @@ class FoV(BaseModel):
         )
 
     def tile(self, target_extent: Self, expand_to_integer_multiple: bool = False) -> list[list[Self]]:
-        """
-        Divides the current field of view (FOV) into smaller tiles based on the specified target extent.
+        """Divides the current field of view (FOV) into smaller tiles based on the specified target extent/FoV.
 
         If `expand_to_integer_multiple` is True, the method ensures that the field of view is expanded to the nearest
         integer multiple of the target_extent dimensions before tiling.
 
         Parameters
         ----------
-        target_extent : Self
-            The target extent used for creating smaller tiles.
+        target_extent : FoV
+            FoV object representing the target extent for tiling.
 
         expand_to_integer_multiple : bool, optional
-            If True, expands the current field of view to an integer multiple of the target extent before tiling.
-            Default is False.
 
         Returns
         -------
-        list of list of Self
-            A 2D list representing the divided tiles. Each sublist contains tiles in a single row, where rows are
-            organized from top to bottom.
+        list[list[FoV]]
         """
         if expand_to_integer_multiple:
             width_int = int(np.ceil(self.width() / target_extent.width()))
@@ -460,32 +435,26 @@ class FoV(BaseModel):
         return tiles
 
     def quadrants(self) -> tuple[Self, ...]:
-        """
-        Splits the current object into four quadrants.
+        """Splits the current object into four quadrants.
 
         Returns
         -------
         tuple of Self
-            A tuple containing the four quadrants of the object.
         """
         # Keep for legacy
         return tuple(self.split(shape=(2, 2)))
 
     @classmethod
     def merge(cls, fovs: Iterable[Self]) -> Self:
-        """
-        Merges multiple instances of the class to create a single instance that encompasses
-        the total area covered by all given instances.
-
+        """Merges multiple FoV returning a single FoV that encompasses the total area covered
         Parameters
         ----------
-        fovs : Iterable[Self]
-            An iterable containing instances of the class to be merged.
+        fovs : Iterable[FoV]
+            All FoV objects to be merged.
 
         Returns
         -------
-        Self
-            A new instance of the class representing the merged area.
+        FoV
         """
         return cls(
             left=min(fovs, key=lambda fov: fov.left).left,
@@ -496,19 +465,16 @@ class FoV(BaseModel):
 
     @property
     def horizontal_min(self) -> Angle:
-        """
-        horizontal_min property retrieves the left attribute while issuing a deprecation warning
-        to inform users that the elevation_min property is replaced by the 'top' property.
+        """Horizontal minimum angle value. Equivalent to the left attribute.
 
         Warnings
         --------
         DeprecationWarning
-            This property is deprecated. Use the 'top' property instead.
+            This property is deprecated. Use the 'left' property instead.
 
         Returns
         -------
         Angle
-            The value of the left attribute.
         """
         warnings.warn(
             "elevation_min property has been deprecated. Please use the 'top' property",
@@ -519,20 +485,16 @@ class FoV(BaseModel):
 
     @property
     def horizontal_max(self) -> Angle:
-        """
-        @property
-        def horizontal_max(self) -> Angle:
-            Return the right angle value as the horizontal maximum.
+        """Horizontal maximum angle value. Equivalent to the right attribute.
 
-            Warnings
-            --------
-            Deprecated. The `horizontal_max` property is deprecated and replaced by
-            the `top` property. Use `top` instead.
+        Warnings
+        --------
+        DeprecationWarning
+            This property is deprecated. Use the 'right' property instead.
 
-            Returns
-            -------
-            Angle
-                The right angle value.
+        Returns
+        -------
+        Angle
         """
         warnings.warn(
             "horizontal_max property has been deprecated. Please use the 'top' property",
@@ -543,17 +505,16 @@ class FoV(BaseModel):
 
     @property
     def elevation_min(self) -> Angle:
-        """
-        Retrieves the deprecated minimum elevation property, `elevation_min`.
+        """Elevation minimum angle value. Equivalent to the top attribute.
 
-        This property is maintained for backward compatibility and is deprecated.
-        Users are advised to use the `top` property instead. The method issues a
-        `DeprecationWarning`.
+        Warnings
+        --------
+        DeprecationWarning
+            This property is deprecated. Use the 'top' property instead.
 
         Returns
         -------
         Angle
-            The value of the `top` property representing the minimum elevation.
         """
         warnings.warn(
             "elevation_min property has been deprecated. Please use the 'top' property",
@@ -564,15 +525,16 @@ class FoV(BaseModel):
 
     @property
     def elevation_max(self) -> Angle:
-        """
-        Returns the maximum elevation angle in the form of an `Angle` object.
+        """Elevation maximum angle value. Equivalent to the bottom attribute.
 
-        This property has been deprecated in favor of the `bottom` property.
+        Warnings
+        --------
+        DeprecationWarning
+            This property is deprecated. Use the 'bottom' property instead.
 
         Returns
         -------
         Angle
-            The maximum elevation angle previously accessed through this property.
         """
         warnings.warn(
             "elevation_max property has been deprecated. Please use the 'bottom' property",
@@ -591,17 +553,16 @@ class FoV(BaseModel):
 
 @dataclass(init=True, frozen=True)
 class FoVTree:
-    """
-    Represents a hierarchical tree structure for spatial partitioning of FoVs.
+    """A hierarchical tree structure for spatial partitioning of FoVs
 
     Parameters
     ----------
     identifier : str
-        A unique identifier for this tree node.
+        Unique identifier for this tree node.
     node : FoV
         The FoV associated with this tree node.
     children : dict[str, FoVTree] | None
-        A dictionary of child nodes, if any.
+        Dictionary of child nodes, if any.
     """
 
     identifier: str
@@ -610,18 +571,13 @@ class FoVTree:
 
     @staticmethod
     def add_identifier(fovs: list[FoV], shape: tuple[int, int]) -> tuple[tuple[str | Any, FoV], ...]:
-        """
-        Adds a unique identifier to each field of view (FoV) in the list.
-
-        The identifier is a hexadecimal string generated based on the FoV index
-        and the specified shape dimensions.
+        """Add unique identifier(s) to each field of view (FoV) in the list.
 
         Parameters
         ----------
         fovs : list[FoV]
-            A list of FoV objects that need unique identifiers.
         shape : tuple[int, int]
-            The shape dimensions used to calculate the identifier length.
+            Shape dimensions used to calculate the identifier length.
 
         Returns
         -------
@@ -635,13 +591,13 @@ class FoVTree:
         )
 
     def depth(self) -> int:
-        """
-        Calculates the depth of the tree starting from the current node.
+        """Return the depth of the FoVTree from the current node.
+
+        Leaf nodes have a depth of 1.
 
         Returns
         -------
         int
-            The depth of the tree from the current node. Leaf nodes have a depth of 1.
         """
         if self.is_leaf() or self.children is None:
             return 1
@@ -653,18 +609,12 @@ class FoVTree:
         return sum((len(c) for c in self.children.values()))
 
     def to_list(self) -> list[tuple[str, FoV]]:
-        """
-        Converts the tree structure into a flattened list of tuples.
-
-        Each tuple contains the identifier and the node data of the tree's
-        leaf or child nodes. If the current node is a leaf, returns a list
-        containing a single tuple with the current node's identifier and data.
+        """Convert tree structure into a flattened list.
 
         Returns
         -------
-        list of tuple of (str, FoV)
-            A flattened list of tuples, where each tuple consists of the
-            identifier and the node data of the leaves or child nodes.
+        list[(str, FoV)]
+            Each tuple consists of the identifier and the FoV node
         """
         if self.is_leaf() or self.children is None:
             return [(self.identifier, self.node)]
@@ -675,17 +625,16 @@ class FoVTree:
 
     @classmethod
     def build_from_tiles(cls, tiles: list[list[FoV]], min_children: int = 4, identifier: str = "") -> Self | None:
-        """
-        Constructs a tree from a grid of FoVs.
+        """Constructs a tree from a grid of FoVs.
 
         Parameters
         ----------
         tiles : list[list[FoV]]
-            A grid of FoVs to organize into a tree.
+            Grid of FoVs
         min_children : int, default=4
             The minimum number of children to avoid further splitting.
         identifier : str, default=""
-            The identifier for the root node.
+            Unique identifier for this node.
 
         Returns
         -------
@@ -791,10 +740,7 @@ class FoVTree:
         return self.children[identifier]
 
     def is_leaf(self):
-        """
-        Determine if the node is a leaf node.
-
-        A leaf node is a node without any child nodes.
+        """Check if the FoVTree node is a leaf (no child nodes)
 
         Returns
         -------
@@ -805,26 +751,18 @@ class FoVTree:
 
     @staticmethod
     def calculate_optimal_shape(fov: FoV, target_ratio: float, max_denominator: float) -> tuple[int, int]:
-        """
-        Calculates the optimal shape based on a given field of view (FoV), target ratio, and maximum denominator.
-
-        The method adjusts the aspect ratio of the field of view towards the target ratio within the limits of
-        the specified maximum denominator by approximating it as a fraction. It ensures that the resulting shape
-        meets minimum size criteria to avoid producing a (1, 1) shape.
+        """Calculate the optimal shape based on a given field of view (FoV), target ratio, and maximum denominator.
 
         Parameters
         ----------
         fov : FoV
-            The field of view object containing the current aspect ratio.
         target_ratio : float
-            The desired ratio to adjust the field of view towards.
         max_denominator : float
-            Maximum denominator for approximating the ratio.
+            Maximum number of FoV tree should be split into along a direction
 
         Returns
         -------
-        tuple of int
-            A tuple representing the optimal shape as (numerator, denominator).
+        tuple[int, int]
         """
 
         shape = Fraction(fov.ratio() / target_ratio).limit_denominator(np.round(max_denominator).astype(int))

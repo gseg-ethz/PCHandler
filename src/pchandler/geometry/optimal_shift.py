@@ -1,3 +1,7 @@
+"""
+    Enables point clouds to use optimized coordinates without precision loss.
+"""
+
 from __future__ import annotations
 
 import copy
@@ -23,20 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 class SingletonMeta(type):
-    """
-    A thread-safe implementation of the Singleton Metaclass.
-
-    The SingletonMeta metaclass ensures that a class using it as a metaclass
-    has only one instance. This implementation is thread-safe, allowing safe
-    access to the shared single instance in multithreaded environments.
-
-    Parameters
-    ----------
-    _instances : dict[type, object]
-        Stores the single instance of each class using this metaclass.
-    _lock : threading.RLock
-        Ensures thread-safe access to `_instances` during instance creation.
-    """
+    """Thread-safe implementation of the Singleton Metaclass"""
     _instances: ClassVar[dict[type, object]] = {}
     _lock: ClassVar[threading.RLock] = threading.RLock()
 
@@ -48,9 +39,9 @@ class SingletonMeta(type):
 
 
 class OptimizedShiftManager(metaclass=SingletonMeta):
-    """
-    Manages a collection of optimized shifts with unique UUIDs, ensuring efficient handling of large coordinate
-    datasets and decimal precision constraints. This class allows registration, retrieval, and management of shifts
+    """Manager for optimized shifts.
+
+    This class allows registration, retrieval, and management of shifts
     while maintaining a global configuration for numerical precision.
 
     Parameters
@@ -72,8 +63,7 @@ class OptimizedShiftManager(metaclass=SingletonMeta):
         pass
 
     def __init__(self, minimum_decimal_places: int = 3) -> None:
-        """
-        Initializes the class with specified minimum decimal places.
+        """Initialize the manager singleton.
 
         Parameters
         ----------
@@ -88,43 +78,31 @@ class OptimizedShiftManager(metaclass=SingletonMeta):
 
     @property
     def all_shifts(self) -> list[OptimizedShift]:
-        """
-        Gets all optimized shifts.
+        """Returns all optimized shifts.
 
         Returns
         -------
-        list of OptimizedShift
-            A list of all optimized shifts available in the internal storage.
+        list[OptimizedShift]
         """
         return list(self._by_uuid.values())
 
     @property
     def minimum_decimal_places(self) -> int:
-        """
-        Returns the minimum number of decimal places allowed.
-
-        This property retrieves the configured minimum number of decimal places
-        to be used as a numeric formatting or validation constraint.
+        """Returns the minimum number of decimal places supported by the manager.
 
         Returns
         -------
         int
-            The minimum number of decimal places.
         """
         return self._minimum_decimal_places
 
     @minimum_decimal_places.setter
     def minimum_decimal_places(self, value: int) -> None:  # TODO input value name correct?
-        """
-        Sets the minimum number of decimal places.
-
-        This setter validates if the input value for minimum decimal places meets
-        the required constraints.
+        """Sets the minimum number of decimal places supported by the manager.
 
         Parameters
         ----------
         value : int
-            The minimum number of decimal places to be set.
         """
         pass  # Todo: Should probably check all registered GlobalShifts and their pcds if they conform to new limit
 
@@ -132,77 +110,60 @@ class OptimizedShiftManager(metaclass=SingletonMeta):
     def maximum_number_representable(self) -> float:
         """Determines the maximum number representable with given float precision.
 
-        The method calculates the largest representable number using a defined
-        decimal precision for a 32-bit float and a minimum number of decimal places.
-
         Returns
         -------
         float
-            The maximum representable number based on the current settings.
         """
         return 10 ** (self.FLOAT32_DECIMAL_PRECISION - self.minimum_decimal_places)
 
-    def get_by_uuid(self, u: UUID) -> Optional[OptimizedShift]:
-        """
-        Retrieve an OptimizedShift by its UUID.
+    def get_by_uuid(self, u: UUID) -> OptimizedShift | None:
+        """Retrieve an OptimizedShift by its UUID.
 
         Parameters
         ----------
         u : UUID
-            The UUID of the OptimizedShift to retrieve.
 
         Returns
         -------
-        Optional[OptimizedShift]
-            The OptimizedShift object corresponding to the given UUID, or None
-            if no such object exists.
+        OptimizedShift | None
         """
         return self._by_uuid.get(u)
 
     def is_shift_needed(self, values: Array_Nx3_T) -> bool:
-        """
-        Determines whether a shift is required based on the magnitude of provided values.
-
-        Checks if any absolute value in the input array exceeds or equals the maximum
-        number representable to indicate whether a shift is needed.
+        """Determines whether a shift is required based on the magnitude of provided values.
 
         Parameters
         ----------
         values : Array_Nx3_T
-            Input array with numerical values to be assessed.
 
         Returns
         -------
         bool
-            True if any value in the array meets or exceeds the threshold, otherwise False.
         """
         return bool(np.any(np.abs(values) >= self.maximum_number_representable))
 
     def is_shift_possible(self, values: Array_Nx3_T) -> bool:
-        """
-        Determines whether a shift operation is possible by checking if the range of the given values
-        stays within the maximum representable limit.
+        """Check whether a shift is possible if the range of the given values is within the representable limit.
 
         Parameters
         ----------
         values : Array_Nx3_T
-            An array of shape (N, 3) containing values to validate.
 
         Returns
         -------
         bool
-            True if the range of values along each axis is less than the maximum
-            representable number, False otherwise.
         """
         return bool(
-            np.all(np.subtract(np.max(values, axis=0), np.min(values, axis=0)) < self.maximum_number_representable)
+            np.all(
+                np.subtract(np.max(values, axis=0), np.min(values, axis=0))
+                < self.maximum_number_representable)
         )
 
     def update_uuid(self, old_uuid: uuid.UUID, new_uuid: uuid.UUID) -> None:
-        """
-        Updates the UUID of a shift in the manager.
+        """Updates the UUID of a shift in the manager.
 
         Replaces the old UUID with a new one in the internal shift manager system.
+
         An error is raised if the old UUID does not exist, or if the new UUID is
         already in use.
 
@@ -215,8 +176,6 @@ class OptimizedShiftManager(metaclass=SingletonMeta):
 
         Returns
         -------
-        None
-            This method does not return anything.
         """
         if old_uuid not in self._by_uuid:
             raise OptimizedShiftManager.ShiftUUIDNotFound(f"Shift with uuid: {old_uuid} not found.")
@@ -225,23 +184,22 @@ class OptimizedShiftManager(metaclass=SingletonMeta):
         self._by_uuid[new_uuid] = self._by_uuid.pop(old_uuid)
 
     def register_shift(self, shift: OptimizedShift) -> None:
-        """
-        Registers a shift into the manager. If a shift with the same UUID already
-        exists but is a different object instance, raises a ShiftUUIDAlreadyTaken exception.
+        """Registers a shift into the manager.
+
+        If a shift with the same UUID already exists but is a different object instance,
+        raises a ShiftUUIDAlreadyTaken exception.
 
         Parameters
         ----------
         shift : OptimizedShift
-            The shift instance to be registered.
 
         Raises
         ------
         OptimizedShiftManager.ShiftUUIDAlreadyTaken
-            If a shift with the same UUID already exists but is a different object instance.
+            Shift with the same UUID already exists in the manager
 
         Returns
         -------
-        None
         """
         if shift.uuid in self._by_uuid and id(shift) is not id(self._by_uuid[shift.uuid]):
             raise OptimizedShiftManager.ShiftUUIDAlreadyTaken()
@@ -251,26 +209,28 @@ class OptimizedShiftManager(metaclass=SingletonMeta):
     def register_coordinates_to_shift(
         self, coordinates: CartesianCoordinates, shift: OptimizedShift | uuid.UUID
     ) -> OptimizedShift:
-        """
-        Registers coordinates to a shift with provided optimization strategies.
+        """Registers coordinates to an existing optimized shift
 
         This method associates the given coordinates with an instance of `OptimizedShift`.
-        It attempts to register the coordinates with the provided shift, or resolves the
-        shift using its UUID if a `uuid.UUID` object is passed. If the registration fails
-        due to infeasibility, it attempts a fallback mechanism to use a new `OptimizedShift`
-        instance before raising an error.
+
+        If the registration fails, it attempts to use a new `OptimizedShift` before raising an error.
 
         Parameters
         ----------
         coordinates : CartesianCoordinates
-            The coordinates to be registered with the shift.
         shift : OptimizedShift or uuid.UUID
-            The `OptimizedShift` instance or the UUID of an existing shift.
 
         Returns
         -------
         OptimizedShift
-            The `OptimizedShift` instance that successfully registered the coordinates.
+
+        Raises
+        ------
+        OptimizedShiftManager.ShiftUUIDNotFound
+            UUID not found in the manager
+
+        OptimizedShiftManager.ShiftNotFeasibleError
+            Shift not feasible for the given coordinates
         """
         if isinstance(shift, OptimizedShift):
             current_shift = shift
@@ -296,7 +256,12 @@ class OptimizedShiftManager(metaclass=SingletonMeta):
 
 class OptimizedShift:
     """
+    OptimizedShift object contains the translation vector and references to the point clouds linked to it.
 
+    Parameters
+    ----------
+    uuid: uuid.UUID
+    shift: Vector_3_T
     """
     _uuid: uuid.UUID
     _shift: Vector_3_T
@@ -305,13 +270,12 @@ class OptimizedShift:
 
     @validate_variables
     def __init__(self, shift_vec: Optional[Vector_3_T] = None) -> None:
-        """
-        Initializes the object with a unique identifier and shift vector.
+        """Initialize an Optimized Shift
 
         Parameters
         ----------
         shift_vec : Optional[Vector_3_T], optional
-            A vector representing the shift. If not provided, defaults to a zero vector.
+            A vector representing the shift. If not provided, defaults to (0, 0, 0).
         """
         self._uuid = uuid.uuid4()
         self._shift = np.zeros((3,), dtype=np.float64) if shift_vec is None else shift_vec
@@ -347,47 +311,39 @@ class OptimizedShift:
 
     @property
     def uuid(self) -> uuid.UUID:
-        """
-        Fetches the universally unique identifier (UUID) associated with the instance.
+        """Returns the object's UUID
 
         Returns
         -------
         uuid.UUID
-            The UUID of the instance.
         """
         return self._uuid
 
     @property
     def value(self) -> Vector_3_T:
-        """
-        Gets the value of the current shift vector in 3D space.
+        """Returns the current 3D shift vector.
 
         Returns
         -------
         Vector_3_T
-            The current 3D shift vector.
         """
         return self._shift
 
     @value.setter
     @validate_variables
     def value(self, new_shift: Vector_3_T) -> None:
-        """
-        Sets a new shift value for the coordinate set and validates its feasibility.
+        """Sets a new shift vector
 
         The method checks whether the provided new shift is feasible for the registered coordinate sets.
-        If feasible, it computes and applies the shift delta, updates the UUID, and logs the update.
+        If feasible, it computes and applies the shift delta, and applies it to all linked coordinate sets
 
         Parameters
         ----------
         new_shift : Vector_3_T
-            The new shift vector to apply to the coordinate set.
 
         Raises
         ------
         OptimizedShiftManager.ShiftNotFeasibleError
-            If the provided shift is not feasible for the registered coordinate sets.
-
         """
         # check if new shift can be used for registered points
         all_bboxes = [member.unshifted_bbox for member in self._member_coordinate_sets]
@@ -408,18 +364,12 @@ class OptimizedShift:
         logger.debug(f"Updated shift to {new_shift}. New uuid: {new_uuid}.")
 
     @property
-    def __array_interface__(self):
-        """
-        Provides the array interface for the underlying shift array.
-
-        The property returns the `__array_interface__` attribute of the internal `_shift`
-        array, enabling compatibility with NumPy and similar libraries that rely on the
-        array interface protocol.
+    def __array_interface__(self) -> dict[str, Any]:
+        """Enables the shift to be treated as a NumPy array.
 
         Returns
         -------
-        dict
-            The NumPy array interface of the internal shift array.
+        dict[str, Any]
         """
         return self._shift.__array_interface__
 
@@ -463,13 +413,11 @@ class OptimizedShift:
             raise OptimizedShiftManager.ShiftNotFeasibleError()
 
     def unregister(self, coordinate_set: CartesianCoordinates) -> None:
-        """
-        Unregisters a coordinate set from the collection if it exists.
+        """Unregisters a coordinate set from the optimized shift object.
 
         Parameters
         ----------
         coordinate_set : CartesianCoordinates
-            The coordinate set to be unregistered.
 
         Returns
         -------
@@ -483,21 +431,15 @@ class OptimizedShift:
                 break
 
     def check_addibility(self, unshifted_pts: Array_Nx3_T) -> bool:
-        """
-        Check if points can be shifted without errors.
-
-        This method determines whether a set of unshifted points can be used in
-        the current shift configuration.
+        """Check if the points can be added to the shift without errors.
 
         Parameters
         ----------
         unshifted_pts : Array_Nx3_T
-            An array of points in Nx3 format, representing unshifted coordinates.
 
         Returns
         -------
         bool
-            True if points can be shifted successfully, False otherwise.
         """
         # TODO: Check usage [can points be shifted and unshifted]
         try:
@@ -517,27 +459,30 @@ class OptimizedShift:
         # self._member_coordinate_sets_unshifted_bbox[coordinate_set] = MinMaxPoints.from_points(coordinate_set.arr)
 
     def _expand_and_add(self, coordinate_set: CartesianCoordinates) -> None:
+        """Attempt to expand the current optimised shift to include the new coordinate set.
+
+        If so, it is applied, and a new UUID is generated.
+
+        Parameters
+        ----------
+        coordinate_set : CartesianCoordinates
         """
-        Compute a new optimal shift to cover existing coordinate sets and the new pts,
-        apply it, generate new uuid, and then add the new pcd.
-        """
+        # Compute shift based on new coords
         new_shift = self._compute_new_shift(coordinate_set.unshifted_bbox)
+
+        # Set a new UUID
         new_uuid = uuid.uuid4()
         OptimizedShiftManager().update_uuid(self._uuid, new_uuid)
         logger.debug(f"Updated shift to {new_shift}. New uuid: {new_uuid}.")
+
+        # Apply shift delta to linked point clouds
         self._uuid = new_uuid
         self._compute_and_apply_shift_delta(new_shift)
         self._shift = new_shift
         self._add_member(coordinate_set)
 
     def _compute_new_shift(self, additional_bbox: Optional[MinMaxPoints | Array_Nx3_T] = None) -> Vector_3_T:
-        """
-        Computes a new shift value based on the combined bounding box of all relevant
-        coordinate sets, optionally including an additional bounding box.
-
-        This method calculates the central point of the combined bounding box rounded
-        for optimized shifting purposes. If the shift is deemed unfeasible, an
-        exception is raised.
+        """Compute a new shift vector from additional points or bounding boxes that will be linked
 
         Parameters
         ----------
@@ -547,8 +492,10 @@ class OptimizedShift:
         Returns
         -------
         Vector_3_T
-            The rounded central point of the combined bounding box as the new shift
-            value.
+
+        Raises
+        ------
+        OptimizedShiftManager.ShiftNotFeasibleError
         """
         # build up the combined bounding‐box
         all_bboxes = [member.unshifted_bbox for member in self._member_coordinate_sets]
@@ -563,39 +510,28 @@ class OptimizedShift:
         return np.round(combined.central_point, decimals=-2)
 
     def _compute_and_apply_shift_delta(self, new_shift: Vector_3_T):
-        """
-        Move all registered coordinate sets by the calculated delta between the
-        current shift and a new provided shift.
+        """Move all registered coordinate sets by the calculated delta between old and new shift
 
         Parameters
         ----------
         new_shift : Vector_3_T
-            The new reference shift vector to compute the delta.
         """
-        """Move every registered coordinate set by the change from old to new shift."""
         delta = self._shift - new_shift
         for pcd in self._member_coordinate_sets:
             pcd.update_shift(delta)
 
     @staticmethod
     def _reconstruct(u: UUID, shift_vec: Vector_3_T) -> "OptimizedShift":
-        """
-        Reconstructs an `OptimizedShift` instance based on the given UUID and shift vector.
-        If an existing instance with the same UUID is found, it will be returned. Otherwise,
-        a new instance is created, registered, and returned.
+        """Reconstruct an Optimized shift instance from a previous state
 
         Parameters
         ----------
-        u : UUID
-            Unique identifier of the shift instance.
-
-        shift_vec : Vector_3_T
-            The shift vector associated with the instance.
+        u: UUID
+        shift_vec: Vector_3_T
 
         Returns
         -------
         OptimizedShift
-            The reconstructed or newly created `OptimizedShift` instance.
         """
         mgr = OptimizedShiftManager()
         existing = mgr.get_by_uuid(u)
@@ -612,9 +548,16 @@ class OptimizedShift:
         return new
 
     def reattach_member(self, coordinate_set: CartesianCoordinates) -> None:
-        """
-        Register `pcd` under this shift, *without* changing any existing member PCDs.
+        """Reattach a coordinate set to the shift without change to other members.
+
         `unshifted_pts` should be the original float64 points before shifting.
+
+        Parameters
+        ----------
+        coordinate_set: CartesianCoordinates
+
+        Returns
+        -------
         """
         # add to the weakref set
         self._member_coordinate_sets.add(coordinate_set)

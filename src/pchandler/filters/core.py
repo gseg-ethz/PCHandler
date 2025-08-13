@@ -1,3 +1,7 @@
+"""
+Contains the abstract filter class and a generic filter class
+"""
+
 from __future__ import annotations
 
 import logging
@@ -17,95 +21,92 @@ logger = logging.getLogger(__name__.split(".")[0])
 
 
 class PointCloudFilter(ABC):
-    """
-    Abstract base class for filters on a PointCloudData.
-
-    Subclasses should implement the mask() method to return a boolean mask
-    that selects the desired points.
-    """
+    """Abstract base class for PointCloudData filters"""
 
     @abstractmethod
     def mask(self, pcd: PointCloudData) -> npt.NDArray[np.bool_]:
         """
         Compute and return a boolean mask for the provided point cloud.
 
-        Parameters:
-            pcd (PointCloudData): The point cloud to filter.
+        Parameters
+        ----------
+        pcd: Point
 
-        Returns:
-            A numpy boolean array with shape (N,) where N is the number of points.
+        Returns
+        -------
+        npt.NDArray[np.bool_]
         """
         pass
 
     @validate_variables
     def reduce(self, pcd: PointCloudData) -> None:
-        """
-        Reduces the point cloud in-place to only the points where mask() is True.
+        """Reduces the point to only the points defined by the mask.
 
-        Parameters:
-            pcd (PointCloudData): The point cloud to reduce.
+        Parameters
+        ----------
+        pcd: PointCloudData
 
-        Returns:
-            The modified point cloud.
+        Returns
+        -------
+        PointCloudData
         """
         pcd.reduce(self.mask(pcd))
 
     def extract(self, pcd: PointCloudData) -> PointCloudData:
-        """
-        Extracts points where mask() is True: returns a new point cloud with those points,
-        and removes them from the original.
+        """Returns a new point cloud from the points selected by the mask.
 
-        Parameters:
-            pcd (PointCloudData): The point cloud to extract points from.
+        The existing point cloud is reduced to only the points defined by the negated mask.
 
-        Returns:
-            A new PointCloudData instance containing the extracted points.
+        Parameters
+        ----------
+        pcd: PointCloudData
+
+        Returns
+        -------
+        PointCloudData
         """
         return pcd.extract(self.mask(pcd))
 
     def sample(self, pcd: PointCloudData) -> PointCloudData:
-        """
-        Returns a new point cloud with only the points where mask() is True, leaving
-        the original point cloud untouched.
+        """Returns a copy of the point cloud sampled using the boolean mask.
 
-        Parameters:
-            pcd (PointCloudData): The point cloud to sample from.
+        Parameters
+        ----------
+        pcd: PointCloudData
 
-        Returns:
-            A new PointCloudData instance containing only the sampled points.
+        Returns
+        -------
+        PointCloudData
         """
         return pcd.sample(self.mask(pcd))
 
 
 class GenericFieldFilter(PointCloudFilter):
-    """
-    A generic filter that uses a user-supplied function to _generate a mask
-    from a given field.
-
-    Parameters:
-        field_label: The field (attribute or scalar field key) on which to operate.
-        filter_func: A callable that takes the field data and returns a boolean mask.
-    """
-
     @validate_variables
-    def __init__(self, field_label: str, filter_func: Callable) -> None:
-        """
-        Initialize the instance with a field label and a filter function.
+    def __init__(self, field_label: str, filter_func: Callable[[npt.NDArray], npt.NDArray[np.bool_]]) -> None:
+        """Generic filter class that will perform a custom filter on a defined field.
 
         Parameters
         ----------
         field_label : str
             A label or name for the field.
-        filter_func : Callable
-            A callable function used to perform filtering logic.
+        filter_func : Callable[[NDArray], NDArray[np.bool_]]
+            A callable function used to perform filtering logic. Must return a boolean mask.
         """
         self.field_label = field_label
         self.filter_func = filter_func
 
+    # TODO check if this is in use anywhere before changing the default names
     def mask(self, pcd: PointCloudData) -> npt.NDArray[np.bool_]:
-        """
-        Retrieves the field data from the point cloud, applies the filter function,
-        and returns the resulting boolean mask.
+        """Create a boolean mask from the defined field and function
+
+        Parameters
+        ----------
+        pcd: PointCloudData
+
+        Returns
+        -------
+        npt.NDArray[np.bool_]
         """
         if self.field_label == "cartesian_coordinates":
             data = pcd.xyz

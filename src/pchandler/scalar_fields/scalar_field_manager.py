@@ -14,10 +14,10 @@ from typing import (
     TypeAlias,
     cast,
     overload,
+    Any
 )
 
 import numpy as np
-import numpy.typing as npt
 from GSEGUtils.base_arrays import BaseArray
 from GSEGUtils.base_types import (
     Array_Nx3_Float32_T,
@@ -141,12 +141,29 @@ class ScalarFieldManager:
             logger.info("No parent point cloud to validate scalar field lengths against")
 
     def __len__(self) -> int:
+        """Returns the number of scalar fields
+
+        Returns
+        -------
+        int
+        """
         return len(self.fields)
 
     def __iter__(self) -> Iterator[str]:
+        """Returns an iterator for the scalar fields"""
         return iter(self.fields)
 
     def __contains__(self, key: object) -> bool:
+        """Check if a scalar field exists
+
+        Parameters
+        ----------
+        key: object
+
+        Returns
+        -------
+        bool
+        """
         return str(key).lower() in self.fields
 
     @overload
@@ -156,6 +173,16 @@ class ScalarFieldManager:
     def __getitem__(self, key: IndexLike) -> Self: ...
 
     def __getitem__(self, key: str | LowerStr | IndexLike) -> Self | SF_T | None:
+        """Get a scalar field by name or a sample of the scalar field based on a mask.
+
+        Parameters
+        ----------
+        key: str | LowerStr | IndexLike
+
+        Returns
+        -------
+        SF_T | ScalarFieldManager | None
+        """
         if isinstance(key, str):
             if key in RGB_NAMES.all:
                 return self._get_rgb(key)
@@ -173,7 +200,20 @@ class ScalarFieldManager:
 
         return self.sample(key)
 
-    def __setitem__(self, name: LowerStr, value: Optional[SF_T | VectorT | Array_Nx3_T]) -> None:
+    def __setitem__(self, name: LowerStr, value: SF_T | VectorT | Array_Nx3_T | None) -> None:
+        """Set the value of a scalar field.
+
+        Set to None to delete an existing field.
+
+        Parameters
+        ----------
+        name: LowerStr
+        value: ScalarField | NormalFields | RGBFields | np.ndarray | None
+
+        Returns
+        -------
+
+        """
         # Delete value if None is passed or ignore
         if value is None:
             if name in self:
@@ -210,14 +250,40 @@ class ScalarFieldManager:
             self.fields[name] = ScalarField(value, name=name, origin_dtype=origin_dtype)
 
     def __delitem__(self, key: str) -> None:
+        """Delete a scalar field
+
+        Parameters
+        ----------
+        key: str
+
+        Returns
+        -------
+
+        """
         del self.fields[key]
 
     def __getstate__(self):
+        """Return the object's state.
+
+        Returns
+        -------
+
+        """
         state = self.__dict__.copy()
         state["_parent"] = None
         return state
 
-    def __setstate__(self, state):
+    def __setstate__(self, state: dict[str, Any] = None) -> None:
+        """Set the object's state.
+
+        Parameters
+        ----------
+        state: dict[str, Any]
+
+        Returns
+        -------
+
+        """
         self.__dict__.update(state)
 
     def keys(self) -> KeysView[str]:
@@ -317,7 +383,9 @@ class ScalarFieldManager:
 
     @rgb.setter
     def rgb(self, value: Array_Nx3_Uint8_T | Array_Nx3_Float32_T | RGBFields | None) -> None:
-        """Set the RGB fields. If set to None, the field will be deleted.
+        """Set the RGB fields.
+
+        If set to None, the field will be deleted.
 
         Parameters
         ----------
@@ -343,9 +411,11 @@ class ScalarFieldManager:
     def normals(self, value: Optional[Array_Nx3_Float_T | NormalFields]):
         """Set the normals fields.
 
+        If set to None, the field will be deleted.
+
         Parameters
         ----------
-        value
+        value: Array_Nx3_Float_T | NormalFields | None
 
         Returns
         -------
@@ -355,21 +425,68 @@ class ScalarFieldManager:
 
     @property
     def intensity(self) -> ScalarField | None:
+        """Get the intensity field
+
+        Returns
+        -------
+        ScalarField | None
+        """
         return cast(ScalarField | None, self.fields.get(INTENSITY_NAMES.base, None))
 
     @intensity.setter
-    def intensity(self, value: Optional[VectorT | ScalarField]):
+    def intensity(self, value: VectorT | ScalarField | None):
+        """Set the intensity field.
+
+        If set to None, the field will be deleted.
+
+        Parameters
+        ----------
+        value: VectorT | ScalarField | None
+
+        Returns
+        -------
+
+        """
         self[INTENSITY_NAMES.base] = ScalarField(value, name=INTENSITY_NAMES.base) if value is not None else None
 
     @property
     def reflectance(self) -> ScalarField | None:
+        """Get the reflectance field.
+
+        Returns
+        -------
+        ScalarField | None
+        """
         return cast(ScalarField | None, self.fields.get(REFLECTANCE_NAMES.base, None))
 
     @reflectance.setter
-    def reflectance(self, value: Optional[VectorT | ScalarField]):
+    def reflectance(self, value: VectorT | ScalarField | None):
+        """Set the reflectance field.
+
+        If set to None, the field will be deleted.
+
+        Parameters
+        ----------
+        value: VectorT | ScalarField | None
+
+        Returns
+        -------
+
+        """
         self[REFLECTANCE_NAMES.base] = ScalarField(value, name=REFLECTANCE_NAMES.base) if value is not None else None
 
     def sample(self, mask: IndexLike) -> Self:
+        """Sample the scalar fields based on a mask.
+
+        Parameters
+        ----------
+        mask: IndexLike
+            The mask corresponds to indexing the rows or points in the parent point cloud.
+
+        Returns
+        -------
+        ScalarFieldManager
+        """
         sampled = type(self)(fields={})
 
         for name, value in self.items():
@@ -378,10 +495,35 @@ class ScalarFieldManager:
         return sampled
 
     def reduce(self, mask: IndexLike) -> None:
+        """
+        Reduces the entries in the fields based on the provided mask.
+
+        Parameters
+        ----------
+        mask : IndexLike
+            The mask corresponds to indexing the rows or points in the parent point cloud.
+
+        Returns
+        -------
+        """
         for name, value in self.items():
             self.fields[name] = value[mask]
 
     def extract(self, mask: IndexLike) -> Self:
+        """
+        Extracts a subset of the current object based on the provided mask and returns a new instance.
+
+        The current object is also reduced by removing the extracted points.
+
+        Parameters
+        ----------
+        mask : IndexLike
+            The mask corresponds to indexing the rows or points in the parent point cloud.
+
+        Returns
+        -------
+        ScalarFieldManager
+        """
         if len(self) == 0:
             return type(self)(fields={})
 
@@ -397,30 +539,39 @@ class ScalarFieldManager:
         return sample
 
     def add_field(self, sf_field: SF_T) -> None:
-        """
+        """Adds a new scalar field to the manager.
 
         Parameters
         ----------
-        sf_field
+        sf_field : SF_T
+
+        Returns
+        -------
+        """
+        self[sf_field.name] = sf_field
+
+    def remove_field(self, field_name: LowerStr) -> None:
+        """Removes a scalar field from the manager.
+
+        Parameters
+        ----------
+        field_name: LowerStr
 
         Returns
         -------
 
         """
-        self[sf_field.name] = sf_field
-
-    def remove_field(self, field_name: LowerStr) -> None:
         del self.fields[field_name.lower()]
 
     def create_field(self, name: str, data: VectorT | Array_Nx3_T) -> None:
-        """Create a scalar field from a name and array vector
+        """Create a scalar field from name and array
 
-        Supports Array_Nx3_T in case users try to create RGB or Normal fields using this route
+        Supports Array_Nx3_T for the creation of RGB or Normals fields.
 
         Parameters
         ----------
         name: str
-        data: |VectorT| | |Array_Nx3_T|
+        data: VectorT | Array_Nx3_T
 
         Returns
         -------
@@ -430,6 +581,16 @@ class ScalarFieldManager:
         self.add_field(sf)
 
     def _get_rgb(self, name: LowerStr) -> SF_T | None:
+        """Handler for getting the RGB values based on the different RGB name conmventions.
+
+        Parameters
+        ----------
+        name: LowerStr
+
+        Returns
+        -------
+
+        """
         if self.rgb is None:
             return None
 
@@ -448,6 +609,16 @@ class ScalarFieldManager:
             raise KeyError(f"Unknown key made it into _handle_rgb : {name}")
 
     def _get_normals(self, name: LowerStr) -> SF_T | None:
+        """Handler for getting the normal values based on the different normal name conmventions
+
+        Parameters
+        ----------
+        name: LowerStr
+
+        Returns
+        -------
+
+        """
         if self.normals is None:
             return None
 
@@ -464,8 +635,19 @@ class ScalarFieldManager:
         else:
             raise KeyError(f"Unknown key made it into normals : {name}")
 
-    def _set_rgb(self, name: LowerStr, value: RGBLikeT, origin_dtype: Optional[DtypeState] = None) -> None:
+    def _set_rgb(self, name: LowerStr, value: RGBLikeT, origin_dtype: DtypeState | None = None) -> None:
+        """Handler for setting the RGB values based on the different RGB name conmventions.
 
+        Parameters
+        ----------
+        name: LowerStr
+        value: RGBLikeT
+        origin_dtype: DtypeState | None
+
+        Returns
+        -------
+
+        """
         if name in RGB_NAMES.names:
             self.fields[RGB_NAMES.base] = RGBFields(value, origin_dtype=cast(DtypeState, origin_dtype))
             return
@@ -489,7 +671,19 @@ class ScalarFieldManager:
         else:
             raise KeyError(f"Unknown key made it into _handle_rgb : {name}")
 
-    def _set_normals(self, name: LowerStr, value: NormalLikeT, origin_dtype: Optional[DtypeState] = None) -> None:
+    def _set_normals(self, name: LowerStr, value: NormalLikeT, origin_dtype: DtypeState | None = None) -> None:
+        """Handler for setting the normal values based on the different normal name conmventions.
+
+        Parameters
+        ----------
+        name: LowerStr
+        value: NormalLikeT
+        origin_dtype: DtypeState | None
+
+        Returns
+        -------
+
+        """
         if name in NORMAL_NAMES.names:
             self.fields[NORMAL_NAMES.base] = NormalFields(value, origin_dtype=cast(DtypeState, origin_dtype))
 
@@ -509,6 +703,16 @@ class ScalarFieldManager:
 
     @classmethod
     def merge(cls, scalar_field_managers: Iterable[Self]) -> Self:
+        """Merges a list of scalar field managers into one.
+
+        Parameters
+        ----------
+        scalar_field_managers: Iterable[ScalarFieldManager]]
+
+        Returns
+        -------
+
+        """
 
         sfm_key_sets = (set(sfm) for sfm in scalar_field_managers)
 

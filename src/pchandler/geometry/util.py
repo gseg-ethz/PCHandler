@@ -89,13 +89,7 @@ def get_outline_polygon(pcd: PointCloudData, plane: str, alpha_value: float = 10
 
 # TODO could change this to a frozen basemodel with validation
 class MinMaxPoints(NamedTuple):
-    """
-    Named tuple for determining the minimum and maximum points in a given
-    3-dimensional coordinate space.
-
-    This class provides utility methods for deriving minimum and maximum points from
-    a set of points, constructing instances from existing minimum and maximum points,
-    and calculating derived attributes such as the central point and extents.
+    """Countains the minimum and maximum points of a set of coordinates to represent it's bounding box.
 
     Parameters
     ----------
@@ -109,15 +103,13 @@ class MinMaxPoints(NamedTuple):
 
     @classmethod
     def from_points(cls, points: Array_Nx3_T, already_applied_shift_vec: Optional[Vector_3_T] = None) -> Self:
-        """
-        Creates an instance of the class from a given set of points and an optional shift vector.
+        """Create an instance from a given set of points
 
         Parameters
         ----------
         points : Array_Nx3_T
-            Array (N, 3)
         already_applied_shift_vec : Optional[Vector_3_T], optional
-            Size 3 vector that has already been applied to the points. If not provided, it defaults to a zero vector.
+            If provided, a vector that represents a shift applied to the points before
 
         Returns
         -------
@@ -139,68 +131,45 @@ class MinMaxPoints(NamedTuple):
 
     @classmethod
     def from_minmax_points(cls, minmax_points: Iterable[Self | Array_Nx3_T]) -> Self:
-        """
-        Creates an instance of the class using a collection of minimum and maximum points.
-
-        Transform the provided iterable of minimum and maximum points into a 3-dimensional
-        array. These points are then used to create the desired instance of the class via
-        `from_points`.
+        """Create an instance from a set of MinMaxPoints or Array_Nx3_T objects.
 
         Parameters
         ----------
         minmax_points : Iterable[Self | Array_Nx3_T]
-            Collection of points, where each element can either be an instance of the class
-            or an `Array_Nx3_T`. The points represent the minimum and maximum bounds that
-            will be processed and used to construct the instance.
+            Collection of point sets, either as point clouds or MinMaxPoints objects.
 
         Returns
         -------
         Self
-            An instance of the class constructed based on the processed points.
-
         """
         arr = Array_Nx3_T(np.vstack(tuple(minmax_points)))
         return cls.from_points(arr)
 
     @property
     def central_point(self) -> Vector_3_T:
-        """
-        Get the central point of the bounding box.
-
-        The central point is calculated as the mean of the minimum and maximum
-        coordinates along each axis.
+        """Return the center point of the bounding box
 
         Returns
         -------
         Vector_3_T
-            The central point of the bounding box as a 3-dimensional vector.
         """
         return np.mean(np.vstack((self.minimum, self.maximum)), axis=0)
 
     @property
     def extents(self) -> Vector_3_T:
-        """
-        Computes the extents of a bounding box based on its minimum and maximum values.
+        """Return the extents of the bounding box
 
         Returns
         -------
         Vector_3_T
-            Difference between the maximum and minimum values representing the
-            extents of the bounding box.
         """
         return self.maximum - self.minimum
 
     def __array__(self) -> Array_Nx3_T:
-        """
-        Returns the bounds of the object as a NumPy array.
-
-        The method constructs a 2D array where the first row represents the minimum
-        bounds and the second row represents the maximum bounds.
+        """Enables the use of the MinMaxPoints object as an array.
 
         Returns
         -------
         Array_Nx3_T
-            A 2D array with the minimum bounds in the first row and maximum bounds
-            in the second row.
         """
         return np.vstack((self.minimum, self.maximum))

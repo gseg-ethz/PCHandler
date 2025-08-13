@@ -24,10 +24,12 @@ from GSEGUtils.base_arrays import ArrayNx2, ArrayNx3, FixedLengthArray
 from GSEGUtils.base_types import (
     Array_3x3_T,
     Array_Nx3_Float_T,
+    Array_Nx2_Float_T,
     Array_4x4_T,
     Array_Nx3_T,
     IndexLike,
     Vector_3_T,
+    Vector_Float_T
 )
 from GSEGUtils.constants import DEFAULT_CONFIG
 from pydantic import UUID4, AliasChoices, Field, PrivateAttr, validate_call
@@ -142,11 +144,13 @@ class CartesianCoordinates(Abstract3dCoordinates):
     Parameters
     ----------
     arr : Array_Nx3_T
-        Contains the raw coordinate data
+        Raw coordinate data
     unshifted_bbox : MinMaxPoints | None
-        Contains the original bbox of the point cloud when it was first initialized (without optimization shift)
+        Bounding box of the original input coordinates (before optimization shift)
     numerical_optimization_shift : OptimizedShift | None
-        Contains the numerical optimization shift applied to the point cloud.
+        Optimization shift applied to the point cloud.
+    socs_origin : Vector_3_T | None
+        Scan center coordinate in the current coordinate system.
 
     """
     arr: Array_Nx3_T = Field(..., validation_alias=AliasChoices("arr", "xyz"))
@@ -161,10 +165,10 @@ class CartesianCoordinates(Abstract3dCoordinates):
     def __init__(self, /, **kwargs: Unpack[CartesianKwFull]): ...
 
     def __init__(self, /, xyz: Optional[Array_Nx3_T | Self] = None, **kwargs: Unpack[CartesianKwFull]):
-        """
-        Default behavior of the CartesianCoordinates object is to automatically compute a numerical optimization
-        shift upon initialization. This attempts to reduce the point cloud data type to Float32 for reduced
-        memory usage and faster computations.
+        """When initialised, a CartesianCoordinates object is to automatically compute a numerical optimization
+        shift upon initialization.
+
+        This attempts to reduce the point cloud data type to Float32 for reduced memory usage and faster computations.
 
         The user can set this to None if they want to force the coordinates to use the input precision end maintain
         their original coordinate systems.
@@ -172,6 +176,7 @@ class CartesianCoordinates(Abstract3dCoordinates):
         Parameters
         ----------
         xyz: Array_Nx3_T | Self
+        socs_origin: Vector_3_T | None
         numerical_optimization_shift: OptimizedShift | None
         kwargs: dict[str, Any]
         """
@@ -466,44 +471,39 @@ class CartesianCoordinates(Abstract3dCoordinates):
         )
 
     @property
-    def x(self) -> npt.NDArray[np.floating]:
+    def x(self) -> Vector_Float_T:
         """Return the X coordinate"""
         return self.arr[:, 0]
 
     @property
-    def y(self) -> npt.NDArray[np.floating]:
+    def y(self) -> Vector_Float_T:
         """Return the Y coordinate"""
         return self.arr[:, 1]
 
     @property
-    def z(self) -> npt.NDArray[np.floating]:
+    def z(self) -> Vector_Float_T:
         """Return the Z coordinate"""
         return self.arr[:, 2]
 
     @property
-    def xyz(self) -> npt.NDArray[np.floating]:
+    def xyz(self) -> Array_Nx3_Float_T:
         """Return the XYZ coordinates as a numpy array"""
         return self.arr
 
     @property
-    def yxz(self) -> npt.NDArray[np.floating]:
+    def yxz(self) -> Array_Nx3_Float_T:
         """Return the coordinates in YXZ order"""
         return self.xyz[:, [1, 0, 2]]
 
     @cached_property
-    def spher(self) -> npt.NDArray[np.floating]:
-        """
-        Returns the spherical coordinate representation of the input array.
+    def spher(self) -> Array_Nx3_Float_T:
+        """Returns the coordinates as spherical coordinates based on the `socs_origin`.
 
-        If `socs_origin` is defined, it calculates spherical coordinates relative
-        to it. If `numerical_optimization_shift` is defined, the calculation
-        adjusts using its negated value. Otherwise, it defaults the calculation to
-        the origin.
+        If `socs_origin` is not defined, it treats (0, 0, 0) as the origin.
 
         Returns
         -------
-        numpy.ndarray
-            Array containing spherical coordinates of the input data.
+        Array_Nx3_Float_T
         """
         if self.socs_origin is not None:
             return xyz2rhv(self.arr, self.socs_origin)
@@ -513,156 +513,115 @@ class CartesianCoordinates(Abstract3dCoordinates):
             return xyz2rhv(self.arr, np.zeros(3, dtype=np.float32))
 
     @property
-    def r(self) -> npt.NDArray[np.floating]:
-        """
-        r : numpy.ndarray of floats, read-only property
-            Provides access to the radial component of the spherical coordinates.
+    def r(self) -> Vector_Float_T:
+        """Returns radial component of the spherical coordinates.
 
         Returns
         -------
-        numpy.ndarray
-            A 1-D array representing the radial distances.
+        Vector_Float_T
         """
         return self.spher[:, 0]
 
     @property
-    def hz(self) -> npt.NDArray[np.floating]:
-        """
-        Returns the Hz component of a spheroid data array.
-
-        The property accesses the second column in the spheroid data array,
-        representing the Hz component.
+    def hz(self) -> Vector_Float_T:
+        """Return the horizontal angles of the spherical coordinates.
 
         Returns
         -------
-        npt.NDArray[np.floating]
-            The Hz component of the spheroid data array.
+        Vector_Float_T
         """
         return self.spher[:, 1]
 
     @property
-    def v(self) -> npt.NDArray[np.floating]:
-        """
-        Gets the v component of the spherical coordinate system.
+    def v(self) -> Vector_Float_T:
+        """Return the vertical angles of the spherical coordinates.
 
         Returns
         -------
-        npt.NDArray[np.floating]
-            The v component values extracted from the spherical
-            coordinates, corresponding to the third column of the
-            `spher` array.
+        Vector_Float_T
         """
         return self.spher[:, 2]
 
     @property
-    def rhv(self) -> npt.NDArray[np.floating]:
-        """
-        Gets the value of the spher attribute.
+    def rhv(self) -> Array_Nx3_Float_T:
+        """Returns the coordinates as spherical coordinates.
 
         Returns
         -------
-        numpy.ndarray of numpy.floating
-            The value of the spher attribute.
+        Array_Nx3_Float_T
         """
         return self.spher
 
     @property
-    def _hz_v(self) -> npt.NDArray[np.floating]:
-        """
-        Returns a subset of the rhv attribute, excluding the first column.
-
-        The property extracts and returns all elements of the `rhv` attribute
-        except for the first column along the second axis.
+    def _hz_v(self) -> Array_Nx2_Float_T:
+        """Return the horizontal and vertical angles of the spherical coordinates.
 
         Returns
         -------
-        numpy.ndarray of float
-            A NumPy array containing elements of `rhv` excluding the first column.
+        Array_Nx2_Float_T
         """
         return self.rhv[:, 1:]
 
     @cached_property
     def fov(self) -> FoV:
-        """
-        Caches and returns the field of view (FoV) object.
+        """Returns the field of view of the point cloud.
 
         Returns
         -------
         FoV
-            The field of view constructed using horizontal and vertical angles.
         """
         return FoV.from_angles(self.hz, self.v)
 
     def rotate(self, rotation: Array_3x3_T) -> None:
-        """
-        Applies a rotation transformation to the internal state.
+        """Rotates the current coordinates
 
         Parameters
         ----------
         rotation : Array_3x3_T
-            A 3x3 rotation matrix to be applied.
 
         Returns
         -------
-        None
         """
         self.arr = (rotation @ self.T).T
 
     def translate(self, translation: Vector_3_T) -> None:
-        """
-        Applies a translation vector to the current object.
+        """Translates the current coordinates
 
         Parameters
         ----------
         translation : Vector_3_T
-            The translation vector to be added to the current array.
         """
         self.arr += translation
 
     def scale(self, scale: Vector_3_T) -> None:
-        """
-        Scales the internal array by the given vector.
+        """Scales the current coordinates
 
         Parameters
         ----------
         scale : Vector_3_T
-            The vector used for scaling the internal array.
-
         """
         self.arr *= scale
 
-    def transform(self, affine: Array_4x4_T = None) -> None:
-        """
-        Applies a transformation to the internal data using the specified affine matrix.
+    def transform(self, affine: Array_4x4_T) -> None:
+        """Transforms the current coordinates using the specified affine matrix.
 
         Parameters
         ----------
-        affine : Array_4x4_T, optional
-            A 4x4 affine transformation matrix.
-
-        Returns
-        -------
-        None
-            This method does not return any value, it directly modifies the internal state.
+        affine : Array_4x4_T
         """
         self.arr = (affine @ self.H.T).T[:, :3]
 
     @classmethod
     def from_spherical(cls, spher: Array_Nx3_T) -> Self:
-        """
-        Creates an instance of the class from a spherical coordinate array.
+        """Creates an instance from spherical coordinates in RHV format.
 
         Parameters
         ----------
         spher : Array_Nx3_T
-            A NumPy array of shape (N, 3) representing spherical coordinates
-            where each row contains [radius, azimuth, elevation].
 
         Returns
         -------
         Self
-            An instance of the class constructed from the given spherical
-            coordinates.
         """
         return cls(xyz=rhv2xyz(spher))
 
@@ -740,8 +699,7 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
 @validate_call(config=DEFAULT_CONFIG)
 def rhv2xyz(spher: Array_Nx3_T, scan_origin: Optional[Vector_3_T] = None) -> Array_Nx3_T:
-    """
-    Convert spherical coordinates to Cartesian coordinates.
+    """ Convert spherical coordinates (RHV) to Cartesian coordinates (XYZ).
 
     This function transforms 3D points given in spherical coordinates
     (radius, azimuth, elevation) to Cartesian coordinates (x, y, z).
@@ -771,7 +729,7 @@ def rhv2xyz(spher: Array_Nx3_T, scan_origin: Optional[Vector_3_T] = None) -> Arr
 @validate_call(config=DEFAULT_CONFIG)
 def xyz2rhv(xyz: Array_Nx3_T, scan_origin: Optional[Vector_3_T] = None) -> Array_Nx3_T:
     """
-    Converts Cartesian coordinates to spherical coordinates with an optional origin shift.
+    Converts Cartesian coordinates (XYZ) to spherical coordinates (RHV).
 
     The resulting spherical coordinates include the slope distance, horizontal angle,
     and zenith angle calculated from Cartesian coordinates. If a scan origin is
@@ -780,17 +738,14 @@ def xyz2rhv(xyz: Array_Nx3_T, scan_origin: Optional[Vector_3_T] = None) -> Array
     Parameters
     ----------
     xyz : Array_Nx3_T
-        Array of Cartesian coordinates with shape (N, 3). Each row represents
-        a point as [x, y, z].
+        Array of Cartesian coordinates with shape (N, 3). Each row represents a point as [x, y, z].
     scan_origin : Optional[Vector_3_T], optional
-        The origin point from which to calculate spherical coordinates. If None,
-        the calculation assumes the origin at (0, 0, 0).
+        The origin point from which to calculate spherical coordinates. If None, it assumes the origin is at (0, 0, 0).
 
     Returns
     -------
     Array_Nx3_T
-        Array of spherical coordinates with shape (N, 3). Each row contains
-        [slope distance, horizontal angle, zenith angle].
+        Output array of shape (N, 3) representing Cartesian coordinates.
     """
     spher: np.ndarray = np.zeros_like(xyz)
 

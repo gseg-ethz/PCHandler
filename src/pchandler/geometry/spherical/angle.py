@@ -8,7 +8,7 @@ from typing import Any, Generator, Self, cast
 import numpy as np
 from GSEGUtils.util import AngleUnit, convert_angles
 from GSEGUtils.base_types import Array_Float_T, ArrayT
-from numpy.typing import NDArray
+from numpy.typing import NDArray, DTypeLike, ArrayLike
 
 
 
@@ -33,22 +33,21 @@ def _rebuild_angle(cls, internal_value, display_unit):
 
 @total_ordering
 class AngleBase:
-    """
-    AngleBase class provides the basic functions for interacting with angles.
-
-    These include storage, unit conversion, comparison and numerical operations.
-    """
     __slots__ = ("_internal_value", "_display_unit")
 
     _INTERNAL_UNIT = AngleUnit.RAD
 
     def __init__(self, value: float | ArrayT, unit: AngleUnit):
-        """
+        """AngleBase class provides the basic functions for interacting with angles
 
+        These include storage, unit conversion, comparison and numerical operations.
+
+        Internally, the angles are stored in radians.
         Parameters
         ----------
         value: float | ArrayT
         unit: AngleUnit
+            Unit which the angle should be displayed in.
         """
         value = np.array(value, dtype=float)
         # noinspection PyTypeChecker
@@ -57,19 +56,16 @@ class AngleBase:
         self._display_unit = unit
 
 
-    def to(self, unit: AngleUnit) -> Array_Float_T:
-        """
-        Convert stored radians → `unit`.
-        Returns either a scalar float (if input was scalar)
-        or a ndarray of floats.
+    def to(self, unit: AngleUnit) -> Array_Float_T|float:
+        """Convert stored radians → `unit`.
 
         Parameters
         ----------
-        unit
+        unit: AngleUnit
 
         Returns
         -------
-
+        Array_Float_T | float
         """
         arr = self._internal_value.copy()
         # noinspection PyTypeChecker
@@ -77,10 +73,7 @@ class AngleBase:
         return arr.item() if arr.ndim == 0 else arr
 
     def in_unit(self, unit: AngleUnit) -> Self:
-        """
-        Return a *view* of this object with the same underlying
-        ._rad array in radians, but reporting a different unit.
-
+        """Return a view of the object converted to the specified unit.
 
         Parameters
         ----------
@@ -99,12 +92,26 @@ class AngleBase:
 
     @property
     def display_unit(self) -> AngleUnit:
-        """Display unit set for this angle(s)"""
+        """Display unit set for this angle(s)
+
+        Returns
+        -------
+        AngleUnit
+        """
         return self._display_unit
 
     @display_unit.setter
     def display_unit(self, unit: AngleUnit) -> None:
-        """Set the display unit for this angle(s)"""
+        """Set the display unit for this angle(s)
+
+        Parameters
+        ----------
+        unit
+
+        Returns
+        -------
+
+        """
         self._display_unit = unit
 
     @property
@@ -122,68 +129,84 @@ class AngleBase:
 
     @property
     def degrees(self) -> float | Array_Float_T:
-        """Returns a copy of the angle(s) in degrees"""
+        """Returns a copy of the angle(s) in degrees
+
+        Returns
+        -------
+        float | Array_Float_T
+        """
         return self.to(AngleUnit.DEGREE)
 
     def in_degrees(self) -> Self:
-        """Returns a view of the angle(s) in degrees,"""
+        """Returns a view of the angle(s) in degrees
+
+        Returns
+        -------
+        Angle | AngleArray
+        """
         return self.in_unit(AngleUnit.DEGREE)
 
     @property
     def radians(self) -> float | Array_Float_T:
-        """Returns a copy of the angle(s) in radians."""
+        """Returns a copy of the angle(s) in radians
+
+        Returns
+        -------
+        float | Array_Float_T
+        """
         return self.to(AngleUnit.RAD)
 
     def in_radians(self) -> Self:
-        """Returns a view of the angle(s) in radians."""
+        """Returns a view of the angle(s) in radians
+
+        Returns
+        -------
+        Angle | AngleArray
+        """
         return self.in_unit(AngleUnit.RAD)
 
     @property
     def gon(self) -> float | Array_Float_T:
-        """Returns a copy of the angle(s) in gon units."""
+        """Returns a copy of the angle(s) in gradians(gon)
+
+        Returns
+        -------
+        float | Array_Float_T
+        """
         return self.to(AngleUnit.GON)
 
     def in_gon(self) -> Self:
-        """Returns a view of the angle(s) in gon units."""
+        """Returns a view of the angle(s) in gradians(gon)
+
+        Returns
+        -------
+        Angle | AngleArray
+        """
         return self.in_unit(AngleUnit.GON)
 
-    def __array__(self, dtype=None) -> NDArray:
-        """
-        This makes np.asarray(angle) produce the raw radian array,
-        so most numpy functions will operate on ._rad directly.
+    def __array__(self, dtype: DTypeLike | None=None) -> NDArray:
+        """Enables numpy array operations on the angle(s)
+
+        Parameters
+        ----------
+        dtype: DTypeLike | None
+
+        Returns
+        -------
+        NDArray
         """
         return np.array(self._internal_value, dtype=dtype)
 
     # DISCUSS should we return an angle object? That way the user can access the value in unit of choice
-    def min(self):
-        """Returns the minimum value of the angle(s) in radians."""
+    def min(self) -> Any:
+        """Returns the minimum value of the angle(s) in radians"""
         return np.array(self).min()
 
     def max(self):
-        """Returns the maximum value of the angle(s) in radians."""
+        """Returns the maximum value of the angle(s) in radians"""
         return np.array(self).max()
 
     def __add__(self, other) -> Self:
-        """
-        Adds the given object or value to the current object and returns a new instance
-        with the updated value. Supports addition with objects of the same type or with
-        scalar numeric values.
-
-        Parameters
-        ----------
-        other : AngleBase or float
-            The object or scalar to be added to the current object's value.
-
-        Returns
-        -------
-        Self
-            A new instance of the class with the updated value.
-
-        Raises
-        ------
-        NotImplementedError
-            If the addition operation is not supported for the provided `other` type.
-        """
         try:
             if isinstance(other, AngleBase):
                 new_val = self.internal_value + other.internal_value
@@ -264,28 +287,19 @@ class AngleBase:
     #     return self.__binary_op(other, divmod)
 
     def _compare(self, other, op):
-        """
-        Compares the current object with another using a specified operator.
-
-        The comparison is performed based on internal unit values if both objects belong
-        to the `AngleBase` class. Otherwise, it uses the display value for the comparison.
-        The operation is conducted using the specified numpy ufunc operator.
+        """Compares the current object with another using a specified operator.
 
         Parameters
         ----------
-        other : AngleBase or numeric
-            The object or value to compare with. Can be an instance of `AngleBase`
-            or a numeric value.
+        other : AngleBase | float
         op : ufunc
-            A numpy universal function such as `np.equal` or `np.less` that defines
-            the comparison operation.
+            A numpy universal function such as `np.equal` or `np.less`
 
         Returns
         -------
-        bool or array_like
-            The result of the comparison operation. Returns a boolean or an array-like
-            object based on the inputs.
+        bool or NDArray[bool]
         """
+
         # Pull out the raw float/array to compare
         if isinstance(other, AngleBase):
             if self._INTERNAL_UNIT == other._INTERNAL_UNIT:
@@ -336,8 +350,7 @@ class Angle(AngleBase):
         The unit of the angle, such as radians or degrees.
     """
     def __new__(cls, value: float | Array_Float_T | str, unit: AngleUnit = AngleUnit.RAD):
-        """
-        Creates a new instance of Angle or AngleArray based on the input type and dimensions.
+        """Returns a new instance of Angle or AngleArray based on the input value and unit.
 
         Parameters
         ----------
@@ -364,21 +377,18 @@ class Angle(AngleBase):
         return inst
 
     def __init__(self, value: float, unit: AngleUnit=AngleUnit.RAD):
-        """
-        Initializes an angle object with a specified value and unit.
+        """Create an Angle object.
 
         Parameters
         ----------
         value : float
-            The numeric value of the angle.
-        unit : AngleUnit, optional
-            The unit of the angle, default is AngleUnit.RAD.
+        unit : AngleUnit, default=AngleUnit.RAD
         """
         super().__init__(value, unit)
 
     @classmethod
     def parse(cls, value: Any) -> Self:
-        """Parser function to convert angle from a variety of input formats.
+        """Parser function to create an angle from a variety of input formats.
 
         Supported formats include:
 
@@ -497,13 +507,11 @@ class AngleArray(AngleBase):
 
     @property
     def shape(self) -> tuple[int, ...]:
-        """
-        Provides the dimensions of the object as a tuple.
+        """Returns the shape of the array
 
         Returns
         -------
-        tuple of int
-            A tuple representing the object's dimensions.
+        tuple[int, ...]
         """
         return self._internal_value.shape
 

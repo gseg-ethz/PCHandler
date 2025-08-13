@@ -1,3 +1,4 @@
+"""LAS/LAZ file format handler class"""
 import logging
 from pathlib import Path
 from typing import Optional
@@ -12,25 +13,22 @@ from pchandler.constants import INTENSITY_NAMES, NORMAL_NAMES, RGB_NAMES, XYZ_NA
 from pchandler.data_io.core import AbstractIOHandler, _get_rgb_or_normal_field_names
 from pchandler.geometry import OptimizedShift
 
+__all__ = ["LasHandler"]
+
 logger = logging.getLogger(__name__.split(".")[0])
 
 
 class LasHandler(AbstractIOHandler):
-    """
-    Handles loading and saving of LAS/LAZ files for point cloud data management.
+    """Handles LAS/LAZ file input and output.
 
-    This class provides methods to load LAS/LAZ files into PointCloudData objects
-    and to save PointCloudData objects back to LAS/LAZ format. Includes support for
-    extracting scalar fields, applying numerical optimizations, and managing additional
-    attributes like RGB, intensity, and normals.
+    Supported file extensions:
 
-    Parameters
-    ----------
-    FORMATS : list of str
-        Supported file extensions for this handler (".las" and ".laz").
+     * .las
+     * .laz
     """
     FORMATS = [".las", ".laz"]
 
+    # TODO check how socs_origin is being passed to PointCloudData. Should support to stop optimal shift be shared?
     @classmethod
     def load(
         cls,  # type: ignore[override]
@@ -42,29 +40,26 @@ class LasHandler(AbstractIOHandler):
         force_no_numerical_shift: bool = False,
         **config,
     ) -> PointCloudData:
-        """
-        Loads a LAZ file and initializes a PointCloudData object. Extracts scalar fields as specified
-        and applies numerical optimization based on the header offsets if not disabled.
+        """Load a point cloud from a LAS/LAZ file.
 
         Parameters
         ----------
-        path : str or Path
-            The file path of the LAZ file to be loaded.
-        scalar_fields : list of str, optional
-            List of scalar field names to extract, by default None.
-        remove_prefix : bool
-            Whether to remove a prefix from scalar field names, by default True.
-        prefix : str
-            The prefix to be removed if `remove_prefix` is True, by default "scalar_".
-        force_no_numerical_shift : bool
-            If True, disables numerical optimization shift, by default False.
+        path : str | Path
+            Input LAS or LAZ file path.
+        scalar_fields : list[str]], default=None
+            List of specific scalar fields to extract from the PLY file.
+            Setting `None` will retrieve all scalar fields. Setting to `[]` will ignore scalar fields in the file.
+        remove_prefix : bool, default=True
+            Flag to remove prefixes on scalar field names.
+        prefix : str, default="scalar_"
+            Prefix to strip from scalar field names if `remove_prefix` is True.
+        force_no_numerical_shift : bool, default=False
+            Flag determining if the optimal shifts should be overridden and original coordinates used
         config : dict
-            Additional configuration parameters.
 
         Returns
         -------
         PointCloudData
-            A PointCloudData object containing the loaded 3D point cloud alongside scalar fields.
         """
 
         logger.info(f"Loading LAZ file: {path}")
@@ -97,32 +92,26 @@ class LasHandler(AbstractIOHandler):
         scales: Vector_3_T = np.array([0.0001, 0.0001, 0.0001]),
         **config,
     ) -> None:
-        """
-        Save the PointCloudData to a LAS/LAZ file.
-
-        This method exports point cloud data to a LAS/LAZ file, including its coordinates, scalar fields,
-        and additional attributes like RGB values, intensities, and normals. It also allows for optional
-        scaling, offset adjustments, and prefix handling for scalar fields.
+        """Save the point cloud data to a LAS/LAZ file.
 
         Parameters
         ----------
         pcd : PointCloudData
-            The point cloud data containing information such as coordinates, scalars, and other attributes.
-        path : str or Path
-            The output file path for the LAS/LAZ file.
-        scalar_fields : list of str, optional
-            A list of scalar fields to include in the exported file. If None, all scalar fields from the
-            input data are included.
-        add_prefix : bool, optional
-            If True, a prefix is added to the scalar field names in the output file.
-        prefix : str, optional
-            The prefix to add to scalar field names when `add_prefix` is True.
-        revert_sf_types : bool, optional
-            Whether to revert scalar field types to their original format before exporting.
-        scales : Vector_3_T, optional
-            Scaling factors for the x, y, and z coordinates in the LAS/LAZ file.
-        config : dict
-            Additional configuration options passed as keyword arguments.
+            Point cloud object
+        path : str | Path
+            Path to save the LAS/LAZ file to. File extension must be ".las" or ".laz".
+        scalar_fields: list[str], default=None
+            List of specific scalar fields to extract from the PLY file.
+            Setting `None` will retrieve all scalar fields. Setting to `[]` will ignore scalar fields in the file.
+        add_prefix: bool, default=False
+            Flag to add prefixes on scalar field names
+        prefix: str, default="scalar_"
+            Prefix to strip from scalar field names if `remove_prefix` is True.
+        revert_sf_types: bool, default=False
+            Flag to revert scalar field values to their original types or not
+        scales : Vector_3_T, default=[0.0001, 0.0001, 0.0001]
+            Scaling factors for (x,y,z). Relates to data precision and reducing memory footprint in file
+        config : dict[str, Any]
 
         Returns
         -------
@@ -180,6 +169,7 @@ class LasHandler(AbstractIOHandler):
             if name in scalar_fields:
                 scalar_fields.remove(name)
 
+        # TODO the add prefix and revert_sf are not yet supported here
         # Remaining fields including normals as these are extra dimensions
         for field in scalar_fields:
             value = np.asarray(pcd.scalar_fields[field])
@@ -189,6 +179,6 @@ class LasHandler(AbstractIOHandler):
 
             setattr(las, field, value)
 
-        las.write(path)
+        las.write(str(path))
 
         logger.info(f"Successfully wrote to  LAS/LAZ file: {path}")

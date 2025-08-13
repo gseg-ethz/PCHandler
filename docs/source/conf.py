@@ -43,14 +43,14 @@ intersphinx_mapping = {'open3d': ('https://www.open3d.org/docs/release/', None),
 python_use_unqualified_type_name = True                # False
 
 # ======= Autodoc Config =========
-autoclass_content = 'both'                              # 'both'
+autoclass_content = 'init'                              # 'both', 'None, 'init', 'class'
 autodoc_class_signature = 'separated'                       # 'mixed' / 'separated
 autodoc_member_order = 'bysource'                       # 'alphabetical', 'bysource'
 autodoc_default_options = {
     'members': True,
     'undoc-members': True,
     'private-members': True,
-    'special-members': '__init__',
+    # 'special-members': '__init__',
     'inherited-members': False,
     # 'imported-members': True,
     'exclude-members': 'model_config model_post_init _abc_impl, _reconstruct',

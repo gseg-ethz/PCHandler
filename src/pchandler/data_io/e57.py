@@ -1,3 +1,4 @@
+"""CSV / ASCII file format handler class"""
 import logging
 from pathlib import Path
 from typing import Generator, Optional
@@ -11,24 +12,18 @@ from pchandler.data_io.core import AbstractIOHandler
 
 logger = logging.getLogger(__name__.split(".")[0])
 
+__all__ = ['E57Handler']
+
 
 class E57Handler(AbstractIOHandler):
-    """
-    Handler for processing E57 point cloud files.
+    """Handles E57 file input and output.
 
-    This class provides functionality for loading point cloud data from E57 files.
-    It supports extracting coordinate data, intensity values, and RGB color information
-    from E57 formatted scans. The handler also facilitates reading single or multiple
-    scans from E57 files.
+    Currently limited to reading and writing single scans with and only RGB and intensity scalar field types.
+    All other scalar fields are ignored (due to library limitations).
 
-    Parameters
-    ----------
-    FORMATS : list of str
-        List of file formats supported by the handler.
-    SUPPORTED_FIELDS : dict
-        Mapping of supported field names to corresponding E57 field names.
-    SUPPORTED_SCALAR_FIELDS_MAP : dict
-        Mapping for supported scalar fields to specific E57 field names.
+    Supported file extensions:
+
+    * .e57
     """
     FORMATS = ['.e57']
 
@@ -54,26 +49,23 @@ class E57Handler(AbstractIOHandler):
              read_transform: bool = True,
              ignore_missing_fields: bool = True,
              **kwargs) -> PointCloudData | Generator[PointCloudData, None, None]:
-        """
-        Load one or more point cloud data from an E57 file.
+        """Load one or more point cloud from an E57 file.
 
         Parameters
         ----------
-        path : str or Path
-            Path to the E57 file.
-        retain_rgb : bool, optional
-            Specifies if RGB data should be retained, by default True.
-        retain_intensity : bool, optional
-            Specifies if intensity data should be retained, by default True.
-        pcd_index : int or None, optional
+        path: str or Path
+        retain_rgb: bool, default=True
+            Flag if RGB values should be loaded (if exists)
+        retain_intensity: bool, default=True
+            Flag if intensity values should be loaded (if exists)
+        pcd_index: int or None, default=None
             Index of the specific point cloud to load. If None, loads all scans,
             by default None.
-        read_transform : bool, optional
+        read_transform: bool, default=True
             Indicates if the transformation information should be read, by default True.
-        ignore_missing_fields : bool, optional
-            If True, handles missing fields gracefully during loading, by default True.
-        kwargs : dict
-            Additional arguments for loading E57 scans.
+        ignore_missing_fields: bool, default=True
+            If true, no errors are raised if fields are missing from the point cloud.
+        kwargs: dict
 
         Returns
         -------
@@ -98,7 +90,7 @@ class E57Handler(AbstractIOHandler):
             'retain_intensity': retain_intensity,
             'pcd_index': pcd_index,
             'ignore_missing_fields': ignore_missing_fields,
-            'read_transform': read_transform
+            'project_transform': read_transform
         }
 
         logger.info(f"Loading E57 file: {path}")
@@ -123,40 +115,31 @@ class E57Handler(AbstractIOHandler):
 
     @classmethod
     def save(cls, path: str | Path, /, pcd: PointCloudData, **config) -> None:   # type: ignore[override]
-        """
-        Saves the given point cloud data to the specified path using provided configurations.
+        """Save the point cloud data to an E57 file.
+
+        ** NOT CURRENTLY IMPLEMENTED **
 
         Parameters
         ----------
         path : str or Path
-            The file path where the point cloud data will be saved.
         pcd : PointCloudData
-            The point cloud data to be saved.
         **config : dict
-            Additional configuration options for saving the point cloud data.
         """
         raise NotImplementedError
 
     # TODO implement tests on file with multiple scans
     @classmethod
     def _load_all_e57_scans(cls, path, **kwargs) -> Generator[PointCloudData, None, None]:
-        """
-        Load all E57 scans from a file.
-
-        This method loads multiple scans from an E57 file, yielding a PointCloudData
-        object for each scan.
+        """Load all E57 scans from a file.
 
         Parameters
         ----------
         path : str
-            Path to the E57 file.
         **kwargs : dict
-            Additional arguments to be passed for loading individual scans.
 
         Yields
         ------
         Generator[PointCloudData, None, None]
-            A generator yielding PointCloudData objects for each scan in the file.
         """
         logger.debug(f"Loading multiple scans from E57 file: {path}")
         e57 = pye57.E57(str(path), mode="r")
@@ -174,30 +157,7 @@ class E57Handler(AbstractIOHandler):
              pcd_index: Optional[int] = None,
              read_transform: bool = True,
              ignore_missing_fields: bool = True,) -> PointCloudData:
-        """
-        Load a single scan from an E57 file as a PointCloudData object.
-
-        Parameters
-        ----------
-        path : str or Path
-            Path to the E57 file.
-        retain_rgb : bool, optional
-            Whether to retain RGB color data, by default True.
-        retain_intensity : bool, optional
-            Whether to retain intensity data, by default True.
-        pcd_index : int or None, optional
-            Index of the specific point cloud to load from the E57 file. Defaults to None.
-        read_transform : bool, optional
-            Whether to read and apply transformation data, by default True.
-        ignore_missing_fields : bool, optional
-            Whether to ignore missing fields when loading the E57 scan, by default True.
-
-        Returns
-        -------
-        PointCloudData
-            The loaded point cloud data from the specified E57 scan, including its geometry and, optionally, RGB
-            and intensity data.
-        """
+        """Load a single scan from an E57 file as a PointCloudData object"""
         logger.debug(f"Loading single scan {pcd_index} from E57 file: {path}")
 
         logger.debug(f"Reading fields:"

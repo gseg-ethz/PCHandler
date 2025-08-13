@@ -46,8 +46,7 @@ logger = logging.getLogger(__name__.split(".")[0])
 
 
 class DtypeState(NamedTuple):
-    """
-    NamedTuple containing the original dtype and the min and max values from an array.
+    """Contains the original dtype and limits of an array used to create a ScalarField array.
 
     Parameters
     ----------
@@ -55,7 +54,7 @@ class DtypeState(NamedTuple):
     lower: npt.NDArray[np.number] | float | int
     upper: npt.NDArray[np.number] | float | int
     """
-    dtype: np.dtype
+    dtype: npt.DTypeLike
     lower: npt.NDArray[np.number] | float | int
     upper: npt.NDArray[np.number] | float | int
 
@@ -100,8 +99,7 @@ class _ScalarKwargT(TypedDict, total=False):
 
 
 class AbstractScalarField(FixedLengthArray):
-    """
-    Abstract scalar field class containing validation and method to return data in it's original form.
+    """Abstract scalar field class containing validation and conversion to origianl dtype methods
 
     Parameters
     ----------
@@ -129,7 +127,16 @@ class AbstractScalarField(FixedLengthArray):
     @model_validator(mode='before')
     @classmethod
     def _validate_model_before(cls, data: Any) -> Any:
-        """Extract the array data and original dtype when initializing the scalar field."""
+        """Extract the array data and original dtype when initializing the scalar field.
+
+        Parameters
+        ----------
+        data: Any
+
+        Returns
+        -------
+        Any
+        """
         if data['name'] is None:
             # Extract name from field if it exists, otherwise get default if available
             if hasattr(data['arr'], 'name'):
@@ -200,8 +207,9 @@ class ScalarFieldTriplet(ArrayNx3, AbstractScalarField):
 
 
 class RGBFields(ScalarFieldTriplet):
-    """
-    RGB Color Field represented by a scalar field triplet of Uint8 values.
+    """RGB / Color Field
+
+     Represented by a scalar field triplet of Uint8 values.
 
     Parameters
     ----------
@@ -211,7 +219,7 @@ class RGBFields(ScalarFieldTriplet):
     name: str = RGB_NAMES.base
 
     def __init__(self, arr: Array_Nx3_Uint8_T|Array_Nx3_Float_T|Self, **kwargs: Unpack[_ScalarKwargT]):
-        """Initialise an RGB colour field.
+        """Initialise an RGB field.
 
         Will convert any floating point values to uint8.
 
@@ -226,8 +234,17 @@ class RGBFields(ScalarFieldTriplet):
     # noinspection PyNestedDecorators
     @field_validator('arr', mode='before')
     @classmethod
-    def normalise_to_uint8(cls, data: npt.NDArray[Any]) -> Array_Uint8_T:
-        """Automatically convert the input array to uint8"""
+    def _normalise_to_uint8(cls, data: npt.NDArray[Any]) -> Array_Uint8_T:
+        """Automatically convert the input array to uint8
+
+        Parameters
+        ----------
+        data: npt.NDArray[Any]
+
+        Returns
+        -------
+        Array_Uint8_T
+        """
         return normalize_uint8(data)
 
     @field_validator('name', mode='before')
@@ -448,6 +465,13 @@ class ScalarFieldUint8(ScalarField):
     arr: Vector_Uint8_T
 
     def __init__(self, arr: Vector_Uint8_T | Self, **kwargs: Unpack[_ScalarKwargT]):
+        """
+
+        Parameters
+        ----------
+        arr: Vector_Uint8_T | Self
+        kwargs: Unpack[_ScalarKwargT]
+        """
         super().__init__(arr, **kwargs)
 
 
@@ -458,6 +482,13 @@ class ScalarFieldBoolean(ScalarField):
     arr: Vector_Bool_T
 
     def __init__(self, arr: Vector_Bool_T | Self, **kwargs: Unpack[_ScalarKwargT]):
+        """
+
+        Parameters
+        ----------
+        arr: Vector_Bool_T | Self
+        kwargs: Unpack[_ScalarKwargT]
+        """
         super().__init__(arr, **kwargs)
 
 
@@ -468,6 +499,13 @@ class ScalarFieldFloat32(ScalarField):
     arr: Vector_Float32_T
 
     def __init__(self, arr: Vector_Float32_T | Self, **kwargs: Unpack[_ScalarKwargT]):
+        """
+
+        Parameters
+        ----------
+        arr: Vector_Float32_T | Self
+        kwargs: Unpack[_ScalarKwargT]
+        """
         super().__init__(arr, **kwargs)
 
 
@@ -478,8 +516,21 @@ class NormalisedInt16ScalarField(ScalarField):
     arr: Annotated[Vector_Int16_T, BeforeValidator(normalize_int16)]
 
     def __init__(self, arr: VectorT | Self, **kwargs: Unpack[_ScalarKwargT]):
+        """
+
+        Parameters
+        ----------
+        arr: VectorT | Self
+        kwargs: Unpack[_ScalarKwargT]
+        """
         super().__init__(arr, **kwargs)
 
     def to_uint8(self) -> ScalarFieldUint8:
+        """Returns a converted copy of the scalar field with the dtype set to uint8.
+
+        Returns
+        -------
+        ScalarFieldUint8
+        """
         return ScalarFieldUint8(normalize_uint8(self.arr), name=self.name, origin_dtype=self.origin_dtype)
 

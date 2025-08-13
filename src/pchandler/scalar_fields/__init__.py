@@ -1,3 +1,7 @@
+"""
+Public API for ScalarField and ScalarFieldManager classes.
+"""
+
 from __future__ import annotations
 
 import importlib

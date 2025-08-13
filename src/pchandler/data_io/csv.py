@@ -1,3 +1,4 @@
+"""CSV / ASCII file format handler class"""
 import logging
 from pathlib import Path
 from typing import Any, Iterable, NamedTuple, Optional
@@ -8,6 +9,8 @@ import numpy.typing as npt
 from pchandler import PointCloudData
 from pchandler.constants import RGB_NAMES, XYZ_NAMES
 from pchandler.data_io.core import AbstractIOHandler
+
+__all__ = ["CsvHandler"]
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -39,17 +42,17 @@ class AsciiInfo(NamedTuple):
 
 
 class CsvHandler(AbstractIOHandler):
-    """
-    Handler for reading and writing point cloud data in CSV and ASCII-like formats.
+    """Handles TXT and CSV like file input and output
 
-    This class provides methods to load and save point cloud data from and to CSV or similar
-    formats. It supports scalar fields and provides customization options for field names,
-    prefixes, delimiters, and more.
+    Supported file extensions:
 
-    Parameters
-    ----------
-    FORMATS : list of str
-        Supported file formats by the handler.
+    * .txt
+    * .csv
+    * .xyz
+    * .asc
+    * .ascii
+    * .pts
+
     """
     FORMATS = [".txt", ".csv", ".xyz", ".asc", ".ascii", ".pts"]
 
@@ -66,37 +69,29 @@ class CsvHandler(AbstractIOHandler):
         delimiter: Optional[str] = None,
         **config,
     ) -> PointCloudData:
-        """
-        Load point cloud data from a specified file using provided configurations.
-
-        This method processes the file structure, validates the fields, determines
-        the data load configuration, and extracts the relevant data into a PointCloudData
-        object.
+        """Load a point cloud from a CSV-like file.
 
         Parameters
         ----------
         path : str or Path
-            The path to the file that contains the point cloud data.
-        scalar_fields : list of str, optional
-            A list of scalar field names to extract. Default is None.
-        remove_prefix : bool
-            Indicates if the prefix should be removed from scalar field names. Default is True.
-        prefix : str
-            The prefix to be removed if 'remove_prefix' is True. Default is "scalar_".
-        column_names_row : int
-            The row index of column names in the file. Use -1 if not applicable. Default is -1.
-        comment : str
-            The comment character(s) in the file used to skip lines. Default is "//".
-        delimiter : str, optional
-            The delimiter used to separate fields in the file. If None, it will attempt
-            auto-detection. Default is None.
+        scalar_fields : list of str, default=None
+            List of specific scalar fields to extract from the PLY file.
+            Setting `None` will retrieve all scalar fields. Setting to `[]` will ignore scalar fields in the file.
+        remove_prefix : bool, default=True
+            Flag to remove prefixes on scalar field names.
+        prefix : str, default="scalar_"
+            Prefix to strip from scalar field names if `remove_prefix` is True.
+        column_names_row : int, default=-1
+            Header row index where column names are defined. Default is -1 for the last line of the header.
+        comment : str, default = "//"
+            Character used for comments or header in the file
+        delimiter : str, default=None
+            Delimiting character(s) type. If None is set, the file will be sniffed and attempt to automatically it.
         config : dict
-            Additional configuration parameters passed as keyword arguments.
 
         Returns
         -------
         PointCloudData
-            Object containing the extracted point cloud data.
         """
 
         # Get general file structure information
@@ -149,29 +144,28 @@ class CsvHandler(AbstractIOHandler):
         delimiter: str = ",",
         **config: dict[str, Any],
     ) -> None:
-        """
-        Saves point cloud data to a CSV file with optional configurations for scalar fields
-        and formatting.
+        """Save the point cloud data to a text-delimited file format
+
+        Alternatively, save to TXT or other
 
         Parameters
         ----------
         pcd : PointCloudData
-            The point cloud data to save.
+            Point cloud object
         path : str or Path
-            The file path where the CSV will be saved.
-        scalar_fields : list of str, optional
-            List of scalar fields to include. Include all if None.
-        add_prefix : bool, default=True
-            Whether to prepend a prefix to scalar field names in the CSV.
-        prefix : str, default='scalar_'
-            The prefix to add to scalar field names if `add_prefix` is True.
-        revert_sf_types : bool, default=False
-            Whether to revert scalar field types to their original format.
-        delimiter : str, default=','
-            The delimiter to use in the CSV file.
+            File path
+        scalar_fields: list[str], default=None
+            List of specific scalar fields to extract from the PLY file.
+            Setting `None` will retrieve all scalar fields. Setting to `[]` will ignore scalar fields in the file.
+        add_prefix: bool, default=False
+            Flag to add prefixes on scalar field names
+        prefix: str, default="scalar_"
+            Prefix to strip from scalar field names if `remove_prefix` is True.
+        revert_sf_types: bool, default=False
+            Flag to revert scalar field values to their original types or not
+        delimiter: str, default=","
+            Delimiter to separate fields in the file.
         config : dict of str, Any
-            Additional configuration options for CSV generation.
-
         """
 
         array = cls._generate_structured_array(pcd, scalar_fields, add_prefix, prefix, revert_sf_types)
@@ -196,30 +190,27 @@ def sniff_file(
     minimum_columns: int = 3,
     comment: str = "//",
 ) -> AsciiInfo:
-    """
-    Reads and analyzes a file to determine its structure, extracting header information,
-    data delimiter, field names, and the number of data points.
+    """Attempts to read part of the file and determine some information about it's structure
 
     Parameters
     ----------
     file : Path
-        Path to the file to be analyzed.
-    delimiters : tuple of str, optional
-        Possible delimiters to test for splitting lines. Defaults to (" ", ";", "\t", ",").
-    field_names_row_index : int, optional
-        Index of the row in the header that contains field names. Defaults to -1 (last header row).
-    lines_to_check : int, optional
+        File path
+    delimiters : tuple[str, ...], default=(" ", ";", "\t", ",")
+        Possible delimiters to search for
+    field_names_row_index : int, default=-1
+        Index number for the row in the header that contains field names. Defaults to the last row (-1).
+    lines_to_check : int, default=10
         Number of lines to analyze for detecting the delimiter and number of columns. Defaults to 10.
-    minimum_columns : int, optional
-        Minimum expected number of columns in the data. Rows with fewer columns are ignored. Defaults to 3.
-    comment : str, optional
-        String prefix used to denote comment lines in the file. Defaults to "//".
+    minimum_columns : int, default=3
+        Minimum number of columns required for a file to be valid (X,Y,Z)
+    comment : str, default="//"
+        String indicating line comments
 
     Returns
     -------
     AsciiInfo
-        Object containing detected header, delimiter, field names, number of fields,
-        and the total number of data points in the file.
+        Object contains detected header, delimiter, field names, number of fields, and number of points in the file.
     """
 
     # Read the header information defined by the comment section of the Ascii File and check if
@@ -244,33 +235,20 @@ def sniff_file(
 def _get_field_counts(
     file: Path, character: str, lines_to_check: int = 10, minimum_columns: int = 3, comment: str = "//"
 ) -> int:
-    """
-    Determine the number of consistent delimited fields in a file.
-
-    Parses a given file to analyze a specified number of lines to identify consistent
-    field counts based on a delimiter. Ensures all considered lines have the same
-    number of fields and meet the minimum column requirement. The function disregards
-    lines starting with a specified comment prefix and processes a specified header
-    skipping mechanism.
+    """Determine the number of fields (including XYZ coordinates) in a file
 
     Parameters
     ----------
     file : Path
-        Path to the input file to be processed.
     character : str
-        Delimiter character used to split fields in each line.
-    lines_to_check : int, optional
-        Number of lines to analyze for field consistency (default: 10).
-    minimum_columns : int, optional
-        Minimum required number of columns in a line (default: 3).
-    comment : str, optional
-        Prefix for comment lines to ignore in the file (default: "//").
+        Delimiter character
+    lines_to_check : int, default=10
+    minimum_columns : int, default=3
+    comment : str, default="//"
 
     Returns
     -------
     int
-        The determined number of fields per line if consistent and meeting the minimum
-        required columns; otherwise, 0.
     """
 
     header, number_points = _get_header(file, comment)
@@ -322,32 +300,20 @@ def _delimiter_sniffer(
     minimum_columns: int = 3,
     comment: str = "//",
 ) -> tuple[str, int]:
-    """
-    Analyzes a file to detect the most appropriate delimiter based on the provided
-    criteria, such as acceptable delimiters, number of lines to check, minimum column
-    requirements, and comment exclusions. Returns the detected delimiter and field count.
+    """Automatically try to determine the delimiter in a file.
 
     Parameters
     ----------
-    file : Path
-        The path of the file to examine for delimiter detection.
-    delimiters : str or Iterable[str], optional
-        A single delimiter or multiple potential delimiters to test. Defaults to
-        (" ", ";", "\t", ",").
-    lines_to_check : int, optional
-        Number of lines from the start of the file to analyze for delimiter suitability.
-        Defaults to 10.
-    minimum_columns : int, optional
-        Minimum number of columns required for a delimiter to be considered valid.
-        Defaults to 3.
-    comment : str, optional
-        String pattern indicating lines to be treated as comments, which should be
-        ignored during analysis. Defaults to "//".
+    file: Path
+    delimiters: str or Iterable[str], default=(" ", ";", "\t", ",")
+    lines_to_check: int, default=10
+    minimum_columns: int, default=3
+    comment : str, default="//"
 
     Returns
     -------
     tuple[str, int]
-        The detected delimiter and the number of fields it identifies in the file.
+        delimiter and number of fields found in the file
     """
 
     for delimiter in delimiters:
@@ -359,26 +325,19 @@ def _delimiter_sniffer(
 
 
 def _get_header(file: Path, comment: str = "//") -> tuple[list[str], int | None]:
-    """
-    Extracts the header and an optional points number from a file.
+    """Extracts the header and an optional points number from a file.
 
-    The function reads a file line by line to extract comments at the beginning of
-    the file, treating them as header content. It looks for the first non-comment
-    line and determines if it can be interpreted as an integer number.
+    Will only get the number of points if it is represented as a standalone integer on the first line
+    after the header/comments section.
 
     Parameters
     ----------
     file : Path
-        The path to the input file to extract the header and points number from.
-    comment : str, optional
-        The string prefix used to identify comment lines in the file. Defaults to "//".
+    comment : str, default="//"
 
     Returns
     -------
-    tuple[list[str], int or None]
-        A tuple where the first element is a list of header lines (strings without
-        the comment prefix) and the second element is an integer if the first non-
-        comment line is interpretable as a number, otherwise None.
+    tuple[list[str], int | None]
     """
     with open(file, "r") as f:
         header = []
@@ -396,23 +355,16 @@ def _get_header(file: Path, comment: str = "//") -> tuple[list[str], int | None]
 
 
 def generate_ascii_load_dtype(column_names: list[str]) -> npt.DTypeLike:
-    """
-    Generates a numpy dtype object for loading ASCII data based on column names.
-
-    This function maps given column names to appropriate data types based on
-    their category or type definitions in predefined constants (e.g., XYZ_NAMES
-    and RGB_NAMES). It is used to define structured arrays for loading data.
+    """Generates a dtype object for loading ASCII data based on column names.
 
     Parameters
     ----------
     column_names : list of str
-        A list of column names to create the dtype for.
 
     Returns
     -------
     numpy.typing.DTypeLike
-        A numpy dtype object with structured names and corresponding formats
-        based on the input column names.
+        dtype object used for creating a structured array
     """
     names: list[str] = []
     formats: list[npt.DTypeLike] = []

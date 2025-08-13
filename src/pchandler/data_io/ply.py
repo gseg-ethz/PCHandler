@@ -1,3 +1,4 @@
+"""PLY file format handler class"""
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -8,21 +9,18 @@ from plyfile import PlyData, PlyElement  # type: ignore
 from pchandler import PointCloudData
 from pchandler.data_io.core import AbstractIOHandler
 
+__all__ = ["PlyHandler"]
+
 logger = logging.getLogger(__name__.split(".")[0])
 
 
 class PlyHandler(AbstractIOHandler):
-    """
-    Handles PLY file input and output.
+    """Handles PLY file input and output.
 
-    This class provides methods for loading and saving PLY files as point cloud data. It supports
-    various configurations for managing scalar fields, prefixes, and file format (ASCII or binary).
-    PLY files must contain vertex data to properly function with this handler.
+    Supported file extensions:
 
-    Parameters
-    ----------
-    FORMATS : list of str
-        Supported file formats for the handler.
+    * .ply
+
     """
     FORMATS = [".ply"]
 
@@ -36,28 +34,24 @@ class PlyHandler(AbstractIOHandler):
         prefix: str = "scalar_",
         **config: dict[str, Any],
     ) -> PointCloudData:
-        """
-        Loads a PointCloudData object from a PLY file, supporting optional scalar field extraction
-        and field name customization.
+        """Load a point cloud from a PLY file
 
         Parameters
         ----------
         path : str or Path
-            Path to the PLY file to load.
-        scalar_fields : list of str, optional
-            List of scalar fields to extract from the PLY file. If None, no scalar fields
-            are extracted.
-        remove_prefix : bool, optional
-            Indicates whether prefixes in scalar field names should be removed while extracting.
-        prefix : str, optional
-            Prefix to identify scalar field names. Used in combination with `remove_prefix`.
+            Input PLY file path.
+        scalar_fields : list of str, default=None
+            List of specific scalar fields to extract from the PLY file.
+            Setting `None` will retrieve all scalar fields. Setting to `[]` will ignore scalar fields in the file.
+        remove_prefix : bool, default=True
+            Flag to remove prefixes on scalar field names.
+        prefix : str, default="scalar_"
+            Prefix to strip from scalar field names if `remove_prefix` is True.
         **config : dict of str, Any
-            Additional configuration parameters.
 
         Returns
         -------
         PointCloudData
-            A PointCloudData instance containing the loaded point cloud data.
         """
         logger.info(f"Loading PLY file: {path}")
 
@@ -87,33 +81,26 @@ class PlyHandler(AbstractIOHandler):
         as_ascii: bool = False,
         **config: dict[str, Any],
     ) -> None:
-        """
-        Saves the point cloud data to a PLY file.
-
-        This class method processes the given point cloud data and writes it to a
-        PLY file format at the specified path. It can selectively include scalar
-        fields and customize naming conventions for the fields.
+        """Save the point cloud data to a PLY file
 
         Parameters
         ----------
-        pcd : PointCloudData
-            Input point cloud data to be saved.
-        path : str or Path
-            The destination file path for the saved PLY file.
-        scalar_fields : list of str, optional
-            List of scalar field names to include in the file. If None, all fields
-            are included.
-        add_prefix : bool, optional
-            Whether to add a prefix to scalar field names.
-        prefix : str, optional
-            The prefix string to be added to the field names, if `add_prefix` is True.
-        revert_sf_types : bool, optional
-            Specifies whether to revert scalar fields to their original data types.
-        as_ascii : bool, optional
-            If True, the PLY file will be written in ASCII format; otherwise, it
-            will use binary format.
-        config : dict of str, Any
-            Additional configuration for customization during file saving.
+        pcd: PointCloudData
+            Point cloud object
+        path: str | Path
+            Path to save the PLY file to. File extension must be ".ply".
+        scalar_fields: list[str], default=None
+            List of specific scalar fields to extract from the PLY file.
+            Setting `None` will retrieve all scalar fields. Setting to `[]` will ignore scalar fields in the file.
+        add_prefix: bool, default=False
+            Flag to add prefixes on scalar field names
+        prefix: str, default="scalar_"
+            Prefix to strip from scalar field names if `remove_prefix` is True.
+        revert_sf_types: bool, default=False
+            Flag to revert scalar field values to their original types or not
+        as_ascii: bool, default=False
+            Write to ASCII file if `as_ascii` is True, otherwise write to binary file.
+        config: dict[str, Any]
         """
 
         path = Path(path)

@@ -19,38 +19,17 @@ from GSEGUtils.base_types import Array_3x3_T, Array_4x4_T, Array_Float_T, Vector
 
 
 class _TransformArray(NumericMixins):
-    """
-    Represents a transformation array with special handling for matrix multiplication.
-
-    Enables advanced matrix multiplication features, particularly for specific array types like
-    FixedLengthArray or numpy arrays. Provides support for both standard and in-place matrix
-    multiplication.
-
-    Parameters
-    ----------
-    arr : Array_Float_T | BaseArray
-        Internal array storing the values to be transformed.
-    shape : tuple
-        Tuple representing the shape of the array.
-    """
-    def __matmul__(self, other: Array_Float_T | BaseArray) -> Any:
-        """
-        Perform matrix multiplication.
-
-        This method supports matrix multiplication between the current object
-        and another object or array-like structure. It handles objects of the same
-        shape or different shapes appropriating compatibility checks.
+    """Base Validated Transformation Array class"""
+    def __matmul__(self, other: Array_Float_T | BaseArray) -> Array_Float_T | BaseArray:
+        """Matrix multiplication ensuring other `BaseArray` inherited objects return as their own type
 
         Parameters
         ----------
-        other : Array_Float_T or BaseArray
-            The other array-like or compatible type for matrix multiplication.
+        other : Array_Float_T | BaseArray
 
         Returns
         -------
-        Any
-            Resulting product of the matrix multiplication. The returned type may
-            vary depending on the type of the input (e.g., numpy array or object-specific type).
+        Array_Float_T | BaseArray
         """
         if isinstance(other, FixedLengthArray) and other.ndim > 1:  # Coordinates and PointCloudData
             return other.__rmatmul__(self)
@@ -64,72 +43,48 @@ class _TransformArray(NumericMixins):
             return self.arr @ other
 
     def __imatmul__(self, other: Array_Float_T | BaseArray) -> Self:
-        """
-        Performs in-place matrix multiplication.
+        """Perform in place multiplication
 
-        The method updates the existing object by performing matrix multiplication
-        with another array or compatible object.
+        Supports chaining Transformations
 
         Parameters
         ----------
         other : Array_Float_T or BaseArray
-            The array or compatible object to be used in the matrix multiplication.
 
         Returns
         -------
         Self
-            The updated object after in-place matrix multiplication.
         """
         self.arr @= other
         return self
 
 
 class _Transform3x3(_TransformArray):
-    """
-    Represents a 3x3 transformation array.
-
-    This class encapsulates a 3x3 transformation matrix and provides functionalities
-    to work with such matrices. It serves as a fundamental representation for
-    various kinds of 3x3 transformations in numerical computations.
+    """3x3 Transformation Array class
 
     Parameters
     ----------
     arr : Array_3x3_T
-        The 3x3 transformation matrix, initialized to the identity matrix by
-        default.
     """
     arr: Array_3x3_T = Field(default_factory=lambda: np.eye(3))
 
 
 class _Transform4x4(_TransformArray):
-    """
-    Represents a 4x4 transformation matrix.
-
-    This class encapsulates a 4x4 transformation matrix, which is commonly
-    used in geometric transformations, including translations, rotations,
-    scaling, and projections. The default matrix is an identity matrix.
+    """4x4 Transformation Array class
 
     Parameters
     ----------
     arr : Array_4x4_T
-        A 4x4 matrix representing the transformation. Default is an
-        identity matrix.
     """
     arr: Array_4x4_T = Field(default_factory=lambda: np.eye(4))
 
 
 class Transform(_Transform4x4):
-    """
-    Represents a 4x4 transformation matrix for operations like translation, rotation,
-    scaling, and affine transformations.
-
-    Provides methods for creating transformations based on translation vectors, rotation
-    matrices, scaling factors, and affine matrices.
+    """Point Cloud Transformation Array class
 
     Parameters
     ----------
-    arr : Array_Float_T | Array_4x4_T | Self
-        Underlying data representing the transformation matrix.
+    arr : Array_4x4_T
     """
 
     def __init__(self, arr: Array_Float_T | Array_4x4_T | Self, **kwargs):
@@ -147,157 +102,90 @@ class Transform(_Transform4x4):
 
     @classmethod
     def from_translation(cls, vector: Vector_3_T) -> Transform:
-        """
-        Creates a transform object based on a translation vector.
-
-        This class method generates a transformation that represents a translation
-        operation, using the given translation vector as input. The implementation
-        is designed to abstract the generation process internally.
+        """Create a Transform object from a translation vector
 
         Parameters
         ----------
         vector : Vector_3_T
-            The 3D vector representing the translation magnitude for each axis.
 
         Returns
         -------
         Transform
-            A new Transform object representing the translation.
         """
-        return cls._generate(vector, mode='translate')
+        return cls.generate(translation=vector)
 
     @classmethod
     def from_rotation(cls, matrix: Array_3x3_T) -> Transform:
-        """
-        Creates a Transform object using a given rotation matrix.
+        """Create a Transform object from a rotation matrix
 
         Parameters
         ----------
         matrix : Array_3x3_T
-            A 3x3 rotation matrix.
 
         Returns
         -------
         Transform
-            A new Transform object initialized with the rotation matrix.
         """
-        return cls._generate(matrix, mode='rotate')
+        return cls.generate(rotation=matrix)
 
     @classmethod
     def from_affine(cls, matrix: Array_4x4_T) -> Transform:
-        """
-        Creates a Transform instance from a 4x4 affine matrix.
+        """Creates a Transform object from a 4x4 affine matrix.
 
         Parameters
         ----------
         matrix : Array_4x4_T
-            A 4x4 transformation matrix that represents the affine transform.
 
         Returns
         -------
         Transform
-            A Transform object created using the provided affine matrix.
         """
-        return cls._generate(matrix, mode='affine')
+        return cls(matrix)
 
     @classmethod
-    def from_scale(cls, vector: Vector_3_T|float) -> Transform:
-        """
-        Create a Transform instance based on scaling by the provided vector.
-
-        This method generates a Transformation object that applies scaling transformations
-        determined by the specified vector or scalar factor.
-
+    def from_scale(cls, vector: Vector_3_T | float) -> Transform:
+        """Create a Transform object from a scaling vector or scale factor
         Parameters
         ----------
         vector : Vector_3_T or float
-            The scaling factor(s). If a scalar (float) is provided, uniform scaling
-            is applied to all dimensions. If a 3D vector is provided, non-uniform scaling
-            is applied based on its components.
+            If a scalar (float) is provided, uniform scaling is applied to all dimensions.
 
         Returns
         -------
         Transform
-            A Transform object representing the scaling transformation.
         """
-        return cls._generate(vector, mode='scale')
+        return cls.generate(scale=vector)
 
     @classmethod
     def generate(cls,
                  rotation: Array_3x3_T = np.eye(3),
                  translation: Vector_3_T = np.zeros(3),
                  scale: Vector_3_T|float = 1, ):
-        """
-        Generates an affine transformation matrix based on the given rotation,
-        translation, and scale parameters. The output matrix follows the form:
-        x0 = (R * s + t) @ x1, where R is the rotation, s is the scale, and t
-        is the translation.
+        """Generate an affine transformation from rotation, translation, and/or scale parameters.
+
+        Takes the form x0 = (R * s + t) @ x1
+
+            Rotation  Translation     Scale:
+            | R 0 |     | I t |      | s 0 |
+            | 0 1 |     | 0 1 |      | 0 1 |
 
         Parameters
         ----------
         rotation : Array_3x3_T, optional
-            A 3x3 rotation matrix. Defaults to the identity matrix.
+            3x3 rotation matrix
         translation : Vector_3_T, optional
-            A 3-dimensional translation vector. Defaults to a zero vector.
+            3-dimensional translation vector
         scale : Vector_3_T or float, optional
-            Scale factor(s) applied to the axes. Accepts a scalar or a
-            3-dimensional vector. Defaults to 1.
+            Scalar value or 3-dimensional vector
 
         Returns
         -------
-        cls
-            An instance of the class with the generated affine transformation
-            matrix.
+        Transform
         """
-        """
-                Takes the form x0 = (R * s + t) @ x1
-
-                Rotation  Translation     Scale:
-                | R 0 |     | I t |      | s 0 |
-                | 0 1 |     | 0 1 |      | 0 1 |
-                """
         affine = np.eye(4).astype(np.float32)
         affine[:3, :3] = rotation.astype(np.float32)
         affine[:3, 3] = translation.astype(np.float32)
         affine[np.diag_indices(3)] *= scale
-        return cls(affine)
-
-    @classmethod
-    def _generate(cls, values=Array_Float_T, mode: Literal['translate', 'rotate', 'scale', 'affine'] = 'affine', ):
-        """
-        Generates a transformation matrix using specified values and mode.
-
-        Parameters
-        ----------
-        values : Array_Float_T
-            Array-like input values used for the transformation.
-        mode : {'translate', 'rotate', 'scale', 'affine'}, default='affine'
-            Transformation mode. It can be one of the following:
-            - 'translate': Values represent translation offsets.
-            - 'rotate': Values represent rotation matrix.
-            - 'scale': Values represent scaling factors.
-            - 'affine': Values represent a complete affine matrix.
-
-        Returns
-        -------
-        cls
-            A new instance of the class initialized with the generated transformation
-            matrix.
-        """
-
-        affine = np.eye(4)
-        values = np.asarray(values)
-        if mode == 'translate':
-            affine[:3, 3] += values
-        elif mode == 'rotate':
-            affine[:3, :3] @= values
-        elif mode == 'scale':
-            affine[np.diag_indices(3)] *= values
-        elif mode == 'affine':
-            affine = values
-        else:
-            raise ValueError(f"Invalid mode: {mode}")
-
         return cls(affine)
 
 #     def as_record(self, forward=True):

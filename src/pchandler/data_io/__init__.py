@@ -1,3 +1,7 @@
+"""
+Public API for pchandler.data_io.
+Re-exports key classes for easy IO access
+"""
 from __future__ import annotations
 
 import importlib

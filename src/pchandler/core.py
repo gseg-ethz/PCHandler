@@ -52,7 +52,7 @@ class PointCloudData(CartesianCoordinates):
         scalar_fields: (ScalarFieldManager
                                  | dict[str, ScalarField | ScalarFieldTriplet | Array_Nx3_T | VectorT | Sequence]
                                  | None) = None,
-        socs_origin: Vector_3_Float_T = np.zeros(3, dtype=np.float32),
+        socs_origin: Vector_3_Float_T | None = None,
         **kwargs: Any,
     ):
         """
@@ -75,7 +75,7 @@ class PointCloudData(CartesianCoordinates):
         """
 
         kwargs = {} | kwargs
-        kwargs["scalar_fields"] = scalar_fields if not None else None
+        kwargs["scalar_fields"] = scalar_fields
         kwargs['socs_origin'] = socs_origin
 
         super().__init__(xyz=xyz, **kwargs)  # type: ignore[call-overload]
@@ -107,8 +107,17 @@ class PointCloudData(CartesianCoordinates):
 
     @field_validator("scalar_fields", mode="before")
     @classmethod
-    def _convert_sfm(cls, value):
-        """Ensure scalar_fields input is converted to a ScalarFieldManager"""
+    def _convert_sfm(cls, value: dict | ScalarFieldManager | None = None) -> ScalarFieldManager:
+        """Ensure scalar_fields input is converted to a ScalarFieldManager
+
+        Parameters
+        ----------
+        value: dict | ScalarFieldManager | None
+
+        Returns
+        -------
+        ScalarFieldManager
+        """
         if isinstance(value, dict):
             value = ScalarFieldManager(fields=value)
         elif value is None:
@@ -117,7 +126,16 @@ class PointCloudData(CartesianCoordinates):
 
     @field_serializer("scalar_fields")
     def _drop_parent_weakref(self, scalar_fields: ScalarFieldManager):
-        """Drop weakref to parent on serialization"""
+        """Drop weakref to parent on serialization
+
+        Parameters
+        ----------
+        scalar_fields: ScalarFieldManager
+
+        Returns
+        -------
+
+        """
         scalar_fields._parent = None
         return scalar_fields
 
@@ -137,7 +155,7 @@ class PointCloudData(CartesianCoordinates):
 
         Parameters
         ----------
-        value : |Array_Nx3_Float_T| | NormalFields | None
+        value : Array_Nx3_Float_T | NormalFields | None
 
         Returns
         -------
@@ -161,7 +179,7 @@ class PointCloudData(CartesianCoordinates):
 
         Parameters
         ----------
-        value : |Array_Nx3_Float_T| | |Array_Nx3_Uint8_T| | RGBFields | None
+        value : Array_Nx3_Float_T | Array_Nx3_Uint8_T | RGBFields | None
 
         Returns
         -------
@@ -185,7 +203,7 @@ class PointCloudData(CartesianCoordinates):
 
         Parameters
         ----------
-        value: |VectorT| | ScalarField | None
+        value: VectorT | ScalarField | None
 
         Returns
         -------
@@ -209,7 +227,7 @@ class PointCloudData(CartesianCoordinates):
 
         Parameters
         ----------
-        value: |VectorT| | ScalarField | None
+        value: VectorT | ScalarField | None
 
         Returns
         -------
