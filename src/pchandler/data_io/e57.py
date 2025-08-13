@@ -90,7 +90,7 @@ class E57Handler(AbstractIOHandler):
             'retain_intensity': retain_intensity,
             'pcd_index': pcd_index,
             'ignore_missing_fields': ignore_missing_fields,
-            'project_transform': read_transform
+            'read_transform': read_transform
         }
 
         logger.info(f"Loading E57 file: {path}")
