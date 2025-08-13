@@ -63,7 +63,7 @@ autodoc_mock_imports = []                               # []
 autodoc_typehints = 'description'                       # 'signature', 'description', 'none', 'both'
 autodoc_typehints_description_target = 'documented'     # 'all', 'documented', 'documented_params'
 autodoc_type_aliases = {
-    'VectorT': 'GSEGUtils.base_types.VectorT',
+    # 'VectorT': 'GSEGUtils.base_types.VectorT',
 }                               # {}
 autodoc_typehints_format = 'short'                      # 'short', 'fully-qualified'
 autodoc_preserve_defaults = True                        # False
@@ -93,4 +93,6 @@ rst_epilog = """
 .. |Array_Nx3_Float32_T| replace:: :attr:`Array_Nx3_Float32_T <GSEGUtils.base_types.Array_Nx3_Float32_T>`
 .. |Array_Nx3_Uint8_T| replace:: :attr:`Array_Nx3_Uint8_T <GSEGUtils.base_types.Array_Nx3_Uint8_T>`
 .. |ArrayT| replace:: :attr:`ArrayT <GSEGUtils.base_types.ArrayT>`
+.. |_SF_| replace:: :attr:`ScalarField <pchandler.scalar_fields.scalar_fields.ScalarField>`
+.. |_SFM_| replace:: :attr:`ScalarFieldManager <pchandler.scalar_fields.scalar_fields.ScalarFieldManager>`
 """

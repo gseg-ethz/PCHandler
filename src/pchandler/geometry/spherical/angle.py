@@ -164,6 +164,26 @@ class AngleBase:
         return np.array(self).max()
 
     def __add__(self, other) -> Self:
+        """
+        Adds the given object or value to the current object and returns a new instance
+        with the updated value. Supports addition with objects of the same type or with
+        scalar numeric values.
+
+        Parameters
+        ----------
+        other : AngleBase or float
+            The object or scalar to be added to the current object's value.
+
+        Returns
+        -------
+        Self
+            A new instance of the class with the updated value.
+
+        Raises
+        ------
+        NotImplementedError
+            If the addition operation is not supported for the provided `other` type.
+        """
         try:
             if isinstance(other, AngleBase):
                 new_val = self.internal_value + other.internal_value
@@ -244,6 +264,28 @@ class AngleBase:
     #     return self.__binary_op(other, divmod)
 
     def _compare(self, other, op):
+        """
+        Compares the current object with another using a specified operator.
+
+        The comparison is performed based on internal unit values if both objects belong
+        to the `AngleBase` class. Otherwise, it uses the display value for the comparison.
+        The operation is conducted using the specified numpy ufunc operator.
+
+        Parameters
+        ----------
+        other : AngleBase or numeric
+            The object or value to compare with. Can be an instance of `AngleBase`
+            or a numeric value.
+        op : ufunc
+            A numpy universal function such as `np.equal` or `np.less` that defines
+            the comparison operation.
+
+        Returns
+        -------
+        bool or array_like
+            The result of the comparison operation. Returns a boolean or an array-like
+            object based on the inputs.
+        """
         # Pull out the raw float/array to compare
         if isinstance(other, AngleBase):
             if self._INTERNAL_UNIT == other._INTERNAL_UNIT:
@@ -280,11 +322,36 @@ class AngleBase:
 
 class Angle(AngleBase):
     """
-    Angle object represents a single angle.
+    Represents an angle in various units, such as degrees, radians, or gons. Provides functionality to
+    create an angle instance from different data types and formats.
+
+    The class supports scalar and array-based input, with automatic differentiation between single values
+    and sequences. It also enables flexible parsing from strings, tuples, and other formats.
+
+    Parameters
+    ----------
+    value : float
+        The numerical representation of the angle.
+    unit : AngleUnit
+        The unit of the angle, such as radians or degrees.
     """
     def __new__(cls, value: float | Array_Float_T | str, unit: AngleUnit = AngleUnit.RAD):
         """
-        Selects Angle or AngleArray based on if value is scalar or an array.
+        Creates a new instance of Angle or AngleArray based on the input type and dimensions.
+
+        Parameters
+        ----------
+        value : float, Array_Float_T, or str
+            The angle value(s). If a string, it is parsed to create an instance.
+
+        unit : AngleUnit, default AngleUnit.RAD
+            The unit of the angle value(s). Defaults to radians.
+
+        Returns
+        -------
+        Angle or AngleArray
+            An instance of either Angle or AngleArray depending on the dimension
+            of the input value.
         """
         if isinstance(value, str):
             return cls.parse(value)
@@ -298,11 +365,14 @@ class Angle(AngleBase):
 
     def __init__(self, value: float, unit: AngleUnit=AngleUnit.RAD):
         """
+        Initializes an angle object with a specified value and unit.
 
         Parameters
         ----------
-        value: float
-        unit: AngleUnit = AngleUnit.RAD
+        value : float
+            The numeric value of the angle.
+        unit : AngleUnit, optional
+            The unit of the angle, default is AngleUnit.RAD.
         """
         super().__init__(value, unit)
 
@@ -405,7 +475,19 @@ class Angle(AngleBase):
 
 
 class AngleArray(AngleBase):
-    """Represents an N‑D array of angles."""
+    """
+    Represents a multi-dimensional array of angle values.
+
+    Provides functionality for working with arrays of angles, including indexing,
+    iterability, and unit conversions.
+
+    Parameters
+    ----------
+    unit : AngleUnit
+        The unit of the angle array internally stored.
+    display_unit : AngleUnit
+        The unit in which the angle values are displayed.
+    """
 
     def __new__(cls, arr: ArrayT, unit: AngleUnit = AngleUnit.RAD):
         arr = np.array(arr, dtype=float)
@@ -415,7 +497,14 @@ class AngleArray(AngleBase):
 
     @property
     def shape(self) -> tuple[int, ...]:
-        """Returns the array shape"""
+        """
+        Provides the dimensions of the object as a tuple.
+
+        Returns
+        -------
+        tuple of int
+            A tuple representing the object's dimensions.
+        """
         return self._internal_value.shape
 
     def __len__(self) -> int:

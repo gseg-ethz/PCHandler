@@ -16,6 +16,19 @@ logger = logging.getLogger(__name__.split(".")[0])
 
 
 class LasHandler(AbstractIOHandler):
+    """
+    Handles loading and saving of LAS/LAZ files for point cloud data management.
+
+    This class provides methods to load LAS/LAZ files into PointCloudData objects
+    and to save PointCloudData objects back to LAS/LAZ format. Includes support for
+    extracting scalar fields, applying numerical optimizations, and managing additional
+    attributes like RGB, intensity, and normals.
+
+    Parameters
+    ----------
+    FORMATS : list of str
+        Supported file extensions for this handler (".las" and ".laz").
+    """
     FORMATS = [".las", ".laz"]
 
     @classmethod
@@ -29,6 +42,30 @@ class LasHandler(AbstractIOHandler):
         force_no_numerical_shift: bool = False,
         **config,
     ) -> PointCloudData:
+        """
+        Loads a LAZ file and initializes a PointCloudData object. Extracts scalar fields as specified
+        and applies numerical optimization based on the header offsets if not disabled.
+
+        Parameters
+        ----------
+        path : str or Path
+            The file path of the LAZ file to be loaded.
+        scalar_fields : list of str, optional
+            List of scalar field names to extract, by default None.
+        remove_prefix : bool
+            Whether to remove a prefix from scalar field names, by default True.
+        prefix : str
+            The prefix to be removed if `remove_prefix` is True, by default "scalar_".
+        force_no_numerical_shift : bool
+            If True, disables numerical optimization shift, by default False.
+        config : dict
+            Additional configuration parameters.
+
+        Returns
+        -------
+        PointCloudData
+            A PointCloudData object containing the loaded 3D point cloud alongside scalar fields.
+        """
 
         logger.info(f"Loading LAZ file: {path}")
 
@@ -60,6 +97,37 @@ class LasHandler(AbstractIOHandler):
         scales: Vector_3_T = np.array([0.0001, 0.0001, 0.0001]),
         **config,
     ) -> None:
+        """
+        Save the PointCloudData to a LAS/LAZ file.
+
+        This method exports point cloud data to a LAS/LAZ file, including its coordinates, scalar fields,
+        and additional attributes like RGB values, intensities, and normals. It also allows for optional
+        scaling, offset adjustments, and prefix handling for scalar fields.
+
+        Parameters
+        ----------
+        pcd : PointCloudData
+            The point cloud data containing information such as coordinates, scalars, and other attributes.
+        path : str or Path
+            The output file path for the LAS/LAZ file.
+        scalar_fields : list of str, optional
+            A list of scalar fields to include in the exported file. If None, all scalar fields from the
+            input data are included.
+        add_prefix : bool, optional
+            If True, a prefix is added to the scalar field names in the output file.
+        prefix : str, optional
+            The prefix to add to scalar field names when `add_prefix` is True.
+        revert_sf_types : bool, optional
+            Whether to revert scalar field types to their original format before exporting.
+        scales : Vector_3_T, optional
+            Scaling factors for the x, y, and z coordinates in the LAS/LAZ file.
+        config : dict
+            Additional configuration options passed as keyword arguments.
+
+        Returns
+        -------
+        None
+        """
 
         logger.info(f"Attempting to write to LAS/LAZ file: {path}")
         if pcd.numerical_optimization_shift is None:

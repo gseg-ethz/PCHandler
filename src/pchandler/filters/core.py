@@ -89,6 +89,16 @@ class GenericFieldFilter(PointCloudFilter):
 
     @validate_variables
     def __init__(self, field_label: str, filter_func: Callable) -> None:
+        """
+        Initialize the instance with a field label and a filter function.
+
+        Parameters
+        ----------
+        field_label : str
+            A label or name for the field.
+        filter_func : Callable
+            A callable function used to perform filtering logic.
+        """
         self.field_label = field_label
         self.filter_func = filter_func
 

@@ -26,8 +26,6 @@ from pchandler.scalar_fields import (
     NormalFields,
     RGBFields,
     ScalarField,
-    ReflectanceField,
-    IntensityField,
     ScalarFieldManager,
     ScalarFieldTriplet,
 )
@@ -63,12 +61,12 @@ class PointCloudData(CartesianCoordinates):
         ----------
         xyz : |Array_Nx3_Float_T|
             Input coordinates
-        rgb : |RGBFields| | |Array_Nx3_Float_T| | |Array_Nx3_Uint8_T| | None
+        rgb : :class:`RGBFields` | |Array_Nx3_Float_T| | |Array_Nx3_Uint8_T| | None
         normals : |NormalFields| | |Array_Nx3_Float_T| | None
             Normal vectors corresponding for each point (normalized to unit vectors)
         intensity : |VectorT| | |ArrayT| | None
         reflectance : VectorT | ArrayT | None
-        scalar_fields : |ScalarFieldManager| | dict[str, |ScalarField| | |ScalarFieldTriplet| | |Array_Nx3_T| | |VectorT| | Sequence] | None
+        scalar_fields : :class:`ScalarFieldManager` | dict[str, :class:`ScalarField` | |ScalarFieldTriplet| | |Array_Nx3_T| | |VectorT| | Sequence] | None
             Additional custom scalar fields
         socs_origin: |Vector_3_Float_T|
 

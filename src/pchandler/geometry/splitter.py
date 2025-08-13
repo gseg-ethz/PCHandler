@@ -16,6 +16,23 @@ logger = logging.getLogger(__name__.split(".")[0])
 
 
 def check_number_jobs(n_jobs: int):
+    """
+    Validates the `n_jobs` parameter, ensuring it is a valid number of jobs to run
+    concurrently. Raises an error if the value is invalid, or adjusts it if it
+    exceeds the available number of CPU cores.
+
+    Parameters
+    ----------
+    n_jobs : int
+        The number of jobs to run. Must be -1 (all available cores) or a positive
+        integer. Zero is not valid.
+
+    Returns
+    -------
+    int
+        Validated number of jobs. If the input exceeds the available CPU count, the
+        maximum available core count is returned.
+    """
     if n_jobs == 0:
         raise ValueError("n_jobs must be -1 or a positive integer value. Zero is not valid.")
 
@@ -37,12 +54,52 @@ NumberJobsT = Annotated[int, Field(gt=-cpus, le=cpus), BeforeValidator(check_num
 
 
 class PointCloudSplitter(ABC):
+    """
+    Defines an interface for splitting point cloud data into labeled categories.
+
+    This abstract base class provides a method signature that must be implemented
+    in derived classes. The main purpose is to facilitate the division of a single
+    point cloud data object into multiple labeled groups.
+    """
     @abstractmethod
     def split(self, pcd: PointCloudData) -> dict[str, PointCloudData]:
+        """
+        Splits a point cloud dataset into segments based on a specific condition or logic.
+
+        Parameters
+        ----------
+        pcd : PointCloudData
+            A point cloud dataset to be split into multiple segments.
+
+        Returns
+        -------
+        dict[str, PointCloudData]
+            A dictionary where each key represents a segment identifier and the corresponding value
+            is the subset of PointCloudData belonging to that segment.
+        """
         pass
 
 
 class FoVTreePointCloudSplitter(PointCloudSplitter):
+    """
+    Splits a point cloud into smaller subsets based on a field-of-view (FoV) tree.
+
+    The FoVTreePointCloudSplitter class is responsible for segmenting a point cloud
+    into smaller subsets, leveraging a hierarchical structure represented by an
+    FoVTree. The splitting process supports multiple methods, including "iterative"
+    and "direct", and can handle parallel processing for large-scale data.
+
+    Parameters
+    ----------
+    fov_tree : FoVTree
+        The hierarchical field-of-view tree used to guide the splitting process.
+    remove_empty : bool
+        Determines whether subsets with no data points are skipped.
+    n_jobs : int
+        Number of parallel jobs to execute during the splitting process.
+    method : FoVSplitMethodT
+        The methodology to use for splitting ('iterative' or 'direct').
+    """
     # Todo: Check how validate_variables interacts with initializers...got weird errors
     # DISCUSS: Still relevant?
     @validate_variables
@@ -93,6 +150,22 @@ class FoVTreePointCloudSplitter(PointCloudSplitter):
         return splits
 
     def _direct_split(self, pcd: PointCloudData, fov_tree: FoVTree) -> dict[str, PointCloudData]:
+        """
+        Splits the point cloud data based on the field of view tree using parallel processing.
+
+        Parameters
+        ----------
+        pcd : PointCloudData
+            The point cloud data to be split.
+        fov_tree : FoVTree
+            The tree structure representing fields of view for splitting.
+
+        Returns
+        -------
+        dict of str to PointCloudData
+            A dictionary mapping field of view identifiers to their corresponding
+            split point cloud data.
+        """
         fov_list: list[tuple[str, FoV]] = fov_tree.to_list()
         if len(fov_list) > 1:
             with parallel_config(backend="loky", n_jobs=self.n_jobs, verbose=50, prefer="processes") as config:
@@ -106,6 +179,23 @@ class FoVTreePointCloudSplitter(PointCloudSplitter):
         return dict(splits)
 
     def _process_direct_task(self, pcd: PointCloudData, fov_id: str, fov: FoV) -> tuple[str, PointCloudData]:
+        """
+        Processes a direct task by applying a field-of-view filter over the point cloud data.
+
+        Parameters
+        ----------
+        pcd : PointCloudData
+            The point cloud data to process.
+        fov_id : str
+            Identifier for the field of view.
+        fov : FoV
+            The field-of-view object to apply as a filter.
+
+        Returns
+        -------
+        tuple[str, PointCloudData]
+            A tuple containing the field-of-view identifier and the filtered point cloud data.
+        """
         new_pcd = FoVFilter(fov).sample(pcd)
 
         return fov_id, new_pcd
