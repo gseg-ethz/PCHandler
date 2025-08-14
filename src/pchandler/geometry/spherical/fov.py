@@ -63,12 +63,14 @@ class FoV(BaseModel):
         return Angle.parse(value)
 
     @field_validator("left", "right", mode="after")
+    @classmethod
     def _check_hz(cls, hz: Angle) -> Angle:
         if not -np.pi - EPS <= hz.internal_value <= np.pi + EPS:
             raise ValueError(f"Horizontal angle {hz.radians} not in [-π, π]")
         return hz
 
     @field_validator("top", "bottom", mode="after")
+    @classmethod
     def _check_elevation(cls, v: Angle) -> Angle:
         if not 0 - EPS <= v.internal_value <= np.pi + EPS:
             raise ValueError(f"Top angle {v.radians} not in [0, π]")
