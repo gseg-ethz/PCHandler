@@ -77,9 +77,10 @@ class FoV(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def _check_bottom_and_top(self):
+    def _check_bottom_and_top(self) -> Self:
         if self.top > self.bottom:
             raise ValueError(f"Top ({self.top.radians}) must be smaller than bottom ({self.bottom.radians})")
+        return self
 
     @classmethod
     def construct_without_bounds_check(
