@@ -2,7 +2,8 @@
 name: "🐞 Bug report"
 about: Report a defect so we can fix it
 title: "[Bug] <short title>"
-labels: ["bug"]
+labels: []
+type: bug
 assignees: []
 projects: ["gseg-ethz/3"]
 ---
