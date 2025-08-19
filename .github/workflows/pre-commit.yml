@@ -1,7 +1,3 @@
-name: pre-commit.yml
-on:
-
-jobs:
 name: pre-commit
 on:
   pull_request:
