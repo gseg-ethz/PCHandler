@@ -677,7 +677,9 @@ class BaseTestCartesianCoordinates:
         pcd1 = self.cls(coords)
         pcd2 = self.cls(coords, numerical_optimization_shift=OptimizedShift([200, 200, 200]))
         pcd3 = self.cls(coords + 10, socs_origin=[10, 10, 10])
-        pcd4 = self.cls(coords + 10, socs_origin=[10, 10, 10], numerical_optimization_shift=OptimizedShift([200, 200, 200]))
+        pcd4 = self.cls(
+            coords + 10, socs_origin=[10, 10, 10], numerical_optimization_shift=OptimizedShift([200, 200, 200])
+        )
         pcd5 = self.cls(coords + 10, socs_origin=[10, 10, 10], numerical_optimization_shift=None)
         pcd6 = pcd4.copy()
         pcd6.numerical_optimization_shift = OptimizedShift([100, 100, 100])

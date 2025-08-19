@@ -1,8 +1,8 @@
 from pchandler.constants import (
-    RGB_NAMES,
-    NORMAL_NAMES,
     INTENSITY_NAMES,
+    NORMAL_NAMES,
     REFLECTANCE_NAMES,
+    RGB_NAMES,
 )
 
 

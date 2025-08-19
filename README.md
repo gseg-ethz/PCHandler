@@ -9,20 +9,20 @@ Motivations
 ```
 Class CoordinateSet3D(CustomArray):
     __num_cols = 3
-    
+
     def __len__(self):
         return self.shape[0]
-        
+
 class SphericalCoordinates(CoordinateSet):
     @property
     def hz(self) -> np.ndarray: ...
-    
+
     @property
     def v(self) -> np.ndarray: ...
-    
+
     @property
     def r(self) -> np.ndarray: ...
-    
+
     def to_cartesian(self) -> np.ndarray: ...
 ```
 - Treated like a numpy array directly for array / matrix operations
@@ -31,7 +31,7 @@ class SphericalCoordinates(CoordinateSet):
 
 - Ability to append extra attributes to the main array like a dataclass definition
 ```python
-array.info = "First Data Set" 
+array.info = "First Data Set"
 array.metadata = {transform: array}
 array.transforms.history.append(('Image plane projection', array[3, 3]))
 ```
@@ -39,23 +39,23 @@ array.transforms.history.append(('Image plane projection', array[3, 3]))
 - Strict type enforcement to mitigate errors from user input or during development
 ```python
 class ScalarField(CustomArray):
-    label = ValidatedField(data=data, 
+    label = ValidatedField(data=data,
                            name=name,
-                           type=type, 
-                           validation_func=None, 
+                           type=type,
+                           validation_func=None,
                            dtype=None)
-    
+
     arr = ValidatedField(array, 'arr', np.ndarray, check_all_positive, dtype=np.float)
-    
+
 ```
 - Automatically perform attribute validation on setting
 ```python
 class ValidatedField:
-    def __init__(self, data, name, type, 
-                 validation_funcs: list[Callable] = None, 
+    def __init__(self, data, name, type,
+                 validation_funcs: list[Callable] = None,
                  dtype: np.ndarray.dtype = None): ...
         self.validation_func = validation_func
-        
+
     def validate(value):
         if self.validation_funcs is not None:
             for func in self.validation_funcs:
@@ -77,7 +77,7 @@ array = CustomArray(np.random.rand(3,3))
 array.setImmutability(ImmutabilityLevels.NONE)
 array = np.random.rand(3,3)
 # No Error
-    
+
 array.setImmutability(ImmutabilityLevels.FULL)
 array = np.random.rand(3,3)
 # Raises attribute error

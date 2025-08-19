@@ -1,10 +1,9 @@
 from pathlib import Path
-import pytest
 
 import numpy as np
+import pytest
 
 from pchandler.data_io import E57 as E57Handler
-
 from tests.data_io.test_core import BaseLoadSave
 
 base_directory = Path(__file__).resolve().parent.parent
@@ -12,8 +11,8 @@ base_directory = Path(__file__).resolve().parent.parent
 
 class TestE57Handler(BaseLoadSave):
     cls = E57Handler
-    folder = BaseLoadSave.folder / 'E57'
-    reference = folder / 'XYZ_RGB_Normals_Intensity.e57'
+    folder = BaseLoadSave.folder / "E57"
+    reference = folder / "XYZ_RGB_Normals_Intensity.e57"
 
     def test_save(self, tmp_path):
         with pytest.raises(NotImplementedError):
@@ -21,6 +20,7 @@ class TestE57Handler(BaseLoadSave):
 
     def test_load_all(self):
         super()._load_all()
+
 
 # class TestE57Handler:
 #     file_1 = base_directory / ".."/ "data" / "test_target_intensity_normals_rgb.e57"
