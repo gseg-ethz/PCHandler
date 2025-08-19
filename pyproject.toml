@@ -36,8 +36,15 @@ dependencies = [
 #	"scipy ~= 1.15",
 	"shapely ~= 2.1",
 	"typing-extensions ~= 4.13",
-    "GSEGUtils @ git+https://github.com/gseg-ethz/GSEGUtils.git",
 ]
+
+[tool.setuptools]
+packages = { find = { where = ["src"] } }
+package-dir = { "" = "src" }
+include-package-data = true
+
+[tool.setuptools.package-data]
+yourpkg = ["py.typed", "**/*.pyi"]
 
 [tool.setuptools.dynamic]
 readme = {file = ["README.md"]}
@@ -62,11 +69,11 @@ extend-ignore = ["E203", "W503"]
 # add plugins, e.g. flake8-bugbear
 select = ["B", "C", "E", "F", "W", "T4", "D"]
 
-[tool.mypy]
-mypy_path = 'src/pchandler'
-python_version = "3.12"
-strict = false
-ignore_missing_imports = true
+#[tool.mypy] --> moved to 'mypy.ini'
+#mypy_path = 'src/pchandler'
+#python_version = "3.12"
+#strict = false
+#ignore_missing_imports = true
 
 
 [project.urls]
