@@ -1,3 +1,11 @@
+# pchandler - Toolbox for point-cloud handling, processing and analysis
+#
+# Copyright (c) 2025, Nicholas Meyer, Geosensors and Engineering Geodesy,
+# Institute of Geodesy and Photogrammetry, ETH Zurich, Switzerland
+# SPDX-License-Identifier: BSD-3-Clause
+#
+# Author: Nicholas Meyer (meyernic@ethz.ch)
+
 """
 Transforms module for pchandler.geometry.
 
@@ -6,16 +14,14 @@ Provides helper functions for transforming point clouds and converting between c
 
 from __future__ import annotations
 
-from typing import Any, Self, Literal
+from typing import Any, Literal, Self
 
 import numpy as np
+from GSEGUtils.base_arrays import BaseArray, FixedLengthArray, NumericMixins
+from GSEGUtils.base_types import Array_3x3_T, Array_4x4_T, Array_Float_T, Vector_3_T
 from pydantic import (
     Field,
 )
-
-from GSEGUtils.base_arrays import BaseArray, FixedLengthArray, NumericMixins
-from GSEGUtils.base_types import Array_3x3_T, Array_4x4_T, Array_Float_T, Vector_3_T
-
 
 
 class _TransformArray(NumericMixins):
@@ -25,10 +31,10 @@ class _TransformArray(NumericMixins):
 
         other = np.asarray(other)
 
-        if self.shape == other.shape: # Same shaped objects treated like another transformation
+        if self.shape == other.shape:  # Same shaped objects treated like another transformation
             return super().__matmul__(other)
 
-        else: # return numpy for numpy input
+        else:  # return numpy for numpy input
             return self.arr @ other
 
     def __imatmul__(self, other: Array_Float_T | BaseArray) -> Self:
@@ -51,32 +57,34 @@ class Transform(_Transform4x4):
 
     @classmethod
     def from_translation(cls, vector: Vector_3_T) -> Transform:
-        return cls._generate(vector, mode='translate')
+        return cls._generate(vector, mode="translate")
 
     @classmethod
     def from_rotation(cls, matrix: Array_3x3_T) -> Transform:
-        return cls._generate(matrix, mode='rotate')
+        return cls._generate(matrix, mode="rotate")
 
     @classmethod
     def from_affine(cls, matrix: Array_4x4_T) -> Transform:
-        return cls._generate(matrix, mode='affine')
+        return cls._generate(matrix, mode="affine")
 
     @classmethod
-    def from_scale(cls, vector: Vector_3_T|float) -> Transform:
-        return cls._generate(vector, mode='scale')
+    def from_scale(cls, vector: Vector_3_T | float) -> Transform:
+        return cls._generate(vector, mode="scale")
 
     @classmethod
-    def generate(cls,
-                 rotation: Array_3x3_T = np.eye(3),
-                 translation: Vector_3_T = np.zeros(3),
-                 scale: Vector_3_T|float = 1, ):
+    def generate(
+        cls,
+        rotation: Array_3x3_T = np.eye(3),
+        translation: Vector_3_T = np.zeros(3),
+        scale: Vector_3_T | float = 1,
+    ):
         """
-                Takes the form x0 = (R * s + t) @ x1
+        Takes the form x0 = (R * s + t) @ x1
 
-                Rotation  Translation     Scale:
-                | R 0 |     | I t |      | s 0 |
-                | 0 1 |     | 0 1 |      | 0 1 |
-                """
+        Rotation  Translation     Scale:
+        | R 0 |     | I t |      | s 0 |
+        | 0 1 |     | 0 1 |      | 0 1 |
+        """
         affine = np.eye(4).astype(np.float32)
         affine[:3, :3] = rotation.astype(np.float32)
         affine[:3, 3] = translation.astype(np.float32)
@@ -84,22 +92,27 @@ class Transform(_Transform4x4):
         return cls(affine)
 
     @classmethod
-    def _generate(cls, values=Array_Float_T, mode: Literal['translate', 'rotate', 'scale', 'affine'] = 'affine', ):
+    def _generate(
+        cls,
+        values=Array_Float_T,
+        mode: Literal["translate", "rotate", "scale", "affine"] = "affine",
+    ):
 
         affine = np.eye(4)
         values = np.asarray(values)
-        if mode == 'translate':
+        if mode == "translate":
             affine[:3, 3] += values
-        elif mode == 'rotate':
+        elif mode == "rotate":
             affine[:3, :3] @= values
-        elif mode == 'scale':
+        elif mode == "scale":
             affine[np.diag_indices(3)] *= values
-        elif mode == 'affine':
+        elif mode == "affine":
             affine = values
         else:
             raise ValueError(f"Invalid mode: {mode}")
 
         return cls(affine)
+
 
 #     def as_record(self, forward=True):
 #         if forward:
@@ -160,5 +173,3 @@ class Transform(_Transform4x4):
 #             chained_transform @= record.backward
 #
 #         return chained_transform, previous_history
-
-

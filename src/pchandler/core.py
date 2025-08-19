@@ -1,14 +1,18 @@
+# pchandler - Toolbox for point-cloud handling, processing and analysis
+#
+# Copyright (c) 2025, Nicholas Meyer, Geosensors and Engineering Geodesy,
+# Institute of Geodesy and Photogrammetry, ETH Zurich, Switzerland
+# SPDX-License-Identifier: BSD-3-Clause
+#
+# Author: Nicholas Meyer (meyernic@ethz.ch)
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Literal, Optional, Self, Sequence, cast, overload, Mapping
+from typing import Any, Literal, Mapping, Optional, Self, Sequence, cast, overload
 
 import numpy as np
 import open3d as o3d
-
-from pydantic import Field, field_serializer, field_validator
-
-
 from GSEGUtils.base_types import (
     Array_Nx3_Float_T,
     Array_Nx3_T,
@@ -17,6 +21,7 @@ from GSEGUtils.base_types import (
     IndexLike,
     VectorT,
 )
+from pydantic import Field, field_serializer, field_validator
 
 from pchandler.geometry.coordinates import CartesianCoordinates
 from pchandler.scalar_fields import (
@@ -34,7 +39,9 @@ RgbInputT = Optional[RGBFields | Array_Nx3_Float_T | Array_Nx3_Uint8_T]
 NormalInputT = Optional[NormalFields | Array_Nx3_Float_T]
 IntensityInputT = Optional[VectorT | ArrayT]
 ReflectanceInputT = Optional[VectorT | ArrayT]
-SFM_T = Optional[ScalarFieldManager | dict[str, ScalarField | ScalarFieldTriplet | Array_Nx3_T | VectorT | Sequence[Any]]]  # Todo: Think about Any
+SFM_T = Optional[
+    ScalarFieldManager | dict[str, ScalarField | ScalarFieldTriplet | Array_Nx3_T | VectorT | Sequence[Any]]
+]  # Todo: Think about Any
 
 
 class PointCloudData(CartesianCoordinates):

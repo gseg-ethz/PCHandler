@@ -1,4 +1,12 @@
-from typing import Optional, NamedTuple
+# pchandler - Toolbox for point-cloud handling, processing and analysis
+#
+# Copyright (c) 2025, Nicholas Meyer, Geosensors and Engineering Geodesy,
+# Institute of Geodesy and Photogrammetry, ETH Zurich, Switzerland
+# SPDX-License-Identifier: BSD-3-Clause
+#
+# Author: Nicholas Meyer (meyernic@ethz.ch)
+
+from typing import NamedTuple, Optional
 
 from numpy import finfo, float32, pi
 from pydantic import ConfigDict, validate_call
@@ -13,7 +21,7 @@ class NameConstantsSingle(NamedTuple):
 
     @property
     def names(self) -> tuple[str, ...]:
-        return (self.base, ) + self.extra_names
+        return (self.base,) + self.extra_names
 
     @property
     def all(self) -> tuple[str, ...]:
@@ -26,8 +34,8 @@ class NameConstantsTriplet(NamedTuple):
     base: str
     char: TripletT
     extra_names: tuple[str, ...] = ()
-    words: TripletT = ("","","")
-    float: TripletT = ("","","")
+    words: TripletT = ("", "", "")
+    float: TripletT = ("", "", "")
     reverse: Optional[str] = None
 
     @property
@@ -36,13 +44,13 @@ class NameConstantsTriplet(NamedTuple):
 
     @property
     def triplets(self) -> tuple[TripletT, ...]:
-        triplets: tuple[TripletT, ...] = (self.char, )
+        triplets: tuple[TripletT, ...] = (self.char,)
 
         if self.words:
-            triplets += (self.words, )
+            triplets += (self.words,)
 
         if self.float:
-            triplets += (self.float, )
+            triplets += (self.float,)
 
         return triplets
 
@@ -51,7 +59,7 @@ class NameConstantsTriplet(NamedTuple):
         return self.char + self.words + self.float
 
     @property
-    def all(self) -> tuple[TripletT|str, ...]:
+    def all(self) -> tuple[TripletT | str, ...]:
         if self.reverse:
             return self.names + self.scalars + (self.reverse,)
         return self.names + self.scalars
@@ -74,39 +82,39 @@ class NameConstantsTriplet(NamedTuple):
 
 
 RGB_NAMES = NameConstantsTriplet(
-    base = "rgb",
-    char = ("r", "g", "b"),
-    words = ("red", "green", "blue"),
-    float = ("rf", "gf", "bf"),
-    extra_names = ("colour", "colours", "color", "colors"),
-    reverse = "bgr"
+    base="rgb",
+    char=("r", "g", "b"),
+    words=("red", "green", "blue"),
+    float=("rf", "gf", "bf"),
+    extra_names=("colour", "colours", "color", "colors"),
+    reverse="bgr",
 )
 NORMAL_NAMES = NameConstantsTriplet(
     base="normals",
     char=("nx", "ny", "nz"),
     words=("normalx", "normaly", "normalz"),
     extra_names=("normal", "normal_fields", "nxnynz"),
-    reverse="nznynx"
+    reverse="nznynx",
 )
 
 XYZ_NAMES = NameConstantsTriplet(
     base="xyz",
     char=("x", "y", "z"),
     extra_names=("cartesian", "cartesians", "coordinates", "coordinate"),
-    reverse="zyx"
+    reverse="zyx",
 )
 
-INTENSITY_NAMES = NameConstantsSingle(
-    base="intensity",
-    char="i",
-    extra_names=("intensities",)
-)
+INTENSITY_NAMES = NameConstantsSingle(base="intensity", char="i", extra_names=("intensities",))
 
 REFLECTANCE_NAMES = NameConstantsSingle(
     base="reflectance",
 )
 
-COMMON_FIELD_NAMES: tuple[NameConstantsSingle|NameConstantsTriplet, ...] = \
-    (RGB_NAMES, NORMAL_NAMES, INTENSITY_NAMES, REFLECTANCE_NAMES)
+COMMON_FIELD_NAMES: tuple[NameConstantsSingle | NameConstantsTriplet, ...] = (
+    RGB_NAMES,
+    NORMAL_NAMES,
+    INTENSITY_NAMES,
+    REFLECTANCE_NAMES,
+)
 
 COMMON_FIELD_BASES = (field.base for field in COMMON_FIELD_NAMES)

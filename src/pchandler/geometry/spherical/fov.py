@@ -1,3 +1,11 @@
+# pchandler - Toolbox for point-cloud handling, processing and analysis
+#
+# Copyright (c) 2025, Nicholas Meyer, Geosensors and Engineering Geodesy,
+# Institute of Geodesy and Photogrammetry, ETH Zurich, Switzerland
+# SPDX-License-Identifier: BSD-3-Clause
+#
+# Author: Nicholas Meyer (meyernic@ethz.ch)
+
 """
 ``pchandler.fov``
 
@@ -287,15 +295,13 @@ class FoV(BaseModel):
         )
 
     def encompasses(self, fov2: Self) -> bool:
-        """ Does self fully surround fov2"""
+        """Does self fully surround fov2"""
         left_chk = self.left <= fov2.left + EPS
         top_chk = self.top <= fov2.top + EPS
         right_chk = self.right >= fov2.right - EPS
         bottom_chk = self.bottom >= fov2.bottom - EPS
 
         return left_chk and top_chk and right_chk and bottom_chk
-
-
 
     @validate_variables
     def ratio(self) -> NonNegativeFloat:
