@@ -95,7 +95,7 @@ class ScalarFieldManager:
         else:
             raise TypeError(f"Unknown fields type: {type(fields)}")
 
-    def validate_lengths(self):
+    def validate_lengths(self) -> None:
         if self.parent:
             for field in self.values():
                 if len(field) != len(self.parent):

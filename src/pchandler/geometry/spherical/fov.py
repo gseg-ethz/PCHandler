@@ -118,27 +118,30 @@ class FoV(BaseModel):
     def __init__(self, *, left: AngleLikeT, top: AngleLikeT, right: AngleLikeT, bottom: AngleLikeT):
         super().__init__(left=left, top=top, right=right, bottom=bottom)
 
-    @field_validator("left", "right", "top", "bottom", mode="before")
-    @classmethod
-    def _coerce_to_angle(cls, value: AngleLikeT) -> Angle:
-        return Angle.parse(value)
+    # @field_validator("left", "right", "top", "bottom", mode="before")
+    # @classmethod
+    # def _coerce_to_angle(cls, value: AngleLikeT) -> Angle:
+    #     return Angle.parse(value)
 
     @field_validator("left", "right", mode="after")
+    @classmethod
     def _check_hz(cls, hz: Angle) -> Angle:
         if not -np.pi - EPS <= hz.internal_value <= np.pi + EPS:
             raise ValueError(f"Horizontal angle {hz.radians} not in [-π, π]")
         return hz
 
     @field_validator("top", "bottom", mode="after")
+    @classmethod
     def _check_elevation(cls, v: Angle) -> Angle:
         if not 0 - EPS <= v.internal_value <= np.pi + EPS:
             raise ValueError(f"Top angle {v.radians} not in [0, π]")
         return v
 
     @model_validator(mode="after")
-    def _check_bottom_and_top(self):
+    def _check_bottom_and_top(self) -> Self:
         if self.top > self.bottom:
             raise ValueError(f"Top ({self.top.radians}) must be smaller than bottom ({self.bottom.radians})")
+        return self
 
     @classmethod
     def construct_without_bounds_check(
@@ -283,6 +286,17 @@ class FoV(BaseModel):
             bottom=min(self.bottom, fov2.bottom),
         )
 
+    def encompasses(self, fov2: Self) -> bool:
+        """ Does self fully surround fov2"""
+        left_chk = self.left <= fov2.left + EPS
+        top_chk = self.top <= fov2.top + EPS
+        right_chk = self.right >= fov2.right - EPS
+        bottom_chk = self.bottom >= fov2.bottom - EPS
+
+        return left_chk and top_chk and right_chk and bottom_chk
+
+
+
     @validate_variables
     def ratio(self) -> NonNegativeFloat:
         """
@@ -411,7 +425,7 @@ class FoV(BaseModel):
             for vert_bin in vertical_bins:
                 if vert_bin[-1] - vert_bin[0] <= 0:
                     continue
-                new_fov = type(self)(
+                new_fov = type(self).construct_without_bounds_check(
                     left=hor_bin[0],
                     top=vert_bin[0],
                     right=hor_bin[1],
@@ -558,7 +572,7 @@ class FoVTree:
                 return cls("root", tiles[0][0], None)
             return cls(identifier, tiles[0][0], None)
 
-        fov = FoV(
+        fov = FoV.construct_without_bounds_check(
             left=tiles[0][0].left,
             top=tiles[0][0].top,
             right=tiles[-1][-1].right,

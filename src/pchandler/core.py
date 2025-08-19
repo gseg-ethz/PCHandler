@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Literal, Optional, Self, Sequence, cast, overload
+from typing import Any, Literal, Optional, Self, Sequence, cast, overload, Mapping
 
 import numpy as np
 import open3d as o3d
 
 from pydantic import Field, field_serializer, field_validator
+
 
 from GSEGUtils.base_types import (
     Array_Nx3_Float_T,
@@ -33,7 +34,7 @@ RgbInputT = Optional[RGBFields | Array_Nx3_Float_T | Array_Nx3_Uint8_T]
 NormalInputT = Optional[NormalFields | Array_Nx3_Float_T]
 IntensityInputT = Optional[VectorT | ArrayT]
 ReflectanceInputT = Optional[VectorT | ArrayT]
-SFM_T = Optional[ScalarFieldManager | dict[str, ScalarField | ScalarFieldTriplet | Array_Nx3_T | VectorT | Sequence]]
+SFM_T = Optional[ScalarFieldManager | dict[str, ScalarField | ScalarFieldTriplet | Array_Nx3_T | VectorT | Sequence[Any]]]  # Todo: Think about Any
 
 
 class PointCloudData(CartesianCoordinates):
@@ -90,7 +91,7 @@ class PointCloudData(CartesianCoordinates):
 
     @field_validator("scalar_fields", mode="before")
     @classmethod
-    def convert_sfm(cls, value):
+    def convert_sfm(cls, value: SFM_T) -> ScalarFieldManager:
         if isinstance(value, dict):
             value = ScalarFieldManager(fields=value)
         elif value is None:
@@ -98,7 +99,7 @@ class PointCloudData(CartesianCoordinates):
         return value
 
     @field_serializer("scalar_fields")
-    def drop_parent_weakref(self, scalar_fields: ScalarFieldManager):
+    def drop_parent_weakref(self, scalar_fields: ScalarFieldManager) -> ScalarFieldManager:
         scalar_fields._parent = None
         return scalar_fields
 
@@ -134,8 +135,8 @@ class PointCloudData(CartesianCoordinates):
     def reflectance(self, value: Optional[VectorT | ScalarField]) -> None:
         self.scalar_fields.reflectance = value
 
-    def __setattr__(self, key, value):
-        super().__setattr__(key, value)
+    # def __setattr__(self, key, value) -> None:  # Todo: Is this necessary?
+    #     super().__setattr__(key, value)
 
     def __setitem__(self, key: IndexLike, value: ArrayT | PointCloudData) -> None:
         raise IndexError(
@@ -147,7 +148,7 @@ class PointCloudData(CartesianCoordinates):
         return id(self)
 
     @classmethod
-    def _reconstruct(cls, state: dict) -> Self:
+    def _reconstruct(cls, state: dict[str, Any]) -> Self:
         obj: Self = super(cls, cls)._reconstruct(state)
         obj.scalar_fields.parent = obj
         return obj
@@ -177,7 +178,7 @@ class PointCloudData(CartesianCoordinates):
     def merge(
         cls,
         *pcds: Self,
-        **kwargs,
+        **kwargs: dict[str, Any],
     ) -> Self:
         scalar_fields = ScalarFieldManager.merge([pcd.scalar_fields for pcd in pcds])
         return super(cls, cls).merge(*pcds, scalar_fields=scalar_fields, **kwargs)
