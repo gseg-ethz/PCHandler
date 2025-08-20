@@ -56,7 +56,22 @@ class VoxelDownsample:
         # Compute distances of points to their respective voxel centroids
         match self.weigthing_method:
             case "nearest":
-                raise NotImplementedError
+                # Distance of every point to the centroid of *its* voxel
+                distances = np.linalg.norm(pcd.xyz - centroids[unique_inverse], axis=1)
+
+                # For each voxel: smallest distance found so far
+                min_dist = np.full(unique.shape[0], np.inf, dtype=np.float32)
+                np.minimum.at(min_dist, unique_inverse, distances)
+
+                # Give weight 1 to the point(s) that realise the minimum, 0 otherwise
+                weights = (np.isclose(distances, min_dist[unique_inverse])).astype(np.float32)
+
+                # If a tie occurs (two points exactly the same distance) every “winner”
+                # now has weight 1, so the voxel’s total weight would be >1.
+                # Renormalise so that the voxel’s weight sum is exactly 1.
+                w_sum = np.bincount(unique_inverse, weights=weights, minlength=unique.shape[0])
+                weights /= w_sum[unique_inverse]
+
             case "constant":
                 weights = np.ones_like(counts, dtype=np.float32)[unique_inverse]
             case "linear":
@@ -69,11 +84,45 @@ class VoxelDownsample:
 
         sfm = ScalarFieldManager()
         for field_name, field_values in pcd.scalar_fields.items():
-            # Compute weighted sum of scalar values within each voxel
-            scalar_sum = np.bincount(unique_inverse, weights=field_values * weights, minlength=unique.shape[0])
-            weight_sum = np.bincount(unique_inverse, weights=weights, minlength=unique.shape[0])
-            sfm.create_field(field_name, scalar_sum / weight_sum)
-            # self.scalar_fields[field_name] = (scalar_sum / weight_sum).astype(field_values.dtype)
+            if np.issubdtype(field_values.data.dtype, np.integer):
+                # assume categorical field where dtype is np.integer
+                # initiate weighted majority vote
+
+                # 1) remap your labels to [0..K-1]
+                uniq_lbl, inv_lbl = np.unique(field_values.data, return_inverse=True)
+                V = unique.shape[0]  # number of occupied voxels
+
+                # 2) prepare running‐max and winner arrays
+                max_w = np.zeros(V, dtype=np.float32)  # best weight seen so far per voxel
+                winner = np.zeros(V, dtype=field_values.data.dtype)  # winning label per voxel
+
+                # 3) for each category j, accumulate its total weight in each voxel
+                for j, lbl in enumerate(uniq_lbl):
+                    # mask points of label=lbl
+                    mask = (inv_lbl == j)
+                    if not np.any(mask):
+                        continue
+                    # their voxel indices and weights
+                    vox_idxs = unique_inverse[mask]
+                    wj = weights[mask]
+                    # accumulate into a length-V vector
+                    hist_j = np.bincount(vox_idxs,
+                                         weights=wj,
+                                         minlength=V).astype(np.float32)
+
+                    # wherever this label’s weight > previous max, update winner
+                    better = hist_j > max_w
+                    winner[better] = lbl
+                    max_w[better] = hist_j[better]
+
+                # 4) winner now holds your “majority label per voxel”
+                sfm.create_field(field_name, winner)
+            else:
+                # Compute weighted sum of scalar values within each voxel
+                scalar_sum = np.bincount(unique_inverse, weights=field_values * weights, minlength=unique.shape[0])
+                weight_sum = np.bincount(unique_inverse, weights=weights, minlength=unique.shape[0])
+                sfm.create_field(field_name, scalar_sum / weight_sum)
+                # self.scalar_fields[field_name] = (scalar_sum / weight_sum).astype(field_values.dtype)
 
         # # Average scalar fields
         # averaged_scalar_fields = {}
@@ -101,4 +150,6 @@ class VoxelDownsample:
         return PointCloudData(centroids, scalar_fields=sfm,
                               spherical_coordinates_origin=pcd.spherical_coordinates_origin,
                               global_coordinate_shift=pcd.global_coordinate_shift,
-                              _global_shift_already_applied=True)
+                              _global_shift_already_applied=True,
+                              xyz_is_prcs=pcd.xyz_is_prcs,
+                              tmat_socs2prcs=pcd.tmat_socs2prcs)

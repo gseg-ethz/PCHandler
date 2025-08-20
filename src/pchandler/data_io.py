@@ -123,6 +123,39 @@ def find_pcd_in_directory(directory_path, pcd_file_types: list[str], include_sub
     logger.info(f"Found {len(file_list)} PCD files in {directory_path}")
     return file_list
 
+
+def find_tmat_in_directory(directory_path, include_subdirectories: bool = True) -> list[Path]:
+    """
+    (Recursively) searches a directory for transformation matrices files (*_t.txt or *_T.txt).
+
+    Parameters
+    ----------
+    directory_path : Path
+        The directory to search for PCD files.
+    include_subdirectories : bool, default=True
+        Whether to include subdirectories in the search.
+
+    Returns
+    -------
+    list[Path]
+        A list of `Path` objects representing the found transformation matrices files.
+    """
+    logger.debug(f"Starting search for transformation matrices in {directory_path}")
+    file_list = []
+    # Check each item in the current directory
+    for item in directory_path.iterdir():
+        # If it's a file, check if it ends with "_T.txt"
+        if item.is_file() and item.name.lower().endswith("_t.txt"):
+            file_list.append(item)
+
+        # If it's a directory and we include subdirectories, recurse
+        elif item.is_dir() and include_subdirectories:
+            file_list.extend(
+                find_tmat_in_directory(item, include_subdirectories)
+            )
+    logger.info(f"Found {len(file_list)} transformation matrices files in {directory_path}")
+    return file_list
+
 def load_ply(pcd_path: Path, retain_colors: bool = True, retain_normals: bool = True, scalar_fields: list[str] = None,
              normalize_intensities: bool = False, **kwargs) -> PointCloudData:
     """
@@ -479,7 +512,40 @@ def save_csv(pcd_path: Path, pcd: PointCloudData, delimiter: str = " ", add_head
 
 
 def load_e57(pcd_path: Path, point_cloud_index: Optional[int] = None, retain_intensity: bool = True,
-             retain_colors: bool = True, normalize_intensities: bool = False, **kwargs) -> PointCloudData | Generator[PointCloudData, None, None]:
+             retain_colors: bool = True, normalize_intensities: bool = False,
+             stay_prcs: bool = True, # Tomislav
+             save_prcs_info: bool = True, # Tomislav
+             **kwargs) -> PointCloudData | Generator[PointCloudData, None, None]:
+
+    """
+    Loads one or more point clouds from a `.e57` file using `pye57`.
+
+    Parameters
+    ----------
+    pcd_path : Path
+        The path to the input `.las` or `.laz` file.
+    point_cloud_index : int, optional
+        If the `.e57` file contains multiple point clouds, specify this index to load a specific one.
+    retain_intensity : bool, default=True
+    retain_colors : bool, default=True
+    normalize_intensities : bool, default=False
+    stay_prcs: bool, default= False
+         If True keeps xyz values in the project coordinate system defined in the e57 header (otherwise ignores
+         prcs info about pose and saves xyz in socs (scanner-own coordinate system for TLS scans).
+    save_prcs_info: bool, default=True
+        Whether to store the 4x4 transformation matrix defining project coordinate system (prcs) related pose of the point cloud.
+
+    Returns
+    -------
+    PointCloudData object
+        A `PointCloudData` object containing the loaded point cloud and metadata.
+
+    Notes
+    -----
+        Remark: Save normals currently not supported, requires modification of pye57 library - ask Tomislav if needed
+        similar holds for loading any specifically choosen scalar fields, see e.g. "scalar_fields" in load_laz().
+    """
+
     logger.info(f"Loading E57 file: {pcd_path}")
     e57 = pye57.E57(str(pcd_path), mode="r")
     number_of_scans = e57.scan_count
@@ -491,15 +557,18 @@ def load_e57(pcd_path: Path, point_cloud_index: Optional[int] = None, retain_int
 
     if point_cloud_index is None:
         logger.debug(f"Loading {number_of_scans} scans from E57 file.")
-        return _load_all_e57_scans(pcd_path, retain_intensity, retain_colors, normalize_intensities, **kwargs)
+        return _load_all_e57_scans(pcd_path, retain_intensity, retain_colors, normalize_intensities, stay_prcs,
+                                   save_prcs_info, **kwargs)
     else:
         logger.debug(f"Loading scan index {point_cloud_index} from E57 file.")
-        return _load_single_e57(pcd_path, point_cloud_index, retain_intensity, retain_colors, normalize_intensities, **kwargs)
-
+        return _load_single_e57(pcd_path, point_cloud_index, retain_intensity, retain_colors, normalize_intensities,
+                                stay_prcs, save_prcs_info, **kwargs)
 
 
 def _load_all_e57_scans(pcd_path: Path, retain_intensity: bool = True, retain_colors: bool = True,
-                       normalize_intensities: bool = False, **kwargs) -> Generator[PointCloudData, None, None]:
+                       normalize_intensities: bool = False, stay_prcs: bool = False, save_prcs_info: bool = True,
+                        **kwargs) -> Generator[PointCloudData, None, None]:
+
     logger.debug(f"Loading multiple scans from E57 file: {pcd_path}")
     e57 = pye57.E57(str(pcd_path), mode="r")
     number_of_scans = e57.scan_count
@@ -509,23 +578,52 @@ def _load_all_e57_scans(pcd_path: Path, retain_intensity: bool = True, retain_co
 
 
 def _load_single_e57(pcd_path: Path, point_cloud_index: int, retain_intensity: bool = True, retain_colors: bool = True,
-                    normalize_intensities: bool = False, **kwargs) -> PointCloudData:
+                    normalize_intensities: bool = False, stay_prcs: bool = False, save_prcs_info: bool = True,
+                     **kwargs) -> PointCloudData:
+
     logger.debug(f"Loading single scan {point_cloud_index} from E57 file: {pcd_path}")
     e57 = pye57.E57(str(pcd_path), mode="r")
-    data = e57.read_scan(point_cloud_index, ignore_missing_fields=True, intensity=retain_intensity, colors=retain_colors)
+    # data = e57.read_scan(point_cloud_index, ignore_missing_fields=True, intensity=retain_intensity, colors=retain_colors)
+    data = e57.read_scan_raw(point_cloud_index, ignore_unsupported_fields=True)
     header = e57.get_header(point_cloud_index)
 
-    xyz = np.column_stack((data["cartesianX"], data["cartesianY"], data["cartesianZ"]))
+    # Tomislav: Save xyz (either in local or global coordinates, local (not global) is default)
+    if stay_prcs is False:
+        xyz = np.column_stack((data["cartesianX"], data["cartesianY"], data["cartesianZ"]))
+    else:
+        data_small = e57.read_scan(point_cloud_index, transform=True)
+        xyz = np.column_stack([data_small["cartesianX"], data_small["cartesianY"], data_small["cartesianZ"]]).T
+
+    # Save colors
     colors = np.column_stack((data["colorRed"], data["colorGreen"], data["colorBlue"])) if "colorRed" in data else None
+    # Initiate empty scalar field
     sfm = ScalarFieldManager(expected_length=xyz.shape[0])
+    # Save (and optionally normalize) intensity as a scalar field
     if "intensity" in data:
         sfm.create_field("intensity", data["intensity"])
         if normalize_intensities:
             sfm["Intensity"].normalize()
+    # TODO: Save normals currently not supported, requires modification of pye57 library - ask Tomislav if needed
+    # Tomislav: Save transformation matrix (global pose)
+    if save_prcs_info:
+        # Read transformation parameters
+        rotation = header.rotation_matrix
+        translation = header.translation
+        transformation_matrix = np.concatenate(
+            (np.concatenate((rotation, np.transpose(np.array([translation]))), axis=1), np.array([[0, 0, 0, 1]])))
+    else:
+        transformation_matrix = np.identity(4)
+
+    if stay_prcs:
+        spherical_coordinates_origin = np.squeeze(translation)
+    else:
+        spherical_coordinates_origin = np.zeros(3)
 
     e57.close()
     logger.info(f"Successfully loaded scan {point_cloud_index} from E57 file: {pcd_path}")
-    return PointCloudData(xyz, color=colors, scalar_fields=sfm, **kwargs)
+    return PointCloudData(xyz, color=colors, scalar_fields=sfm, xyz_is_prcs=stay_prcs,
+                          spherical_coordinates_origin=spherical_coordinates_origin,
+                          tmat_socs2prcs=transformation_matrix, **kwargs)
 
 
 def load_laz(pcd_path, retain_colors: bool = True, scalar_fields: list[str] = None) -> PointCloudData:

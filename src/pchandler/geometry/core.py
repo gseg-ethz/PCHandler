@@ -53,6 +53,10 @@ class PointCloudData:
     _spherical_coordinates_calculated: bool = False
     _global_shift_already_applied: InitVar[bool] = False
 
+    #TODO: CHECK WITH NICHOLAS
+    tmat_socs2prcs: Optional[np.ndarray] = None
+    xyz_is_prcs: Optional[bool] = None
+
     def __post_init__(self, _global_shift_already_applied: bool) -> None:
         """
         Validates and processes input data after object initialization.
@@ -113,6 +117,12 @@ class PointCloudData:
         if self.spherical_coordinates_origin is not None and not isinstance(self.spherical_coordinates_origin, np.ndarray):
             raise TypeError(f"spherical_coordinates_origin must be a numpy array or None. "
                             f"Got type {type(self.spherical_coordinates_origin)}")
+        # TOMISLAV:
+        if self.tmat_socs2prcs is not None and not isinstance(self.tmat_socs2prcs, np.ndarray):
+            raise TypeError(f"tmat_socs2prcs must be a numpy array or None. Got type {type(self.tmat_socs2prcs)}")
+        # TOMISLAV:
+        if self.xyz_is_prcs is not None and not isinstance(self.xyz_is_prcs, bool):
+            raise TypeError(f"xyz_is_prcs must be a boolean (True/False) or None. Got type {type(self.xyz_is_prcs)}")
 
         if not isinstance(self.scalar_fields, ScalarFieldManager):
             raise TypeError(f"scalar_fields must be a ScalarFieldManager or a dict. Got type {type(self.scalar_fields)}")
@@ -137,6 +147,9 @@ class PointCloudData:
         if self.global_coordinate_shift is not None and self.global_coordinate_shift.shape != (3,):
             raise ValueError(f"global_coordinate_shift must be (3,). Got shape {self.global_coordinate_shift.shape}")
 
+        # Tomislav
+        if self.tmat_socs2prcs is not None and self.tmat_socs2prcs.shape != (4,4):
+            raise ValueError(f"tmat_socs2prcs must be (4,4). Got shape {self.tmat_socs2prcs.shape}")
 
     @property
     def nbPoints(self) -> int:
@@ -316,10 +329,14 @@ class PointCloudData:
         new_sf = self.scalar_fields[mask]
         new_gcs = self.global_coordinate_shift.copy() if self.global_coordinate_shift is not None else None
         new_origin = self.spherical_coordinates_origin.copy()
+        new_tmat_socs2prcs = self.tmat_socs2prcs.copy()
+        new_xyz_is_prcs = self.xyz_is_prcs
         new_pcd = PointCloudData(new_xyz, color=new_color, normals=new_normals,
                                  scalar_fields=new_sf, global_coordinate_shift=new_gcs,
                                  spherical_coordinates_origin=new_origin,
-                                 _global_shift_already_applied=True)
+                                 _global_shift_already_applied=True, tmat_socs2prcs=new_tmat_socs2prcs,
+                                 xyz_is_prcs=new_xyz_is_prcs)
+
         if self._spherical_coordinates_calculated:
             object.__setattr__(new_pcd, "spherical_coordinates", self.spherical_coordinates[mask].copy())
             object.__setattr__(new_pcd, "_spherical_coordinates_calculated", True)
@@ -405,7 +422,18 @@ class PointCloudData:
         if self._spherical_coordinates_calculated:
             object.__delattr__(self, "spherical_coordinates")
             object.__setattr__(self, "_spherical_coordinates_calculated", False)
-        return
+
+
+        # TOMISLAV: warning if pcd has normals!
+        if self.normals:
+            print("Warning, if transformation included rotation, normals are invalid!")
+
+        # TOMISLAV: tmat_socs2prcs tracks transforms
+        # if self.xyz_is_prcs is True:
+        #     object.__setattr__(self, 'tmat_socs2prcs', transformation_matrix @ self.tmat_socs2prcs)
+        # else:
+        #     object.__setattr__(self, 'tmat_socs2prcs', self.tmat_socs2prcs @ np.linalg.inv(transformation_matrix))
+        # return
 
     def change_spherical_coordinates_origin(self, new_origin: NDArray[np.float_]) -> None:
         """
@@ -564,6 +592,8 @@ class PointCloudData:
         global_coordinate_shift = []
         spherical_coordinates_origin = []
         merge_id = []
+        tmat_socs2prcs = []
+        xyz_is_prcs = []
 
         # Build lists of all elements
         for i, pcd in enumerate(pcds):
@@ -574,6 +604,9 @@ class PointCloudData:
             merge_id.append(np.ones((pcd.xyz.shape[0],), dtype=np.uint8) * (i + 1))
             global_coordinate_shift.append(pcd.global_coordinate_shift)
             spherical_coordinates_origin.append(pcd.spherical_coordinates_origin)
+            # Tomislav
+            tmat_socs2prcs.append(pcd.tmat_socs2prcs)
+            xyz_is_prcs.append(pcd.xyz_is_prcs)
 
         scalar_fields = ScalarFieldManager.merge(sfms)
         scalar_fields.create_field("merge_id", np.concatenate(merge_id))
@@ -607,9 +640,9 @@ class PointCloudData:
         del normals
         gc.collect()
 
-        sco_pairs = zip(spherical_coordinates_origin[:-1], spherical_coordinates_origin[1:])
 
         # Check if all spherical_coordinates_origin are equal and represented in the same system
+        sco_pairs = zip(spherical_coordinates_origin[:-1], spherical_coordinates_origin[1:])
         scs = None
         if all(map(lambda sco_pair: np.array_equal(*sco_pair), sco_pairs)):
             sco = spherical_coordinates_origin[0]
@@ -618,9 +651,24 @@ class PointCloudData:
         else:
             sco = None
 
+        # Check if tmat_socs2prcs same:
+        common_tmat = None
+        tmat_pairs = zip(tmat_socs2prcs[:-1], tmat_socs2prcs[1:])
+        if tmat_socs2prcs and all(map(lambda tmats: np.array_equal(*tmats), tmat_pairs)):
+            common_tmat = tmat_socs2prcs[0]
+        else:
+            common_tmat = None
+
+        # Check if all xyz_is_prcs same:
+        common_xyz_is_prcs_flag = None
+        if xyz_is_prcs and all(map(lambda b: b == xyz_is_prcs[0], xyz_is_prcs)):
+            common_xyz_is_prcs_flag = xyz_is_prcs[0]
+        else:
+            common_xyz_is_prcs_flag = None
+
         new_pcd = cls(xyz=xyz_np, color=color_np, normals=normals_np, scalar_fields=scalar_fields,
                       global_coordinate_shift=gcs, _global_shift_already_applied=(gcs is not None),
-                      spherical_coordinates_origin=sco)
+                      spherical_coordinates_origin=sco, tmat_socs2prcs=common_tmat, xyz_is_prcs=common_xyz_is_prcs_flag)
 
         if scs is not None:
             object.__setattr__(new_pcd, "spherical_coordinates", scs)

@@ -35,7 +35,7 @@ class ScalarField:
     _: KW_ONLY
     original_dtype: Optional[DTypeLike] = None
     operations_performed: list[tuple[str, tuple[...]]] = field(default_factory=list)
-    override_forced_dtype_conversion: InitVar[bool] = False
+    override_forced_dtype_conversion: InitVar[bool] = True
 
     def __post_init__(self, override_forced_dtype_conversion: bool) -> None:
         if not isinstance(self.name, str):
