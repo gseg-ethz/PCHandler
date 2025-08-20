@@ -1,6 +1,9 @@
 name: release-please
 on:
-  push:
+  workflow_run:
+    workflows:
+      - CI
+    types: [completed]
     branches:
       - main
 
@@ -9,12 +12,9 @@ permissions:
   pull-requests: write
   issues: write
 
-concurrency:
-  group: release-please-${{ github.ref }}
-  cancel-in-progress: false
-
 jobs:
   release-please:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -35,11 +35,14 @@ jobs:
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
 
-          major="${{ steps.release.outputs.major }}"
-          minor="${{ steps.release.outputs.minor }}"
+          # Clean up old tags if they exist
+          git tag -d v${{ steps.release.outputs.major }} || true
+          git tag -d v${{ steps.release.outputs.major }}.${{ steps.release.outputs.minor }} || true
+          git push origin :refs/tags/v${{ steps.release.outputs.major }} || true
+          git push origin :refs/tags/v${{ steps.release.outputs.major }}.${{ steps.release.outputs.minor }} || true
 
-          # Rewrite floating tags to the new release commit
-          git tag -fa "v$major" -m "Release v$major"
-          git tag -fa "v$major.$minor" -m "Release v$major.$minor"
-          git push origin --force "v$major"
-          git push origin --force "v$major.$minor"
+          # Create and push new tags
+          git tag -a v${{ steps.release.outputs.major }} -m "Release v${{ steps.release.outputs.major }}"
+          git tag -a v${{ steps.release.outputs.major }}.${{ steps.release.outputs.minor }} -m "Release v${{ steps.release.outputs.major }}.${{ steps.release.outputs.minor }}"
+          git push origin v${{ steps.release.outputs.major }}
+          git push origin v${{ steps.release.outputs.major }}.${{ steps.release.outputs.minor }}
