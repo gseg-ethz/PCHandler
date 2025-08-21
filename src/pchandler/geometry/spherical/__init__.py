@@ -9,13 +9,13 @@ from typing import TYPE_CHECKING
 
 __all__ = []
 
-_lazy_map = {"Angle": "angle", "AngleArray": "angle", "FoV": "fov", "FoVTree": "fov"}
+_lazy_map = {"Angle": "angle", "AngleArray": "angle", "FoV": "fov", "FoVTree": "fov", "min_enclosing_arc": "min_enclosing_arc"}
 
 __all__ = __all__ + list(_lazy_map)
 
 if TYPE_CHECKING:
     from .angle import Angle, AngleArray
-    from .fov import FoV, FoVTree
+    from .fov import FoV, FoVTree, min_enclosing_arc
 
 
 def __getattr__(name: str):

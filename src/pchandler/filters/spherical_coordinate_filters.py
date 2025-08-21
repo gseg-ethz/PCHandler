@@ -37,10 +37,16 @@ class FoVFilter(PointCloudFilter):
         -------
         NDArray[np.bool_]
         """
-        mask = np.logical_and(
-            np.logical_and(pcd.v >= self.fov.top, pcd.v <= self.fov.bottom),
-            np.logical_and(pcd.hz >= self.fov.left, pcd.hz <= self.fov.right),
-        )
+        v_indices = np.logical_and(pcd.v >= self.fov.top, pcd.v <= self.fov.bottom)
+
+        if self.fov.crosses_pi:
+            # Combines the ranges [left, π] and [-π, right]
+            hz_indices = np.logical_or(pcd.hz >= self.fov.left, pcd.hz <= self.fov.right)
+        else:
+            # Range of [left, right]
+            hz_indices = np.logical_and(pcd.hz >= self.fov.left, pcd.hz <= self.fov.right)
+
+        mask = np.logical_and(v_indices, hz_indices)
 
         return mask
 

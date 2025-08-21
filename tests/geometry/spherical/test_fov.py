@@ -99,15 +99,22 @@ class TestFov:
             FoV.construct_without_bounds_check(left=100, right=200, top=200, bottom={"Not a": "Valid Angle"})
 
     def test_from_angles(self):
-        hz = np.array([-1.7, 0.2, -3.1, 3.0, 2.0, 1.3])
+        # Case not crossing pi
+        hz = np.array([-0.4, 0.2, 0.4, -0.31, 0.5, 0.05])
         v = np.array([1.4, 0.4, 2.1, 2.9, 1.9, 1.2])
 
         fov = FoV.from_angles(horizontal=hz, vertical=v)
 
-        assert fov.left == -3.1
-        assert fov.right == 3.0
-        assert fov.top == 0.4
-        assert fov.bottom == 2.9
+        assert np.isclose(fov.top, 0.4)
+        assert np.isclose(fov.bottom, 2.9)
+        assert np.isclose(fov.left, -0.4)
+        assert np.isclose(fov.right, 0.5)
+
+        # Case crossing pi
+        hz = np.array([-1.7, 0.2, -3.1, 3.0, 2.0, 1.3])
+        fov = FoV.from_angles(horizontal=hz, vertical=v)
+        assert np.isclose(fov.left, 0.2)
+        assert np.isclose(fov.right, -1.7)
 
     def test_iter(self):
         fov = FoV(left=-0.12, top=0.45, right=1.23, bottom=2.78)

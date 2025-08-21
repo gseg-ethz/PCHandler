@@ -6,7 +6,7 @@ import warnings
 from dataclasses import dataclass, field
 from fractions import Fraction
 from itertools import chain
-from typing import Any, Generator, Iterable, Optional, Self, TypeAlias, cast
+from typing import Any, Generator, Iterable, Optional, Self, TypeAlias, cast, NamedTuple
 
 import numpy as np
 from GSEGUtils.constants import DEFAULT_CONFIG, EPS, PI, TWO_PI, validate_variables
@@ -23,7 +23,7 @@ from pydantic import (
 from GSEGUtils.base_types import VectorT
 from pchandler.geometry.spherical import Angle, AngleArray
 
-__all__ = ['FoV', 'FoVTree']
+__all__ = ['FoV', 'FoVTree', 'min_enclosing_arc']
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -123,7 +123,9 @@ class FoV(BaseModel):
         -------
         FoV
         """
-        return cls(left=horizontal.min(), top=vertical.min(), right=horizontal.max(), bottom=vertical.max())
+        enclosing_arc = min_enclosing_arc(horizontal)
+
+        return cls(left=enclosing_arc.left, top=vertical.min(), right=enclosing_arc.right, bottom=vertical.max())
 
     def __iter__(self) -> Generator[tuple[str, Angle], None, None]:
         yield "left", self.left
@@ -207,9 +209,6 @@ class FoV(BaseModel):
         -------
         FoV
         """
-        # hz_min = centerpoint[0] - extent[0] / 2
-        # hz_max = centerpoint[0] + extent[0] / 2
-        # v_min = centerpoint[1] - extent[1] / 2
         new_instance = cls.construct_without_bounds_check(
             left=centerpoint[0] - extent[0] / 2,
             right=centerpoint[0] + extent[0] / 2,
@@ -217,8 +216,6 @@ class FoV(BaseModel):
             bottom=centerpoint[1] + extent[1] / 2,
         )
         return new_instance
-
-        # def union(self, fov2: Self) -> Self:
 
     def union(self, fov2: Self) -> Self:
         """Returns the union of this FoV with another.
@@ -264,8 +261,6 @@ class FoV(BaseModel):
         bottom_chk = self.bottom >= fov2.bottom - EPS
 
         return left_chk and top_chk and right_chk and bottom_chk
-
-
 
     @validate_variables
     def ratio(self) -> NonNegativeFloat:
@@ -788,3 +783,74 @@ class FoVTree:
             new_shape = (2, 2)
 
         return new_shape
+
+
+class EnclosingArc(NamedTuple):
+    span: float
+    left: float
+    right: float
+    crosses_pi: bool
+    segments: list[tuple[float, float]]
+
+
+def min_enclosing_arc(angles_rad):
+    """
+    angles_rad: array-like, angles in [-pi, pi].
+    Returns:
+        span               : minimal arc length in radians
+        start_signed, end_signed : endpoints in [-pi, pi]
+        wraps_signed       : True if the arc crosses -pi/+pi in the signed domain
+        segments_signed    : list of one or two (lo, hi) segments in [-pi, pi] covering the arc
+        idx_after_gap      : index (in sorted [0,2π) order) of the point that starts the arc
+    """
+    ang = np.asarray(angles_rad, dtype=float)
+    n = ang.size
+    if n == 0:
+        return 0.0, 0.0, 0.0, False, [], None
+    if n == 1:
+        a = float(ang[0])
+        return 0.0, a, a, False, [(a, a)], 0
+
+    two_pi = 2*np.pi
+    a = (ang + two_pi) % two_pi                  # [0, 2π)
+    a_sorted = np.sort(a)
+
+    diffs = np.diff(a_sorted)
+    wrap_gap = (a_sorted[0] + two_pi) - a_sorted[-1]
+    gaps = np.concatenate([diffs, [wrap_gap]])
+
+    k = int(np.argmax(gaps))                     # largest gap's end index
+    span = float(two_pi - gaps[k])
+    start = a_sorted[(k + 1) % n]                # start in [0, 2π)
+    end = (start + span) % two_pi                # end in [0, 2π)
+
+    to_signed = lambda x: ((x + np.pi) % two_pi) - np.pi
+    left = to_signed(start)
+    right   = to_signed(end)
+
+    # In signed space, the arc wraps if start_signed > end_signed (and span > 0)
+    wraps_pi = (span > 0.0) and (left > right)
+
+    # Provide the signed segments that cover the arc
+    if not wraps_pi:
+        segments_signed = [(left, right)]
+    else:
+        # Arc covers [start, π] U [-π, end] in signed domain
+        segments_signed = [(left, np.pi), (-np.pi, right)]
+
+    enclosing_arc = EnclosingArc(span=span, left=left, right=right, crosses_pi=wraps_pi, segments=segments_signed)
+
+    return enclosing_arc
+
+
+def points_in_arc_signed(angles_rad, start_signed, end_signed, wraps_signed, atol=0.0):
+    """
+    Membership test in signed [-pi, pi] using the wrap flag.
+    If wraps_signed is True, the arc is the union of two segments.
+    """
+    ang = np.asarray(angles_rad, dtype=float)
+    if not wraps_signed:
+        return (ang >= start_signed - atol) & (ang <= end_signed + atol)
+    else:
+        return ((ang >= start_signed - atol) & (ang <= np.pi + atol)) | \
+               ((ang >= -np.pi - atol) & (ang <= end_signed + atol))

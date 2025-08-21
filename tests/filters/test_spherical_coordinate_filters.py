@@ -55,5 +55,15 @@ class TestFoVFilter:
         expected_mask[[3, 4, 5]] = True
         mask = fov_filter.mask(pcd)
         assert np.all(mask == expected_mask)
-        pcd_filtered = fov_filter.extract(pcd)
+        pcd_filtered = fov_filter.sample(pcd)
         assert len(pcd_filtered) == 3
+
+        fov = FoV(left=2.0, right=-0.5, top=0.1, bottom=np.pi)
+
+        fov_filter = FoVFilter(fov)
+        expected_mask = np.zeros(10, dtype=np.bool_)
+        expected_mask[[1, 2, 3, 8, 9]] = True
+        mask = fov_filter.mask(pcd)
+        assert np.all(mask == expected_mask)
+        pcd_filtered = fov_filter.sample(pcd)
+        assert len(pcd_filtered) == 5
