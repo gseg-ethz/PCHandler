@@ -126,7 +126,7 @@ class ScalarFieldManager:
         else:
             raise TypeError(f"Unknown fields type: {type(fields)}")
 
-    def validate_lengths(self):
+    def validate_lengths(self) -> None:
         """Check all scalar fields lengths match the number of points in the parent
 
         Returns

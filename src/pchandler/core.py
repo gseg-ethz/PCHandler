@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Literal, Optional, Self, Sequence, cast, overload, TypeAlias, Union
+from typing import Any, Literal, Optional, Self, Sequence, cast, overload, Mapping, TypeAlias, Union
 
 import numpy as np
 import open3d as o3d
@@ -125,7 +125,7 @@ class PointCloudData(CartesianCoordinates):
         return value
 
     @field_serializer("scalar_fields")
-    def _drop_parent_weakref(self, scalar_fields: ScalarFieldManager):
+    def _drop_parent_weakref(self, scalar_fields: ScalarFieldManager) -> ScalarFieldManager:
         """Drop weakref to parent on serialization
 
         Parameters
@@ -235,8 +235,8 @@ class PointCloudData(CartesianCoordinates):
         """
         self.scalar_fields.reflectance = value
 
-    def __setattr__(self, key, value):
-        super().__setattr__(key, value)
+    # def __setattr__(self, key, value) -> None:  # Todo: Is this necessary?
+    #     super().__setattr__(key, value)
 
     def __setitem__(self, key: IndexLike, value: ArrayT | PointCloudData) -> None:
         raise IndexError(
@@ -248,7 +248,7 @@ class PointCloudData(CartesianCoordinates):
         return id(self)
 
     @classmethod
-    def _reconstruct(cls, state: dict) -> Self:
+    def _reconstruct(cls, state: dict[str, Any]) -> Self:
         obj: Self = super(cls, cls)._reconstruct(state)
         obj.scalar_fields.parent = obj
         return obj
@@ -311,7 +311,11 @@ class PointCloudData(CartesianCoordinates):
         return extracted
 
     @classmethod
-    def merge(cls, *pcds: Self, **kwargs) -> Self:
+    def merge(
+        cls,
+        *pcds: Self,
+        **kwargs: dict[str, Any],
+    ) -> Self:
         """ Merge a set of point clouds together
 
         If point clouds contain similar scalar fields, these will be also merged.

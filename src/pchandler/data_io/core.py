@@ -5,10 +5,21 @@ import copy
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Callable, Generator, Mapping, Optional, Sequence, cast
+from typing import (
+    Any,
+    Callable,
+    Generator,
+    Mapping,
+    Optional,
+    Sequence,
+    TypedDict,
+    Unpack,
+    cast,
+)
 
 import numpy as np
 import numpy.typing as npt
+from GSEGUtils.base_types import Vector_3_T
 from numpy._typing._dtype_like import _DTypeDict
 
 from pchandler import PointCloudData
@@ -22,6 +33,7 @@ from pchandler.constants import (
     XYZ_NAMES,
     _NameConstantsTriplet,
 )
+from pchandler.geometry import OptimizedShift
 from pchandler.scalar_fields import (
     SF_T,
     NormalFields,
@@ -35,6 +47,11 @@ logger = logging.getLogger(__name__.split(".")[0])
 
 BaseDataT = Mapping[str, npt.NDArray[Any]] | npt.NDArray[Any]
 SUPPORTED_TYPES = (".ply", ".las", ".laz", ".txt", ".csv", ".pts", ".e57")
+
+
+class PointCloudDataKW(TypedDict, total=False):
+    socs_origin: Optional[Vector_3_T]
+    numerical_optimization_shift: Optional[OptimizedShift]
 
 
 def find_point_cloud_in_directory(
@@ -99,7 +116,7 @@ class AbstractIOHandler(ABC):
         scalar_fields: Optional[list[str]] = None,
         remove_prefix: bool = True,
         prefix: str = "scalar_",
-        **config: dict[str, Any],
+        **pcd_kw: Unpack[PointCloudDataKW],
     ) -> PointCloudData | Generator[PointCloudData, None, None]: ...
 
 

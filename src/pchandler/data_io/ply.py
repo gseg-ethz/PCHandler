@@ -2,12 +2,12 @@
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Unpack
 
 from plyfile import PlyData, PlyElement  # type: ignore
 
 from pchandler import PointCloudData
-from pchandler.data_io.core import AbstractIOHandler
+from pchandler.data_io.core import AbstractIOHandler, PointCloudDataKW
 
 __all__ = ["PlyHandler"]
 
@@ -32,7 +32,7 @@ class PlyHandler(AbstractIOHandler):
         scalar_fields: Optional[list[str]] = None,
         remove_prefix: bool = True,
         prefix: str = "scalar_",
-        **config: dict[str, Any],
+        **pcd_kw: Unpack[PointCloudDataKW],
     ) -> PointCloudData:
         """Load a point cloud from a PLY file
 
@@ -63,7 +63,7 @@ class PlyHandler(AbstractIOHandler):
 
         field_names = cls._validate_field_selection(scalar_fields, file_fields, remove_prefix, prefix)
 
-        pcd = PointCloudData(cls.extract_xyz(plydata["vertex"], num_points))
+        pcd = PointCloudData(cls.extract_xyz(plydata["vertex"], num_points), **pcd_kw)
         cls.extract_scalar_fields(pcd, plydata["vertex"], num_points, field_names)
 
         return pcd
