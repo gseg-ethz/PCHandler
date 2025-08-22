@@ -329,25 +329,17 @@ class FoV(BaseModel):
         if shape[0] == shape[1] == 1:
             return [self]
 
-        horizontal_borders = cast(
-            AngleArray,
-            Angle(
-                np.linspace(
-                    start=self.left.radians, stop=self.right.radians, num=shape[0] + 1, endpoint=True, retstep=False
-                )
-            ),
+        horizontal_borders = AngleArray(
+            np.linspace(
+                start=self.left.radians, stop=self.right.radians, num=shape[0] + 1, endpoint=True, retstep=False
+            )
         )
-        vertical_borders = cast(
-            AngleArray,
-            Angle(
-                np.linspace(
-                    start=self.top.radians, stop=self.bottom.radians, num=shape[1] + 1, endpoint=True, retstep=False
-                )
-            ),
+
+        vertical_borders = AngleArray(
+            np.linspace(
+                start=self.top.radians, stop=self.bottom.radians, num=shape[1] + 1, endpoint=True, retstep=False
+            )
         )
-        # TODO check if a bug on AngleArray initialisation when used in place above
-        # horizontal_borders.display_unit = self.left.display_unit
-        # vertical_borders.display_unit = self.top.display_unit
 
         fov_splits = [
             type(self)(left=hor_min, top=elev_min, right=hor_max, bottom=elev_max)

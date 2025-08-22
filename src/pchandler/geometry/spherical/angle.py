@@ -505,6 +505,16 @@ class AngleArray(AngleBase):
         AngleBase.__init__(inst, arr, unit)
         return inst
 
+    def __init__(self, value: ArrayT, unit: AngleUnit=AngleUnit.RAD):
+        """Create an AngleArray object.
+
+        Parameters
+        ----------
+        value : ArrayT
+        unit : AngleUnit, default=AngleUnit.RAD
+        """
+        super().__init__(value, unit)
+
     @property
     def shape(self) -> tuple[int, ...]:
         """Returns the shape of the array
