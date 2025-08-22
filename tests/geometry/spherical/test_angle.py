@@ -176,6 +176,11 @@ class TestAngleArrayDirect:
         assert isinstance(scalar, AngleArray)
         np.testing.assert_allclose(scalar.internal_value, [np.pi], rtol=1e-6)
 
+        # Test initialisation without units
+        arr = AngleArray(np.linspace(0, np.pi, 10))
+        assert isinstance(arr, AngleArray)
+        np.testing.assert_allclose(arr.internal_value, np.linspace(0, np.pi, 10), rtol=1e-6)
+
     def test_anglearray_getitem_and_iter(self):
         arr = AngleArray([0, 90, 180], AngleUnit.DEGREE)
         # __len__

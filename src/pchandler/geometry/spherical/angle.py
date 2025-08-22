@@ -37,7 +37,7 @@ class AngleBase:
 
     _INTERNAL_UNIT = AngleUnit.RAD
 
-    def __init__(self, value: float | ArrayT, unit: AngleUnit):
+    def __init__(self, value: float | ArrayT, unit: AngleUnit=AngleUnit.RAD):
         """AngleBase class provides the basic functions for interacting with angles
 
         These include storage, unit conversion, comparison and numerical operations.
@@ -376,16 +376,6 @@ class Angle(AngleBase):
         AngleBase.__init__(inst, arr, unit)
         return inst
 
-    def __init__(self, value: float, unit: AngleUnit=AngleUnit.RAD):
-        """Create an Angle object.
-
-        Parameters
-        ----------
-        value : float
-        unit : AngleUnit, default=AngleUnit.RAD
-        """
-        super().__init__(value, unit)
-
     @classmethod
     def parse(cls, value: Any) -> Self:
         """Parser function to create an angle from a variety of input formats.
@@ -504,16 +494,6 @@ class AngleArray(AngleBase):
         inst = super().__new__(cls)
         AngleBase.__init__(inst, arr, unit)
         return inst
-
-    def __init__(self, value: ArrayT, unit: AngleUnit=AngleUnit.RAD):
-        """Create an AngleArray object.
-
-        Parameters
-        ----------
-        value : ArrayT
-        unit : AngleUnit, default=AngleUnit.RAD
-        """
-        super().__init__(value, unit)
 
     @property
     def shape(self) -> tuple[int, ...]:
