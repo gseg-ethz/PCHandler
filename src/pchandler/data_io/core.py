@@ -145,8 +145,9 @@ class AbstractIOHandler(ABC):
                 return headers
 
             raise ValueError(f"Unable to resolve field names without header info or user selection.")
-
-        if len(selection) == 0 or set(selection.values()).issubset(headers.values()):
+        
+        # Todo: Check if this logic is sound
+        if len(selection) == 0 or set(selection.values()).issubset(headers.values()) or not headers:
             return selection
 
         # User input is a subset of the 'cleaned' names - lowercase, prefix removed etc.

@@ -67,9 +67,13 @@ class CsvHandler(AbstractIOHandler):
             "usecols": None,
         }
 
+        # Todo: Rethink this logic
         # When a number of scalar_fields match, assumes all fields are in the same order
         if len(field_names) + 3 <= file_info.num_fields:
-            load_config["usecols"] = [0, 1, 2] + [file_info.fields.index(name) for name in field_names.values()]
+            if not file_info.fields:
+                load_config["usecols"] = list(range(len(field_names) + 3))
+            else:
+                load_config["usecols"] = [0, 1, 2] + [file_info.fields.index(name) for name in field_names.values()]
         elif len(field_names) == 3:
             load_config["usecols"] = [0, 1, 2]
 
@@ -123,6 +127,9 @@ def sniff_file(
     # a number of points is on the first line
     header, num_points = _get_header(file, comment)
     delimiter, number_fields = _delimiter_sniffer(file, delimiters, lines_to_check, minimum_columns, comment)
+
+    if not header:
+        return AsciiInfo([], delimiter, [], number_fields, num_points)
 
     # Get the field names based on the defined row_index. Default is the last line of the header (-1)
     line: str = header[field_names_row_index].removeprefix(comment)
