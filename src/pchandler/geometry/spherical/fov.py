@@ -20,7 +20,7 @@ from pydantic import (
     validate_call,
 )
 
-from GSEGUtils.base_types import VectorT
+from GSEGUtils.base_types import VectorT, Vector_Bool_T, Vector_Float_T
 from pchandler.geometry.spherical import Angle, AngleArray
 
 __all__ = ['FoV', 'FoVTree', 'min_enclosing_arc']
@@ -261,6 +261,19 @@ class FoV(BaseModel):
         bottom_chk = self.bottom >= fov2.bottom - EPS
 
         return left_chk and top_chk and right_chk and bottom_chk
+
+    def find_points_inside(self, horizontal: Vector_Float_T, vertical: Vector_Float_T) -> Vector_Bool_T:
+        """Returns a mask for the points that fall within the FoV"""
+        v_indices = np.logical_and(vertical >= self.top, vertical <= self.bottom)
+
+        if self.crosses_pi:
+            # Combines the ranges [left, π] and [-π, right]
+            hz_indices = np.logical_or(horizontal >= self.left, horizontal <= self.right)
+        else:
+            # Range of [left, right]
+            hz_indices = np.logical_and(horizontal >= self.left, horizontal <= self.right)
+
+        return np.logical_and(v_indices, hz_indices)
 
     @validate_variables
     def ratio(self) -> NonNegativeFloat:
