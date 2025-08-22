@@ -324,25 +324,17 @@ class FoV(BaseModel):
         if shape[0] == shape[1] == 1:
             return [self]
 
-        horizontal_borders = cast(
-            AngleArray,
-            Angle(
-                np.linspace(
-                    start=self.left.radians, stop=self.right.radians, num=shape[0] + 1, endpoint=True, retstep=False
-                )
-            ),
+        horizontal_borders = AngleArray(
+            np.linspace(
+                start=self.left.radians, stop=self.right.radians, num=shape[0] + 1, endpoint=True, retstep=False
+            )
         )
-        vertical_borders = cast(
-            AngleArray,
-            Angle(
-                np.linspace(
-                    start=self.top.radians, stop=self.bottom.radians, num=shape[1] + 1, endpoint=True, retstep=False
-                )
-            ),
+
+        vertical_borders = AngleArray(
+            np.linspace(
+                start=self.top.radians, stop=self.bottom.radians, num=shape[1] + 1, endpoint=True, retstep=False
+            )
         )
-        # TODO check if a bug on AngleArray initialisation when used in place above
-        # horizontal_borders.display_unit = self.left.display_unit
-        # vertical_borders.display_unit = self.top.display_unit
 
         fov_splits = [
             type(self)(left=hor_min, top=elev_min, right=hor_max, bottom=elev_max)
@@ -406,38 +398,41 @@ class FoV(BaseModel):
             extended_fov = type(self).from_center_with_extent(self.center(), (width_target, height_target))
             return extended_fov.tile(target_extent, False)
 
-        # TODO check if these functions should actually be AngleArray and default units
-        horizontal_steps = cast(
-            AngleArray, Angle(np.append(np.arange(self.left, self.right, target_extent.width()), self.right))
+        horizontal_steps = AngleArray(
+            np.append(np.arange(self.left, self.right, target_extent.width()), self.right)
         )
-
-        elevation_steps = cast(
-            AngleArray, Angle(np.append(np.arange(self.top, self.bottom, target_extent.height()), self.bottom))
+        elevation_steps = AngleArray(
+            np.append(np.arange(self.top, self.bottom, target_extent.height()), self.bottom)
         )
 
         horizontal_bins = list(zip(horizontal_steps[:-1], horizontal_steps[1:]))
         vertical_bins = list(zip(elevation_steps[:-1], elevation_steps[1:]))
 
         tiles = []
-        for hor_bin in horizontal_bins:
-            if hor_bin[-1] - hor_bin[0] <= 0:
+        for left_edge, right_edge in horizontal_bins:
+            if right_edge - left_edge <= 0:
                 continue
+
             horizontal_tiles = []
-            for vert_bin in vertical_bins:
-                if vert_bin[-1] - vert_bin[0] <= 0:
+            for top_edge, bottom_edge in vertical_bins:
+                if bottom_edge - top_edge <= 0:
                     continue
+
                 new_fov = type(self).construct_without_bounds_check(
-                    left=hor_bin[0],
-                    top=vert_bin[0],
-                    right=hor_bin[1],
-                    bottom=vert_bin[1],
+                    left=left_edge,
+                    top=top_edge,
+                    right=right_edge,
+                    bottom=bottom_edge,
                 )
+
                 new_fov.left.display_unit = self.left.display_unit
                 new_fov.right.display_unit = self.right.display_unit
                 new_fov.top.display_unit = self.top.display_unit
                 new_fov.bottom.display_unit = self.bottom.display_unit
+
                 if all(e > EPS for e in new_fov.extent()):
                     horizontal_tiles.append(new_fov)
+
             if horizontal_tiles:
                 tiles.append(horizontal_tiles)
 
@@ -467,8 +462,8 @@ class FoV(BaseModel):
         """
         return cls(
             left=min(fovs, key=lambda fov: fov.left).left,
-            top=min(fovs, key=lambda fov: fov.top).top,
             right=max(fovs, key=lambda fov: fov.right).right,
+            top=min(fovs, key=lambda fov: fov.top).top,
             bottom=max(fovs, key=lambda fov: fov.bottom).bottom,
         )
 
