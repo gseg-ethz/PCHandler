@@ -174,18 +174,6 @@ class TestFov:
         assert math.isclose(fov.top, -4.0)
         assert math.isclose(fov.bottom, 6.0)
 
-    def test_union(self):
-        fov1 = FoV(top=0.4, bottom=2.4, right=1.3, left=0.3)
-        fov2 = FoV(top=0.2, bottom=2.2, right=1.5, left=-1)
-
-        union = fov1.union(fov2)
-
-        assert isinstance(union, FoV)
-        assert math.isclose(union.right, 1.5)
-        assert math.isclose(union.left, -1)
-        assert math.isclose(union.top, 0.2)
-        assert math.isclose(union.bottom, 2.4)
-        # Not testing for crossing of PI / TWO_PI
 
     def test_intersect(self):
         fov1 = FoV(top=0.4, bottom=2.4, right=1.3, left=0.3)
@@ -355,3 +343,68 @@ class TestFoVTree:
         new_tree = FoVTree.build_from_tiles(new_fov.tile(FoV(left=0.0, right=0.1, top=1.3, bottom=1.4)))
         assert isinstance(new_tree, FoVTree)
         assert len(new_tree.children) == 4
+
+def _fov_are_equal(fov1: FoV, fov2: FoV):
+    assert np.allclose(fov1.as_array(), fov2.as_array())
+    return True
+
+
+class TestFoVUnion:
+
+    @pytest.mark.parametrize('fov1,fov2,result', ((
+        FoV(top='20deg', bottom='80deg', left='-40deg', right='80deg'),
+        FoV(top='12deg', bottom='64deg', left='-20deg', right='130deg'),
+        FoV(top='12deg', bottom='80deg', left='-40deg', right='130deg'),
+    ),))
+    def test_joint_pairs(self, fov1: FoV, fov2: FoV, result: FoV):
+        union = fov1.union(fov2)
+        assert _fov_are_equal(result, union)
+
+    @pytest.mark.parametrize('fov1,fov2,result', ((
+        FoV(top='20deg', bottom='80deg', left='160deg', right='-100deg'),
+        FoV(top='12deg', bottom='64deg', left='-120deg', right='30deg'),
+        FoV(top='12deg', bottom='80deg', left='160deg', right='30deg'),
+    ),))
+    def test_joint_first_fov_wraps(self, fov1: FoV, fov2: FoV, result: FoV):
+        union = fov1.union(fov2)
+        assert _fov_are_equal(result, union)
+
+    @pytest.mark.parametrize('fov1,fov2,result', ((
+        FoV(top='20deg', bottom='80deg', left='50deg', right='160deg'),
+        FoV(top='12deg', bottom='64deg', left='120deg', right='-130deg'),
+        FoV(top='12deg', bottom='80deg', left='50deg', right='-130deg'),
+    ),))
+    def test_joint_second_fov_wraps(self, fov1: FoV, fov2: FoV, result: FoV):
+        union = fov1.union(fov2)
+        assert _fov_are_equal(result, union)
+
+    @pytest.mark.parametrize('fov1,fov2,result', ((
+        FoV(top='20deg', bottom='80deg', left='150deg', right='-160'),
+        FoV(top='12deg', bottom='64deg', left='170deg', right='-140deg'),
+        FoV(top='12deg', bottom='80deg', left='150deg', right='-140deg'),
+    ),))
+    def test_joint_both_wrap(self, fov1: FoV, fov2: FoV, result: FoV):
+        union = fov1.union(fov2)
+        assert _fov_are_equal(result, union)
+
+    @pytest.mark.parametrize('fov1,fov2,result', ((
+        FoV(top='20deg', bottom='50deg', left='-140deg', right='-20'),
+        FoV(top='80deg', bottom='120deg', left='30', right='120deg'),
+        FoV(top='20deg', bottom='120deg', left='-140deg', right='120deg'),
+    ),))
+    def test_disjointed(self, fov1: FoV, fov2: FoV, result: FoV):
+        union = fov1.union(fov2)
+        assert _fov_are_equal(result, union)
+
+    def test_basic(self):
+        fov1 = FoV(top='20deg', bottom=2.4, right=1.3, left=0.3)
+        fov2 = FoV(top=0.2, bottom=2.2, right=1.5, left=-1)
+
+        union = fov1.union(fov2)
+
+        assert isinstance(union, FoV)
+        assert math.isclose(union.right, 1.5)
+        assert math.isclose(union.left, -1)
+        assert math.isclose(union.top, 0.2)
+        assert math.isclose(union.bottom, 2.4)
+        # Not testing for crossing of PI / TWO_PI

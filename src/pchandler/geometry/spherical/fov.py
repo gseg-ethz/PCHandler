@@ -57,11 +57,6 @@ class FoV(BaseModel):
         """
         super().__init__(left=left, top=top, right=right, bottom=bottom)
 
-    # @field_validator("left", "right", "top", "bottom", mode="before")
-    # @classmethod
-    # def _coerce_to_angle(cls, value: AngleLikeT) -> Angle:
-    #     return Angle.parse(value)
-
     @field_validator("left", "right", mode="after")
     @classmethod
     def _check_hz(cls, hz: Angle) -> Angle:
