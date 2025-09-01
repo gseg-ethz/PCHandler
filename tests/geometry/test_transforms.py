@@ -1,6 +1,6 @@
+import numpy as np
 import pytest
 
-import numpy as np
 from pchandler.geometry.transforms import Transform
 
 
@@ -9,14 +9,11 @@ def identity_transform():
     """Fixture for creating an identity Transform."""
     return Transform(np.eye(4))
 
+
 @pytest.fixture
 def random_transform():
     """Fixture for creating a random affine transform."""
-    rotation = np.array([
-        [0, -1, 0],
-        [1,  0, 0],
-        [0,  0, 1]
-    ], dtype=np.float32)
+    rotation = np.array([[0, -1, 0], [1, 0, 0], [0, 0, 1]], dtype=np.float32)
     translation = np.array([5, 10, 15], dtype=np.float32)
     scale = np.array([2, 2, 2], dtype=np.float32)
     return Transform.generate(rotation=rotation, translation=translation, scale=scale)
@@ -38,11 +35,7 @@ def test_transform_from_translation():
 
 def test_transform_from_rotation():
     """Test creating a transform from a rotation matrix."""
-    rotation = np.array([
-        [0, -1, 0],
-        [1, 0, 0],
-        [0, 0, 1]
-    ])
+    rotation = np.array([[0, -1, 0], [1, 0, 0], [0, 0, 1]])
     transform = Transform.from_rotation(rotation)
     expected = np.eye(4)
     expected[:3, :3] = rotation

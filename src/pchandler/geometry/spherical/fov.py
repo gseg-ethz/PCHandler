@@ -1,3 +1,78 @@
+# pchandler - Toolbox for point-cloud handling, processing and analysis
+#
+# Copyright (c) 2025, Nicholas Meyer, Geosensors and Engineering Geodesy,
+# Institute of Geodesy and Photogrammetry, ETH Zurich, Switzerland
+# SPDX-License-Identifier: BSD-3-Clause
+#
+# Author: Nicholas Meyer (meyernic@ethz.ch)
+
+"""
+``pchandler.fov``
+
+This module provides classes and methods for defining and manipulating Fields of View (FoVs) and hierarchical FoV trees.
+It is designed to facilitate the spatial partitioning, tiling, and merging of 3D regions based on angular constraints.
+The module supports flexible representation of angular units and integrates with external tools to enable hierarchical
+partitioning of FoVs.
+
+Key Features:
+-------------
+- **FoV Class**:
+  - Represents rectangular angular regions in 3D space.
+  - Supports unit conversion between radians, degrees, and gradians (gon).
+  - Provides methods for splitting, merging, and calculating geometric properties such as aspect ratios and centers.
+
+- **FoVTree Class**:
+  - Implements a hierarchical tree structure for managing FoVs.
+  - Enables efficient spatial partitioning, depth-based querying, and merging operations.
+  - Compatible with tile-based FoV organization for large-scale datasets.
+
+- **Utility Methods**:
+  - Split a single FoV into multiple tiles or quadrants.
+  - Convert between tuple, dictionary, or NumPy array representations of FoV boundaries.
+  - Calculate optimal partitioning schemes for FoVs based on aspect ratios and angular extents.
+
+Dependencies:
+-------------
+- ``numpy``: For numerical computations.
+- ``pchandler.util``: Provides utilities for angle unit conversion and numerical constants.
+
+Usage:
+------
+Example: Create an FoV and convert it between different representations:
+
+.. code-block:: python
+
+    from pchandler.fov import FoV
+
+    # Define a field of view in degrees
+    fov = FoV(horizontal_min=0, horizontal_max=90, elevation_min=-30, elevation_max=30, unit="deg")
+
+    # Convert to radians
+    fov_rad = fov.as_tuple(unit="rad")
+    print("FoV in radians:", fov_rad)
+
+    # Split the FoV into a 2x2 grid
+    sub_fovs = fov.split(shape=(2, 2))
+    print("Sub-FoVs:", sub_fovs)
+
+
+Example: Use a hierarchical FoV tree for spatial partitioning:
+
+.. code-block:: python
+
+    from pchandler.fov import FoV, FoVTree
+
+    # Create a base FoV
+    base_fov = FoV(horizontal_min=0, horizontal_max=90, elevation_min=-30, elevation_max=30, unit="deg")
+
+    # Split into tiles and build a tree
+    tiles = base_fov.tile(FoV(horizontal_min=0, horizontal_max=30, elevation_min=-10, elevation_max=10))
+    fov_tree = FoVTree.build_from_tiles(tiles)
+
+    # Query the depth of the tree
+    print("Tree depth:", fov_tree.depth())
+"""
+
 from __future__ import annotations
 
 import logging
@@ -118,9 +193,8 @@ class FoV(BaseModel):
         -------
         FoV
         """
-        enclosing_arc = min_enclosing_arc(horizontal)
 
-        return cls(left=enclosing_arc.left, top=vertical.min(), right=enclosing_arc.right, bottom=vertical.max())
+        return cls(left=horizontal.min(), top=vertical.min(), right=horizontal.max(), bottom=vertical.max())
 
     def __iter__(self) -> Generator[tuple[str, Angle], None, None]:
         yield "left", self.left
@@ -249,7 +323,7 @@ class FoV(BaseModel):
         )
 
     def encompasses(self, fov2: Self) -> bool:
-        """ Does self fully surround fov2"""
+        """Does self fully surround fov2"""
         left_chk = self.left <= fov2.left + EPS
         top_chk = self.top <= fov2.top + EPS
         right_chk = self.right >= fov2.right - EPS
@@ -470,8 +544,8 @@ class FoV(BaseModel):
         """
         return cls(
             left=min(fovs, key=lambda fov: fov.left).left,
-            right=max(fovs, key=lambda fov: fov.right).right,
             top=min(fovs, key=lambda fov: fov.top).top,
+            right=max(fovs, key=lambda fov: fov.right).right,
             bottom=max(fovs, key=lambda fov: fov.bottom).bottom,
         )
 
@@ -786,74 +860,3 @@ class FoVTree:
             new_shape = (2, 2)
 
         return new_shape
-
-
-class EnclosingArc(NamedTuple):
-    span: float
-    left: float
-    right: float
-    crosses_pi: bool
-    segments: list[tuple[float, float]]
-
-
-def min_enclosing_arc(angles_rad):
-    """
-    angles_rad: array-like, angles in [-pi, pi].
-    Returns:
-        span               : minimal arc length in radians
-        start_signed, end_signed : endpoints in [-pi, pi]
-        wraps_signed       : True if the arc crosses -pi/+pi in the signed domain
-        segments_signed    : list of one or two (lo, hi) segments in [-pi, pi] covering the arc
-        idx_after_gap      : index (in sorted [0,2π) order) of the point that starts the arc
-    """
-    ang = np.asarray(angles_rad, dtype=float)
-    n = ang.size
-    if n == 0:
-        return 0.0, 0.0, 0.0, False, [], None
-    if n == 1:
-        a = float(ang[0])
-        return 0.0, a, a, False, [(a, a)], 0
-
-    two_pi = 2*np.pi
-    a = (ang + two_pi) % two_pi                  # [0, 2π)
-    a_sorted = np.sort(a)
-
-    diffs = np.diff(a_sorted)
-    wrap_gap = (a_sorted[0] + two_pi) - a_sorted[-1]
-    gaps = np.concatenate([diffs, [wrap_gap]])
-
-    k = int(np.argmax(gaps))                     # largest gap's end index
-    span = float(two_pi - gaps[k])
-    start = a_sorted[(k + 1) % n]                # start in [0, 2π)
-    end = (start + span) % two_pi                # end in [0, 2π)
-
-    to_signed = lambda x: ((x + np.pi) % two_pi) - np.pi
-    left = to_signed(start)
-    right   = to_signed(end)
-
-    # In signed space, the arc wraps if start_signed > end_signed (and span > 0)
-    wraps_pi = (span > 0.0) and (left > right)
-
-    # Provide the signed segments that cover the arc
-    if not wraps_pi:
-        segments_signed = [(left, right)]
-    else:
-        # Arc covers [start, π] U [-π, end] in signed domain
-        segments_signed = [(left, np.pi), (-np.pi, right)]
-
-    enclosing_arc = EnclosingArc(span=span, left=left, right=right, crosses_pi=wraps_pi, segments=segments_signed)
-
-    return enclosing_arc
-
-
-def points_in_arc_signed(angles_rad, start_signed, end_signed, wraps_signed, atol=0.0):
-    """
-    Membership test in signed [-pi, pi] using the wrap flag.
-    If wraps_signed is True, the arc is the union of two segments.
-    """
-    ang = np.asarray(angles_rad, dtype=float)
-    if not wraps_signed:
-        return (ang >= start_signed - atol) & (ang <= end_signed + atol)
-    else:
-        return ((ang >= start_signed - atol) & (ang <= np.pi + atol)) | \
-               ((ang >= -np.pi - atol) & (ang <= end_signed + atol))

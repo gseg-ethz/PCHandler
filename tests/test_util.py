@@ -1,7 +1,7 @@
-import pytest
 import numpy as np
-
+import pytest
 from GSEGUtils.util import AngleUnit, convert_angles
+
 
 class TestUtil:
     def test_bypass_immutability_decorator(self):

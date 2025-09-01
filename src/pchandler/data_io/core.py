@@ -1,3 +1,11 @@
+# pchandler - Toolbox for point-cloud handling, processing and analysis
+#
+# Copyright (c) 2025, Nicholas Meyer, Geosensors and Engineering Geodesy,
+# Institute of Geodesy and Photogrammetry, ETH Zurich, Switzerland
+# SPDX-License-Identifier: BSD-3-Clause
+#
+# Author: Nicholas Meyer (meyernic@ethz.ch)
+
 """
 Base module for I/O handlers and supporting methods
 """
@@ -169,7 +177,8 @@ class AbstractIOHandler(ABC):
 
             raise ValueError(f"Unable to resolve field names without header info or user selection.")
 
-        if len(selection) == 0 or set(selection.values()).issubset(headers.values()):
+        # Todo: Check if this logic is sound
+        if len(selection) == 0 or set(selection.values()).issubset(headers.values()) or not headers:
             return selection
 
         # User input is a subset of the 'cleaned' names - lowercase, prefix removed etc.

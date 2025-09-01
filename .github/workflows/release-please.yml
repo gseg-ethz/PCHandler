@@ -1,6 +1,9 @@
 name: release-please
 on:
-  push:
+  workflow_run:
+    workflows:
+      - CI
+    types: [completed]
     branches:
       - main
 
@@ -11,11 +14,13 @@ permissions:
 
 jobs:
   release-please:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          fetch-tags: true
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: googleapis/release-please-action@v4

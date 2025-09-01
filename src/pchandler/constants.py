@@ -1,4 +1,12 @@
-from typing import Optional, NamedTuple
+# pchandler - Toolbox for point-cloud handling, processing and analysis
+#
+# Copyright (c) 2025, Nicholas Meyer, Geosensors and Engineering Geodesy,
+# Institute of Geodesy and Photogrammetry, ETH Zurich, Switzerland
+# SPDX-License-Identifier: BSD-3-Clause
+#
+# Author: Nicholas Meyer (meyernic@ethz.ch)
+
+from typing import NamedTuple, Optional
 
 __all__ = ['RGB_NAMES', 'NORMAL_NAMES', 'XYZ_NAMES', 'INTENSITY_NAMES', 'REFLECTANCE_NAMES',
            'COMMON_FIELD_NAMES', 'COMMON_FIELD_BASES']
@@ -14,7 +22,7 @@ class _NameConstantsSingle(NamedTuple):
 
     @property
     def names(self) -> tuple[str, ...]:
-        return (self.base, ) + self.extra_names
+        return (self.base,) + self.extra_names
 
     @property
     def all(self) -> tuple[str, ...]:
@@ -27,8 +35,8 @@ class _NameConstantsTriplet(NamedTuple):
     base: str
     char: TripletT
     extra_names: tuple[str, ...] = ()
-    words: TripletT = ("","","")
-    float: TripletT = ("","","")
+    words: TripletT = ("", "", "")
+    float: TripletT = ("", "", "")
     reverse: Optional[str] = None
 
     @property
@@ -37,13 +45,13 @@ class _NameConstantsTriplet(NamedTuple):
 
     @property
     def triplets(self) -> tuple[TripletT, ...]:
-        triplets: tuple[TripletT, ...] = (self.char, )
+        triplets: tuple[TripletT, ...] = (self.char,)
 
         if self.words:
-            triplets += (self.words, )
+            triplets += (self.words,)
 
         if self.float:
-            triplets += (self.float, )
+            triplets += (self.float,)
 
         return triplets
 
@@ -52,7 +60,7 @@ class _NameConstantsTriplet(NamedTuple):
         return self.char + self.words + self.float
 
     @property
-    def all(self) -> tuple[TripletT|str, ...]:
+    def all(self) -> tuple[TripletT | str, ...]:
         if self.reverse:
             return self.names + self.scalars + (self.reverse,)
         return self.names + self.scalars
@@ -89,7 +97,7 @@ NORMAL_NAMES = _NameConstantsTriplet(
     char=("nx", "ny", "nz"),
     words=("normalx", "normaly", "normalz"),
     extra_names=("normal", "normal_fields", "nxnynz"),
-    reverse="nznynx"
+    reverse="nznynx",
 )
 
 #: Pre-defined names for XYZ coordinate access
@@ -97,15 +105,14 @@ XYZ_NAMES = _NameConstantsTriplet(
     base="xyz",
     char=("x", "y", "z"),
     extra_names=("cartesian", "cartesians", "coordinates", "coordinate"),
-    reverse="zyx"
+    reverse="zyx",
 )
 
 #: Pre-defined names for Intensity field access
 INTENSITY_NAMES = _NameConstantsSingle(
     base="intensity",
     char="i",
-    extra_names=("intensities",)
-)
+    extra_names=("intensities",))
 
 #: Pre-defined names for Reflectance field access
 REFLECTANCE_NAMES = _NameConstantsSingle(

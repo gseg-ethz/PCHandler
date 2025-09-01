@@ -1,3 +1,11 @@
+# pchandler - Toolbox for point-cloud handling, processing and analysis
+#
+# Copyright (c) 2025, Nicholas Meyer, Geosensors and Engineering Geodesy,
+# Institute of Geodesy and Photogrammetry, ETH Zurich, Switzerland
+# SPDX-License-Identifier: BSD-3-Clause
+#
+# Author: Nicholas Meyer (meyernic@ethz.ch)
+
 """
 Contains spherical geometry classes and functions.
 """
@@ -9,13 +17,13 @@ from typing import TYPE_CHECKING
 
 __all__ = []
 
-_lazy_map = {"Angle": "angle", "AngleArray": "angle", "FoV": "fov", "FoVTree": "fov", "min_enclosing_arc": "min_enclosing_arc"}
+_lazy_map = {"Angle": "angle", "AngleArray": "angle", "FoV": "fov", "FoVTree": "fov"}
 
 __all__ = __all__ + list(_lazy_map)
 
 if TYPE_CHECKING:
     from .angle import Angle, AngleArray
-    from .fov import FoV, FoVTree, min_enclosing_arc
+    from .fov import FoV, FoVTree
 
 
 def __getattr__(name: str):

@@ -1,3 +1,11 @@
+# pchandler - Toolbox for point-cloud handling, processing and analysis
+#
+# Copyright (c) 2025, Nicholas Meyer, Geosensors and Engineering Geodesy,
+# Institute of Geodesy and Photogrammetry, ETH Zurich, Switzerland
+# SPDX-License-Identifier: BSD-3-Clause
+#
+# Author: Nicholas Meyer (meyernic@ethz.ch)
+
 """
 Transforms module for pchandler.geometry.
 
@@ -6,16 +14,14 @@ Provides helper functions for transforming point clouds and converting between c
 
 from __future__ import annotations
 
-from typing import Any, Self, Literal
+from typing import Any, Literal, Self
 
 import numpy as np
+from GSEGUtils.base_arrays import BaseArray, FixedLengthArray, NumericMixins
+from GSEGUtils.base_types import Array_3x3_T, Array_4x4_T, Array_Float_T, Vector_3_T
 from pydantic import (
     Field,
 )
-
-from GSEGUtils.base_arrays import BaseArray, FixedLengthArray, NumericMixins
-from GSEGUtils.base_types import Array_3x3_T, Array_4x4_T, Array_Float_T, Vector_3_T
-
 
 
 class _TransformArray(NumericMixins):
@@ -36,10 +42,10 @@ class _TransformArray(NumericMixins):
 
         other = np.asarray(other)
 
-        if self.shape == other.shape: # Same shaped objects treated like another transformation
+        if self.shape == other.shape:  # Same shaped objects treated like another transformation
             return super().__matmul__(other)
 
-        else: # return numpy for numpy input
+        else:  # return numpy for numpy input
             return self.arr @ other
 
     def __imatmul__(self, other: Array_Float_T | BaseArray) -> Self:
@@ -157,10 +163,12 @@ class Transform(_Transform4x4):
         return cls.generate(scale=vector)
 
     @classmethod
-    def generate(cls,
-                 rotation: Array_3x3_T = np.eye(3),
-                 translation: Vector_3_T = np.zeros(3),
-                 scale: Vector_3_T|float = 1, ):
+    def generate(
+        cls,
+        rotation: Array_3x3_T = np.eye(3),
+        translation: Vector_3_T = np.zeros(3),
+        scale: Vector_3_T | float = 1,
+    ):
         """Generate an affine transformation from rotation, translation, and/or scale parameters.
 
         Takes the form x0 = (R * s + t) @ x1
@@ -247,5 +255,3 @@ class Transform(_Transform4x4):
 #             chained_transform @= record.backward
 #
 #         return chained_transform, previous_history
-
-
