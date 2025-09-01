@@ -210,7 +210,15 @@ class FoV(BaseModel):
             left = horizontal.min()
             right = horizontal.max()
 
-        return cls(left=left, right=right, top=vertical.min(), bottom=vertical.max())
+        fov = cls(left=left, right=right, top=vertical.min(), bottom=vertical.max())
+
+        # Check that the points do in fact lie in the smaller extent
+        if not np.all(fov.find_points_inside(horizontal, vertical)):
+            fov = cls(left=right, right=left, top=vertical.min(), bottom=vertical.max())
+
+        # assert np.all(fov.find_points_inside(horizontal, vertical))
+
+        return fov
 
     def __iter__(self) -> Generator[tuple[str, Angle], None, None]:
         yield "left", self.left
@@ -679,12 +687,13 @@ class FoV(BaseModel):
         -------
         FoV
         """
-        return cls(
-            left=min(fovs, key=lambda fov: fov.left).left,
-            top=min(fovs, key=lambda fov: fov.top).top,
-            right=max(fovs, key=lambda fov: fov.right).right,
-            bottom=max(fovs, key=lambda fov: fov.bottom).bottom,
-        )
+        horizontals = []
+        verticals = []
+        for fov in fovs:
+            horizontals.extend([fov.left, fov.right])
+            verticals.extend([fov.top, fov.bottom])
+
+        return cls.from_angles(np.array(horizontals), np.array(verticals))
 
     @property
     def horizontal_min(self) -> Angle:
