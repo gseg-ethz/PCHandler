@@ -329,7 +329,7 @@ class PointCloudData:
         new_sf = self.scalar_fields[mask]
         new_gcs = self.global_coordinate_shift.copy() if self.global_coordinate_shift is not None else None
         new_origin = self.spherical_coordinates_origin.copy()
-        new_tmat_socs2prcs = self.tmat_socs2prcs.copy()
+        new_tmat_socs2prcs = self.tmat_socs2prcs.copy() if self.tmat_socs2prcs is not None else None
         new_xyz_is_prcs = self.xyz_is_prcs
         new_pcd = PointCloudData(new_xyz, color=new_color, normals=new_normals,
                                  scalar_fields=new_sf, global_coordinate_shift=new_gcs,
