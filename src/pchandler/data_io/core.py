@@ -40,6 +40,7 @@ from pchandler.constants import (
     RGB_NAMES,
     XYZ_NAMES,
     _NameConstantsTriplet,
+    _NameConstantsSingle,
 )
 from pchandler.geometry import OptimizedShift
 from pchandler.scalar_fields import (
@@ -359,8 +360,19 @@ class AbstractIOHandler(ABC):
                     dtype_dict["names"].append(field[0] + field[-1])
                     dtype_dict["formats"].append(_get_sf_dtype(pcd.normals, revert_sf_types))
 
-            # General scalar fields
-            elif field in pcd.scalar_fields.fields:
+            elif isinstance(name_set, _NameConstantsSingle):
+                dtype_dict["names"].append(field)
+                dtype_dict["formats"].append(_get_sf_dtype(cast(SF_T, pcd.scalar_fields[field]), revert_sf_types))
+
+        for field in scalar_fields:
+            name_set = None
+
+            for FIELD_NAMES in COMMON_FIELD_NAMES:
+                if field in FIELD_NAMES.all:
+                    name_set = FIELD_NAMES
+                    break
+
+            if name_set is None:
                 dtype_dict["names"].append(field)
                 dtype_dict["formats"].append(_get_sf_dtype(cast(SF_T, pcd.scalar_fields[field]), revert_sf_types))
 
