@@ -22,6 +22,7 @@ classifiers = [
 
     "Private :: Do Not Upload" # REMOVE BEFORE FLIGHT -- PyPI will always reject packages with classifiers beginning with Private ::
 ]
+# TODO add GSEGUtils
 dependencies = [
 	"alphashape ~= 1.3",
 	"joblib ~= 1.5",

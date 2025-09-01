@@ -345,56 +345,49 @@ class TestFoVTree:
         assert len(new_tree.children) == 4
 
 def _fov_are_equal(fov1: FoV, fov2: FoV):
-    assert np.allclose(fov1.as_array(), fov2.as_array())
+    array_1 = np.array([fov1.left, fov1.right, fov1.top, fov1.bottom])
+    array_2 = np.array([fov2.left, fov2.right, fov2.top, fov2.bottom])
+
+    assert np.allclose(array_1, array_2)
     return True
 
 
 class TestFoVUnion:
 
-    @pytest.mark.parametrize('fov1,fov2,result', ((
-        FoV(top='20deg', bottom='80deg', left='-40deg', right='80deg'),
-        FoV(top='12deg', bottom='64deg', left='-20deg', right='130deg'),
-        FoV(top='12deg', bottom='80deg', left='-40deg', right='130deg'),
-    ),))
-    def test_joint_pairs(self, fov1: FoV, fov2: FoV, result: FoV):
+    def test_joint_both(self):
+        fov1 = FoV(top='20deg', bottom='80deg', left='-40deg', right='80deg')
+        fov2 = FoV(top='12deg', bottom='64deg', left='-20deg', right='130deg')
+        expected = FoV(top='12deg', bottom='80deg', left='-40deg', right='130deg')
         union = fov1.union(fov2)
-        assert _fov_are_equal(result, union)
+        assert _fov_are_equal(expected, union)
 
-    @pytest.mark.parametrize('fov1,fov2,result', ((
-        FoV(top='20deg', bottom='80deg', left='160deg', right='-100deg'),
-        FoV(top='12deg', bottom='64deg', left='-120deg', right='30deg'),
-        FoV(top='12deg', bottom='80deg', left='160deg', right='30deg'),
-    ),))
-    def test_joint_first_fov_wraps(self, fov1: FoV, fov2: FoV, result: FoV):
+    def test_joint_first_fov_wraps(self):
+        fov1 = FoV(top='20deg', bottom='80deg', left='160deg', right='-100deg')
+        fov2 = FoV(top='12deg', bottom='64deg', left='-120deg', right='30deg')
+        expected = FoV(top='12deg', bottom='80deg', left='160deg', right='30deg')
         union = fov1.union(fov2)
-        assert _fov_are_equal(result, union)
+        assert _fov_are_equal(expected, union)
 
-    @pytest.mark.parametrize('fov1,fov2,result', ((
-        FoV(top='20deg', bottom='80deg', left='50deg', right='160deg'),
-        FoV(top='12deg', bottom='64deg', left='120deg', right='-130deg'),
-        FoV(top='12deg', bottom='80deg', left='50deg', right='-130deg'),
-    ),))
-    def test_joint_second_fov_wraps(self, fov1: FoV, fov2: FoV, result: FoV):
+    def test_joint_second_fov_wraps(self):
+        fov1 = FoV(top='20deg', bottom='80deg', left='50deg', right='160deg')
+        fov2 = FoV(top='12deg', bottom='64deg', left='120deg', right='-130deg')
+        expected = FoV(top='12deg', bottom='80deg', left='50deg', right='-130deg')
         union = fov1.union(fov2)
-        assert _fov_are_equal(result, union)
+        assert _fov_are_equal(expected, union)
 
-    @pytest.mark.parametrize('fov1,fov2,result', ((
-        FoV(top='20deg', bottom='80deg', left='150deg', right='-160'),
-        FoV(top='12deg', bottom='64deg', left='170deg', right='-140deg'),
-        FoV(top='12deg', bottom='80deg', left='150deg', right='-140deg'),
-    ),))
-    def test_joint_both_wrap(self, fov1: FoV, fov2: FoV, result: FoV):
+    def test_joint_both_wrap(self):
+        fov1 = FoV(top='20deg', bottom='80deg', left='150deg', right='-160deg')
+        fov2 = FoV(top='12deg', bottom='64deg', left='170deg', right='-140deg')
+        expected = FoV(top='12deg', bottom='80deg', left='150deg', right='-140deg')
         union = fov1.union(fov2)
-        assert _fov_are_equal(result, union)
+        assert _fov_are_equal(expected, union)
 
-    @pytest.mark.parametrize('fov1,fov2,result', ((
-        FoV(top='20deg', bottom='50deg', left='-140deg', right='-20'),
-        FoV(top='80deg', bottom='120deg', left='30', right='120deg'),
-        FoV(top='20deg', bottom='120deg', left='-140deg', right='120deg'),
-    ),))
-    def test_disjointed(self, fov1: FoV, fov2: FoV, result: FoV):
+    def test_disjointed(self):
+        fov1 = FoV(top='20deg', bottom='50deg', left='-140deg', right='-20deg')
+        fov2 = FoV(top='80deg', bottom='120deg', left='30deg', right='120deg')
+        expected = FoV(top='20deg', bottom='120deg', left='-140deg', right='120deg')
         union = fov1.union(fov2)
-        assert _fov_are_equal(result, union)
+        assert _fov_are_equal(expected, union)
 
     def test_basic(self):
         fov1 = FoV(top='20deg', bottom=2.4, right=1.3, left=0.3)
@@ -407,4 +400,79 @@ class TestFoVUnion:
         assert math.isclose(union.left, -1)
         assert math.isclose(union.top, 0.2)
         assert math.isclose(union.bottom, 2.4)
+        # Not testing for crossing of PI / TWO_PI
+
+class TestFoVIntersection:
+    def test_overlap_hz_and_v(self):
+        fov1 = FoV(top='20deg', bottom='80deg', left='-40deg', right='80deg')
+        fov2 = FoV(top='12deg', bottom='64deg', left='-20deg', right='130deg')
+        expected = FoV(top='20deg', bottom='64deg', left='-20deg', right='80deg')
+        intersect = fov1.intersect(fov2)
+        assert _fov_are_equal(expected, intersect)
+
+    def test_joint_first_fov_wraps(self):
+        fov1 = FoV(top='20deg', bottom='80deg', left='160deg', right='-100deg')
+        fov2 = FoV(top='12deg', bottom='64deg', left='-120deg', right='30deg')
+        expected = FoV(top='20deg', bottom='64deg', left='-120deg', right='-100deg')
+        intersect = fov1.intersect(fov2)
+        assert _fov_are_equal(expected, intersect)
+
+    def test_joint_second_fov_wraps(self):
+        fov1 = FoV(top='20deg', bottom='80deg', left='50deg', right='160deg')
+        fov2 = FoV(top='12deg', bottom='64deg', left='120deg', right='-130deg')
+        expected = FoV(top='20deg', bottom='64deg', left='120deg', right='160deg')
+        intersect = fov1.intersect(fov2)
+        assert _fov_are_equal(expected, intersect)
+
+    def test_joint_both_wrap(self):
+        fov1 = FoV(top='20deg', bottom='80deg', left='150deg', right='-160deg')
+        fov2 = FoV(top='12deg', bottom='64deg', left='170deg', right='-140deg')
+        expected = FoV(top='20deg', bottom='64deg', left='170deg', right='-160deg')
+        intersect = fov1.intersect(fov2)
+        assert _fov_are_equal(expected, intersect)
+
+    def test_disjointed_vertically(self):
+        fov1 = FoV(top='20deg', bottom='50deg', left='-140deg', right='-20deg')
+        fov2 = FoV(top='80deg', bottom='120deg', left='-130deg', right='-120deg')
+        intersect = fov1.intersect(fov2)
+        assert intersect is None
+
+    def test_disjointed_horizontally(self):
+        fov1 = FoV(top='20deg', bottom='50deg', left='-140deg', right='-20deg')
+        fov2 = FoV(top='10deg', bottom='120deg', left='5deg', right='20deg')
+        intersect = fov1.intersect(fov2)
+        assert intersect is None
+
+    def test_intersect_both_hz_sides(self):
+        fov1 = FoV(top='20deg', bottom='50deg', left='140deg', right='-140deg')
+        fov2 = FoV(top='10deg', bottom='120deg', left='-160deg', right='160deg')
+
+        with pytest.raises(ValueError):
+            fov1.intersect(fov2)
+
+    def test_intersect_full_circle_non_wrapping(self):
+        fov1 = FoV(top='20deg', bottom='50deg', left='-140deg', right='-20deg')
+        fov2 = FoV(top='10deg', bottom='120deg', left=-PI, right=PI)
+        expected = FoV(top='20deg', bottom='50deg', left='-140deg', right='-20deg')
+        intersect = fov1.intersect(fov2)
+        assert _fov_are_equal(expected, intersect)
+
+    def test_intersect_full_circle_wrapping(self):
+        fov1 = FoV(top='20deg', bottom='50deg', left='140deg', right='-20deg')
+        fov2 = FoV(top='10deg', bottom='120deg', left=-PI, right=PI)
+        expected = FoV(top='20deg', bottom='50deg', left='140deg', right='-20deg')
+        intersect = fov1.intersect(fov2)
+        assert _fov_are_equal(expected, intersect)
+
+    def test_basic(self):
+        fov1 = FoV(top=0.4, bottom=2.4, left=0.3, right=1.3)
+        fov2 = FoV(top=0.2, bottom=2.2, left=-1, right=1.5)
+
+        intersect = fov1.intersect(fov2)
+
+        assert isinstance(intersect, FoV)
+        assert math.isclose(intersect.right, 1.3)
+        assert math.isclose(intersect.left, 0.3)
+        assert math.isclose(intersect.top, 0.4)
+        assert math.isclose(intersect.bottom, 2.2)
         # Not testing for crossing of PI / TWO_PI

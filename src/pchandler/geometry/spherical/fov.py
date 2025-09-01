@@ -98,7 +98,7 @@ from pydantic import (
 from GSEGUtils.base_types import VectorT, Vector_Bool_T, Vector_Float_T
 from pchandler.geometry.spherical import Angle, AngleArray
 
-__all__ = ['FoV', 'FoVTree', 'min_enclosing_arc']
+__all__ = ['FoV', 'FoVTree']
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -194,7 +194,23 @@ class FoV(BaseModel):
         FoV
         """
 
-        return cls(left=horizontal.min(), top=vertical.min(), right=horizontal.max(), bottom=vertical.max())
+        # Create a continuous representation of hz angles in range from 0 -> 2π
+        hz_shifted = horizontal.copy()
+        hz_shifted[hz_shifted < 0] = TWO_PI + hz_shifted[hz_shifted < 0]
+
+        # Get the extent from max-min
+        extent_shifted = hz_shifted.max() - hz_shifted.min()
+        extent = horizontal.max() - horizontal.min()
+
+        # The smallest extent represents the most likely
+        if extent_shifted < extent:
+            left = hz_shifted.min()
+            right = hz_shifted.max() - TWO_PI
+        else:
+            left = horizontal.min()
+            right = horizontal.max()
+
+        return cls(left=left, right=right, top=vertical.min(), bottom=vertical.max())
 
     def __iter__(self) -> Generator[tuple[str, Angle], None, None]:
         yield "left", self.left
@@ -286,6 +302,81 @@ class FoV(BaseModel):
         )
         return new_instance
 
+    def _non_wrapping_segments(self) -> tuple[FoV, FoV]:
+        part_a = type(self)(left=self.left, right=PI, top=self.top, bottom=self.bottom)
+        part_b = type(self)(left=-PI, right=self.right, top=self.top, bottom=self.bottom)
+        return part_a, part_b
+
+    @staticmethod
+    def _interval_intersection_1d(a0: Angle, a1: Angle, b0: Angle, b1: Angle) -> tuple[Angle, Angle] | None:
+        """Intersection of two 1D closed intervals on the real number line (no wrapping)
+
+        Parameters
+        ----------
+        a0: Angle
+            Minimum of the first interval
+        a1: Angle
+            Maximum of the first interval
+        b0: Angle
+            Minimum of the second interval
+        b1: Angle
+            Maximum of the second interval
+
+        Returns
+        -------
+        tuple[float, float] | None
+
+        """
+        low = max(a0, b0)   # Left or top components
+        high = min(a1, b1)  # Right or bottom components
+        return (low, high) if low < high or np.isclose(low, high) else None
+
+    @classmethod
+    def _get_intersections_from_one_wrapping_fov(cls, wrapping_fov: FoV, fov2: FoV) -> tuple[Angle, Angle] | None:
+        # get the intersections on either non-crossing part
+        part_a, part_b = wrapping_fov._non_wrapping_segments()
+        part_a_intersect = cls._interval_intersection_1d(part_a.left, part_a.right, fov2.left, fov2.right)
+        part_b_intersect = cls._interval_intersection_1d(part_b.left, part_b.right, fov2.left, fov2.right)
+
+        # Case 2: Still no intersections
+        if (part_a_intersect is None) and (part_b_intersect is None):
+            return None
+
+        # Case 3 + 4: Get the intersection from the respective side
+        elif part_a_intersect is None:
+            left = part_b_intersect[0]
+            right = part_b_intersect[1]
+        elif part_b_intersect is None:
+            left = part_a_intersect[0]
+            right = part_a_intersect[1]
+        # Case 5 + 6: Intersection on both sides / full circle encompassing
+        else:
+            if np.isclose(fov2.left, -PI) and np.isclose(fov2.right, PI):
+                return wrapping_fov.left, wrapping_fov.right
+
+            raise ValueError(f"Intersections on both sides of the wrapping FoV detected and not supported")
+            # Two cases:
+            #  - Where the non-wrapping FoV is a full circle (encasing) the wrapping FoV
+            #  - Where the non-wrapping FoV touches/overlaps both edges of the wrapping FoV. Creating two intersections
+
+        return left, right
+
+    @staticmethod
+    def _get_unions_from_one_wrapping_fov(wrapping_fov: FoV, non_wrapping_fov: FoV) -> tuple[Angle, Angle]:
+        """Splits a wrapping fov into two FoV segments so that neither overlap PI"""
+        part_a, part_b = wrapping_fov._non_wrapping_segments()
+        part_a_union = part_a.union(non_wrapping_fov)
+        part_b_union = part_b.union(non_wrapping_fov)
+
+        if part_a_union.width() < part_b_union.width():
+            left = part_a_union.left
+            right = part_b.right
+        else:
+            left = part_a.left
+            right = part_b_union.right
+
+        return left, right
+
     def union(self, fov2: Self) -> Self:
         """Returns the union of this FoV with another.
 
@@ -297,14 +388,30 @@ class FoV(BaseModel):
         -------
         FoV
         """
+
+        # split into non-overlapping FoVs -
+        # Part a represents part less than +PI and part b represents part greater than -PI
+        # The smallest width made from the unions represents the side to extend
+
+        if self.crosses_pi and not fov2.crosses_pi:
+            left, right = self._get_unions_from_one_wrapping_fov(self, fov2)
+
+        elif not self.crosses_pi and fov2.crosses_pi:
+            left, right = self._get_unions_from_one_wrapping_fov(fov2, self)
+
+        # Case 1 and 4: Both non-wrapping or both wrapping
+        else:
+            left=min(self.left, fov2.left)
+            right=max(self.right, fov2.right)
+
         return type(self)(
-            left=min(self.left, fov2.left),
+            left=left,
+            right=right,
             top=min(self.top, fov2.top),
-            right=max(self.right, fov2.right),
             bottom=max(self.bottom, fov2.bottom),
         )
 
-    def intersect(self, fov2: Self) -> Self:
+    def intersect(self, fov2: Self) -> Self|None:
         """Returns the intersection of this FoV with another.
 
         Parameters
@@ -315,11 +422,41 @@ class FoV(BaseModel):
         -------
         FoV
         """
+
+        # Case 1: no vertical intersection, therefore no intersection.
+        vertical_intersection = self._interval_intersection_1d(
+            a0=self.top,
+            a1=self.bottom,
+            b0=fov2.top,
+            b1=fov2.bottom
+        )
+
+        if vertical_intersection is None:
+            return None
+        else:
+            top = vertical_intersection[0]
+            bottom = vertical_intersection[1]
+
+        if self.crosses_pi and not fov2.crosses_pi:
+            left, right = self._get_intersections_from_one_wrapping_fov(self, fov2)
+        elif not self.crosses_pi and fov2.crosses_pi:
+            left, right = self._get_intersections_from_one_wrapping_fov(fov2, self)
+        elif self.crosses_pi and fov2.crosses_pi:
+            left = max(self.left, fov2.left)
+            right = min(self.right, fov2.right)
+        else:
+            horizontal_intersection = self._interval_intersection_1d(self.left, self.right, fov2.left, fov2.right)
+            if horizontal_intersection is None:
+                return None
+
+            left = horizontal_intersection[0]
+            right = horizontal_intersection[1]
+
         return type(self)(
-            left=max(self.left, fov2.left),
-            top=max(self.top, fov2.top),
-            right=min(self.right, fov2.right),
-            bottom=min(self.bottom, fov2.bottom),
+            left=left,
+            top=top,
+            right=right,
+            bottom=bottom,
         )
 
     def encompasses(self, fov2: Self) -> bool:
