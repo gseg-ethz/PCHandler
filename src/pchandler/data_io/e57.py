@@ -9,14 +9,14 @@
 """CSV / ASCII file format handler class"""
 import logging
 from pathlib import Path
-from typing import Generator, Optional
+from typing import Generator, Optional, Unpack
 
 import numpy as np
 import pye57  # type: ignore[import-untyped]
 
 from pchandler import PointCloudData
 from pchandler.constants import INTENSITY_NAMES, RGB_NAMES
-from pchandler.data_io.core import AbstractIOHandler
+from pchandler.data_io.core import AbstractIOHandler, PointCloudDataKW
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -49,7 +49,7 @@ class E57Handler(AbstractIOHandler):
         pcd_index: Optional[int] = None,
         read_transform: bool = True,
         ignore_missing_fields: bool = True,
-        **kwargs,
+        **pcd_kw: Unpack[PointCloudDataKW],
     ) -> PointCloudData | Generator[PointCloudData, None, None]:
         """Load one or more point cloud from an E57 file.
 
@@ -105,12 +105,12 @@ class E57Handler(AbstractIOHandler):
 
         if point_cloud_index is None:
             logger.debug(f"Loading {number_of_scans} scans from E57 file.")
-            return cls._load_all_e57_scans(path, **kwargs)
+            return cls._load_all_e57_scans(path, **kwargs, **pcd_kw)
 
         elif 0 <= point_cloud_index < number_of_scans:
             logger.debug(f"Loading scan index {point_cloud_index} from E57 file.")
             kwargs["pcd_index"] = point_cloud_index
-            return cls._load_single_e57(path, **kwargs)
+            return cls._load_single_e57(path, **kwargs, **pcd_kw)
 
         else:
             raise ValueError(f"Input point cloud index passed is outside of the range [0, num_scans). Got {pcd_index}")
@@ -161,6 +161,7 @@ class E57Handler(AbstractIOHandler):
         pcd_index: Optional[int] = None,
         read_transform: bool = True,
         ignore_missing_fields: bool = True,
+        **pcd_kw: Unpack[PointCloudDataKW],
     ) -> PointCloudData:
         """Load a single scan from an E57 file as a PointCloudData object"""
         logger.debug(f"Loading single scan {pcd_index} from E57 file: {path}")
@@ -196,7 +197,7 @@ class E57Handler(AbstractIOHandler):
                 transform=read_transform,
             )
 
-            pcd = PointCloudData(np.column_stack((data["cartesianX"], data["cartesianY"], data["cartesianZ"])))
+            pcd = PointCloudData(np.column_stack((data["cartesianX"], data["cartesianY"], data["cartesianZ"])), **pcd_kw)
 
             if retain_rgb:
                 if "colorRed" in data:

@@ -9,7 +9,7 @@
 """LAS/LAZ file format handler class"""
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Unpack
 
 import laspy  # type: ignore[import-untyped]
 import numpy as np
@@ -18,7 +18,7 @@ from GSEGUtils.validators import normalize_uint16
 
 from pchandler import PointCloudData
 from pchandler.constants import INTENSITY_NAMES, NORMAL_NAMES, RGB_NAMES, XYZ_NAMES
-from pchandler.data_io.core import AbstractIOHandler, _get_rgb_or_normal_field_names
+from pchandler.data_io.core import AbstractIOHandler, _get_rgb_or_normal_field_names, PointCloudDataKW
 from pchandler.geometry import OptimizedShift
 
 __all__ = ["LasHandler"]
@@ -46,7 +46,7 @@ class LasHandler(AbstractIOHandler):
         remove_prefix: bool = True,
         prefix: str = "scalar_",
         force_no_numerical_shift: bool = False,
-        **config,
+        **pcd_kw: Unpack[PointCloudDataKW],
     ) -> PointCloudData:
         """Load a point cloud from a LAS/LAZ file.
 
@@ -79,9 +79,9 @@ class LasHandler(AbstractIOHandler):
         field_names = cls._validate_field_selection(scalar_fields, header_names, remove_prefix, prefix)
 
         if force_no_numerical_shift:
-            pcd = PointCloudData(las.xyz, numerical_optimization_shift=None)
+            pcd = PointCloudData(las.xyz, numerical_optimization_shift=None, **pcd_kw)
         else:
-            pcd = PointCloudData(las.xyz, numerical_optimization_shift=OptimizedShift(las.header.offsets))
+            pcd = PointCloudData(las.xyz, numerical_optimization_shift=OptimizedShift(las.header.offsets), **pcd_kw)
         cls.extract_scalar_fields(pcd, data, data.size, field_names)
 
         logger.info(f"Successfully loaded LAZ file: {path}")

@@ -9,14 +9,14 @@
 """CSV / ASCII file format handler class"""
 import logging
 from pathlib import Path
-from typing import Any, Iterable, NamedTuple, Optional
+from typing import Any, Iterable, NamedTuple, Optional, Unpack
 
 import numpy as np
 import numpy.typing as npt
 
 from pchandler import PointCloudData
 from pchandler.constants import RGB_NAMES, XYZ_NAMES
-from pchandler.data_io.core import AbstractIOHandler
+from pchandler.data_io.core import AbstractIOHandler, PointCloudDataKW
 
 __all__ = ["CsvHandler"]
 
@@ -48,7 +48,7 @@ class AsciiInfo(NamedTuple):
     num_fields: int
     num_points: int | None
 
-
+# TODO write tests for the pcd_kwargs in each of the load functions
 class CsvHandler(AbstractIOHandler):
     """Handles TXT and CSV like file input and output
 
@@ -75,7 +75,7 @@ class CsvHandler(AbstractIOHandler):
         column_names_row: int = -1,
         comment: str = "//",
         delimiter: Optional[str] = None,
-        **config,
+        **pcd_kw: Unpack[PointCloudDataKW],
     ) -> PointCloudData:
         """Load a point cloud from a CSV-like file.
 
@@ -136,7 +136,7 @@ class CsvHandler(AbstractIOHandler):
 
         # Load all data
         data = np.loadtxt(**load_config)
-        pcd = PointCloudData(cls.extract_xyz(data, data.size))
+        pcd = PointCloudData(cls.extract_xyz(data, data.size), **pcd_kw)
 
         if not tuple([k for k in field_names.keys()]) == XYZ_NAMES.char:
             cls.extract_scalar_fields(pcd, data, data.size, field_names)
