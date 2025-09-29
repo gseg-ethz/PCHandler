@@ -517,7 +517,7 @@ class FoVTree:
     node : FoV
         The FoV associated with this tree node.
     children : Optional[dict[str, FoVTree]]
-        A dictionary of child nodes, if any.
+        A dictionary of child nodes; Empty if leaf.
     """
 
     identifier: str
