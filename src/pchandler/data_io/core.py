@@ -409,7 +409,7 @@ class AbstractIOHandler(ABC):
 
         dtype_dict = cls._generate_struct_dtype(pcd, scalar_fields, revert_sf_types)
 
-        sf_names = copy.deepcopy(dtype_dict["names"])
+        sf_names = sorted(copy.deepcopy(dtype_dict["names"]))
         for i, name in enumerate(dtype_dict["names"]):
             if (name not in RGB_NAMES.all) and (name not in NORMAL_NAMES.all) and (name not in XYZ_NAMES.all):
                 dtype_dict["names"][i] = prefix + name
