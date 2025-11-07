@@ -36,14 +36,14 @@ intersphinx_mapping = {'open3d': ('https://www.open3d.org/docs/release/', None),
                        'numpy': ('https://numpy.org/doc/stable/', None),
                        'pydantic': ('https://docs.pydantic.dev/latest/', None),
                        'numpydantic': ('https://numpydantic.readthedocs.io/en/latest/', None),
-                       'GSEGUtils': ('http://localhost:59603/GSEGUtils/docs/build/html/', '../libs/objects.inv'),}
+                       'GSEGUtils': ('http://localhost:53413/GSEGUtils/docs/build/html/', '../libs/objects.inv'),}
 
 
 # General Config
 python_use_unqualified_type_name = True                # False
 
 # ======= Autodoc Config =========
-autoclass_content = 'init'                              # 'both', 'None, 'init', 'class'
+autoclass_content = 'class'                              # 'both', 'None, 'init', 'class'
 autodoc_class_signature = 'separated'                       # 'mixed' / 'separated
 autodoc_member_order = 'bysource'                       # 'alphabetical', 'bysource'
 autodoc_default_options = {
@@ -53,7 +53,7 @@ autodoc_default_options = {
     # 'special-members': '__init__',
     'inherited-members': False,
     # 'imported-members': True,
-    'exclude-members': 'model_config model_post_init _abc_impl, _reconstruct',
+    'exclude-members': 'model_config model_post_init _abc_impl _reconstruct',
     # 'ignore-module-all': False,
     'member-order': 'bysource',
     'show-inheritance': True,
@@ -71,7 +71,7 @@ autodoc_use_type_comments = True                        # True
 autodoc_warningiserror = True                           # True
 autodoc_inherit_docstrings = True                       # True
 linkcheck_allowed_redirects = {}
-
+autosummary_generate_overwrite = False
 # Defaults
 templates_path = ["_templates"]
 exclude_patterns = []
@@ -84,7 +84,7 @@ def setup(app):
 
 rst_epilog = """
 .. |NDArray| replace:: :external+numpydantic:py:class:`NDArray <numpydantic.NDArray>`
-.. |o3d.geometry.PointCloud| replace:: :class:`o3d.geometry.PointCloud <open3d.geometry.PointCloud>`
+.. |o3d.geometry.PointCloud| replace:: :class:`~open3d.geometry.PointCloud`
 .. |o3d.t.geometry.PointCloud| replace:: :class:`o3d.t.geometry.PointCloud <open3d.t.geometry.PointCloud>`
 .. |VectorT| replace:: :attr:`VectorT <GSEGUtils.base_types.VectorT>`
 .. |Vector_3_Float_T| replace:: :attr:`Vector_3_Float_T <GSEGUtils.base_types.Vector_3_Float_T>`
@@ -93,6 +93,8 @@ rst_epilog = """
 .. |Array_Nx3_Float32_T| replace:: :attr:`Array_Nx3_Float32_T <GSEGUtils.base_types.Array_Nx3_Float32_T>`
 .. |Array_Nx3_Uint8_T| replace:: :attr:`Array_Nx3_Uint8_T <GSEGUtils.base_types.Array_Nx3_Uint8_T>`
 .. |ArrayT| replace:: :attr:`ArrayT <GSEGUtils.base_types.ArrayT>`
+.. |NormalFields| replace:: :attr:`NormalFields <pchandler.scalar_fields.scalar_fields.NormalFields>`
+.. |RGBFields| replace:: :attr:`RGBFields <pchandler.scalar_fields.scalar_fields.RGBFields>`
 .. |_SF_| replace:: :attr:`ScalarField <pchandler.scalar_fields.scalar_fields.ScalarField>`
-.. |_SFM_| replace:: :attr:`ScalarFieldManager <pchandler.scalar_fields.scalar_fields.ScalarFieldManager>`
+.. |_SFM_| replace:: :attr:`ScalarFieldManager <pchandler.scalar_fields.ScalarFieldManager>`
 """

@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 
 class PointCloudData(CartesianCoordinates):
     """Point Cloud Class with automatic validation and coordinate optimisation"""
-    scalar_fields: ScalarFieldManager = Field(default_factory=ScalarFieldManager)
+    scalar_fields: ScalarFieldManager = Field(default_factory=ScalarFieldManager) #: Contains and manages all the scalar fields associated with the point cloud coordinates
 
     # TODO decide on the kwargs and unpacking approach
     def __init__(
@@ -73,12 +73,12 @@ class PointCloudData(CartesianCoordinates):
         normals : |NormalFields| | |Array_Nx3_Float_T| | None
             Normal vectors corresponding for each point (normalized to unit vectors)
         intensity : |VectorT| | |ArrayT| | None
-        reflectance : VectorT | ArrayT | None
-        scalar_fields : :class:`ScalarFieldManager` | dict[str, :class:`ScalarField` | |ScalarFieldTriplet| | |Array_Nx3_T| | |VectorT| | Sequence] | None
+        reflectance : |VectorT| | |ArrayT| | None
+        scalar_fields : :class:`ScalarFieldManager` | dict[str, :class:`ScalarField` | |RGBFields| | |NormalFields| | |Array_Nx3_T| | |VectorT| | Sequence] | None
             Additional custom scalar fields
         socs_origin: |Vector_3_Float_T|
-
             Scan original coordinate system (SOCS). Reference point for conversion to spherical coordinates.
+        numerical_optimization
         kwargs : dict[str, Any]
         """
 
@@ -430,3 +430,4 @@ class PointCloudData(CartesianCoordinates):
             raise TypeError(f"Input point cloud is not an open 3d type but {type(pcd_o3d)=}")
 
         return pcd
+

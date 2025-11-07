@@ -1,5 +1,5 @@
-pchandler package
-=================
+API
+===
 
 .. currentmodule:: pchandler
 

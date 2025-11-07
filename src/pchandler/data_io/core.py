@@ -462,14 +462,14 @@ def _get_rgb_or_normal_field_names(input_names: list[str], target_field: _NameCo
         identified_triplet = list(target_field.triplets[valid_names_set.index(identified_names)])
 
     elif len(identified_names := identified_names.intersection(target_field.all)) >= 1:
-        logger.info(
+        logger.debug(
             f"Only a full list of RGB or Normal triplet fields supported. "
             f"A partial or mixed list was passed: {identified_names}."
         )
         return list()
 
     else:
-        logger.info(f"No valid {target_field} found in [{target_field.triplets}]. Only :{identified_names}")
+        logger.debug(f"No valid {target_field} found in [{target_field.triplets}]. Only :{identified_names}")
         return list()
 
     # Removes the fields from the current list
@@ -521,7 +521,7 @@ def _clean_field_names(column_names: list[str], func: Callable, **kwargs) -> dic
             if name in cleaned_names:
                 del cleaned_names[name]
     else:
-        logger.info("Only X, Y, Z fields in the file.")
+        logger.debug("Only X, Y, Z fields in the file.")
 
     return cleaned_names
 

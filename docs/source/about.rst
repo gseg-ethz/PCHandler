@@ -1,3 +1,1 @@
-About
-=====
-History of why PCHandler exists
+:doc:`PCHandler <index.rst>`
