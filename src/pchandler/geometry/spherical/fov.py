@@ -203,7 +203,7 @@ class FoV(BaseModel):
         extent = horizontal.max() - horizontal.min()
 
         # The smallest extent represents the most likely
-        if extent_shifted < extent:
+        if extent_shifted < extent and not np.isclose(extent_shifted, extent):
             left = hz_shifted.min()
             right = hz_shifted.max() - TWO_PI
         else:
