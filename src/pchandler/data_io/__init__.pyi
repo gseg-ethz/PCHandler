@@ -15,7 +15,8 @@ from .csv import CsvHandler as Csv
 from .e57 import E57Handler as E57
 from .las import LasHandler as Las
 from .ply import PlyHandler as Ply
+from .util import load_file
 
-__all__: Final[list[str]] = ["core", "Csv", "E57", "Las", "Ply", "find_point_cloud_in_directory"]
+__all__: Final[list[str]] = ["core", "Csv", "E57", "Las", "Ply", "find_point_cloud_in_directory", "load_file"]
 
 def __getattr__(name: str) -> NoReturn: ...

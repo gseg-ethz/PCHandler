@@ -16,7 +16,7 @@ import importlib
 from typing import TYPE_CHECKING
 
 __all__ = [
-    "core",
+    "core", "util"
 ]
 
 _lazy_map: dict[str, str | tuple[str, str]] = {
@@ -26,12 +26,13 @@ _lazy_map: dict[str, str | tuple[str, str]] = {
     "Ply": ("ply", "PlyHandler"),
     # "Pcd": ("pcd", "PcdHandler"),
     "find_point_cloud_in_directory": "core",
+    "load_file": "util"
 }
 
 __all__ = __all__ + list(_lazy_map)
 
 if TYPE_CHECKING:
-    from . import core
+    from . import core, util
 
     # from .pcd import PcdHandler as Pcd
     from .core import find_point_cloud_in_directory

@@ -2,25 +2,33 @@ from pathlib import Path
 
 from pchandler import PointCloudData
 from pchandler.data_io.core import SUPPORTED_TYPES
-from pchandler.data_io import las, csv, e57, ply
 
 
-def load_file(file_path: str |Path) -> PointCloudData:
+def load_file(file_path: str | Path) -> PointCloudData:
     file_path = Path(file_path)
-
-    data_loaders = {
-        '.las': las.LasHandler.load,
-        '.laz': las.LasHandler.load,
-        '.txt': csv.CsvHandler.load,
-        '.asc': csv.CsvHandler.load,
-        '.csv': csv.CsvHandler.load,
-        '.pts': csv.CsvHandler.load,
-        '.e57': e57.E57Handler.load,
-        '.ply': ply.PlyHandler.load,
-    }
 
     if file_path.suffix not in SUPPORTED_TYPES:
         raise ValueError(f"File suffix {file_path.suffix} is not supported. It should be in {SUPPORTED_TYPES}")
 
-    return data_loaders[file_path.suffix](file_path)
+    # Lazy import only the required handler based on file extension
+    suffix_to_handler = {
+        '.las': ('Las', 'load'),
+        '.laz': ('Las', 'load'),
+        '.txt': ('Csv', 'load'),
+        '.asc': ('Csv', 'load'),
+        '.csv': ('Csv', 'load'),
+        '.pts': ('Csv', 'load'),
+        '.e57': ('E57', 'load'),
+        '.ply': ('Ply', 'load'),
+    }
+
+    handler_name, method_name = suffix_to_handler[file_path.suffix]
+
+    # Import only the required handler using the lazy loading mechanism
+    from pchandler import data_io
+    handler = getattr(data_io, handler_name)
+    loader = getattr(handler, method_name)
+
+    return loader(file_path)
+
 
