@@ -4,7 +4,7 @@ from pchandler import PointCloudData
 from pchandler.data_io.core import SUPPORTED_TYPES
 
 
-def load_file(file_path: str | Path) -> PointCloudData:
+def load_file(file_path: str | Path, **kwargs) -> PointCloudData:
     file_path = Path(file_path)
 
     if file_path.suffix not in SUPPORTED_TYPES:
@@ -29,6 +29,6 @@ def load_file(file_path: str | Path) -> PointCloudData:
     handler = getattr(data_io, handler_name)
     loader = getattr(handler, method_name)
 
-    return loader(file_path)
+    return loader(file_path, **kwargs)
 
 
