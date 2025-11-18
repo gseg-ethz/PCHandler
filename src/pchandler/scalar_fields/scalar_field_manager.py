@@ -46,6 +46,8 @@ from pchandler.constants import (
     NORMAL_NAMES,
     REFLECTANCE_NAMES,
     RGB_NAMES,
+    ALL_FIELD_NAMES
+
 )
 from pchandler.scalar_fields.scalar_fields import (
     AbstractScalarField,
@@ -119,7 +121,8 @@ class ScalarFieldManager:
         elif isinstance(fields, dict):
             for key, value in fields.items():
                 if isinstance(value, np.ndarray):
-                    value = ScalarField(value, name=key)
+                    if key not in ALL_FIELD_NAMES:
+                        value = ScalarField(value, name=key)
 
                 elif isinstance(value, AbstractScalarField):
                     value.name = key
@@ -760,3 +763,23 @@ class ScalarFieldManager:
                 )
 
         return new_sfm
+
+    def as_struct_array(self) -> np.ndarray:
+        dtype = []
+        data = []
+
+        for name, value in self.fields.items():
+            data.append(
+                value.arr if value.ndim == 2 else value.arr[..., np.newaxis]
+            )
+
+            dtype.append(
+                (name, value.dtype, (len(value), 3) if value.ndim==2 else (len(value),))
+            )
+
+        dtype = np.dtype(dtype)
+        array = np.empty(len(self), dtype=dtype)
+        for name, value in self.fields.items():
+            array[value.name] = value.arr
+        return array
+
