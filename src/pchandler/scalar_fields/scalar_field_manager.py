@@ -121,7 +121,11 @@ class ScalarFieldManager:
         elif isinstance(fields, dict):
             for key, value in fields.items():
                 if isinstance(value, np.ndarray):
-                    if key not in ALL_FIELD_NAMES:
+                    if key in RGB_NAMES.all:
+                        value = RGBFields(value, name=key)
+                    elif key in NORMAL_NAMES.all:
+                        value = NormalFields(value, name=key)
+                    else:
                         value = ScalarField(value, name=key)
 
                 elif isinstance(value, AbstractScalarField):
@@ -770,15 +774,14 @@ class ScalarFieldManager:
 
         for name, value in self.fields.items():
             data.append(
-                value.arr if value.ndim == 2 else value.arr[..., np.newaxis]
+                value
             )
 
             dtype.append(
-                (name, value.dtype, (len(value), 3) if value.ndim==2 else (len(value),))
+                (name, value.dtype, value.shape)
             )
 
-        dtype = np.dtype(dtype)
-        array = np.empty(len(self), dtype=dtype)
+        array = np.empty(1, dtype=dtype)
         for name, value in self.fields.items():
             array[value.name] = value.arr
         return array

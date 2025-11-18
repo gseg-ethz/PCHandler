@@ -81,6 +81,7 @@ class LasHandler(AbstractIOHandler):
         if force_no_numerical_shift:
             pcd = PointCloudData(las.xyz, numerical_optimization_shift=None, **pcd_kw)
         else:
+            # TODO error multiple "numerical_optimization_shift" passed in ("pcd_kw")
             pcd = PointCloudData(las.xyz, numerical_optimization_shift=OptimizedShift(las.header.offsets), **pcd_kw)
         cls.extract_scalar_fields(pcd, data, data.size, field_names)
 

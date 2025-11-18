@@ -15,8 +15,9 @@ from typing import Any, Literal, Optional, Self, Sequence, cast, overload, Mappi
 
 import numpy as np
 import open3d as o3d
+import py4dgeo
 
-from pydantic import Field, field_serializer, field_validator
+from pydantic import Field, field_serializer, field_validator, AliasChoices
 
 from GSEGUtils.base_types import (
     Array_Nx3_Float_T,
@@ -38,6 +39,12 @@ from pchandler.scalar_fields import (
     ScalarFieldTriplet,
 )
 
+try:
+    from py4dgeo import Epoch
+except ModuleNotFoundError as e:
+    print(e)
+    Epoch: py4dgeo.Epoch = cast(py4dgeo.Epoch, None)
+
 __all__ = ['PointCloudData',]
 
 logger = logging.getLogger(__name__)
@@ -45,7 +52,9 @@ logger = logging.getLogger(__name__)
 
 class PointCloudData(CartesianCoordinates):
     """Point Cloud Class with automatic validation and coordinate optimisation"""
-    scalar_fields: ScalarFieldManager = Field(default_factory=ScalarFieldManager) #: Contains and manages all the scalar fields associated with the point cloud coordinates
+
+    #: Contains and manages all the scalar fields associated with the point cloud coordinates
+    scalar_fields: ScalarFieldManager = Field(default_factory=ScalarFieldManager)
 
     # TODO decide on the kwargs and unpacking approach
     def __init__(
@@ -431,3 +440,20 @@ class PointCloudData(CartesianCoordinates):
 
         return pcd
 
+
+    def to_py4dgeo(self) -> Epoch:
+        return Epoch(
+            cloud = self.xyz,
+            normals = self.normals if self.normals is not None else None,
+            additional_dimensions= self.scalar_fields.as_struct_array()
+        )
+
+    @classmethod
+    def from_py4dgeo(cls, epoch: Epoch) -> Self:
+        sfs = {}
+        for name in epoch.additional_dimensions.dtype.names:
+            sfs[name] = epoch.additional_dimensions[name].squeeze()
+
+        pcd = cls(epoch.cloud, scalar_fields=sfs)
+        pcd.normals = epoch.normals
+        return pcd
