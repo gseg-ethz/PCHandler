@@ -15,7 +15,6 @@ from typing import Any, Literal, Optional, Self, Sequence, cast, overload, Mappi
 
 import numpy as np
 import open3d as o3d
-import py4dgeo
 
 from pydantic import Field, field_serializer, field_validator, AliasChoices
 
@@ -39,11 +38,12 @@ from pchandler.scalar_fields import (
     ScalarFieldTriplet,
 )
 
+
 try:
     from py4dgeo import Epoch
 except ModuleNotFoundError as e:
     print(e)
-    Epoch: py4dgeo.Epoch = cast(py4dgeo.Epoch, None)
+    Epoch: TypeAlias = None
 
 __all__ = ['PointCloudData',]
 
@@ -455,5 +455,6 @@ class PointCloudData(CartesianCoordinates):
             sfs[name] = epoch.additional_dimensions[name].squeeze()
 
         pcd = cls(epoch.cloud, scalar_fields=sfs)
-        pcd.normals = epoch.normals
+        if epoch.__dict__['_normals'] is not None:
+            pcd.normals = epoch.normals
         return pcd
