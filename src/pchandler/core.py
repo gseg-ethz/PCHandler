@@ -39,15 +39,17 @@ from pchandler.scalar_fields import (
 )
 
 
-try:
-    from py4dgeo import Epoch
-except ModuleNotFoundError as e:
-    print(e)
-    Epoch: TypeAlias = None
 
 __all__ = ['PointCloudData',]
 
 logger = logging.getLogger(__name__)
+
+
+try:
+    from py4dgeo import Epoch
+except ModuleNotFoundError as e:
+    logger.debug(str(e))
+    Epoch: TypeAlias = None
 
 
 class PointCloudData(CartesianCoordinates):
