@@ -38,6 +38,7 @@ __all__ = [
 
 _lazy_map = {
     "PointCloudData": "core",
+    "load_file": "data_io",
     "__version__": "_version",
     "version": "_version",
     "__version_tuple__": "_version",
