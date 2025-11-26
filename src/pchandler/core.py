@@ -11,10 +11,9 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Literal, Optional, Self, Sequence, cast, overload, Mapping, TypeAlias, Union
+from typing import Any, Literal, Optional, Self, Sequence, cast, overload, Mapping, TypeAlias, Union, TYPE_CHECKING
 
 import numpy as np
-import open3d as o3d
 
 from pydantic import Field, field_serializer, field_validator, AliasChoices
 
@@ -38,18 +37,18 @@ from pchandler.scalar_fields import (
     ScalarFieldTriplet,
 )
 
+if TYPE_CHECKING:
+    from py4dgeo import Epoch
+    import open3d as o3d
+else:
+    o3d: TypeAlias = Any
+    Epoch: TypeAlias = Any
 
 
 __all__ = ['PointCloudData',]
 
 logger = logging.getLogger(__name__)
 
-
-try:
-    from py4dgeo import Epoch
-except ModuleNotFoundError as e:
-    logger.debug(str(e))
-    Epoch: TypeAlias = None
 
 
 class PointCloudData(CartesianCoordinates):
@@ -371,6 +370,10 @@ class PointCloudData(CartesianCoordinates):
         -------
         |o3d.geometry.PointCloud| | |o3d.t.geometry.PointCloud|
         """
+        try:
+            import open3d as _o3d
+        except ModuleNotFoundError as e:
+            raise ModuleNotFoundError("Open3d is not installed.") from e
 
         if self.numerical_optimization_shift is not None:
             pcd = self.copy(
@@ -421,7 +424,12 @@ class PointCloudData(CartesianCoordinates):
         PointCloudData
         """
 
-        if isinstance(pcd_o3d, o3d.t.geometry.PointCloud):
+        try:
+            import open3d as _o3d
+        except ModuleNotFoundError as e:
+            raise ModuleNotFoundError("Open3d is not installed.") from e
+
+        if isinstance(pcd_o3d, _o3d.t.geometry.PointCloud):
             pcd = PointCloudData(pcd_o3d.point.positions.numpy())
 
             for name, value in pcd_o3d.point.items():
@@ -429,7 +437,7 @@ class PointCloudData(CartesianCoordinates):
                     setattr(pcd, name, value.numpy())
 
         # Original o3d object -> Other fields not supported
-        elif isinstance(pcd_o3d, o3d.geometry.PointCloud):
+        elif isinstance(pcd_o3d, _o3d.geometry.PointCloud):
             pcd = PointCloudData(np.asarray(pcd_o3d.points))
             if len(pcd_o3d.colors):
                 pcd.rgb = np.asarray(pcd_o3d.colors)
@@ -444,14 +452,45 @@ class PointCloudData(CartesianCoordinates):
 
 
     def to_py4dgeo(self) -> Epoch:
-        return Epoch(
+        """Convert the PointCloudData object to a py4dgeo Epoch.
+
+        Returns
+        -------
+        Epoch
+        """
+
+        try:
+            from py4dgeo import Epoch as _Epoch
+        except ModuleNotFoundError as e:
+            raise ModuleNotFoundError(
+                "py4dgeo is not installed. Install it to use PointCloudData.from_py4dgeo()."
+            ) from e
+
+        return _Epoch(
             cloud = self.xyz,
             normals = self.normals if self.normals is not None else None,
             additional_dimensions= self.scalar_fields.as_struct_array()
         )
 
     @classmethod
-    def from_py4dgeo(cls, epoch: Epoch) -> Self:
+    def from_py4dgeo(cls, epoch: Epoch) -> PointCloudData:
+        """Convert a py4dgeo Epoch object to a PointCloudData object.
+
+        Parameters
+        ----------
+        epoch: Epoch
+
+        Returns
+        -------
+        PointCloudData
+        """
+        try:
+            from py4dgeo import Epoch as _Epoch
+        except ModuleNotFoundError as e:
+            raise ModuleNotFoundError(
+                "py4dgeo is not installed. Install it to use PointCloudData.from_py4dgeo()."
+            ) from e
+
         sfs = {}
         for name in epoch.additional_dimensions.dtype.names:
             sfs[name] = epoch.additional_dimensions[name].squeeze()
@@ -459,4 +498,5 @@ class PointCloudData(CartesianCoordinates):
         pcd = cls(epoch.cloud, scalar_fields=sfs)
         if epoch.__dict__['_normals'] is not None:
             pcd.normals = epoch.normals
+
         return pcd
