@@ -9,7 +9,8 @@
 from types import ModuleType
 
 # Auto-generated stub for lazy exports
-from typing import Final, Literal, NoReturn, overload
+from typing import Final, Literal, NoReturn, overload, Callable
+from pathlib import Path
 
 from . import base_types as base_types
 from . import constants as constants
@@ -19,6 +20,7 @@ from . import geometry as geometry
 from . import scalar_fields as scalar_fields
 from ._version import __version__, __version_tuple__, version, version_tuple
 from .core import PointCloudData
+from .data_io import load_file
 
 __author__: str
 __email__: str
@@ -36,6 +38,7 @@ __all__: Final[list[str]] = [
     "version",
     "__version_tuple__",
     "version_tuple",
+    "load_file",
 ]
 
 @overload
@@ -48,4 +51,6 @@ def __getattr__(name: Literal["__version_tuple__", "version_tuple"]) -> tuple[in
 def __getattr__(
     name: Literal["data_io", "geometry", "filters", "scalar_fields", "base_types", "constants"],
 ) -> ModuleType: ...
+@overload
+def __getattr__(name: Literal["load_file"]) -> Callable[[str|Path], PointCloudData]: ...
 def __getattr__(name: str) -> NoReturn: ...
