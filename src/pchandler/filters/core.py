@@ -19,6 +19,7 @@ from typing import Annotated, Callable, Sequence, cast
 import numpy as np
 import numpy.typing as npt
 from GSEGUtils.constants import validate_variables
+from GSEGUtils.base_types import Vector_Bool_T
 from pydantic import BeforeValidator
 from shapely import Polygon
 
@@ -32,7 +33,7 @@ class PointCloudFilter(ABC):
     """Abstract base class for PointCloudData filters"""
 
     @abstractmethod
-    def mask(self, pcd: PointCloudData) -> npt.NDArray[np.bool_]:
+    def mask(self, pcd: PointCloudData) -> Vector_Bool_T:
         """
         Compute and return a boolean mask for the provided point cloud.
 
@@ -42,7 +43,7 @@ class PointCloudFilter(ABC):
 
         Returns
         -------
-        npt.NDArray[np.bool_]
+        Vector_Bool_T
         """
         pass
 
@@ -91,21 +92,21 @@ class PointCloudFilter(ABC):
 
 class GenericFieldFilter(PointCloudFilter):
     @validate_variables
-    def __init__(self, field_label: str, filter_func: Callable[[npt.NDArray], npt.NDArray[np.bool_]]) -> None:
+    def __init__(self, field_label: str, filter_func: Callable[[npt.NDArray], Vector_Bool_T]) -> None:
         """Generic filter class that will perform a custom filter on a defined field.
 
         Parameters
         ----------
         field_label : str
             A label or name for the field.
-        filter_func : Callable[[NDArray], NDArray[np.bool_]]
+        filter_func : Callable[[NDArray], Vector_Bool_T]
             A callable function used to perform filtering logic. Must return a boolean mask.
         """
         self.field_label = field_label
         self.filter_func = filter_func
 
     # TODO check if this is in use anywhere before changing the default names
-    def mask(self, pcd: PointCloudData) -> npt.NDArray[np.bool_]:
+    def mask(self, pcd: PointCloudData) -> Vector_Bool_T:
         """Create a boolean mask from the defined field and function
 
         Parameters
@@ -114,7 +115,7 @@ class GenericFieldFilter(PointCloudFilter):
 
         Returns
         -------
-        npt.NDArray[np.bool_]
+        Vector_Bool_T
         """
         if self.field_label == "cartesian_coordinates":
             data = pcd.xyz

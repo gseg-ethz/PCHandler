@@ -17,6 +17,8 @@ import open3d as o3d
 from numpy.typing import NDArray
 from pydantic import Field, PositiveInt
 
+from GSEGUtils.base_types import Vector_Bool_T
+
 from pchandler import PointCloudData
 from pchandler.filters import PointCloudFilter
 
@@ -38,7 +40,7 @@ class BaseOutlierFilter(PointCloudFilter):
         self.number_of_neighbours = number_of_neighbours
 
 
-    def mask(self, pcd: o3d.geometry.PointCloud) -> NDArray[np.bool_]:
+    def mask(self, pcd: o3d.geometry.PointCloud) -> Vector_Bool_T:
         """Create a boolean mask from the non-outlier points
 
         Parameters
@@ -48,7 +50,7 @@ class BaseOutlierFilter(PointCloudFilter):
 
         Returns
         -------
-        NDArray[np.bool_]
+        Vector_Bool_T
         """
         mask = np.zeros(len(pcd.points), dtype=np.bool_)
         _, inliers = pcd.remove_statistical_outlier(self.number_of_neighbours, self.std_ratio, True)
@@ -59,7 +61,7 @@ class BaseOutlierFilter(PointCloudFilter):
 class SphericalOutlierFilter(BaseOutlierFilter):
     """Outlier filter for point clouds in spherical coordinates"""
 
-    def mask(self, pcd: PointCloudData) -> NDArray[np.bool_]:
+    def mask(self, pcd: PointCloudData) -> Vector_Bool_T:
         """Create a boolean mask from the non-outlier points in spherical coordinates.
 
         Parameters
@@ -68,7 +70,7 @@ class SphericalOutlierFilter(BaseOutlierFilter):
 
         Returns
         -------
-        NDArray[np.bool_]
+        Vector_Bool_T
         """
         sp_pcd = o3d.geometry.PointCloud()
         sp_pcd.points = o3d.utility.Vector3dVector(
@@ -79,7 +81,7 @@ class SphericalOutlierFilter(BaseOutlierFilter):
 
 class CartesianOutlierFilter(BaseOutlierFilter):
     """Outlier filter for point clouds in cartesian coordinates"""
-    def mask(self, pcd: PointCloudData) -> NDArray[np.bool_]:
+    def mask(self, pcd: PointCloudData) -> Vector_Bool_T:
         """Create a boolean mask from the non-outlier points in cartesian coordinates
 
         Parameters
@@ -88,6 +90,6 @@ class CartesianOutlierFilter(BaseOutlierFilter):
 
         Returns
         -------
-        NDArray[np.bool_]
+        Vector_Bool_T
         """
         return super().mask(pcd.to_o3d())

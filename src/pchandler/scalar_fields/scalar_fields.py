@@ -487,7 +487,7 @@ class ScalarFieldUint8(ScalarField):
 
 class ScalarFieldBoolean(ScalarField):
     """
-    Scalar field that only supports np.bool_ dtype.
+    Scalar field that only supports boolean arrays.
     """
     arr: Vector_Bool_T
 

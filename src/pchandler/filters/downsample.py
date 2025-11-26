@@ -19,6 +19,7 @@ import numpy as np
 import numpy.typing as npt
 from GSEGUtils.constants import validate_variables
 from GSEGUtils.util import unique_rows_fast
+from GSEGUtils.base_types import Vector_Bool_T
 from pydantic import Field, PositiveFloat
 
 from pchandler import PointCloudData
@@ -122,7 +123,7 @@ class RandomDownsampleFilter(PointCloudFilter):
         """
         self.size = size
 
-    def mask(self, pcd: PointCloudData) -> npt.NDArray[np.bool_]:
+    def mask(self, pcd: PointCloudData) -> Vector_Bool_T:
         """Creates a mask based on the randomly sampled points
 
         Parameters
@@ -131,7 +132,7 @@ class RandomDownsampleFilter(PointCloudFilter):
 
         Returns
         -------
-        NDArray[np.bool_]
+        Vector_Bool_T
         """
         indices = np.sort(np.random.choice(len(pcd), size=int(np.ceil(self.size * len(pcd))), replace=False))
         mask = np.zeros(len(pcd), dtype=np.bool_)

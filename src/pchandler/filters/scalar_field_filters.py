@@ -17,6 +17,8 @@ from GSEGUtils.constants import validate_variables
 from numpy.typing import NDArray
 from pydantic import Field, NonNegativeFloat
 
+from GSEGUtils.base_types import Vector_Bool_T
+
 from pchandler import PointCloudData
 from pchandler.filters import PointCloudFilter
 from pchandler.scalar_fields import SF_T
@@ -41,7 +43,7 @@ class ScalarFieldFilter(PointCloudFilter):
         self.lower_bound = lower_bound
         self.upper_bound = upper_bound
 
-    def mask(self, pcd: PointCloudData) -> NDArray[np.bool_]:
+    def mask(self, pcd: PointCloudData) -> Vector_Bool_T:
         """Create a boolean mask for the values within the specified scalar field range.
 
         Parameters
@@ -50,7 +52,7 @@ class ScalarFieldFilter(PointCloudFilter):
 
         Returns
         -------
-        NDArray[np.bool_]
+        Vector_Bool_T
         """
         if self.field_label not in pcd.scalar_fields.keys():
             raise KeyError(f"Scalar field '{self.field_label}' is not defined.")
@@ -83,7 +85,7 @@ class ScalarFieldPercentileFilter(PointCloudFilter):
         self.lower_percentile = lower_percentile
         self.upper_percentile = upper_percentile
 
-    def mask(self, pcd: PointCloudData) -> NDArray[np.bool_]:
+    def mask(self, pcd: PointCloudData) -> Vector_Bool_T:
         """Create a mask from the target percentile ranges
 
         Parameters
@@ -92,7 +94,7 @@ class ScalarFieldPercentileFilter(PointCloudFilter):
 
         Returns
         -------
-        NDArray[np.bool_]
+        Vector_Bool_T
         """
         if self.field_label not in pcd.scalar_fields.keys():
             raise KeyError(f"Scalar field '{self.field_label}' is not defined.")

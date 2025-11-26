@@ -62,9 +62,6 @@ autodoc_docstring_signature = True                      # True
 autodoc_mock_imports = []                               # []
 autodoc_typehints = 'description'                       # 'signature', 'description', 'none', 'both'
 autodoc_typehints_description_target = 'documented'     # 'all', 'documented', 'documented_params'
-autodoc_type_aliases = {
-    # 'VectorT': 'GSEGUtils.base_types.VectorT',
-}                               # {}
 autodoc_typehints_format = 'short'                      # 'short', 'fully-qualified'
 autodoc_preserve_defaults = True                        # False
 autodoc_use_type_comments = True                        # True
@@ -86,7 +83,9 @@ rst_epilog = """
 .. |NDArray| replace:: :external+numpydantic:py:class:`NDArray <numpydantic.NDArray>`
 .. |o3d.geometry.PointCloud| replace:: :class:`~open3d.geometry.PointCloud`
 .. |o3d.t.geometry.PointCloud| replace:: :class:`o3d.t.geometry.PointCloud <open3d.t.geometry.PointCloud>`
+.. |Epoch| replace:: :class:`py4dgeo.Epoch <py4dgeo.Epoch>`
 .. |VectorT| replace:: :attr:`VectorT <GSEGUtils.base_types.VectorT>`
+.. |Vector_Bool_T| replace:: :attr:`VectorT <GSEGUtils.base_types.Vector_Bool_T>`
 .. |Vector_3_Float_T| replace:: :attr:`Vector_3_Float_T <GSEGUtils.base_types.Vector_3_Float_T>`
 .. |Array_Nx3_T| replace:: :attr:`Array_Nx3_Float_T <GSEGUtils.base_types.Array_Nx3_Float_T>`
 .. |Array_Nx3_Float_T| replace:: :attr:`Array_Nx3_Float_T <GSEGUtils.base_types.Array_Nx3_Float_T>`

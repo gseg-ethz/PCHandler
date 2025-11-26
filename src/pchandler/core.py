@@ -383,22 +383,22 @@ class PointCloudData(CartesianCoordinates):
             pcd = self
 
         if as_tensor:
-            pcd_o3d = o3d.t.geometry.PointCloud()
-            pcd_o3d.point.positions = o3d.core.Tensor(pcd.xyz)
+            pcd_o3d = _o3d.t.geometry.PointCloud()
+            pcd_o3d.point.positions = _o3d.core.Tensor(pcd.xyz)
 
             for sf_name in set(self.scalar_fields.keys()):
                 if self.scalar_fields[sf_name] is not None:
-                    setattr(pcd_o3d.point, sf_name, o3d.core.Tensor(cast(SF_T, self.scalar_fields[sf_name]).arr))
+                    setattr(pcd_o3d.point, sf_name, _o3d.core.Tensor(cast(SF_T, self.scalar_fields[sf_name]).arr))
 
         else:
-            pcd_o3d = o3d.geometry.PointCloud()
-            pcd_o3d.points = o3d.utility.Vector3dVector(pcd.xyz)
+            pcd_o3d = _o3d.geometry.PointCloud()
+            pcd_o3d.points = _o3d.utility.Vector3dVector(pcd.xyz)
 
             if self.rgb is not None:
-                pcd_o3d.colors = o3d.utility.Vector3dVector(self.rgb.as_normalised_float32())
+                pcd_o3d.colors = _o3d.utility.Vector3dVector(self.rgb.as_normalised_float32())
 
             if self.normals is not None:
-                pcd_o3d.normals = o3d.utility.Vector3dVector(self.normals)
+                pcd_o3d.normals = _o3d.utility.Vector3dVector(self.normals)
 
             for sf_name in set(self.scalar_fields.keys()).difference({"rgb", "normals"}):
                 if self.scalar_fields[sf_name] is not None:

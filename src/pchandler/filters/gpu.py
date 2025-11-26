@@ -28,6 +28,7 @@ else:
     _HAS_GPU = True
 
 from GSEGUtils.constants import validate_variables
+from GSEGUtils.base_types import Vector_Bool_T
 from numpy.typing import NDArray
 from shapely.geometry import Polygon
 
@@ -84,7 +85,7 @@ class PolygonFilterGPU(PointCloudFilter):
         self.polygon: Polygon = polygon
         self.plane = plane
 
-    def mask(self, pcd: PointCloudData) -> NDArray:
+    def mask(self, pcd: PointCloudData) -> Vector_Bool_T:
         """Create a boolean mask from the points inside the projected polygon.
 
         Parameters
@@ -93,7 +94,7 @@ class PolygonFilterGPU(PointCloudFilter):
 
         Returns
         -------
-        NDArray[np.bool_]
+        Vector_Bool_T
         """
         # if self.plane not in ('xy', 'xz', 'yz'): # Handled by validation
         #     raise ValueError("Invalid plane. Choose 'xy', 'xz', or 'yz'.")
@@ -136,7 +137,7 @@ class SphericalPolygonFilterGPU(PointCloudFilter):
         ensure_available()
         self.polygon: Polygon = polygon
 
-    def mask(self, pcd: PointCloudData) -> NDArray:
+    def mask(self, pcd: PointCloudData) -> Vector_Bool_T:
         """Creates mask from points inside the spherical angle defined polygon.
 
         Parameters
@@ -146,7 +147,7 @@ class SphericalPolygonFilterGPU(PointCloudFilter):
 
         Returns
         -------
-        NDArray[np.bool_]
+        Vector_Bool_T
         """
         proj_pts = cudf.DataFrame({"x": pcd.hz.astype(float), "y": pcd.v.astype(float)}).interleave_columns()
 

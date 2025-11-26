@@ -16,6 +16,8 @@ from numpy.typing import NDArray
 from shapely import contains_xy
 from shapely.geometry import Polygon
 
+from GSEGUtils.base_types import Vector_Bool_T
+
 from pchandler import PointCloudData
 from pchandler.filters import PointCloudFilter
 from pchandler.geometry.spherical import FoV
@@ -34,7 +36,7 @@ class FoVFilter(PointCloudFilter):
         """
         self.fov = fov
 
-    def mask(self, pcd: PointCloudData) -> NDArray[np.bool_]:
+    def mask(self, pcd: PointCloudData) -> Vector_Bool_T:
         """Create a boolean mask for a point cloud based on a given field of view (FoV).
 
         Parameters
@@ -43,7 +45,7 @@ class FoVFilter(PointCloudFilter):
 
         Returns
         -------
-        NDArray[np.bool_]
+        Vector_Bool_T
         """
         return self.fov.find_points_inside(horizontal=pcd.hz, vertical=pcd.v)
 
@@ -61,7 +63,7 @@ class RangeFilter(PointCloudFilter):
         self.low = low
         self.high = high
 
-    def mask(self, pcd: PointCloudData) -> NDArray[np.bool_]:
+    def mask(self, pcd: PointCloudData) -> Vector_Bool_T:
         """Create a boolean mask for a point cloud based on given range limits.
 
         Parameters
@@ -70,7 +72,7 @@ class RangeFilter(PointCloudFilter):
 
         Returns
         -------
-        NDArray[np.bool_]
+        Vector_Bool_T
         """
         mask = np.logical_and(pcd.r >= self.low, pcd.r <= self.high)
         return mask
@@ -86,7 +88,7 @@ class SphericalPolygonFilter(PointCloudFilter):
         """
         self.polygon = polygon
 
-    def mask(self, pcd: PointCloudData) -> NDArray[np.bool_]:
+    def mask(self, pcd: PointCloudData) -> Vector_Bool_T:
         """Create a boolean mask for a point cloud based on a polygon defined in spherical coordinates.
 
         Points inside the polygon are marked as `True`.
@@ -97,7 +99,7 @@ class SphericalPolygonFilter(PointCloudFilter):
 
         Returns
         -------
-        NDArray[np.bool_]
+        Vector_Bool_T
         """
         mask = contains_xy(self.polygon, pcd.hz, pcd.v)
         return mask

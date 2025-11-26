@@ -22,7 +22,7 @@ from shapely.affinity import translate  # type: ignore[import-untyped]
 from shapely.geometry import Polygon  # type: ignore[import-untyped]
 
 from pchandler import PointCloudData
-from GSEGUtils.base_types import Vector_3_T
+from GSEGUtils.base_types import Vector_3_T, Vector_Bool_T
 from pchandler.filters import PointCloudFilter, ValidatedPolygonT
 
 logger = logging.getLogger(__name__.split(".")[0])
@@ -72,7 +72,7 @@ class BoxFilter(PointCloudFilter):
         """
         return self.maximum - self.minimum
 
-    def mask(self, pcd: PointCloudData, mode: Literal["local", "global"] = "local") -> npt.NDArray[np.bool_]:
+    def mask(self, pcd: PointCloudData, mode: Literal["local", "global"] = "local") -> Vector_Bool_T:
         """Create a boolean mask for points within a 3D bounding box.
 
         Parameters
@@ -83,7 +83,7 @@ class BoxFilter(PointCloudFilter):
 
         Returns
         -------
-        npt.NDArray[np.bool_]
+        Vector_Bool_T
         """
         offset = _get_offset(pcd, mode)
 
@@ -109,7 +109,7 @@ class SphereFilter(PointCloudFilter):
         self.sphere_center = sphere_center
         self.radius = radius
 
-    def mask(self, pcd: PointCloudData, mode: Literal["local", "global"] = "local") -> npt.NDArray[np.bool_]:
+    def mask(self, pcd: PointCloudData, mode: Literal["local", "global"] = "local") -> Vector_Bool_T:
         """Create a boolean mask for points within the sphere.
         Parameters
         ----------
@@ -119,13 +119,13 @@ class SphereFilter(PointCloudFilter):
 
         Returns
         -------
-        npt.NDArray[np.bool_]
+        Vector_Bool_T
         """
         offset = _get_offset(pcd, mode)
 
         point = self.sphere_center - offset
 
-        distances_to_point: npt.NDArray[np.float64 | np.float32] = np.linalg.norm(pcd.xyz - point, axis=1)
+        distances_to_point: np.ndarray[np.floating] = np.linalg.norm(pcd.xyz - point, axis=1)
         return distances_to_point <= self.radius
 
 
@@ -144,7 +144,7 @@ class PolygonFilter(PointCloudFilter):
         self.plane = plane
 
     # DECISION should the Polygon Filter match the GPU variant?
-    def mask(self, pcd: PointCloudData, mode: Literal["local", "global"] = "local") -> npt.NDArray[np.bool_]:
+    def mask(self, pcd: PointCloudData, mode: Literal["local", "global"] = "local") -> Vector_Bool_T:
         """Create a boolean mask from the points inside the projected polygon.
 
         Parameters
@@ -155,7 +155,7 @@ class PolygonFilter(PointCloudFilter):
 
         Returns
         -------
-        NDArray[np.bool_]
+        Vector_Bool_T
         """
         if self.plane == "xy":
             dims = [0, 1]
