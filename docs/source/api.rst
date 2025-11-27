@@ -13,5 +13,6 @@ API
 
 .. automodule:: pchandler
    :members:
+   :exclude-members: model_config, model_post_init, _abc_impl, _reconstruct
    :show-inheritance:
-   :ignore-module-all:
+

@@ -36,7 +36,7 @@ intersphinx_mapping = {'open3d': ('https://www.open3d.org/docs/release/', None),
                        'numpy': ('https://numpy.org/doc/stable/', None),
                        'pydantic': ('https://docs.pydantic.dev/latest/', None),
                        'numpydantic': ('https://numpydantic.readthedocs.io/en/latest/', None),
-                       'GSEGUtils': ('http://localhost:53413/GSEGUtils/docs/build/html/', '../libs/objects.inv'),}
+                       'GSEGUtils': ('https://gsegutils.readthedocs.io/en/latest/', None),}
 
 
 # General Config
@@ -50,10 +50,11 @@ autodoc_default_options = {
     'members': True,
     'undoc-members': True,
     'private-members': True,
+
     # 'special-members': '__init__',
     'inherited-members': False,
     # 'imported-members': True,
-    'exclude-members': 'model_config model_post_init _abc_impl _reconstruct',
+    'exclude-members': 'model_config, model_post_init, _abc_impl, _reconstruct',
     # 'ignore-module-all': False,
     'member-order': 'bysource',
     'show-inheritance': True,
@@ -75,6 +76,10 @@ exclude_patterns = []
 html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]
 
+
+redirects = {
+    "index.html": "introduction.html"
+}
 
 def setup(app):
     app.add_css_file('pchandler_theme.css')

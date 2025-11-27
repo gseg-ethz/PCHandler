@@ -22,7 +22,7 @@ classifiers = [
 
     "Private :: Do Not Upload" # REMOVE BEFORE FLIGHT -- PyPI will always reject packages with classifiers beginning with Private ::
 ]
-# TODO add GSEGUtils
+
 dependencies = [
 	"alphashape ~= 1.3",
 	"joblib ~= 1.5",
@@ -35,6 +35,8 @@ dependencies = [
 #	"scipy ~= 1.15",
 	"shapely ~= 2.1",
 	"typing-extensions ~= 4.13",
+
+    "GSEGUtils @ git+ssh://git@github.com/gseg-ethz/GSEGUtils.git@doc"
 ]
 
 [tool.setuptools]
@@ -65,7 +67,7 @@ profile = "black"
 
 [project.urls]
 homepage = "https://gseg.igp.ethz.ch/"
-documentation = "https://google.com"
+documentation = "https://gsegutils.readthedocs.io/en/latest/"
 repository = "https://github.com/gseg-ethz/PCHandler.git"
 Issues = "https://github.com/gseg-ethz/PCHandler/issues"
 Changelog = "https://github.com/gseg-ethz/PCHandler/blob/main/CHANGELOG.md"
