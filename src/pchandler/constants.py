@@ -82,7 +82,7 @@ class _NameConstantsTriplet(NamedTuple):
         raise ValueError("Could not find name in positional names")
 
 #: Pre-defined names for RGB field access
-RGB_NAMES = _NameConstantsTriplet(
+RGB_NAMES: _NameConstantsTriplet = _NameConstantsTriplet(
     base = "rgb",
     char = ("r", "g", "b"),
     words = ("red", "green", "blue"),
@@ -92,7 +92,7 @@ RGB_NAMES = _NameConstantsTriplet(
 )
 
 #: Pre-defined names for Normals field access
-NORMAL_NAMES = _NameConstantsTriplet(
+NORMAL_NAMES: _NameConstantsTriplet = _NameConstantsTriplet(
     base="normals",
     char=("nx", "ny", "nz"),
     words=("normalx", "normaly", "normalz"),
@@ -101,7 +101,7 @@ NORMAL_NAMES = _NameConstantsTriplet(
 )
 
 #: Pre-defined names for XYZ coordinate access
-XYZ_NAMES = _NameConstantsTriplet(
+XYZ_NAMES: _NameConstantsTriplet = _NameConstantsTriplet(
     base="xyz",
     char=("x", "y", "z"),
     extra_names=("cartesian", "cartesians", "coordinates", "coordinate"),
@@ -109,13 +109,13 @@ XYZ_NAMES = _NameConstantsTriplet(
 )
 
 #: Pre-defined names for Intensity field access
-INTENSITY_NAMES = _NameConstantsSingle(
+INTENSITY_NAMES: _NameConstantsSingle = _NameConstantsSingle(
     base="intensity",
     char="i",
     extra_names=("intensities",))
 
 #: Pre-defined names for Reflectance field access
-REFLECTANCE_NAMES = _NameConstantsSingle(
+REFLECTANCE_NAMES: _NameConstantsSingle = _NameConstantsSingle(
     base="reflectance",
 )
 

@@ -9,6 +9,7 @@ API
    pchandler.data_io
    pchandler.filters
    pchandler.scalar_fields
+   pchandler.constants
 
 
 .. automodule:: pchandler

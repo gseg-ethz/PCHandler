@@ -1,6 +1,16 @@
 Introduction
 ============
 
+|license-bsd-3| |documentation-status|
+
+.. |license-bsd-3| image:: https://img.shields.io/badge/License-BSD_3-yellow.svg
+    :alt: License: BSD-3
+    :target: ./LICENSE.txt
+
+.. |documentation-status| image:: https://readthedocs.org/projects/pchandler/badge/?version=latest
+    :alt: Documentation Status
+    :target: https://readthedocs.org/projects/pchandler/badge/
+
 The ``pchandler`` module provides a comprehensive set of tools for handling, manipulating, and analyzing
 3D point cloud data. Its components are modularly designed, covering geometry processing, field-of-view
 (FoV) management, data input/output, and utility functions. The package is optimized for flexibility,
@@ -8,11 +18,11 @@ efficiency, and extensibility, supporting both CPU and GPU acceleration for scal
 
 Components:
 -----------
-1. ``pchandler.core.py``
+1. ``pchandler.core``
 
   Contains the main PointCloudData object for working with point clouds and interfaces with the other components.
 
-2. ``pchandler.geometry``:
+2. ``pchandler.geometry``
 
   - Core coordinaate classes from which PointCloudData inherits from the ``CartesianCoordinates``
   - Numerical optimal shift functionality to enable more efficient processing with float 32 data types

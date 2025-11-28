@@ -11,13 +11,24 @@ Construct with or without a shift
 
 .. code-block:: python
 
-   import numpy as np
-   from pchandler.core import PointCloudData
+    import numpy as np
+    from pchandler.core import PointCloudData
+    from pchandler.geometry.optimal_shift import OptimizedShift
 
-   xyz = (np.random.rand(1000, 3) * 1e6).astype(float)
+    xyz = (np.random.rand(1000, 3) * 1e3).astype(float)
 
-   # Explicitly disable shifting
-   pcd = PointCloudData(xyz=xyz, numerical_optimization_shift=None)
+    # Explicitly disable shifting
+    pcd = PointCloudData(xyz=xyz, numerical_optimization_shift=None)
+
+    pcd = PointCloudData(xyz=xyz, numerical_optimization_shift=OptimizedShift([500, 200, 1000]))
+
+A warning will be thrown if the shift is not feasible.
+
+.. code-block:: python
+
+    xyz = (np.random.rand(1000, 3) * 1e6).astype(float)
+    pcd = PointCloudData(xyz=xyz,
+                         numerical_optimization_shift=OptimizedShift([500, 200, 1000]))
 
 Exporting with Open3D ignores the shift
 ---------------------------------------
@@ -30,11 +41,14 @@ see the unshifted coordinates.
    import numpy as np
    from pchandler.core import PointCloudData
 
-   xyz = (np.random.rand(500, 3) * 1e4).astype(float)
-   pcd = PointCloudData(xyz=xyz, numerical_optimization_shift=None)
+   xyz = (np.random.rand(500, 3) + 60_000).astype(float)
+   pcd = PointCloudData(xyz=xyz)
 
    try:
        # If a shift were active, to_o3d would transparently export unshifted coords
        o3d_pcd = pcd.to_o3d(as_tensor=False)
    except ModuleNotFoundError:
        pass
+
+   assert not np.allclose(xyz, pcd) # PCD has been shifted so shouldn't match
+   assert np.allclose(xyz, o3d_pcd.points)  # But should match to the original coordinates

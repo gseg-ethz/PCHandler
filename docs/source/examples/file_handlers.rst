@@ -1,15 +1,20 @@
 File Handlers
 =============
 
-This page shows a few practical ways to create point clouds and exchange data
-with other libraries.
-
 This page demonstrates loading and saving point clouds using the CSV-like and PLY handlers from ``pchandler.data_io``.
 
 CSV-like formats (CsvHandler)
 -----------------------------
+Although this file handler is named CSV, it is more of a generic text delimited file format handler.
 
-Supported extensions: ``.txt``, ``.csv``, ``.xyz``, ``.asc``, ``.ascii``, ``.pts``
+Supported extensions:
+
+- ``.txt``
+- ``.csv``
+- ``.xyz``
+- ``.asc``
+- ``.ascii``
+- ``.pts``
 
 Load
 ^^^^
@@ -24,25 +29,17 @@ Load
    # The handler will sniff the file structure and locate XYZ plus any extra fields.
    pcd = CsvHandler.load(
        "points.csv",
-       # Select scalar fields to load (names must match columns, excluding x,y,z)
-       # None -> load all fields, [] -> ignore scalar fields
-       scalar_fields=None,
-       # If file columns are named like "scalar_intensity", "scalar_quality", remove the prefix:
-       remove_prefix=True,
+       scalar_fields=None, # Allows the selection of scalar fields or is needed when file has no header
+       remove_prefix=True,  # In some cases, like cloud compare, a prefix is added to all scalar fields
        prefix="scalar_",
-       # Header name row index (default -1 for last header line)
-       column_names_row=-1,
-       # Comment marker used in file header
+       column_names_row=-1, # refers to the row index in the header/comments which contains the column names
        comment="//",
-       # Override delimiter if needed; None lets the handler auto-detect
-       delimiter=None,
-       # You can pass PointCloudData kwargs as well:
-       numerical_optimization_shift=None,
+       delimiter=None,  # Setting delimiter to None, the handler will attempt to "sniff" the file and determine it
+       numerical_optimization_shift=None, # Other parameters for the PointCloudData keyword arguments can be passed
    )
 
-   # Access XYZ and any loaded scalar fields
    xyz = pcd.xyz
-   intensity = pcd.scalar_fields.get("intensity", None)
+   intensity = pcd.intensity
 
 Save
 ^^^^
@@ -51,26 +48,19 @@ Save
 
    from pchandler.data_io.csv import CsvHandler
 
-   # Create or modify a point cloud
-   # pcd = PointCloudData(...)
-
    # Save with a specific delimiter and prefixed scalar field names
    CsvHandler.save(
        pcd,
        "points_out.csv",
-       # Restrict which scalar fields to write; None -> write all available fields
-       scalar_fields=None,
-       # Add a prefix to scalar field column names in the file
+       scalar_fields=None,  # Select which scalar fields to save (defaults to all fields)
        add_prefix=True,
        prefix="scalar_",
-       # Keep original dtypes for scalar fields where possible
-       revert_sf_types=False,
-       # Choose delimiter (e.g., "," or " ")
+       revert_sf_types=False,   # Keep original dtypes for scalar fields where possible
        delimiter=",",
    )
 
 PLY format (PlyHandler)
------------------------
+----------------------------------
 
 Supported extension: ``.ply``
 
@@ -83,12 +73,9 @@ Load
 
    pcd = PlyHandler.load(
        "points.ply",
-       # Choose which scalar fields to load; None -> all, [] -> none
        scalar_fields=None,
-       # Remove "scalar_" (or a custom) prefix when importing field names
        remove_prefix=True,
        prefix="scalar_",
-       # You can pass PointCloudData kwargs as well:
        numerical_optimization_shift=None,
    )
 
@@ -102,15 +89,11 @@ Save
    PlyHandler.save(
        pcd,
        "points_out.ply",
-       # Restrict scalar fields; None -> write all
        scalar_fields=None,
-       # Add a prefix to scalar field names when writing
        add_prefix=False,
        prefix="scalar_",
-       # Revert scalar field types to original representations where possible
        revert_sf_types=False,
-       # Write ASCII PLY (False -> binary, which is smaller/faster)
-       as_ascii=False,
+       as_ascii=False,  # Write ASCII PLY (False -> binary, which is smaller/faster)
    )
 
 Roundtrip examples

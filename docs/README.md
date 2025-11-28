@@ -1,4 +1,8 @@
 # Rebuilding the Sphinx Documentation
+
+Note - this is only needed if you want to test changes to the docs locally before pushing them to GitHub.
+ReadTheDocs will build the docs automatically.
+
 ## 1) Activate your virtualenv
 ``` bash
 # bash

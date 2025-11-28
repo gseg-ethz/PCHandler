@@ -19,10 +19,10 @@ Basic construction and array-style usage
    n = len(pcd)
 
    # Access underlying coordinates
-   arr = pcd.arr           # alias for positions array
-   coords = pcd.xyz        # same coordinate data
+   coords = pcd.xyz.copy()        # same coordinate data
 
-   assert np.all(arr == coords)
+   assert np.all(pcd == coords)
+   print(np.mean(pcd, axis=0))
 
 Vectorized computations
 -----------------------
@@ -43,7 +43,14 @@ Vectorized computations
    # Distances from origin
    d = np.linalg.norm(pcd.xyz, axis=1)
 
-   # Center the cloud (create a modified copy)
-   centered = pcd.copy(pcd.xyz - pcd.xyz.mean(axis=0))
+   # Center the point cloud
+   pcd -= np.mean(pcd, axis=0)
+   pcd2 = pcd + d[:, None]
+
+   assert not np.allclose(pcd.xyz, pcd2.xyz)
+
+   assert isinstance(pcd, PointCloudData)
+   print(pcd.xyz)
+
 
 

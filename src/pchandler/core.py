@@ -466,6 +466,14 @@ class PointCloudData(CartesianCoordinates):
                 "py4dgeo is not installed. Install it to use PointCloudData.from_py4dgeo()."
             ) from e
 
+        # TODO implement and test this to ensure coordinates are passed like open3D
+        # if self.numerical_optimization_shift is not None:
+        #     pcd = self.copy(
+        #         update={"numerical_optimization_shift": None, "scalar_fields": None}, link_to_same_NOS=False
+        #     )
+        # else:
+        #     pcd = self
+
         return _Epoch(
             cloud = self.xyz,
             normals = self.normals if self.normals is not None else None,

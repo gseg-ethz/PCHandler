@@ -44,7 +44,6 @@ Install from GitHub
    # clone and install
    git clone https://github.com/your-org/pchandler.git
    cd pchandler
-   python -m pip install -U pip
    python -m pip install -e .  # editable install for development
 
 
