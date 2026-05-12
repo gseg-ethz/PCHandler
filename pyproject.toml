@@ -37,7 +37,7 @@ dependencies = [
 	"typing-extensions ~= 4.13",
 
 #    TODO change this to the release number when doc branch is merged to main
-    "GSEGUtils @ git+ssh://git@github.com/gseg-ethz/GSEGUtils.git@doc"
+    # "GSEGUtils @ git+ssh://git@github.com/gseg-ethz/GSEGUtils.git@doc"
 ]
 
 [tool.setuptools]
