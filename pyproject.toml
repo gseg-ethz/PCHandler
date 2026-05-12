@@ -36,8 +36,7 @@ dependencies = [
 	"shapely ~= 2.1",
 	"typing-extensions ~= 4.13",
 
-#    TODO change this to the release number when doc branch is merged to main
-    # "GSEGUtils @ git+ssh://git@github.com/gseg-ethz/GSEGUtils.git@doc"
+    "GSEGUtils @ git+ssh://git@github.com/gseg-ethz/GSEGUtils.git@367aa73d9cb509003ebcb1997d533d891470aa08",
 ]
 
 [tool.setuptools]
