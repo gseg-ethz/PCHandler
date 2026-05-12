@@ -6,6 +6,7 @@ import weakref
 
 import numpy as np
 import pytest
+from GSEGUtils.singleton import SingletonMeta
 
 from pchandler import PointCloudData
 from pchandler.geometry import OptimizedShift, OptimizedShiftManager
@@ -67,9 +68,11 @@ def coords_unshiftable2(scale_large, offset_large) -> np.ndarray:
 @pytest.fixture(autouse=True)
 def clear_instantiated_osm():
     yield
-    # Teardown logic
-    OptimizedShiftManager._instances = {}
-    assert len(OptimizedShiftManager._instances) == 0
+    # Teardown: remove this singleton from the shared SingletonMeta registry.
+    # Assigning to OptimizedShiftManager._instances would create a shadow attribute on
+    # the subclass instead of clearing the metaclass-level dict (CR-01, post-COUPLE-01).
+    SingletonMeta._instances.pop(OptimizedShiftManager, None)
+    assert OptimizedShiftManager not in SingletonMeta._instances
 
 
 @pytest.fixture(scope="function")
@@ -89,7 +92,7 @@ def opt_shift() -> OptimizedShift:
 
 class TestOptimizedShift:
     def test_initialisation(self):
-        OptimizedShiftManager._instances = {}
+        SingletonMeta._instances.pop(OptimizedShiftManager, None)
         opt_shift = OptimizedShift(np.array([1, 2, 3]))
         assert isinstance(opt_shift.uuid, uuid.UUID)
         assert isinstance(opt_shift._shift, np.ndarray)
