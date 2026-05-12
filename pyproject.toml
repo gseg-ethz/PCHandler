@@ -113,6 +113,7 @@ dev = [
     "pyright~=1.1",           # informational type checker (warn-only, D-12)
     "pre-commit~=4.3",        # git hooks runner
     "pytest~=8.4",            # test framework
+    "pytest-cov~=5.0",        # pytest coverage plugin (used by ci.yml --cov)
     "coverage~=7.0",          # coverage reporting
 ]
 cuda11 = ["geopandas ~= 1.0", "cudf-cu11 == 25.4.*", "cuspatial-cu11 == 25.4.*", "cuproj-cu11 == 25.4.*",
