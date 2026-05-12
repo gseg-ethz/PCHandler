@@ -111,6 +111,7 @@ class SphereFilter(PointCloudFilter):
 
     def mask(self, pcd: PointCloudData, mode: Literal["local", "global"] = "local") -> Vector_Bool_T:
         """Create a boolean mask for points within the sphere.
+
         Parameters
         ----------
         pcd : PointCloudData
@@ -139,7 +140,6 @@ class PolygonFilter(PointCloudFilter):
         polygon: ValidatedPolygonT
         plane: PlaneStrings, default="xy"
         """
-
         self.polygon: Polygon = polygon
         self.plane = plane
 

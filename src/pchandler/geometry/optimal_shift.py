@@ -16,7 +16,7 @@ import copy
 import logging
 import uuid
 import weakref
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 from uuid import UUID
 
 import numpy as np
@@ -232,8 +232,8 @@ class OptimizedShiftManager(metaclass=SingletonMeta):
         else:
             try:
                 current_shift: OptimizedShift = self._by_uuid[shift]
-            except KeyError:
-                raise OptimizedShiftManager.ShiftUUIDNotFound()
+            except KeyError as err:
+                raise OptimizedShiftManager.ShiftUUIDNotFound() from err
 
         while True:
             try:
@@ -405,8 +405,8 @@ class OptimizedShift:
         try:
             self._expand_and_add(coordinate_set)
             return
-        except OptimizedShiftManager.ShiftNotFeasibleError:
-            raise OptimizedShiftManager.ShiftNotFeasibleError()
+        except OptimizedShiftManager.ShiftNotFeasibleError as err:
+            raise OptimizedShiftManager.ShiftNotFeasibleError() from err
 
     def unregister(self, coordinate_set: CartesianCoordinates) -> None:
         """Unregisters a coordinate set from the optimized shift object.

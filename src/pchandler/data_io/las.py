@@ -71,7 +71,6 @@ class LasHandler(AbstractIOHandler):
         -------
         PointCloudData
         """
-
         logger.info(f"Loading LAZ file: {path}")
 
         las = laspy.read(path)
@@ -91,7 +90,7 @@ class LasHandler(AbstractIOHandler):
         return pcd
 
     @classmethod
-    def save(
+    def save(  # noqa: C901  # Multi-format LAS write — branching tracks laspy's per-field path; refactor deferred to Phase 6.
         cls,  # type: ignore[override]
         pcd: PointCloudData,
         path: str | Path,
@@ -100,7 +99,7 @@ class LasHandler(AbstractIOHandler):
         add_prefix: bool = True,
         prefix: str = "scalar_",
         revert_sf_types: bool = False,
-        scales: Vector_3_T = np.array([0.0001, 0.0001, 0.0001]),
+        scales: Vector_3_T = np.array([0.0001, 0.0001, 0.0001]),  # noqa: B008  # numpy literal default; safe & idiomatic for LAS XYZ scale triple.
         **config,
     ) -> None:
         """Save the point cloud data to a LAS/LAZ file.
@@ -128,7 +127,6 @@ class LasHandler(AbstractIOHandler):
         -------
         None
         """
-
         logger.info(f"Attempting to write to LAS/LAZ file: {path}")
         if pcd.numerical_optimization_shift is None:
             offsets: Vector_3_T = np.zeros(3)

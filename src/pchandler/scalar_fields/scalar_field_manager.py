@@ -710,7 +710,6 @@ class ScalarFieldManager:
         -------
 
         """
-
         sfm_key_sets = (set(sfm) for sfm in scalar_field_managers)
 
         if len(list(scalar_field_managers)) == 0:
@@ -760,6 +759,6 @@ class ScalarFieldManager:
             dtype.append((name, value.dtype, value.shape))
 
         array = np.empty(1, dtype=dtype)
-        for name, value in self.fields.items():
+        for _name, value in self.fields.items():
             array[value.name] = value.arr
         return array

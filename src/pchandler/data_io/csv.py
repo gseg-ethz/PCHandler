@@ -105,7 +105,6 @@ class CsvHandler(AbstractIOHandler):
         -------
         PointCloudData
         """
-
         # Get general file structure information
         file_info = sniff_file(path := Path(path), comment=comment, field_names_row_index=column_names_row)
         num_points_line = True if file_info.num_points else False
@@ -183,7 +182,6 @@ class CsvHandler(AbstractIOHandler):
             Delimiter to separate fields in the file.
         config : dict of str, Any
         """
-
         array = cls._generate_structured_array(pcd, scalar_fields, add_prefix, prefix, revert_sf_types)
 
         header = f"// {delimiter.join(list(array.dtype.names or ''))}"
@@ -228,7 +226,6 @@ def sniff_file(
     AsciiInfo
         Object contains detected header, delimiter, field names, number of fields, and number of points in the file.
     """
-
     # Read the header information defined by the comment section of the Ascii File and check if
     # a number of points is on the first line
     header, num_points = _get_header(file, comment)
@@ -269,7 +266,6 @@ def _get_field_counts(
     -------
     int
     """
-
     header, number_points = _get_header(file, comment)
     skip_lines = len(header)
 
@@ -279,10 +275,10 @@ def _get_field_counts(
     field_counts = set()
 
     with open(file, "r") as f:
-        for i in range(skip_lines):
+        for _ in range(skip_lines):
             f.readline()
 
-        for i in range(lines_to_check):
+        for _ in range(lines_to_check):
             line = f.readline()
 
             if not line:
@@ -334,7 +330,6 @@ def _delimiter_sniffer(
     tuple[str, int]
         delimiter and number of fields found in the file
     """
-
     for delimiter in delimiters:
         number_fields = _get_field_counts(file, delimiter, lines_to_check, minimum_columns, comment)
         if number_fields:
@@ -368,7 +363,10 @@ def _get_header(file: Path, comment: str = "//") -> tuple[list[str], int | None]
                 number_points = int(line) if line.isdigit() else None
                 break
 
-            header.append(line.lstrip("//").strip("\n\r").strip())
+            # noqa rationale: `lstrip("//")` strips any leading `/` character, not the
+            # literal prefix "//"; this matches existing behaviour. Replace with
+            # `line.removeprefix(comment)` in a future bug-fix phase (BUG sweep).
+            header.append(line.lstrip("//").strip("\n\r").strip())  # noqa: B005
 
     return header, number_points
 

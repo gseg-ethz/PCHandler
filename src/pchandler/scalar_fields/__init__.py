@@ -29,8 +29,12 @@ _lazy_map = {
 __all__ = __all__ + list(_lazy_map)
 
 if TYPE_CHECKING:
-    from .scalar_field_manager import SF_T, ScalarFieldManager
-    from .scalar_fields import NormalFields, RGBFields, ScalarField, ScalarFieldTriplet
+    from .scalar_field_manager import SF_T as SF_T
+    from .scalar_field_manager import ScalarFieldManager as ScalarFieldManager
+    from .scalar_fields import NormalFields as NormalFields
+    from .scalar_fields import RGBFields as RGBFields
+    from .scalar_fields import ScalarField as ScalarField
+    from .scalar_fields import ScalarFieldTriplet as ScalarFieldTriplet
 
 
 def __getattr__(name: str):
@@ -41,7 +45,7 @@ def __getattr__(name: str):
         try:
             val = importlib.import_module(f"{__name__}.{name}")
         except ModuleNotFoundError:
-            raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+            raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from None
     globals()[name] = val
     return val
 

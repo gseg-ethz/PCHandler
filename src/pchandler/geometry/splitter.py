@@ -144,7 +144,7 @@ class FoVTreePointCloudSplitter(PointCloudSplitter):
         fov_list: list[tuple[str, FoV]] = fov_tree.to_list()
 
         if len(fov_list) > 1:
-            with parallel_config(backend="loky", n_jobs=self.n_jobs, verbose=50, prefer="processes") as config:
+            with parallel_config(backend="loky", n_jobs=self.n_jobs, verbose=50, prefer="processes"):
                 splits = Parallel(return_as="list")(
                     delayed(self._process_direct_task)(pcd, fov_id, fov) for fov_id, fov in fov_list
                 )

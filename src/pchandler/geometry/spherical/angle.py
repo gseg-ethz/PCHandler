@@ -50,6 +50,7 @@ class AngleBase:
         These include storage, unit conversion, comparison and numerical operations.
 
         Internally, the angles are stored in radians.
+
         Parameters
         ----------
         value: float | ArrayT
@@ -218,8 +219,8 @@ class AngleBase:
                 new_val = self.internal_value + other.internal_value
             else:
                 new_val = self.radians + other
-        except Exception:
-            raise NotImplementedError(f"Add not defined between type: {type(other)} and {type(self)}")
+        except Exception as err:
+            raise NotImplementedError(f"Add not defined between type: {type(other)} and {type(self)}") from err
 
         new_instance = type(self)(new_val, self._INTERNAL_UNIT)
         new_instance.display_unit = self.display_unit
@@ -228,8 +229,8 @@ class AngleBase:
     def __radd__(self, other) -> Any:
         try:
             return other.__add__(self.radians)
-        except Exception:
-            raise NotImplementedError(f"Add not defined between type: {type(other)} and {type(self)}")
+        except Exception as err:
+            raise NotImplementedError(f"Add not defined between type: {type(other)} and {type(self)}") from err
 
     def __sub__(self, other):
         try:
@@ -237,8 +238,8 @@ class AngleBase:
                 new_val = self.internal_value - other.internal_value
             else:
                 new_val = self.radians - other
-        except Exception:
-            raise NotImplementedError(f"Subtraction not defined between type: {type(other)} and {type(self)}")
+        except Exception as err:
+            raise NotImplementedError(f"Subtraction not defined between type: {type(other)} and {type(self)}") from err
 
         new_instance = Angle(new_val, self._INTERNAL_UNIT)
         new_instance.display_unit = self.display_unit
@@ -247,8 +248,10 @@ class AngleBase:
     def __rsub__(self, other):
         try:
             return other.__sub__(self.radians)
-        except Exception:
-            raise NotImplementedError(f"Subtraction not defined between types: {type(other)} and {type(self)}.")
+        except Exception as err:
+            raise NotImplementedError(
+                f"Subtraction not defined between types: {type(other)} and {type(self)}."
+            ) from err
 
     def __mul__(self, other):
         if isinstance(other, AngleBase):
@@ -305,7 +308,6 @@ class AngleBase:
         -------
         bool or NDArray[bool]
         """
-
         # Pull out the raw float/array to compare
         if isinstance(other, AngleBase):
             if self._INTERNAL_UNIT == other._INTERNAL_UNIT:
@@ -384,8 +386,8 @@ class Angle(AngleBase):
         return inst
 
     @classmethod
-    def parse(cls, value: Any) -> Self:
-        """Parser function to create an angle from a variety of input formats.
+    def parse(cls, value: Any) -> Self:  # noqa: C901  # Multi-format parser — branching tracks supported input shapes; refactor deferred to Phase 6.
+        """Create an angle from a variety of input formats.
 
         Supported formats include:
 

@@ -83,14 +83,14 @@ class PointCloudData(CartesianCoordinates):
             Normal vectors corresponding for each point (normalized to unit vectors)
         intensity : |VectorT| | |ArrayT| | None
         reflectance : |VectorT| | |ArrayT| | None
-        scalar_fields : :class:`ScalarFieldManager` | dict[str, :class:`ScalarField` | |RGBFields| | |NormalFields| | |Array_Nx3_T| | |VectorT| | Sequence] | None
-            Additional custom scalar fields
+        scalar_fields : ScalarFieldManager | dict[str, ScalarField | Array_Nx3_T | VectorT | Sequence] | None
+            Additional custom scalar fields. ``dict`` values may also be
+            :class:`RGBFields` / :class:`NormalFields` instances.
         socs_origin: |Vector_3_Float_T|
             Scan original coordinate system (SOCS). Reference point for conversion to spherical coordinates.
         numerical_optimization
         kwargs : dict[str, Any]
         """
-
         kwargs = {} | kwargs
         kwargs["scalar_fields"] = scalar_fields
         kwargs["socs_origin"] = socs_origin
@@ -422,7 +422,6 @@ class PointCloudData(CartesianCoordinates):
         -------
         PointCloudData
         """
-
         try:
             import open3d as _o3d
         except ModuleNotFoundError as e:
@@ -456,7 +455,6 @@ class PointCloudData(CartesianCoordinates):
         -------
         Epoch
         """
-
         try:
             from py4dgeo import Epoch as _Epoch
         except ModuleNotFoundError as e:
@@ -491,7 +489,7 @@ class PointCloudData(CartesianCoordinates):
         PointCloudData
         """
         try:
-            from py4dgeo import Epoch as _Epoch
+            from py4dgeo import Epoch as _Epoch  # noqa: F401  # Availability probe; _Epoch is not used directly here.
         except ModuleNotFoundError as e:
             raise ModuleNotFoundError(
                 "py4dgeo is not installed. Install it to use PointCloudData.from_py4dgeo()."

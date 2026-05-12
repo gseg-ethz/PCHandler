@@ -22,8 +22,10 @@ _lazy_map = {"Angle": "angle", "AngleArray": "angle", "FoV": "fov", "FoVTree": "
 __all__ = __all__ + list(_lazy_map)
 
 if TYPE_CHECKING:
-    from .angle import Angle, AngleArray
-    from .fov import FoV, FoVTree
+    from .angle import Angle as Angle
+    from .angle import AngleArray as AngleArray
+    from .fov import FoV as FoV
+    from .fov import FoVTree as FoVTree
 
 
 def __getattr__(name: str):
@@ -34,7 +36,7 @@ def __getattr__(name: str):
         try:
             val = importlib.import_module(f"{__name__}.{name}")
         except ModuleNotFoundError:
-            raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+            raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from None
     globals()[name] = val
     return val
 

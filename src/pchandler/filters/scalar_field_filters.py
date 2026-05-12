@@ -73,7 +73,6 @@ class ScalarFieldPercentileFilter(PointCloudFilter):
         lower_percentile : PercentileT, default=0
         upper_percentile : PercentileT, default=100
         """
-
         if lower_percentile > upper_percentile:
             raise ValueError(
                 f"Lower percentile value ({lower_percentile}) must be less than the "

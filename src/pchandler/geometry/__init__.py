@@ -33,8 +33,13 @@ _lazy_map = {
 __all__ = __all__ + list(_lazy_map)
 
 if TYPE_CHECKING:
-    from . import coordinates, spherical, splitter, transforms, util
-    from .optimal_shift import OptimizedShift, OptimizedShiftManager
+    from . import coordinates as coordinates
+    from . import spherical as spherical
+    from . import splitter as splitter
+    from . import transforms as transforms
+    from . import util as util
+    from .optimal_shift import OptimizedShift as OptimizedShift
+    from .optimal_shift import OptimizedShiftManager as OptimizedShiftManager
 
     # from .util import get_outline_polygon
 
@@ -47,7 +52,7 @@ def __getattr__(name: str):
         try:
             val = importlib.import_module(f"{__name__}.{name}")
         except ModuleNotFoundError:
-            raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+            raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from None
     globals()[name] = val
     return val
 

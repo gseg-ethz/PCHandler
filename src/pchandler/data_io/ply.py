@@ -112,7 +112,6 @@ class PlyHandler(AbstractIOHandler):
             Write to ASCII file if `as_ascii` is True, otherwise write to binary file.
         config: dict[str, Any]
         """
-
         path = Path(path)
 
         prefix = prefix if add_prefix else ""

@@ -23,7 +23,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__.split(".")[0])
 
 
-def get_outline_polygon(pcd: PointCloudData, plane: str, alpha_value: float = 10.0, nb_points: int = -1) -> Polygon:
+def get_outline_polygon(  # noqa: C901  # Plane-axis dispatch + alpha-shape branching; refactor deferred to Phase 6 / PERF-02.
+    pcd: PointCloudData, plane: str, alpha_value: float = 10.0, nb_points: int = -1
+) -> Polygon:
     """Computes the outline of the point cloud as a polygon in a specific 2D projection.
 
     Parameters
@@ -125,7 +127,6 @@ class MinMaxPoints(NamedTuple):
             An instance of the class initialized with the calculated minimum and maximum points
             based on the given points and the shift vector.
         """
-
         if len(points) == 0:
             return cls(np.zeros(3), np.zeros(3))
 

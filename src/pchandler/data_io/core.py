@@ -67,6 +67,7 @@ def find_point_cloud_in_directory(
     directory_path: Path, pcd_file_types: Sequence[str] = SUPPORTED_TYPES, include_subdirectories: bool = True
 ) -> list[Path]:
     """Search a directory for point cloud files with specific extensions.
+
     Parameters
     ----------
     directory_path : Path
@@ -80,7 +81,6 @@ def find_point_cloud_in_directory(
     -------
     list[Path]
     """
-
     if not directory_path.is_dir():
         if directory_path.is_file():
             raise IOError(f"{directory_path} is file not a directory.")
@@ -165,7 +165,6 @@ class AbstractIOHandler(ABC):
         dict[str, str]
             A dictionary mapping input field names to corresponding resolved field names.
         """
-
         prefix = prefix if remove_prefix else ""
 
         headers = _clean_field_names(header_fields, _clean_header_name, prefix=prefix)
@@ -227,7 +226,6 @@ class AbstractIOHandler(ABC):
         field_names : dict of str, str
             Mapping of scalar field names to their corresponding data keys in the dataset.
         """
-
         sf_keys = list(field_names.keys())
 
         # RGB Cases (e.g. 'rgb' or 'r', 'g', 'b')
@@ -306,7 +304,9 @@ class AbstractIOHandler(ABC):
         return ScalarField(arr, name=name, origin_dtype=DtypeState.generate(arr))
 
     @classmethod
-    def _generate_struct_dtype(cls, pcd: PointCloudData, scalar_fields: list[str], revert_sf_types: bool) -> DtypeDict:
+    def _generate_struct_dtype(  # noqa: C901  # Multi-format dtype assembly; refactor deferred to Phase 6 tech-debt sweep.
+        cls, pcd: PointCloudData, scalar_fields: list[str], revert_sf_types: bool
+    ) -> DtypeDict:
         """Generate a numpy dtype for initialising a structured array
 
         Parameters
@@ -319,7 +319,6 @@ class AbstractIOHandler(ABC):
         -------
         DtypeDict
         """
-
         # Leverage dict to avoid any duplicates of using 'rgb' or 'r', 'g', 'b', for example
         dtype_dict = DtypeDict(names=[], formats=[])
 
@@ -401,7 +400,6 @@ class AbstractIOHandler(ABC):
         -------
         npt.NDArray[Any]
         """
-
         prefix = prefix if add_prefix else ""
 
         if scalar_fields is None:

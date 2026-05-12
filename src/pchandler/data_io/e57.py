@@ -87,7 +87,6 @@ class E57Handler(AbstractIOHandler):
         This is a class method intended for loading E57 point cloud data based on
         the provided parameters.
         """
-
         path = Path(path)
         kwargs = {
             "retain_rgb": retain_rgb,

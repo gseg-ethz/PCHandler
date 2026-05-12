@@ -27,13 +27,15 @@ except (ImportError, RuntimeError) as e:
 else:
     _HAS_GPU = True
 
-from GSEGUtils.base_types import Vector_Bool_T
-from GSEGUtils.constants import validate_variables
-from shapely.geometry import Polygon
+# Imports placed below the GPU availability probe so that ImportError on optional
+# RAPIDS deps is detected before the rest of the module is parsed.
+from GSEGUtils.base_types import Vector_Bool_T  # noqa: E402
+from GSEGUtils.constants import validate_variables  # noqa: E402
+from shapely.geometry import Polygon  # noqa: E402
 
-from pchandler import PointCloudData
-from pchandler.filters.cartesian_filters import PlaneStrings
-from pchandler.filters.core import PointCloudFilter, ValidatedPolygonT
+from pchandler import PointCloudData  # noqa: E402
+from pchandler.filters.cartesian_filters import PlaneStrings  # noqa: E402
+from pchandler.filters.core import PointCloudFilter, ValidatedPolygonT  # noqa: E402
 
 logger = logging.getLogger(__name__.split(".")[0])
 

@@ -41,17 +41,24 @@ _lazy_map = {
 __all__ = list(_lazy_map)
 
 if TYPE_CHECKING:
-    from .cartesian_filters import BoxFilter, PolygonFilter, SphereFilter
-    from .core import GenericFieldFilter, PointCloudFilter, ValidatedPolygonT
-    from .downsample import AngleBinDownsample, RandomDownsampleFilter, VoxelDownsample
-    from .gpu import PolygonFilterGPU, SphericalPolygonFilterGPU
-    from .outlier_filter import CartesianOutlierFilter, SphericalOutlierFilter
-    from .scalar_field_filters import ScalarFieldFilter, ScalarFieldPercentileFilter
-    from .spherical_coordinate_filters import (
-        FoVFilter,
-        RangeFilter,
-        SphericalPolygonFilter,
-    )
+    from .cartesian_filters import BoxFilter as BoxFilter
+    from .cartesian_filters import PolygonFilter as PolygonFilter
+    from .cartesian_filters import SphereFilter as SphereFilter
+    from .core import GenericFieldFilter as GenericFieldFilter
+    from .core import PointCloudFilter as PointCloudFilter
+    from .core import ValidatedPolygonT as ValidatedPolygonT
+    from .downsample import AngleBinDownsample as AngleBinDownsample
+    from .downsample import RandomDownsampleFilter as RandomDownsampleFilter
+    from .downsample import VoxelDownsample as VoxelDownsample
+    from .gpu import PolygonFilterGPU as PolygonFilterGPU
+    from .gpu import SphericalPolygonFilterGPU as SphericalPolygonFilterGPU
+    from .outlier_filter import CartesianOutlierFilter as CartesianOutlierFilter
+    from .outlier_filter import SphericalOutlierFilter as SphericalOutlierFilter
+    from .scalar_field_filters import ScalarFieldFilter as ScalarFieldFilter
+    from .scalar_field_filters import ScalarFieldPercentileFilter as ScalarFieldPercentileFilter
+    from .spherical_coordinate_filters import FoVFilter as FoVFilter
+    from .spherical_coordinate_filters import RangeFilter as RangeFilter
+    from .spherical_coordinate_filters import SphericalPolygonFilter as SphericalPolygonFilter
 
 
 def __getattr__(name: str):

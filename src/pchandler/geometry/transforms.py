@@ -154,6 +154,7 @@ class Transform(_Transform4x4):
     @classmethod
     def from_scale(cls, vector: Vector_3_T | float) -> Transform:
         """Create a Transform object from a scaling vector or scale factor
+
         Parameters
         ----------
         vector : Vector_3_T or float
@@ -168,8 +169,8 @@ class Transform(_Transform4x4):
     @classmethod
     def generate(
         cls,
-        rotation: Array_3x3_T = np.eye(3),
-        translation: Vector_3_T = np.zeros(3),
+        rotation: Array_3x3_T = np.eye(3),  # noqa: B008  # numpy literal default — identity rotation; safe & idiomatic.
+        translation: Vector_3_T = np.zeros(3),  # noqa: B008  # numpy literal default — zero translation; safe & idiomatic.
         scale: Vector_3_T | float = 1,
     ):
         """Generate an affine transformation from rotation, translation, and/or scale parameters.

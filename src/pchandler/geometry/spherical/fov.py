@@ -193,7 +193,6 @@ class FoV(BaseModel):
         -------
         FoV
         """
-
         # Create a continuous representation of hz angles in range from 0 -> 2π
         hz_shifted = horizontal.copy()
         hz_shifted[hz_shifted < 0] = TWO_PI + hz_shifted[hz_shifted < 0]
@@ -396,7 +395,6 @@ class FoV(BaseModel):
         -------
         FoV
         """
-
         # split into non-overlapping FoVs -
         # Part a represents part less than +PI and part b represents part greater than -PI
         # The smallest width made from the unions represents the side to extend
@@ -430,7 +428,6 @@ class FoV(BaseModel):
         -------
         FoV
         """
-
         # Case 1: no vertical intersection, therefore no intersection.
         vertical_intersection = self._interval_intersection_1d(a0=self.top, a1=self.bottom, b0=fov2.top, b1=fov2.bottom)
 
@@ -560,8 +557,8 @@ class FoV(BaseModel):
 
         fov_splits = [
             type(self)(left=hor_min, top=elev_min, right=hor_max, bottom=elev_max)
-            for hor_min, hor_max in zip(horizontal_borders[:-1], horizontal_borders[1:])
-            for elev_min, elev_max in zip(vertical_borders[:-1], vertical_borders[1:])
+            for hor_min, hor_max in zip(horizontal_borders[:-1], horizontal_borders[1:], strict=True)
+            for elev_min, elev_max in zip(vertical_borders[:-1], vertical_borders[1:], strict=True)
         ]
         for fov_split in fov_splits:
             fov_split.left.display_unit = self.left.display_unit
@@ -623,8 +620,8 @@ class FoV(BaseModel):
         horizontal_steps = AngleArray(np.append(np.arange(self.left, self.right, target_extent.width()), self.right))
         elevation_steps = AngleArray(np.append(np.arange(self.top, self.bottom, target_extent.height()), self.bottom))
 
-        horizontal_bins = list(zip(horizontal_steps[:-1], horizontal_steps[1:]))
-        vertical_bins = list(zip(elevation_steps[:-1], elevation_steps[1:]))
+        horizontal_bins = list(zip(horizontal_steps[:-1], horizontal_steps[1:], strict=True))
+        vertical_bins = list(zip(elevation_steps[:-1], elevation_steps[1:], strict=True))
 
         tiles = []
         for left_edge, right_edge in horizontal_bins:
@@ -669,6 +666,7 @@ class FoV(BaseModel):
     @classmethod
     def merge(cls, fovs: Iterable[Self]) -> Self:
         """Merges multiple FoV returning a single FoV that encompasses the total area covered
+
         Parameters
         ----------
         fovs : Iterable[FoV]
@@ -925,9 +923,13 @@ class FoVTree:
     #                         for child_identifier, child in cls.add_identifier(fov_tiles, shape)}
     #     else:
     #         fov_splits = fov.split(shape)
-    #         fov_children = {child_identifier: cls.build_by_splitting(child, target_ratio, target_fov_extent,
-    #                                                                  max_denominator * 2, identifier + child_identifier)
-    #                         for child_identifier, child in cls.add_identifier(fov_splits, shape)}
+    #         fov_children = {
+    #             child_identifier: cls.build_by_splitting(
+    #                 child, target_ratio, target_fov_extent,
+    #                 max_denominator * 2, identifier + child_identifier,
+    #             )
+    #             for child_identifier, child in cls.add_identifier(fov_splits, shape)
+    #         }
     #
     #     return cls(identifier, fov, fov_children)
 
@@ -987,7 +989,6 @@ class FoVTree:
         -------
         tuple[int, int]
         """
-
         shape = Fraction(fov.ratio() / target_ratio).limit_denominator(np.round(max_denominator).astype(int))
         new_shape = (
             shape.numerator,

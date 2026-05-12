@@ -48,9 +48,17 @@ _lazy_map = {
 __all__ = __all__ + list(_lazy_map)
 
 if TYPE_CHECKING:
-    from . import base_types, constants, data_io, filters, geometry, scalar_fields
-    from ._version import __version__, __version_tuple__, version, version_tuple
-    from .core import PointCloudData
+    from . import base_types as base_types
+    from . import constants as constants
+    from . import data_io as data_io
+    from . import filters as filters
+    from . import geometry as geometry
+    from . import scalar_fields as scalar_fields
+    from ._version import __version__ as __version__
+    from ._version import __version_tuple__ as __version_tuple__
+    from ._version import version as version
+    from ._version import version_tuple as version_tuple
+    from .core import PointCloudData as PointCloudData
 
 
 def __getattr__(name: str):
@@ -61,7 +69,7 @@ def __getattr__(name: str):
         try:
             val = importlib.import_module(f"{__name__}.{name}")
         except ModuleNotFoundError:
-            raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+            raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from None
     globals()[name] = val
     return val
 

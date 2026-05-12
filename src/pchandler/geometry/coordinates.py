@@ -407,7 +407,6 @@ class CartesianCoordinates(Abstract3dCoordinates):
         -------
         CartesianCoordinates
         """
-
         update = {} if update is None else update
 
         if link_to_same_NOS and "numerical_optimization_shift" not in update:
