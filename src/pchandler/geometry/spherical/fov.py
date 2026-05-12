@@ -6,8 +6,7 @@
 #
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
-"""
-``pchandler.fov``
+"""Fields of View (FoVs) and hierarchical FoV trees for spherical-coordinate spatial partitioning.
 
 This module provides classes and methods for defining and manipulating Fields of View (FoVs) and hierarchical FoV trees.
 It is designed to facilitate the spatial partitioning, tiling, and merging of 3D regions based on angular constraints.
@@ -108,6 +107,13 @@ hz_limits = (float(-PI - EPS), float(PI + EPS))
 
 
 class FoV(BaseModel):
+    """A rectangular angular region (Field of View) in spherical coordinates.
+
+    Defined by left/right horizontal bounds and top/bottom vertical bounds.
+    Horizontal angles wrap on the ``+/- pi`` discontinuity (left > right
+    indicates a wrapping FoV).
+    """
+
     model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True)
 
     left: Angle = Field(..., description="Hz ∈ [–π, +π]")
@@ -116,19 +122,18 @@ class FoV(BaseModel):
     bottom: Angle = Field(..., description="V ∈ [0, +π]")
 
     def __init__(self, *, left: AngleLikeT, top: AngleLikeT, right: AngleLikeT, bottom: AngleLikeT):
-        """
-        Class containing the angular limits defining a field of view based in spherical coordinates.
+        """Build an :class:`FoV` from four angular limits.
 
         Parameters
         ----------
-        left: Angle
-            Hz ∈ [–π, +π]
-        right: Angle
-            Hz ∈ [–π, +π]
-        top: Angle
-            V ∈ [0, +π]
-        bottom: Angle
-            V ∈ [0, +π]
+        left : Angle
+            Hz ∈ [–π, +π].
+        right : Angle
+            Hz ∈ [–π, +π].
+        top : Angle
+            V ∈ [0, +π].
+        bottom : Angle
+            V ∈ [0, +π].
         """
         super().__init__(left=left, top=top, right=right, bottom=bottom)
 
@@ -220,6 +225,7 @@ class FoV(BaseModel):
         return fov
 
     def __iter__(self) -> Generator[tuple[str, Angle], None, None]:
+        """Yield ``(name, Angle)`` pairs for each of the four bounds, in left-top-right-bottom order."""
         yield "left", self.left
         yield "top", self.top
         yield "right", self.right
@@ -227,40 +233,44 @@ class FoV(BaseModel):
 
     @property
     def crosses_pi(self) -> bool:
-        """Check if the FoV horizontal range crosses the boundary +/- PI
+        """Check whether the FoV horizontal range crosses the ``+/- pi`` boundary.
 
         Returns
         -------
         bool
+            ``True`` if ``left > right`` (wrapping FoV).
         """
         return self.left > self.right
 
     def width(self) -> Angle:
-        """Return the angular width (horizontal angle) of the FoV
+        """Return the angular width (horizontal extent) of the FoV.
 
         Returns
         -------
         Angle
+            The horizontal extent (accounting for wrap at ``+/- pi``).
         """
         if self.crosses_pi:
             return Angle(TWO_PI) - (self.left - self.right)
         return self.right - self.left
 
     def height(self) -> Angle:
-        """Return the angular height (vertical angle) of the FoV
+        """Return the angular height (vertical extent) of the FoV.
 
         Returns
         -------
         Angle
+            The vertical extent.
         """
         return self.bottom - self.top
 
     def extent(self) -> tuple[Angle, Angle]:
-        """Return the angular extent (width, height) of the FoV
+        """Return the angular extent ``(width, height)`` of the FoV.
 
         Returns
         -------
         tuple[Angle, Angle]
+            ``(width, height)`` pair.
         """
         return self.width(), self.height()
 
@@ -290,16 +300,19 @@ class FoV(BaseModel):
     def from_center_with_extent(
         cls, centerpoint: tuple[Angle | float, Angle | float], extent: tuple[Angle | float, Angle | float]
     ) -> Self:
-        """Creates an FoV instance from a center point and angular extent.
+        """Build an :class:`FoV` from a center point and angular extent.
 
         Parameters
         ----------
-        centerpoint: tuple[float, float]
-        extent: tuple[float, float]
+        centerpoint : tuple[float, float]
+            ``(horizontal_center, vertical_center)`` for the FoV.
+        extent : tuple[float, float]
+            ``(width, height)`` extent for the FoV.
 
         Returns
         -------
         FoV
+            FoV centered on ``centerpoint`` with the requested extent.
         """
         new_instance = cls.construct_without_bounds_check(
             left=centerpoint[0] - extent[0] / 2,
@@ -316,23 +329,24 @@ class FoV(BaseModel):
 
     @staticmethod
     def _interval_intersection_1d(a0: Angle, a1: Angle, b0: Angle, b1: Angle) -> tuple[Angle, Angle] | None:
-        """Intersection of two 1D closed intervals on the real number line (no wrapping)
+        """Compute the intersection of two 1D closed intervals on the real number line (no wrapping).
 
         Parameters
         ----------
-        a0: Angle
-            Minimum of the first interval
-        a1: Angle
-            Maximum of the first interval
-        b0: Angle
-            Minimum of the second interval
-        b1: Angle
-            Maximum of the second interval
+        a0 : Angle
+            Minimum of the first interval.
+        a1 : Angle
+            Maximum of the first interval.
+        b0 : Angle
+            Minimum of the second interval.
+        b1 : Angle
+            Maximum of the second interval.
 
         Returns
         -------
         tuple[float, float] | None
-
+            Intersection ``(low, high)`` or ``None`` if the intervals do not
+            overlap.
         """
         low = max(a0, b0)  # Left or top components
         high = min(a1, b1)  # Right or bottom components
@@ -370,7 +384,7 @@ class FoV(BaseModel):
 
     @staticmethod
     def _get_unions_from_one_wrapping_fov(wrapping_fov: FoV, non_wrapping_fov: FoV) -> tuple[Angle, Angle]:
-        """Splits a wrapping fov into two FoV segments so that neither overlap PI"""
+        """Split a wrapping FoV into two segments and union each against a non-wrapping FoV."""
         part_a, part_b = wrapping_fov._non_wrapping_segments()
         part_a_union = part_a.union(non_wrapping_fov)
         part_b_union = part_b.union(non_wrapping_fov)
@@ -385,15 +399,17 @@ class FoV(BaseModel):
         return left, right
 
     def union(self, fov2: Self) -> Self:
-        """Returns the union of this FoV with another.
+        """Return the union of this FoV with another (handles wrap at ``+/- pi``).
 
         Parameters
         ----------
         fov2 : FoV
+            The other FoV to union with.
 
         Returns
         -------
         FoV
+            The smallest FoV containing both inputs.
         """
         # split into non-overlapping FoVs -
         # Part a represents part less than +PI and part b represents part greater than -PI
@@ -418,15 +434,17 @@ class FoV(BaseModel):
         )
 
     def intersect(self, fov2: Self) -> Self | None:
-        """Returns the intersection of this FoV with another.
+        """Return the intersection of this FoV with another, or ``None`` if disjoint.
 
         Parameters
         ----------
         fov2 : FoV
+            The other FoV to intersect with.
 
         Returns
         -------
-        FoV
+        FoV or None
+            The intersection FoV, or ``None`` if the two are disjoint.
         """
         # Case 1: no vertical intersection, therefore no intersection.
         vertical_intersection = self._interval_intersection_1d(a0=self.top, a1=self.bottom, b0=fov2.top, b1=fov2.bottom)
@@ -460,7 +478,19 @@ class FoV(BaseModel):
         )
 
     def encompasses(self, fov2: Self) -> bool:
-        """Does self fully surround fov2"""
+        """Check whether ``self`` fully surrounds ``fov2``.
+
+        Parameters
+        ----------
+        fov2 : FoV
+            Candidate inner FoV.
+
+        Returns
+        -------
+        bool
+            ``True`` if ``fov2`` is fully contained inside ``self`` (within
+            ``EPS`` tolerance).
+        """
         left_chk = self.left <= fov2.left + EPS
         top_chk = self.top <= fov2.top + EPS
         right_chk = self.right >= fov2.right - EPS
@@ -469,7 +499,7 @@ class FoV(BaseModel):
         return left_chk and top_chk and right_chk and bottom_chk
 
     def find_points_inside(self, horizontal: Vector_Float_T, vertical: Vector_Float_T) -> Vector_Bool_T:
-        """Returns a mask for the points that fall within the FoV"""
+        """Return a boolean mask of the input points that fall inside the FoV."""
         v_indices = np.logical_and(vertical >= self.top, vertical <= self.bottom)
 
         if self.crosses_pi:
@@ -483,25 +513,29 @@ class FoV(BaseModel):
 
     @validate_variables
     def ratio(self) -> NonNegativeFloat:
-        """Returns the width-to-height ratio of the FoV.
+        """Return the width-to-height ratio of the FoV.
 
         Returns
         -------
         NonNegativeFloat
+            ``width() / height()``.
         """
         return self.width() / self.height()
 
     @validate_call(config=DEFAULT_CONFIG)
     def extend_to_ratio(self, ratio: float) -> Self:
-        """Extends the FoV to a specified ratio.
+        """Extend the FoV to match a specified width-to-height ratio.
 
         Parameters
         ----------
-        ratio: float
+        ratio : float
+            Target width-to-height ratio.
 
         Returns
         -------
         FoV
+            New FoV matching the requested ratio (or ``self`` if already at
+            ratio).
         """
         if self.ratio() - ratio > EPS:
             target_vertical_extent = self.width() / ratio
@@ -654,18 +688,20 @@ class FoV(BaseModel):
         return tiles
 
     def quadrants(self) -> tuple[Self, ...]:
-        """Splits the current object into four quadrants.
+        """Split the FoV into four equal quadrants.
 
         Returns
         -------
         tuple of Self
+            The four quadrant FoVs (top-left, top-right, bottom-left,
+            bottom-right).
         """
         # Keep for legacy
         return tuple(self.split(shape=(2, 2)))
 
     @classmethod
     def merge(cls, fovs: Iterable[Self]) -> Self:
-        """Merges multiple FoV returning a single FoV that encompasses the total area covered
+        """Merge multiple FoVs into one that encompasses the total area covered.
 
         Parameters
         ----------
@@ -675,6 +711,7 @@ class FoV(BaseModel):
         Returns
         -------
         FoV
+            Smallest FoV containing all inputs.
         """
         horizontals = []
         verticals = []
@@ -765,16 +802,18 @@ class FoV(BaseModel):
         return self.bottom
 
     def __str__(self):
+        """Return a human-readable representation of the FoV in display units."""
         left, top, right, bottom = self.left, self.top, self.right, self.bottom
         return f"{self.__class__.__name__}({left=!s}, {right=!s}, {top=!s}, {bottom=!s})"
 
     def __repr__(self):
+        """Return the debug representation (same as ``__str__``)."""
         return str(self)
 
 
 @dataclass(init=True, frozen=True)
 class FoVTree:
-    """A hierarchical tree structure for spatial partitioning of FoVs
+    """A hierarchical tree structure for spatial partitioning of FoVs.
 
     Parameters
     ----------
@@ -825,6 +864,7 @@ class FoVTree:
         return max([c.depth() for c in self.children.values()]) + 1
 
     def __len__(self) -> int:
+        """Return the number of leaf nodes in the subtree rooted at ``self``."""
         if self.is_leaf() or self.children is None:
             return 1
         return sum((len(c) for c in self.children.values()))
@@ -846,12 +886,12 @@ class FoVTree:
 
     @classmethod
     def build_from_tiles(cls, tiles: list[list[FoV]], min_children: int = 4, identifier: str = "") -> Self | None:
-        """Constructs a tree from a grid of FoVs.
+        """Construct a tree from a 2D grid of FoVs by recursive quad-splitting.
 
         Parameters
         ----------
         tiles : list[list[FoV]]
-            Grid of FoVs
+            Grid of FoVs.
         min_children : int, default=4
             The minimum number of children to avoid further splitting.
         identifier : str, default=""
@@ -860,6 +900,7 @@ class FoVTree:
         Returns
         -------
         FoVTree
+            Root of the constructed tree, or ``None`` if ``tiles`` is empty.
         """
         assert min_children > 1
         if not tiles or not tiles[0]:
@@ -953,6 +994,7 @@ class FoVTree:
     #     pass
 
     def __getitem__(self, identifier: str) -> Self:
+        """Look up a child by ``identifier`` (descending into nested children for long ids)."""
         # TODO: extend to complete for full string
         if not identifier or identifier == "root" or self.children is None:
             return self
@@ -965,12 +1007,12 @@ class FoVTree:
         return self.children[identifier]
 
     def is_leaf(self):
-        """Check if the FoVTree node is a leaf (no child nodes)
+        """Check whether this FoVTree node is a leaf (has no child nodes).
 
         Returns
         -------
         bool
-            True if the node has no children, False otherwise.
+            ``True`` if the node has no children, ``False`` otherwise.
         """
         return not self.children
 
