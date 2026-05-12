@@ -3,7 +3,7 @@
 
 .. automodule:: pchandler.filters
 
-   
+
 .. rubric:: Modules
 
 .. autosummary::

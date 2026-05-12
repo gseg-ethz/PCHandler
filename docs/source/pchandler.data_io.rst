@@ -3,7 +3,7 @@
 
 .. automodule:: pchandler.data_io
 
-   
+
 .. rubric:: Modules
 
 .. autosummary::

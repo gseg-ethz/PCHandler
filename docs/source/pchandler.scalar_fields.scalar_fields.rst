@@ -3,11 +3,11 @@ pchandler.scalar\_fields.scalar\_fields
 
 .. automodule:: pchandler.scalar_fields.scalar_fields
 
-   
+
    .. rubric:: Classes
 
    .. autosummary::
-   
+
       AbstractScalarField
       DtypeState
       NormalFields
@@ -19,4 +19,3 @@ pchandler.scalar\_fields.scalar\_fields
       ScalarFieldTriplet
       ScalarFieldUint8
       SegmentationMap
-   

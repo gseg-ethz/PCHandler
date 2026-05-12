@@ -3,10 +3,9 @@
 
 .. automodule:: pchandler.core
 
-   
+
    .. rubric:: Classes
 
    .. autosummary::
-   
+
       PointCloudData
-   

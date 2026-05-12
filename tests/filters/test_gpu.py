@@ -1,7 +1,6 @@
 import numpy as np
 import pytest
-from pydantic import ValidationError
-from shapely.geometry import Polygon, box
+from shapely.geometry import Polygon
 
 from pchandler import PointCloudData
 from pchandler.filters import PolygonFilterGPU, SphericalPolygonFilterGPU

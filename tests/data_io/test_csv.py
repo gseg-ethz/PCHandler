@@ -127,7 +127,7 @@ def hash_commented_file(tmp_path_factory):
         f.write("# GeneralComment \n")
         f.write("# Another Comment with punctuation which should break it. \n")
         for _ in range(20):
-            f.write(f"0.24,1.1,2.3,4,8,12\n")
+            f.write("0.24,1.1,2.3,4,8,12\n")
 
     return file
 

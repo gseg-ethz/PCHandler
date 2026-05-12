@@ -51,6 +51,3 @@ Vectorized computations
 
    assert isinstance(pcd, PointCloudData)
    print(pcd.xyz)
-
-
-

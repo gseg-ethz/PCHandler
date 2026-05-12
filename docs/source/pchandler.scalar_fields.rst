@@ -3,7 +3,7 @@
 
 .. automodule:: pchandler.scalar_fields
 
-   
+
 .. rubric:: Modules
 
 .. autosummary::

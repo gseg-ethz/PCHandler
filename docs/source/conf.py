@@ -31,43 +31,44 @@ extensions = [
 
 # TODO fix the GSEGUtils once it's implemented to ReadTheDocs
 # Intersphinx Config
-intersphinx_mapping = {'open3d': ('https://www.open3d.org/docs/release/', None),
-                       'python': ('https://docs.python.org/3/', None),
-                       'numpy': ('https://numpy.org/doc/stable/', None),
-                       'pydantic': ('https://docs.pydantic.dev/latest/', None),
-                       'numpydantic': ('https://numpydantic.readthedocs.io/en/latest/', None),
-                       'GSEGUtils': ('https://gsegutils.readthedocs.io/en/latest/', None),}
+intersphinx_mapping = {
+    "open3d": ("https://www.open3d.org/docs/release/", None),
+    "python": ("https://docs.python.org/3/", None),
+    "numpy": ("https://numpy.org/doc/stable/", None),
+    "pydantic": ("https://docs.pydantic.dev/latest/", None),
+    "numpydantic": ("https://numpydantic.readthedocs.io/en/latest/", None),
+    "GSEGUtils": ("https://gsegutils.readthedocs.io/en/latest/", None),
+}
 
 
 # General Config
-python_use_unqualified_type_name = True                # False
+python_use_unqualified_type_name = True  # False
 
 # ======= Autodoc Config =========
-autoclass_content = 'class'                              # 'both', 'None, 'init', 'class'
-autodoc_class_signature = 'separated'                       # 'mixed' / 'separated
-autodoc_member_order = 'bysource'                       # 'alphabetical', 'bysource'
+autoclass_content = "class"  # 'both', 'None, 'init', 'class'
+autodoc_class_signature = "separated"  # 'mixed' / 'separated
+autodoc_member_order = "bysource"  # 'alphabetical', 'bysource'
 autodoc_default_options = {
-    'members': True,
-    'undoc-members': True,
-    'private-members': False,
-
+    "members": True,
+    "undoc-members": True,
+    "private-members": False,
     # 'special-members': '__init__',
-    'inherited-members': False,
+    "inherited-members": False,
     # 'imported-members': True,
-    'exclude-members': 'model_config, model_post_init, _abc_impl, _reconstruct',
+    "exclude-members": "model_config, model_post_init, _abc_impl, _reconstruct",
     # 'ignore-module-all': False,
-    'member-order': 'bysource',
-    'show-inheritance': True,
+    "member-order": "bysource",
+    "show-inheritance": True,
 }
-autodoc_docstring_signature = True                      # True
-autodoc_mock_imports = []                               # []
-autodoc_typehints = 'description'                       # 'signature', 'description', 'none', 'both'
-autodoc_typehints_description_target = 'documented'     # 'all', 'documented', 'documented_params'
-autodoc_typehints_format = 'short'                      # 'short', 'fully-qualified'
-autodoc_preserve_defaults = True                        # False
-autodoc_use_type_comments = True                        # True
-autodoc_warningiserror = True                           # True
-autodoc_inherit_docstrings = True                       # True
+autodoc_docstring_signature = True  # True
+autodoc_mock_imports = []  # []
+autodoc_typehints = "description"  # 'signature', 'description', 'none', 'both'
+autodoc_typehints_description_target = "documented"  # 'all', 'documented', 'documented_params'
+autodoc_typehints_format = "short"  # 'short', 'fully-qualified'
+autodoc_preserve_defaults = True  # False
+autodoc_use_type_comments = True  # True
+autodoc_warningiserror = True  # True
+autodoc_inherit_docstrings = True  # True
 linkcheck_allowed_redirects = {}
 autosummary_generate_overwrite = False
 # Defaults
@@ -77,12 +78,12 @@ html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]
 
 
-redirects = {
-    "index.html": "introduction.html"
-}
+redirects = {"index.html": "introduction.html"}
+
 
 def setup(app):
-    app.add_css_file('pchandler_theme.css')
+    app.add_css_file("pchandler_theme.css")
+
 
 rst_epilog = """
 .. |NDArray| replace:: :external+numpydantic:py:class:`NDArray <numpydantic.NDArray>`

@@ -20,5 +20,3 @@ You are being redirected to the Introduction page. If not, use the link below.
    examples/index
    api
    faq
-
-

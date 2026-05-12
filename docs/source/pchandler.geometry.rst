@@ -3,7 +3,7 @@
 
 .. automodule:: pchandler.geometry
 
-   
+
 .. rubric:: Modules
 
 .. autosummary::

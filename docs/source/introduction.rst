@@ -134,8 +134,3 @@ applications in 3D data analysis, GIS, and computer vision.
 
 .. toctree::
    :maxdepth: 2
-
-
-
-
-

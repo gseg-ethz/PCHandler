@@ -142,7 +142,7 @@ class TestAngle:
 
         # unary ufunc
         sin_a = np.sin(a)
-        assert isinstance(sin_a, np.ndarray) or np.isscalar(z)
+        assert isinstance(sin_a, np.ndarray) or np.isscalar(sin_a)
         np.testing.assert_allclose(sin_a, np.sin(arr), rtol=1e-6)
 
         # binary ufunc

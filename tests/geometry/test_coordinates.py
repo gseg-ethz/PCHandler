@@ -10,7 +10,7 @@ from GSEGUtils.constants import HALF_PI, PI
 from pydantic import ValidationError
 from scipy.spatial.transform import Rotation
 
-from pchandler.geometry import OptimizedShift, OptimizedShiftManager
+from pchandler.geometry import OptimizedShift
 from pchandler.geometry.coordinates import (  # SphericalCoordinates,
     Abstract3dCoordinates,
     AbstractCoordinates,
@@ -418,16 +418,16 @@ class BaseTestCartesianCoordinates:
     def test_setattr(cart_obj):
         new_xyz = cart_obj.copy()
         with pytest.raises(AttributeError):
-            setattr(new_xyz, "_shift_applied_by", OptimizedShift(np.array([1, 1, 1])))
+            new_xyz._shift_applied_by = OptimizedShift(np.array([1, 1, 1]))
 
-        setattr(new_xyz, "numerical_optimization_shift", OptimizedShift(np.array([1, 1, 1])))
+        new_xyz.numerical_optimization_shift = OptimizedShift(np.array([1, 1, 1]))
         assert np.allclose((new_xyz + new_xyz.numerical_optimization_shift), cart_obj.xyz, rtol=1e-5, atol=1e-6)
 
-        setattr(new_xyz, "socs_origin", [2, 3, 3])
+        new_xyz.socs_origin = [2, 3, 3]
         assert np.all(new_xyz.socs_origin == [2, 3, 3])
 
         with pytest.raises(ValidationError):
-            setattr(new_xyz, "socs_origin", "invalid_type")
+            new_xyz.socs_origin = "invalid_type"
 
     @staticmethod
     def test_hash(cart_obj):

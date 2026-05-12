@@ -159,5 +159,3 @@ Optional GPU Acceleration
 - [cuDF](https://docs.rapids.ai/api/cudf/stable/) — GPU DataFrame operations to accelerate tabular point attributes and transforms.
 - [cuSpatial](https://docs.rapids.ai/api/cuspatial/stable/) — GPU-accelerated spatial/trajectory operations for large-scale geospatial workloads.
 - [cuML](https://docs.rapids.ai/api/cuml/stable/) — GPU-accelerated machine learning algorithms useful for clustering, outlier detection, and similar tasks.
-
-

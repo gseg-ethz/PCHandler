@@ -69,8 +69,24 @@ ignore = ["E203"]
 convention = "numpy"
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["D100", "D101", "D102", "D103"]
-"docs/source/conf.py" = ["D100"]
+# tests/** lint-debt: pre-existing violations Plan 01-02a's `ruff check src/`
+# never caught and `--no-verify` masked. Plan 01-03b surfaced them by re-
+# enabling pre-commit hooks. Same pattern Plan 01-03a applied to GSEGUtils.
+# D100-D103/D106/D205/D400/D414: docstring quirks on test fns/fixtures/classes.
+# E711/E712: idiomatic `== None` / `== True` style in assertions.
+# B007/B017/B028/B905: pytest-friendly patterns (blind Exception assertions,
+#                     unused loop counters, missing zip strict, warnings
+#                     without explicit stacklevel).
+# F841: unused-variable inside tests (kept for assertion structure / future).
+# Tracked alongside the test-side mypy/numpydantic deferral; a future tests/
+# D-sweep plan analogous to Plan 01-02b can attack these inline.
+"tests/**" = [
+    "D100", "D101", "D102", "D103", "D106", "D205", "D400", "D414",
+    "E711", "E712",
+    "B007", "B017", "B028", "B905",
+    "F841",
+]
+"docs/source/conf.py" = ["D100", "D103"]
 
 
 [project.urls]

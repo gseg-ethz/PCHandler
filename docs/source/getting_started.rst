@@ -69,5 +69,3 @@ To ensure PCHandler has been properly installed, you can try the following code:
    print(f"{points.shape=}")  # (100, 3)
    print(f"{pcd.xyz=}")
    print(f"{pcd.numerical_optimization_shift=}")
-
-

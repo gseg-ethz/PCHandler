@@ -11,7 +11,6 @@ from pchandler.scalar_fields import ScalarFieldManager
 from pchandler.scalar_fields.scalar_fields import (
     AbstractScalarField,
     NormalFields,
-    NormalisedInt16ScalarField,
     RGBFields,
     ScalarField,
 )
