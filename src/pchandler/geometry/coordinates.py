@@ -6,6 +6,14 @@
 #
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
+"""Cartesian coordinate classes with numerical-precision shift management.
+
+Defines :class:`AbstractCoordinates` and :class:`Abstract3dCoordinates` base
+classes, :class:`CartesianCoordinates` (the main user-facing 3D coordinate
+container), plus the ``rhv2xyz`` / ``xyz2rhv`` spherical/Cartesian conversion
+helpers.
+"""
+
 from __future__ import annotations
 
 import logging
@@ -61,32 +69,46 @@ CartesianT = TypeVar("CartesianT", bound="CartesianCoordinates")
 
 
 class Abstract3dKw(TypedDict, total=False):
+    """Optional keyword arguments accepted by :class:`Abstract3dCoordinates`."""
+
     project_transformation: NotRequired[Array_4x4_T]
     socs_origin: NotRequired[Optional[Vector_3_T]]
 
 
 class CartesianKw(Abstract3dKw, total=False):
+    """Optional keyword arguments accepted by :class:`CartesianCoordinates`."""
+
     numerical_optimization_shift: NotRequired[Optional[OptimizedShift]]
     unshifted_bbox: NotRequired[Optional[MinMaxPoints]]
     _shift_applied_by: NotRequired[Optional[OptimizedShift]]
 
 
 class CartesianKwFull(CartesianKw, total=False):
+    """Full keyword surface for :class:`CartesianCoordinates` (includes ``arr``)."""
+
     arr: NotRequired[Array_Nx3_T]
 
 
 class AbstractCoordinates(FixedLengthArray, ABC):
+    """Abstract base for all coordinate classes; carries a UUID4 identity."""
+
     id: UUID4 = Field(default_factory=uuid.uuid4, alias="_id")
 
 
 class Abstract2dCoordinates(ArrayNx2, AbstractCoordinates, ABC):
-    @property
-    @abstractmethod
-    def row(self) -> npt.NDArray[Any]: ...
+    """Abstract base for 2D coordinate classes exposing ``row`` and ``col``."""
 
     @property
     @abstractmethod
-    def col(self) -> npt.NDArray[Any]: ...
+    def row(self) -> npt.NDArray[Any]:
+        """Return the row component of the 2D coordinates."""
+        ...
+
+    @property
+    @abstractmethod
+    def col(self) -> npt.NDArray[Any]:
+        """Return the column component of the 2D coordinates."""
+        ...
 
 
 class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates, ABC):
@@ -107,23 +129,25 @@ class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates, ABC):
 
     @property
     @abstractmethod
-    def xyz(self) -> npt.NDArray[np.floating]: ...
-
-    """Return the cartesian coordinates as XYZ"""
+    def xyz(self) -> npt.NDArray[np.floating]:
+        """Return the Cartesian coordinates as ``(N, 3)`` XYZ."""
+        ...
 
     @property
     @abstractmethod
-    def spher(self) -> npt.NDArray[np.floating]: ...
-
-    """Return the spherical coordinates as RHV"""
+    def spher(self) -> npt.NDArray[np.floating]:
+        """Return the spherical coordinates as ``(N, 3)`` RHV."""
+        ...
 
     def __matmul__(self, other: Any) -> Self:
+        """Reject left matrix multiplication on coordinates (use ``self.arr @ b`` instead)."""
         raise NotImplementedError(
             "Left matrix multiplication is not supported for coordinates class. "
             "If necessary, access the array data directly: y = a.arr @ b"
         )
 
     def __rmatmul__(self, matrix: Any) -> Self:
+        """Right matrix multiplication: apply a 4x4 homogeneous or 3x3 rotation/scale matrix."""
         # 4x4 Homogeneous transform matrix
         if matrix.shape == (4, 4):
             if np.all(matrix[3, :] == [0, 0, 0, 1]):
@@ -143,6 +167,7 @@ class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates, ABC):
 
     @validate_call(config=DEFAULT_CONFIG)
     def __imatmul__(self, other: Any) -> Self:
+        """Reject in-place matrix multiplication; use ``x = A @ x`` instead."""
         raise NotImplementedError(
             "In place matrix multiplication not supported to avoid ambiguity between left and right multiplication.\n"
             "Use direct assignment instead. E.g. x = A @ x"
@@ -177,20 +202,23 @@ class CartesianCoordinates(Abstract3dCoordinates):
     def __init__(self, /, **kwargs: Unpack[CartesianKwFull]): ...
 
     def __init__(self, /, xyz: Optional[Array_Nx3_T | Self] = None, **kwargs: Unpack[CartesianKwFull]):
-        """When initialised, a CartesianCoordinates object is to automatically compute a numerical optimization
-        shift upon initialization.
+        """Build a :class:`CartesianCoordinates`, auto-computing a numerical-precision shift.
 
-        This attempts to reduce the point cloud data type to Float32 for reduced memory usage and faster computations.
-
-        The user can set this to None if they want to force the coordinates to use the input precision end maintain
-        their original coordinate systems.
+        On construction the object attempts to apply a numerical-precision
+        shift so the coordinates fit in ``float32`` without loss. The user can
+        pass ``numerical_optimization_shift=None`` to force the coordinates to
+        keep the input precision and original coordinate system.
 
         Parameters
         ----------
-        xyz: Array_Nx3_T | Self
-        socs_origin: Vector_3_T | None
-        numerical_optimization_shift: OptimizedShift | None
-        kwargs: dict[str, Any]
+        xyz : Array_Nx3_T | Self, optional
+            XYZ coordinates as an ``(N, 3)`` array, or another
+            :class:`CartesianCoordinates` instance to copy from. May also be
+            supplied via the ``arr=`` keyword.
+        **kwargs
+            Optional fields: ``socs_origin``, ``project_transformation``,
+            ``numerical_optimization_shift``, ``unshifted_bbox``,
+            ``_shift_applied_by``.
         """
         # Accept xyz/arr as a positional argument
         if xyz is not None:
@@ -208,16 +236,12 @@ class CartesianCoordinates(Abstract3dCoordinates):
         self._process_shift()
 
     def compute_unshifted_bbox(self, overwrite: bool = False):
-        """Computes the bounding box for the point cloud's original coordinates
+        """Compute the bounding box of the point cloud's original (unshifted) coordinates.
 
         Parameters
         ----------
-        overwrite: bool
-            Flag to indicate that these should be recomputed even if they exist.
-
-        Returns
-        -------
-
+        overwrite : bool, default=False
+            Recompute the bounding box even if one is already cached.
         """
         if self.unshifted_bbox is None or overwrite:
             applied_shift = None if self._shift_applied_by is None else self._shift_applied_by.value
@@ -227,20 +251,20 @@ class CartesianCoordinates(Abstract3dCoordinates):
             )
 
     def _process_shift(self):
-        """
-        Handles the different cases of self.numerical_optimization_shift and self._shift_applied_by that are passed
+        """Resolve the four-case state machine between ``_shift_applied_by`` and ``numerical_optimization_shift``.
 
-        Case 1 - prev_shift is None, NOS is None
-          Basic init, register to NOS
+        Cases:
 
-        Case 2 - prev_shift is None, NOS exists
-          Revert to prev_shift, convert to float64, unregister prev_shift
-
-        Case 3 - prev_shift exists, NOS is None
-          register to NOS
-
-        Case 4 - prev_shift exists, NOS exists
-          If same, register to NOS. Else, apply difference, unregister prev, register NOS
+        - Case 1 -- ``prev_shift is None``, ``NOS is None``:
+          basic init, register to NOS.
+        - Case 2 -- ``prev_shift is None``, ``NOS`` exists:
+          revert to ``prev_shift``, convert to ``float64``, unregister
+          ``prev_shift``.
+        - Case 3 -- ``prev_shift`` exists, ``NOS is None``:
+          register to NOS.
+        - Case 4 -- ``prev_shift`` exists, ``NOS`` exists:
+          if same, register to NOS; else apply the difference, unregister
+          ``prev``, register ``NOS``.
         """
         prev_shift = self._shift_applied_by
         if self.numerical_optimization_shift is not None:
@@ -270,40 +294,40 @@ class CartesianCoordinates(Abstract3dCoordinates):
         object.__setattr__(self, "_shift_applied_by", self.numerical_optimization_shift)
 
     def reduce(self, index: IndexLike) -> None:
-        """Reduce the coordinates to a defined point set indicated by an index object.
+        """Reduce the coordinates to the point set selected by ``index`` (in place).
 
         Supports both numpy basic and advanced indexing.
 
         Parameters
         ----------
-        index: IndexLike
-
-        Returns
-        -------
-
+        index : IndexLike
+            Index or boolean mask selecting the rows to keep.
         """
         super().reduce(index)
         self.compute_unshifted_bbox(overwrite=True)  # In case limits have been reduced
 
     def sample(self, index: IndexLike) -> Self:
-        """Sample a copy of the coordinates using a predefined index object
+        """Sample a copy of the coordinates using ``index``.
 
         Parameters
         ----------
-        index: IndexLike
+        index : IndexLike
+            Index or boolean mask selecting the rows to keep.
 
         Returns
         -------
         CartesianCoordinates
+            New :class:`CartesianCoordinates` carrying the sampled rows.
         """
         new_sample: Self = super().sample(index)
         new_sample.compute_unshifted_bbox(overwrite=True)
         return new_sample
 
     def update_shift(self, delta_shift: Vector_3_T) -> None:
-        """
-        Updates the shift of the vector by adding the specified delta shift. Adjusts the data type
-        of the updated vectors based on whether numerical optimization shift is defined.
+        """Apply ``delta_shift`` to the coordinates and adjust the dtype accordingly.
+
+        The dtype of the updated vectors is ``float32`` when a
+        numerical-optimization shift is registered, and ``float64`` otherwise.
 
         Parameters
         ----------
@@ -316,13 +340,12 @@ class CartesianCoordinates(Abstract3dCoordinates):
             self.socs_origin = (self.socs_origin + delta_shift).astype(target_dtype, copy=False)
 
     def _register_with_shift_at_osm(self) -> None:
-        """
-        This function tries to register its numerical_optimization_shift with the osm.
-        The osm determines if this is valid and possibly returns a different shift, or None if infeasible.
+        """Register ``self.numerical_optimization_shift`` with the :class:`OptimizedShiftManager`.
 
-        Returns
-        -------
-
+        The manager determines whether the requested shift is feasible. It may
+        return a different shift, or ``None`` if no shift is feasible — in
+        which case ``self.numerical_optimization_shift`` is reset to ``None``
+        and the coordinates continue in ``float64`` mode.
         """
         osm = OptimizedShiftManager()
         try:
@@ -336,6 +359,7 @@ class CartesianCoordinates(Abstract3dCoordinates):
             object.__setattr__(self, "numerical_optimization_shift", None)
 
     def __setattr__(self, key, value):
+        """Guard ``_shift_applied_by`` and rerun ``_process_shift`` on ``numerical_optimization_shift`` assignment."""
         if key == "_shift_applied_by":
             raise AttributeError("Cannot assign to '{key}'")
         if key == "numerical_optimization_shift":
@@ -345,24 +369,28 @@ class CartesianCoordinates(Abstract3dCoordinates):
         super().__setattr__(key, value)
 
     def __hash__(self) -> int:
+        """Return a hash based on object identity (id)."""
         return id(self)
 
     def model_dump(self, **kwargs: Any) -> dict[str, Any]:
-        """Returns the CartesianCoordinates class/model dumped as a dictionary.
+        """Dump the model to a dict, preserving the private ``_shift_applied_by`` attribute.
 
         Parameters
         ----------
-        kwargs: dict[str, Any]
+        **kwargs
+            Passed through to :meth:`pydantic.BaseModel.model_dump`.
 
         Returns
         -------
         dict[str, Any]
+            Model state including ``_shift_applied_by``.
         """
         data = super().model_dump(**kwargs)
         data["_shift_applied_by"] = self._shift_applied_by
         return data
 
     def __reduce__(self) -> Any:
+        """Return the (callable, state) tuple used by :mod:`pickle` to reconstruct ``self``."""
         logger.debug(f"Running `{self.__class__}.reduce()` on {self.id}")
         state = self.model_dump()
         # state["_shift_applied"] = self._shift_applied
@@ -483,38 +511,40 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
     @property
     def x(self) -> Vector_Float_T:
-        """Return the X coordinate"""
+        """Return the X component of the coordinates."""
         return self.arr[:, 0]
 
     @property
     def y(self) -> Vector_Float_T:
-        """Return the Y coordinate"""
+        """Return the Y component of the coordinates."""
         return self.arr[:, 1]
 
     @property
     def z(self) -> Vector_Float_T:
-        """Return the Z coordinate"""
+        """Return the Z component of the coordinates."""
         return self.arr[:, 2]
 
     @property
     def xyz(self) -> Array_Nx3_Float_T:
-        """Return the XYZ coordinates as a numpy array"""
+        """Return the XYZ coordinates as a numpy array."""
         return self.arr
 
     @property
     def yxz(self) -> Array_Nx3_Float_T:
-        """Return the coordinates in YXZ order"""
+        """Return the coordinates in YXZ column order."""
         return self.xyz[:, [1, 0, 2]]
 
     @cached_property
     def spher(self) -> Array_Nx3_Float_T:
-        """Returns the coordinates as spherical coordinates based on the `socs_origin`.
+        """Return the coordinates in spherical RHV form relative to ``socs_origin``.
 
-        If `socs_origin` is not defined, it treats (0, 0, 0) as the origin.
+        When ``socs_origin`` is undefined, ``(0, 0, 0)`` is treated as the
+        origin.
 
         Returns
         -------
         Array_Nx3_Float_T
+            Spherical coordinates as ``(N, 3)`` ``[range, horizontal, vertical]``.
         """
         if self.socs_origin is not None:
             return xyz2rhv(self.arr, self.socs_origin)
@@ -584,55 +614,58 @@ class CartesianCoordinates(Abstract3dCoordinates):
         return FoV.from_angles(self.hz, self.v)
 
     def rotate(self, rotation: Array_3x3_T) -> None:
-        """Rotates the current coordinates
+        """Rotate the current coordinates in place by a 3x3 rotation matrix.
 
         Parameters
         ----------
         rotation : Array_3x3_T
-
-        Returns
-        -------
+            3x3 rotation matrix.
         """
         self.arr = (rotation @ self.T).T
 
     def translate(self, translation: Vector_3_T) -> None:
-        """Translates the current coordinates
+        """Translate the current coordinates in place.
 
         Parameters
         ----------
         translation : Vector_3_T
+            Translation vector added to each coordinate.
         """
         self.arr += translation
 
     def scale(self, scale: Vector_3_T) -> None:
-        """Scales the current coordinates
+        """Scale the current coordinates in place (component-wise).
 
         Parameters
         ----------
         scale : Vector_3_T
+            Per-axis scale vector multiplied onto the coordinates.
         """
         self.arr *= scale
 
     def transform(self, affine: Array_4x4_T) -> None:
-        """Transforms the current coordinates using the specified affine matrix.
+        """Transform the current coordinates in place using a 4x4 affine matrix.
 
         Parameters
         ----------
         affine : Array_4x4_T
+            4x4 affine transformation matrix.
         """
         self.arr = (affine @ self.H.T).T[:, :3]
 
     @classmethod
     def from_spherical(cls, spher: Array_Nx3_T) -> Self:
-        """Creates an instance from spherical coordinates in RHV format.
+        """Build an instance from spherical coordinates in RHV format.
 
         Parameters
         ----------
         spher : Array_Nx3_T
+            Spherical coordinates as ``(N, 3)`` ``[range, horizontal, vertical]``.
 
         Returns
         -------
         Self
+            New :class:`CartesianCoordinates` built from the converted XYZ.
         """
         return cls(xyz=rhv2xyz(spher))
 
@@ -739,8 +772,7 @@ def rhv2xyz(spher: Array_Nx3_T, scan_origin: Optional[Vector_3_T] = None) -> Arr
 
 @validate_call(config=DEFAULT_CONFIG)
 def xyz2rhv(xyz: Array_Nx3_T, scan_origin: Optional[Vector_3_T] = None) -> Array_Nx3_T:
-    """
-    Converts Cartesian coordinates (XYZ) to spherical coordinates (RHV).
+    """Convert Cartesian coordinates (XYZ) to spherical coordinates (RHV).
 
     The resulting spherical coordinates include the slope distance, horizontal angle,
     and zenith angle calculated from Cartesian coordinates. If a scan origin is

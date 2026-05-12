@@ -6,6 +6,8 @@
 #
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
+"""Geometry utilities: outline polygons and min/max bounding-box helpers."""
+
 from __future__ import annotations
 
 import logging
@@ -26,7 +28,7 @@ logger = logging.getLogger(__name__.split(".")[0])
 def get_outline_polygon(  # noqa: C901  # Plane-axis dispatch + alpha-shape branching; refactor deferred to Phase 6 / PERF-02.
     pcd: PointCloudData, plane: str, alpha_value: float = 10.0, nb_points: int = -1
 ) -> Polygon:
-    """Computes the outline of the point cloud as a polygon in a specific 2D projection.
+    """Compute the outline of the point cloud as a polygon in a specific 2D projection.
 
     Parameters
     ----------
@@ -113,19 +115,21 @@ class MinMaxPoints(NamedTuple):
 
     @classmethod
     def from_points(cls, points: Array_Nx3_T, already_applied_shift_vec: Optional[Vector_3_T] = None) -> Self:
-        """Create an instance from a given set of points
+        """Create an instance from a given set of points.
 
         Parameters
         ----------
         points : Array_Nx3_T
-        already_applied_shift_vec : Optional[Vector_3_T], optional
-            If provided, a vector that represents a shift applied to the points before
+            Input ``(N, 3)`` array of points.
+        already_applied_shift_vec : Vector_3_T, optional
+            If provided, a vector that represents a shift already applied to
+            the points; it is added back when computing the min/max.
 
         Returns
         -------
         Self
-            An instance of the class initialized with the calculated minimum and maximum points
-            based on the given points and the shift vector.
+            An instance of the class initialized with the calculated minimum
+            and maximum points based on the given points and the shift vector.
         """
         if len(points) == 0:
             return cls(np.zeros(3), np.zeros(3))
@@ -156,29 +160,32 @@ class MinMaxPoints(NamedTuple):
 
     @property
     def central_point(self) -> Vector_3_T:
-        """Return the center point of the bounding box
+        """Return the center point of the bounding box.
 
         Returns
         -------
         Vector_3_T
+            The midpoint of ``(minimum, maximum)``.
         """
         return np.mean(np.vstack((self.minimum, self.maximum)), axis=0)
 
     @property
     def extents(self) -> Vector_3_T:
-        """Return the extents of the bounding box
+        """Return the per-axis extents of the bounding box.
 
         Returns
         -------
         Vector_3_T
+            ``maximum - minimum`` per axis.
         """
         return self.maximum - self.minimum
 
     def __array__(self) -> Array_Nx3_T:
-        """Enables the use of the MinMaxPoints object as an array.
+        """Expose the bounding box as a ``(2, 3)`` numpy array (min, max stacked vertically).
 
         Returns
         -------
         Array_Nx3_T
+            Vertical stack of ``(minimum, maximum)``.
         """
         return np.vstack((self.minimum, self.maximum))

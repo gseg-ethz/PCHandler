@@ -25,18 +25,21 @@ from pydantic import (
 
 
 class _TransformArray(NumericMixins):
-    """Base Validated Transformation Array class"""
+    """Base validated transformation-array class."""
 
     def __matmul__(self, other: Array_Float_T | BaseArray) -> Array_Float_T | BaseArray:
-        """Matrix multiplication ensuring other `BaseArray` inherited objects return as their own type
+        """Matrix multiply, preserving ``BaseArray`` subclass return types.
 
         Parameters
         ----------
         other : Array_Float_T | BaseArray
+            Right-hand operand.
 
         Returns
         -------
         Array_Float_T | BaseArray
+            Product. Returns a ``BaseArray`` instance when ``other`` is one,
+            otherwise a plain numpy array.
         """
         if isinstance(other, FixedLengthArray) and other.ndim > 1:  # Coordinates and PointCloudData
             return other.__rmatmul__(self)
@@ -50,119 +53,129 @@ class _TransformArray(NumericMixins):
             return self.arr @ other
 
     def __imatmul__(self, other: Array_Float_T | BaseArray) -> Self:
-        """Perform in place multiplication
-
-        Supports chaining Transformations
+        """Perform in-place matrix multiplication, supporting transform chaining.
 
         Parameters
         ----------
         other : Array_Float_T or BaseArray
+            Right-hand operand.
 
         Returns
         -------
         Self
+            ``self`` after the in-place update.
         """
         self.arr @= other
         return self
 
 
 class _Transform3x3(_TransformArray):
-    """3x3 Transformation Array class
+    """3x3 transformation-array class.
 
     Parameters
     ----------
     arr : Array_3x3_T
+        3x3 transformation matrix; defaults to the identity.
     """
 
     arr: Array_3x3_T = Field(default_factory=lambda: np.eye(3))
 
 
 class _Transform4x4(_TransformArray):
-    """4x4 Transformation Array class
+    """4x4 transformation-array class.
 
     Parameters
     ----------
     arr : Array_4x4_T
+        4x4 transformation matrix; defaults to the identity.
     """
 
     arr: Array_4x4_T = Field(default_factory=lambda: np.eye(4))
 
 
 class Transform(_Transform4x4):
-    """Point Cloud Transformation Array class
+    """Point-cloud transformation-array class (4x4 affine).
 
     Parameters
     ----------
     arr : Array_4x4_T
+        4x4 affine transformation matrix.
     """
 
     def __init__(self, arr: Array_Float_T | Array_4x4_T | Self, **kwargs):
-        """
-        Initializes an instance of the class with the given array and additional keyword arguments.
+        """Initialize a :class:`Transform` from a 4x4 array or compatible source.
 
         Parameters
         ----------
         arr : Array_Float_T or Array_4x4_T or Self
             Input array or object used for initialization.
-        kwargs : dict
-            Additional options or settings for initialization.
+        **kwargs
+            Additional keyword arguments forwarded to the base class.
         """
         super().__init__(arr=arr, **kwargs)
 
     @classmethod
     def from_translation(cls, vector: Vector_3_T) -> Transform:
-        """Create a Transform object from a translation vector
+        """Build a :class:`Transform` from a translation vector.
 
         Parameters
         ----------
         vector : Vector_3_T
+            Translation vector.
 
         Returns
         -------
         Transform
+            Affine transform applying ``vector``.
         """
         return cls.generate(translation=vector)
 
     @classmethod
     def from_rotation(cls, matrix: Array_3x3_T) -> Transform:
-        """Create a Transform object from a rotation matrix
+        """Build a :class:`Transform` from a 3x3 rotation matrix.
 
         Parameters
         ----------
         matrix : Array_3x3_T
+            3x3 rotation matrix.
 
         Returns
         -------
         Transform
+            Affine transform applying ``matrix``.
         """
         return cls.generate(rotation=matrix)
 
     @classmethod
     def from_affine(cls, matrix: Array_4x4_T) -> Transform:
-        """Creates a Transform object from a 4x4 affine matrix.
+        """Build a :class:`Transform` from a 4x4 affine matrix.
 
         Parameters
         ----------
         matrix : Array_4x4_T
+            4x4 affine transformation matrix.
 
         Returns
         -------
         Transform
+            Transform wrapping the supplied matrix.
         """
         return cls(matrix)
 
     @classmethod
     def from_scale(cls, vector: Vector_3_T | float) -> Transform:
-        """Create a Transform object from a scaling vector or scale factor
+        """Build a :class:`Transform` from a scale vector or uniform scalar.
 
         Parameters
         ----------
         vector : Vector_3_T or float
-            If a scalar (float) is provided, uniform scaling is applied to all dimensions.
+            If a scalar (float) is provided, uniform scaling is applied to all
+            dimensions.
 
         Returns
         -------
         Transform
+            Affine transform applying the requested scale.
         """
         return cls.generate(scale=vector)
 

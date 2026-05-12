@@ -6,6 +6,8 @@
 #
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
+"""Multiprocessing-based point-cloud splitters keyed on FoV trees."""
+
 import logging
 import warnings
 from abc import ABC, abstractmethod
@@ -28,17 +30,17 @@ FoVSplitMethodT = Literal["iterative"] | Literal["direct"]
 
 
 def check_number_jobs(n_jobs: int):
-    """Validate the number of jobs to be started based on the CPU count
+    """Validate the requested number of parallel jobs against the available CPU count.
 
     Parameters
     ----------
     n_jobs : int
-        Input number of jobs
+        Input number of jobs.
 
     Returns
     -------
     int
-        Returned number of jobs
+        Validated job count (clamped to the available CPU count).
     """
     if n_jobs == 0:
         raise ValueError("n_jobs must be -1 or a positive integer value. Zero is not valid.")
@@ -58,15 +60,16 @@ NumberJobsT = Annotated[int, Field(gt=-NUM_CPUS, le=NUM_CPUS), BeforeValidator(c
 
 
 class PointCloudSplitter(ABC):
-    """Abstract class for point cloud splitting algorithms"""
+    """Abstract base class for point-cloud splitting algorithms."""
 
     @abstractmethod
     def split(self, pcd: PointCloudData) -> dict[str, PointCloudData]:
-        """Splits a point cloud into multiple segments.
+        """Split a point cloud into multiple segments.
 
         Parameters
         ----------
         pcd : PointCloudData
+            Point cloud to split.
 
         Returns
         -------
@@ -77,7 +80,7 @@ class PointCloudSplitter(ABC):
 
 
 class FoVTreePointCloudSplitter(PointCloudSplitter):
-    """Splits a point cloud into smaller subsets based on a field-of-view (FoV) tree"""
+    """Split a point cloud into smaller subsets based on a field-of-view (FoV) tree."""
 
     # Todo: Check how validate_variables interacts with initializers...got weird errors
     # DISCUSS: Still relevant?
@@ -130,16 +133,19 @@ class FoVTreePointCloudSplitter(PointCloudSplitter):
         return splits
 
     def _direct_split(self, pcd: PointCloudData, fov_tree: FoVTree) -> dict[str, PointCloudData]:
-        """Performs the direct split method
+        """Perform the direct (single-pass) split method.
 
         Parameters
         ----------
         pcd : PointCloudData
+            Source point cloud.
         fov_tree : FoVTree
+            FoV tree defining the split structure.
 
         Returns
         -------
         dict[str, PointCloudData]
+            Map of FoV identifier to split point cloud.
         """
         fov_list: list[tuple[str, FoV]] = fov_tree.to_list()
 
@@ -155,13 +161,16 @@ class FoVTreePointCloudSplitter(PointCloudSplitter):
         return dict(splits)
 
     def _process_direct_task(self, pcd: PointCloudData, fov_id: str, fov: FoV) -> tuple[str, PointCloudData]:
-        """Process a single task consisting
+        """Process a single direct-split task (one FoV out of the flattened tree).
 
         Parameters
         ----------
         pcd : PointCloudData
+            Source point cloud.
         fov_id : str
+            Identifier for the FoV.
         fov : FoV
+            FoV bounding the sub-cloud.
 
         Returns
         -------
@@ -173,11 +182,14 @@ class FoVTreePointCloudSplitter(PointCloudSplitter):
         return fov_id, new_pcd
 
     def _iterative_split(self, pcd: PointCloudData, fov_tree: FoVTree) -> dict[str, PointCloudData]:
-        """Perform the iterative split method
+        """Perform the iterative (level-by-level) split method.
 
         Parameters
         ----------
         pcd : PointCloudData
+            Source point cloud.
+        fov_tree : FoVTree
+            FoV tree defining the split structure.
 
         Returns
         -------
@@ -209,18 +221,23 @@ class FoVTreePointCloudSplitter(PointCloudSplitter):
     def _process_iterative_task(
         self, pcd: PointCloudData, fov_tree: FoVTree
     ) -> tuple[dict[str, PointCloudData], list[tuple[PointCloudData, FoVTree]]]:
-        """Process a single iteration task
+        """Process a single iterative-split task at one node of the FoV tree.
 
-        If the node is a leaf, returns the result; otherwise, returns new tasks for each child.
+        If the node is a leaf, returns the result; otherwise, returns new
+        tasks for each child.
 
         Parameters
         ----------
         pcd : PointCloudData
+            Source point cloud at this node.
+        fov_tree : FoVTree
+            The current sub-tree node.
 
         Returns
         -------
         tuple
-            A tuple with a dictionary of results (empty if not a leaf) and a list of new tasks.
+            A tuple with a dictionary of results (empty if not a leaf) and a
+            list of new tasks.
         """
         if fov_tree.is_leaf():
             return {fov_tree.identifier: pcd}, []
@@ -240,7 +257,7 @@ def split_pc_with_fov_tree(
     pcd: PointCloudData, fov_tree: FoVTree, remove_empty: bool = True, n_jobs: NumberJobsT = -1
 ) -> dict[str, PointCloudData]:
     # -> list[tuple[str, FoV, PointCloudData]]:
-    """Splits a PointCloudData instance using a FoVTree.
+    """Split a PointCloudData instance using a FoVTree (free-function variant).
 
     Parameters
     ----------
