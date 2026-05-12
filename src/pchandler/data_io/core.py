@@ -6,8 +6,13 @@
 #
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
-"""
-Base module for I/O handlers and supporting methods
+"""Base module for I/O handlers and supporting helper methods.
+
+Defines :class:`AbstractIOHandler` (the contract every per-format handler
+implements), :data:`SUPPORTED_TYPES` (the canonical set of file suffixes
+:func:`pchandler.load_file` accepts), :func:`find_point_cloud_in_directory`
+(directory-walking helper), and the private name-cleaning and dtype-derivation
+helpers used by the concrete handlers.
 """
 
 import copy
@@ -59,6 +64,16 @@ SUPPORTED_TYPES = (".ply", ".las", ".laz", ".txt", ".csv", ".pts", ".e57")
 
 
 class PointCloudDataKW(TypedDict, total=False):
+    """Keyword-arguments accepted when constructing a :class:`PointCloudData` via an I/O handler.
+
+    Attributes
+    ----------
+    socs_origin : Vector_3_T | None
+        Scan original coordinate-system origin (used for conversion to spherical coordinates).
+    numerical_optimization_shift : OptimizedShift | None
+        Optional pre-existing numerical-precision shift to attach to the loaded cloud.
+    """
+
     socs_origin: Optional[Vector_3_T]
     numerical_optimization_shift: Optional[OptimizedShift]
 
@@ -98,22 +113,32 @@ def find_point_cloud_in_directory(
 
 
 class AbstractIOHandler(ABC):
-    """Abstract I/O handler class"""
+    """Abstract base class for per-format point-cloud I/O handlers.
+
+    Concrete subclasses (:class:`PlyHandler`, :class:`LasHandler`, etc.)
+    declare the file extensions they support via :attr:`FORMATS` and
+    implement :meth:`load` and :meth:`save`. Shared helpers for field-name
+    cleaning, dtype assembly, and structured-array generation are provided
+    here.
+    """
 
     FORMATS: list[str] = []
 
     @classmethod
     def find_pcds_in_directory(cls, directory_path: str | Path, include_subdirectories: bool = True) -> list[Path]:
-        """Find all point cloud files in a specified directory
+        """Find all point cloud files in a specified directory.
 
         Parameters
         ----------
-        directory_path : str or Path
+        directory_path : str | Path
+            Directory to search.
         include_subdirectories : bool, default=True
+            If ``True``, recurse into subdirectories.
 
         Returns
         -------
-        list of Path
+        list[Path]
+            Paths to all point-cloud files whose suffix matches :attr:`FORMATS`.
         """
         return find_point_cloud_in_directory(Path(directory_path), cls.FORMATS, include_subdirectories)
 
@@ -127,7 +152,9 @@ class AbstractIOHandler(ABC):
         remove_prefix: bool = True,
         prefix: str = "scalar_",
         **pcd_kw: Unpack[PointCloudDataKW],
-    ) -> PointCloudData | Generator[PointCloudData, None, None]: ...
+    ) -> PointCloudData | Generator[PointCloudData, None, None]:
+        """Load a point cloud (or stream of point clouds) from ``path`` — implemented by subclasses."""
+        ...
 
     @classmethod
     @abstractmethod
@@ -141,13 +168,15 @@ class AbstractIOHandler(ABC):
         prefix: str = "scalar_",
         revert_sf_types: bool = False,
         **config: dict[str, Any],
-    ) -> None: ...
+    ) -> None:
+        """Save ``pcd`` to ``path`` — implemented by subclasses."""
+        ...
 
     @classmethod
     def _validate_field_selection(
         cls, input_selection: list[str] | None, header_fields: list[str], remove_prefix: bool, prefix: str
     ) -> dict[str, str]:
-        """Validates and resolves field selection based on user input and header fields.
+        """Validate and resolve a field selection against the file's header fields.
 
         Parameters
         ----------
@@ -194,16 +223,19 @@ class AbstractIOHandler(ABC):
 
     @classmethod
     def extract_xyz(cls, data: BaseDataT, num_points: int) -> Array_Nx3_T:
-        """Extract XYZ components from the given structured array or dict
+        """Extract XYZ components from the given structured array or dict.
 
         Parameters
         ----------
         data : BaseDataT
+            Structured-array or dict keyed by ``x`` / ``y`` / ``z``.
         num_points : int
+            Number of points in ``data``.
 
         Returns
         -------
         Array_Nx3_T
+            An ``(N, 3)`` array assembled from the three coordinate columns.
         """
         xyz = np.empty((num_points, 3), dtype=data["x"].dtype)
 
@@ -216,14 +248,17 @@ class AbstractIOHandler(ABC):
     def extract_scalar_fields(
         cls, pcd: PointCloudData, data: BaseDataT, num_points: int, field_names: dict[str, str]
     ) -> None:
-        """Extract scalar fields from the given structured array or dict
+        """Extract scalar fields from the given structured array or dict and attach them to ``pcd``.
 
         Parameters
         ----------
         pcd : PointCloudData
+            Point cloud to populate with scalar fields.
         data : BaseDataT
+            Structured array or dict containing per-point scalar columns.
         num_points : int
-        field_names : dict of str, str
+            Number of points in ``data``.
+        field_names : dict[str, str]
             Mapping of scalar field names to their corresponding data keys in the dataset.
         """
         sf_keys = list(field_names.keys())
@@ -256,19 +291,25 @@ class AbstractIOHandler(ABC):
     def _extract_scalar_field_triplet(
         data: BaseDataT, n: int, field_names: list[str], sf_class: type[SF_T], field_name_map: dict[str, str]
     ) -> SF_T | None:
-        """Extract scalar field triplet types from the structured array or dict.
+        """Extract scalar-field triplet types from the structured array or dict.
 
         Parameters
         ----------
-        data: BaseDataT
-        n: int
-        field_names: list of str
-        sf_class: type[SF_T]
-        field_name_map: dict of str to str
+        data : BaseDataT
+            Structured array or dict keyed by per-column field names.
+        n : int
+            Number of points.
+        field_names : list[str]
+            The three field names making up the triplet (e.g. ``["r", "g", "b"]``).
+        sf_class : type[SF_T]
+            Triplet-typed scalar field class to instantiate (e.g. :class:`RGBFields`).
+        field_name_map : dict[str, str]
+            Mapping from canonical field name to the actual data key in ``data``.
 
         Returns
         -------
-        SF_T or None
+        SF_T | None
+            The constructed triplet, or ``None`` if all values are zero (treated as "field absent").
         """
         array = np.empty((n, 3), dtype=data[field_name_map[field_names[0]]].dtype)
 
@@ -283,17 +324,21 @@ class AbstractIOHandler(ABC):
 
     @staticmethod
     def _extract_scalar_field(data: BaseDataT, name: str, field_name_map: dict[str, str]) -> ScalarField | None:
-        """Extract scalar field from the structured array or dict.
+        """Extract a single scalar field from the structured array or dict.
 
         Parameters
         ----------
-        data: BaseDataT
-        name: str
-        field_name_map: dict[str, str]
+        data : BaseDataT
+            Structured array or dict keyed by per-column field names.
+        name : str
+            Canonical scalar-field name (e.g. ``"intensity"``).
+        field_name_map : dict[str, str]
+            Mapping from canonical field name to the actual data key in ``data``.
 
         Returns
         -------
         ScalarField | None
+            The constructed scalar field, or ``None`` if all values are zero (treated as "field absent").
         """
         arr = data[field_name_map[name]]
 
@@ -307,17 +352,22 @@ class AbstractIOHandler(ABC):
     def _generate_struct_dtype(  # noqa: C901  # Multi-format dtype assembly; refactor deferred to Phase 6 tech-debt sweep.
         cls, pcd: PointCloudData, scalar_fields: list[str], revert_sf_types: bool
     ) -> DtypeDict:
-        """Generate a numpy dtype for initialising a structured array
+        """Generate a numpy structured-array dtype description for ``pcd``.
 
         Parameters
         ----------
-        pcd: PointCloudData
-        scalar_fields: list of str
-        revert_sf_types: bool
+        pcd : PointCloudData
+            Source point cloud.
+        scalar_fields : list[str]
+            Scalar-field names to include.
+        revert_sf_types : bool
+            If ``True``, restore the scalar field's original on-disk dtype
+            (via :attr:`origin_dtype`); otherwise use the in-memory dtype.
 
         Returns
         -------
         DtypeDict
+            A ``names``/``formats`` pair suitable for :func:`numpy.dtype`.
         """
         # Leverage dict to avoid any duplicates of using 'rgb' or 'r', 'g', 'b', for example
         dtype_dict = DtypeDict(names=[], formats=[])
@@ -386,19 +436,25 @@ class AbstractIOHandler(ABC):
         prefix: str,
         revert_sf_types: bool,
     ) -> npt.NDArray[Any]:
-        """Generate a structured array from the existing data for I/O purposes
+        """Generate a structured numpy array from ``pcd`` for I/O purposes.
 
         Parameters
         ----------
-        pcd: PointCloudData
-        scalar_fields: list of str or None
-        add_prefix: bool
-        prefix: str
-        revert_sf_types: bool
+        pcd : PointCloudData
+            Source point cloud.
+        scalar_fields : list[str] | None
+            Scalar-field names to include (``None`` keeps every field on the cloud).
+        add_prefix : bool
+            If ``True``, prepend ``prefix`` to non-XYZ / non-RGB / non-normal field names.
+        prefix : str
+            Prefix to prepend when ``add_prefix`` is ``True``.
+        revert_sf_types : bool
+            If ``True``, restore each scalar field's original on-disk dtype.
 
         Returns
         -------
         npt.NDArray[Any]
+            A flat 1-D structured array with one record per point.
         """
         prefix = prefix if add_prefix else ""
 
@@ -477,16 +533,20 @@ def _get_rgb_or_normal_field_names(input_names: list[str], target_field: _NameCo
 
 
 def _get_sf_dtype(scalar_field: ScalarField | ScalarFieldTriplet, revert_sf_types: bool) -> npt.DTypeLike:
-    """Get the dtype of a scalar field
+    """Get the dtype of a scalar field.
 
     Parameters
     ----------
-    scalar_field: ScalarField | ScalarFieldTriplet
-    revert_sf_types: bool
+    scalar_field : ScalarField | ScalarFieldTriplet
+        Source scalar field.
+    revert_sf_types : bool
+        If ``True``, return the original on-disk dtype via :attr:`origin_dtype`;
+        otherwise return the current in-memory dtype.
 
     Returns
     -------
     npt.DTypeLike
+        The selected dtype.
     """
     if revert_sf_types:
         return scalar_field.origin_dtype.dtype
@@ -494,18 +554,25 @@ def _get_sf_dtype(scalar_field: ScalarField | ScalarFieldTriplet, revert_sf_type
 
 
 def _clean_field_names(column_names: list[str], func: Callable, **kwargs) -> dict[str, str]:
-    """Clean field names of restricted field names (X, Y, Z) and a dedicated function passed
+    """Clean column names via ``func`` and strip the X/Y/Z entries.
+
+    The X, Y, Z columns are always assumed to be the first three columns of
+    the file and are dropped from the returned mapping (unless they are the
+    *only* columns present).
 
     Parameters
     ----------
-    column_names : list of str
+    column_names : list[str]
+        Original column names from the file header.
     func : Callable
-    kwargs : dict[str, Any]
+        Per-name normalisation function (typically :func:`_clean_header_name`).
+    **kwargs : Any
+        Additional keyword arguments forwarded to ``func``.
 
     Returns
     -------
-    dic[str, str]]
-        A dictionary where the keys are cleaned names and the values are the original names.
+    dict[str, str]
+        Mapping from cleaned name to the original name.
     """
     cleaned_names = dict()
     for name in column_names:
@@ -524,30 +591,35 @@ def _clean_field_names(column_names: list[str], func: Callable, **kwargs) -> dic
 
 
 def _clean_string(name: str) -> str:
-    """Clean string of whitespace and convert to lowercase
+    """Clean a string of whitespace and convert to lowercase.
 
     Parameters
     ----------
     name : str
+        Input string.
 
     Returns
     -------
     str
+        ``name`` stripped of surrounding whitespace and lower-cased.
     """
     return name.strip().lower()
 
 
 def _clean_header_name(original_name: str, prefix: str) -> str:
-    """Recursively cleans and modifies a header name based on a given prefix.
+    """Recursively strip ``prefix`` from a cleaned header name.
 
     Parameters
     ----------
     original_name : str
+        Original column-header name.
     prefix : str
+        Prefix to strip (matched case-insensitively, applied repeatedly).
 
     Returns
     -------
     str
+        The cleaned, prefix-stripped name.
     """
     cleaned_name = _clean_string(original_name)
     prefix = prefix.lower()

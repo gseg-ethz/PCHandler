@@ -6,7 +6,7 @@
 #
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
-"""PLY file format handler class"""
+"""PLY file-format handler class."""
 
 import logging
 from datetime import datetime
@@ -44,24 +44,26 @@ class PlyHandler(AbstractIOHandler):
         prefix: str = "scalar_",
         **pcd_kw: Unpack[PointCloudDataKW],
     ) -> PointCloudData:
-        """Load a point cloud from a PLY file
+        """Load a point cloud from a PLY file.
 
         Parameters
         ----------
-        path : str or Path
+        path : str | Path
             Input PLY file path.
-        scalar_fields : list of str, default=None
-            List of specific scalar fields to extract from the PLY file.
-            Setting `None` will retrieve all scalar fields. Setting to `[]` will ignore scalar fields in the file.
+        scalar_fields : list[str], default=None
+            Specific scalar fields to extract from the PLY file.
+            ``None`` retrieves all scalar fields; ``[]`` ignores scalar fields.
         remove_prefix : bool, default=True
-            Flag to remove prefixes on scalar field names.
+            If ``True``, strip ``prefix`` from scalar-field names.
         prefix : str, default="scalar_"
-            Prefix to strip from scalar field names if `remove_prefix` is True.
-        **config : dict of str, Any
+            Prefix to strip from scalar-field names if ``remove_prefix`` is ``True``.
+        **pcd_kw : Unpack[PointCloudDataKW]
+            Additional keyword arguments forwarded to :class:`PointCloudData`.
 
         Returns
         -------
         PointCloudData
+            The loaded point cloud.
         """
         logger.info(f"Loading PLY file: {path}")
 
@@ -91,26 +93,27 @@ class PlyHandler(AbstractIOHandler):
         as_ascii: bool = False,
         **config: dict[str, Any],
     ) -> None:
-        """Save the point cloud data to a PLY file
+        """Save the point cloud data to a PLY file.
 
         Parameters
         ----------
-        pcd: PointCloudData
-            Point cloud object
-        path: str | Path
-            Path to save the PLY file to. File extension must be ".ply".
-        scalar_fields: list[str], default=None
-            List of specific scalar fields to extract from the PLY file.
-            Setting `None` will retrieve all scalar fields. Setting to `[]` will ignore scalar fields in the file.
-        add_prefix: bool, default=False
-            Flag to add prefixes on scalar field names
-        prefix: str, default="scalar_"
-            Prefix to strip from scalar field names if `remove_prefix` is True.
-        revert_sf_types: bool, default=False
-            Flag to revert scalar field values to their original types or not
-        as_ascii: bool, default=False
-            Write to ASCII file if `as_ascii` is True, otherwise write to binary file.
-        config: dict[str, Any]
+        pcd : PointCloudData
+            Point cloud to save.
+        path : str | Path
+            Output PLY file path (suffix must be ``.ply``).
+        scalar_fields : list[str], default=None
+            Specific scalar fields to write. ``None`` writes every field on
+            the cloud; ``[]`` writes XYZ only.
+        add_prefix : bool, default=False
+            If ``True``, prepend ``prefix`` to scalar-field column names.
+        prefix : str, default="scalar_"
+            Prefix to prepend when ``add_prefix`` is ``True``.
+        revert_sf_types : bool, default=False
+            If ``True``, restore each scalar field's original on-disk dtype.
+        as_ascii : bool, default=False
+            Write as ASCII PLY if ``True``, otherwise write a binary PLY.
+        **config : Any
+            Additional configuration (currently unused).
         """
         path = Path(path)
 

@@ -6,7 +6,7 @@
 #
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
-"""PCD file format handler class"""
+"""PCD file-format handler class (not yet implemented)."""
 
 import logging
 from pathlib import Path
@@ -29,44 +29,47 @@ class PcdHandler(AbstractIOHandler):
 
     @classmethod
     def load(cls, /, path: str | Path, **config) -> PointCloudData:  # type: ignore[override]
-        """Load a point cloud from a PCD file
+        """Load a point cloud from a PCD file.
 
-        ** NOT IMPLEMENTED YET **
+        *Not yet implemented.*
 
         Parameters
         ----------
-        path : str or Path
+        path : str | Path
             Input PCD file path.
-        **config : dict
+        **config : Any
+            Additional configuration (currently unused).
 
         Returns
         -------
         PointCloudData
+            Would return the loaded point cloud.
 
         Raises
         ------
         NotImplementedError
-            Raised when the method is not implemented.
+            Always — PCD loading is not yet implemented.
         """
         raise NotImplementedError()
 
     @classmethod
     def save(cls, /, pcd: PointCloudData, path: str | Path, **config) -> None:  # type: ignore[override]
-        """Save the point cloud data to a PCD file
+        """Save a point cloud to a PCD file.
 
-        ** NOT IMPLEMENTED YET **
+        *Not yet implemented.*
 
         Parameters
         ----------
         pcd : PointCloudData
-        path : str or Path
-        **config
-
-        Returns
-        -------
+            Point cloud to save.
+        path : str | Path
+            Output PCD file path.
+        **config : Any
+            Additional configuration (currently unused).
 
         Raises
         ------
         NotImplementedError
+            Always — PCD saving is not yet implemented.
         """
         raise NotImplementedError()

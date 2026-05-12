@@ -6,7 +6,7 @@
 #
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
-"""CSV / ASCII file format handler class"""
+"""E57 file-format handler class."""
 
 import logging
 from pathlib import Path
@@ -164,7 +164,7 @@ class E57Handler(AbstractIOHandler):
         ignore_missing_fields: bool = True,
         **pcd_kw: Unpack[PointCloudDataKW],
     ) -> PointCloudData:
-        """Load a single scan from an E57 file as a PointCloudData object"""
+        """Load a single scan from an E57 file as a :class:`PointCloudData` object."""
         logger.debug(f"Loading single scan {pcd_index} from E57 file: {path}")
 
         logger.debug(

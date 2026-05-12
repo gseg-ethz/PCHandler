@@ -1,3 +1,5 @@
+"""Top-level convenience loader that dispatches to the per-format handler by suffix."""
+
 from pathlib import Path
 
 from pchandler import PointCloudData
@@ -5,6 +7,30 @@ from pchandler.data_io.core import SUPPORTED_TYPES
 
 
 def load_file(file_path: str | Path, **kwargs) -> PointCloudData:
+    """Load a point cloud from disk by dispatching on the file suffix.
+
+    Recognised suffixes are listed in :data:`SUPPORTED_TYPES`
+    (``.las`` / ``.laz`` / ``.txt`` / ``.asc`` / ``.csv`` / ``.pts`` /
+    ``.e57`` / ``.ply``).
+
+    Parameters
+    ----------
+    file_path : str | Path
+        Path to the point-cloud file to load.
+    **kwargs : Any
+        Additional keyword arguments forwarded to the per-format handler's
+        ``load`` method.
+
+    Returns
+    -------
+    PointCloudData
+        The loaded point cloud.
+
+    Raises
+    ------
+    ValueError
+        If the file's suffix is not in :data:`SUPPORTED_TYPES`.
+    """
     file_path = Path(file_path)
 
     if file_path.suffix not in SUPPORTED_TYPES:

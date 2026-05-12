@@ -6,7 +6,7 @@
 #
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
-"""CSV / ASCII file format handler class"""
+"""CSV / ASCII file-format handler class."""
 
 import logging
 from pathlib import Path
@@ -53,17 +53,16 @@ class AsciiInfo(NamedTuple):
 
 # TODO write tests for the pcd_kwargs in each of the load functions
 class CsvHandler(AbstractIOHandler):
-    """Handles TXT and CSV like file input and output
+    """Handle TXT- and CSV-like file input/output for point clouds.
 
     Supported file extensions:
 
-    * .txt
-    * .csv
-    * .xyz
-    * .asc
-    * .ascii
-    * .pts
-
+    * ``.txt``
+    * ``.csv``
+    * ``.xyz``
+    * ``.asc``
+    * ``.ascii``
+    * ``.pts``
     """
 
     FORMATS = [".txt", ".csv", ".xyz", ".asc", ".ascii", ".pts"]
@@ -159,9 +158,7 @@ class CsvHandler(AbstractIOHandler):
         delimiter: str = ",",
         **config: dict[str, Any],
     ) -> None:
-        """Save the point cloud data to a text-delimited file format
-
-        Alternatively, save to TXT or other
+        """Save a point cloud to a text-delimited file (CSV / TXT / similar).
 
         Parameters
         ----------
@@ -204,27 +201,27 @@ def sniff_file(
     minimum_columns: int = 3,
     comment: str = "//",
 ) -> AsciiInfo:
-    """Attempts to read part of the file and determine some information about it's structure
+    r"""Read part of the file and determine some information about its structure.
 
     Parameters
     ----------
     file : Path
-        File path
+        File path.
     delimiters : tuple[str, ...], default=(" ", ";", "\t", ",")
-        Possible delimiters to search for
+        Possible delimiters to search for.
     field_names_row_index : int, default=-1
         Index number for the row in the header that contains field names. Defaults to the last row (-1).
     lines_to_check : int, default=10
-        Number of lines to analyze for detecting the delimiter and number of columns. Defaults to 10.
+        Number of lines to analyse for detecting the delimiter and number of columns.
     minimum_columns : int, default=3
-        Minimum number of columns required for a file to be valid (X,Y,Z)
+        Minimum number of columns required for a file to be valid (X, Y, Z).
     comment : str, default="//"
-        String indicating line comments
+        String indicating line comments.
 
     Returns
     -------
     AsciiInfo
-        Object contains detected header, delimiter, field names, number of fields, and number of points in the file.
+        Detected header, delimiter, field names, number of fields, and number of points in the file.
     """
     # Read the header information defined by the comment section of the Ascii File and check if
     # a number of points is on the first line
@@ -251,20 +248,26 @@ def sniff_file(
 def _get_field_counts(
     file: Path, character: str, lines_to_check: int = 10, minimum_columns: int = 3, comment: str = "//"
 ) -> int:
-    """Determine the number of fields (including XYZ coordinates) in a file
+    """Determine the number of fields (including XYZ coordinates) in a file.
 
     Parameters
     ----------
     file : Path
+        File path.
     character : str
-        Delimiter character
+        Delimiter character.
     lines_to_check : int, default=10
+        Number of post-header lines to sample.
     minimum_columns : int, default=3
+        Minimum required column count (anything smaller returns 0).
     comment : str, default="//"
+        String indicating line comments in the file header.
 
     Returns
     -------
     int
+        Number of fields per line if consistent across the sampled lines,
+        else ``0`` (signalling that ``character`` is not a valid delimiter).
     """
     header, number_points = _get_header(file, comment)
     skip_lines = len(header)
@@ -315,20 +318,30 @@ def _delimiter_sniffer(
     minimum_columns: int = 3,
     comment: str = "//",
 ) -> tuple[str, int]:
-    """Automatically try to determine the delimiter in a file.
+    r"""Automatically try to determine the delimiter in a file.
 
     Parameters
     ----------
-    file: Path
-    delimiters: str or Iterable[str], default=(" ", ";", "\t", ",")
-    lines_to_check: int, default=10
-    minimum_columns: int, default=3
+    file : Path
+        File path.
+    delimiters : str | Iterable[str], default=(" ", ";", "\t", ",")
+        Candidate delimiters to test in order.
+    lines_to_check : int, default=10
+        Number of post-header lines to sample.
+    minimum_columns : int, default=3
+        Minimum required column count.
     comment : str, default="//"
+        String indicating line comments in the file header.
 
     Returns
     -------
     tuple[str, int]
-        delimiter and number of fields found in the file
+        The detected delimiter and the number of fields found in the file.
+
+    Raises
+    ------
+    ValueError
+        If none of the candidate delimiters yield a consistent column count.
     """
     for delimiter in delimiters:
         number_fields = _get_field_counts(file, delimiter, lines_to_check, minimum_columns, comment)
@@ -339,19 +352,23 @@ def _delimiter_sniffer(
 
 
 def _get_header(file: Path, comment: str = "//") -> tuple[list[str], int | None]:
-    """Extracts the header and an optional points number from a file.
+    """Extract the header and an optional point-count line from a file.
 
-    Will only get the number of points if it is represented as a standalone integer on the first line
-    after the header/comments section.
+    Only returns a point count if it is represented as a standalone integer
+    on the first line after the header/comments section.
 
     Parameters
     ----------
     file : Path
+        File path.
     comment : str, default="//"
+        String indicating line comments in the file header.
 
     Returns
     -------
     tuple[list[str], int | None]
+        The list of header lines (without comment markers) and the optional
+        leading-integer point count.
     """
     with open(file, "r") as f:
         header = []
@@ -372,16 +389,20 @@ def _get_header(file: Path, comment: str = "//") -> tuple[list[str], int | None]
 
 
 def generate_ascii_load_dtype(column_names: list[str]) -> npt.DTypeLike:
-    """Generates a dtype object for loading ASCII data based on column names.
+    """Generate a dtype object for loading ASCII data based on column names.
+
+    XYZ columns are typed ``float64``; RGB triplet columns are typed ``uint8``;
+    all other columns default to ``float32``.
 
     Parameters
     ----------
-    column_names : list of str
+    column_names : list[str]
+        Column names from the file header (X/Y/Z first, then scalar fields).
 
     Returns
     -------
     numpy.typing.DTypeLike
-        dtype object used for creating a structured array
+        A dtype object suitable for creating a structured array.
     """
     names: list[str] = []
     formats: list[npt.DTypeLike] = []

@@ -6,7 +6,7 @@
 #
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
-"""LAS/LAZ file format handler class"""
+"""LAS/LAZ file-format handler class."""
 
 import logging
 from pathlib import Path
