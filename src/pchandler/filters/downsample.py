@@ -6,9 +6,7 @@
 #
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
-"""
-Downsampling methods
-"""
+"""Downsampling filters for point clouds (random, voxel-grid, angle-bin)."""
 
 from __future__ import annotations
 
@@ -110,27 +108,31 @@ def _calculate_centroids_and_weights(obj, unique, ndim, unique_inverse, values, 
 
 
 class RandomDownsampleFilter(PointCloudFilter):
+    """Downsample a point cloud by uniformly random sampling a fixed ratio of points."""
+
     @validate_variables
     def __init__(self, size: Annotated[PositiveFloat, Field(lt=1)]):
-        """Downsamples the point cloud by random sampling a defined ratio of points.
+        """Downsample the point cloud by randomly sampling a fixed ratio of points.
 
         Parameters
         ----------
         size : PositiveFloat
-            In the range of [0.0, 1.0]
+            Fraction of points to keep, in the open interval ``(0.0, 1.0)``.
         """
         self.size = size
 
     def mask(self, pcd: PointCloudData) -> Vector_Bool_T:
-        """Creates a mask based on the randomly sampled points
+        """Create a mask based on a uniformly random sample of points.
 
         Parameters
         ----------
         pcd : PointCloudData
+            Point cloud to be sampled.
 
         Returns
         -------
         Vector_Bool_T
+            Boolean mask, ``True`` for sampled points.
         """
         indices = np.sort(np.random.choice(len(pcd), size=int(np.ceil(self.size * len(pcd))), replace=False))
         mask = np.zeros(len(pcd), dtype=np.bool_)
@@ -139,31 +141,37 @@ class RandomDownsampleFilter(PointCloudFilter):
 
 
 class VoxelDownsample:
+    """Downsample a point cloud onto a regular 3D voxel grid."""
+
     @validate_variables
     def __init__(self, voxel_size: PositiveFloat, weighting_method: WeightingMethods = "linear"):
-        """Downsamples the point cloud based on a voxel size and weighting method.
+        """Build a voxel-grid downsampler.
 
-        Voxel centers then represent the point cloud.
+        Voxel centroids represent the downsampled point cloud.
 
         Parameters
         ----------
         voxel_size : PositiveFloat
+            Edge length of each cubic voxel cell.
         weighting_method : WeightingMethods, default="linear"
-            Options include "nearest", "constant", and "linear".
+            Per-point weighting strategy. One of ``"nearest"``, ``"constant"``,
+            ``"linear"``.
         """
         self.voxel_size = voxel_size
         self.weighting_method = weighting_method
 
     def sample(self, pcd: PointCloudData) -> PointCloudData:
-        """Returns a sample of the point cloud based as a voxel grid.
+        """Return a downsampled copy of the point cloud built from voxel centroids.
 
         Parameters
         ----------
-        pcd: PointCloudData
+        pcd : PointCloudData
+            Source point cloud.
 
         Returns
         -------
         PointCloudData
+            New point cloud with one point per occupied voxel.
         """
         values = pcd.xyz
         ndim = values.shape[1]
@@ -187,29 +195,36 @@ class VoxelDownsample:
 
 
 class AngleBinDownsample:
+    """Downsample a point cloud using spherical-angle binning in horizontal/vertical space."""
+
     @validate_variables
     def __init__(self, angle_bin_size: PositiveFloat, weighting_method: WeightingMethods = "linear"):
-        """Downsamples the point cloud based on spherical angle binning (2D space)
+        """Build a spherical-angle-bin downsampler (2D over horizontal × vertical).
 
         Parameters
         ----------
         angle_bin_size : PositiveFloat
+            Edge length of each angular bin (same units as the spherical
+            coordinates being binned).
         weighting_method : WeightingMethods, default="linear"
-            Options include "nearest", "constant", and "linear".
+            Per-point weighting strategy. One of ``"nearest"``, ``"constant"``,
+            ``"linear"``.
         """
         self.angle_bin_size = angle_bin_size
         self.weighting_method = weighting_method
 
     def sample(self, pcd: PointCloudData) -> PointCloudData:
-        """Returns a sample of the point cloud in evenly spaced angular steps/bins
+        """Return a downsampled copy of the point cloud built from angle-bin centroids.
 
         Parameters
         ----------
         pcd : PointCloudData
+            Source point cloud.
 
         Returns
         -------
         PointCloudData
+            New point cloud with one point per occupied angular bin.
         """
         values = pcd.spher[:, 1:]
         ndim = values.shape[1]

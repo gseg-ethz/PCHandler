@@ -6,9 +6,7 @@
 #
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
-"""
-Spherical coordinate based filters
-"""
+"""Spherical-coordinate-based filters."""
 
 import logging
 
@@ -25,13 +23,16 @@ logger = logging.getLogger(__name__.split(".")[0])
 
 
 class FoVFilter(PointCloudFilter):
+    """Filter points by a field-of-view (FoV) angular region."""
+
     def __init__(self, fov: FoV):
-        """Filters points based on a given field of view (FoV).
+        """Filter points based on a given field of view (FoV).
 
         Parameters
         ----------
         fov : FoV
-            Field of view object defining the top, bottom, left, and right boundaries.
+            Field of view object defining the top, bottom, left, and right
+            boundaries.
         """
         self.fov = fov
 
@@ -50,14 +51,17 @@ class FoVFilter(PointCloudFilter):
 
 
 class RangeFilter(PointCloudFilter):
+    """Filter points by a minimum/maximum spherical-range threshold."""
+
     def __init__(self, low: float = 0.0, high: float = np.inf):
-        """Filters points based on a range minimum and maximum threshold
+        """Filter points based on minimum and maximum range thresholds.
 
         Parameters
         ----------
-        low : float, optional
-        high : float, optional
-
+        low : float, default=0.0
+            Lower (inclusive) range threshold.
+        high : float, default=``np.inf``
+            Upper (inclusive) range threshold.
         """
         self.low = low
         self.high = high
@@ -78,12 +82,16 @@ class RangeFilter(PointCloudFilter):
 
 
 class SphericalPolygonFilter(PointCloudFilter):
+    """Filter points by a polygon defined in spherical (horizontal × vertical) coordinates."""
+
     def __init__(self, polygon: Polygon):
-        """Filters points based on a polygon defined in spherical coordinates.
+        """Filter points based on a polygon defined in spherical coordinates.
 
         Parameters
         ----------
         polygon : Polygon
+            Polygon defining the filter region in (horizontal, vertical)
+            spherical-angle coordinates.
         """
         self.polygon = polygon
 

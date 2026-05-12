@@ -6,9 +6,7 @@
 #
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
-"""
-Contains the abstract filter class and a generic filter class
-"""
+"""Abstract filter base class plus a generic field-based filter."""
 
 from __future__ import annotations
 
@@ -30,92 +28,101 @@ logger = logging.getLogger(__name__.split(".")[0])
 
 
 class PointCloudFilter(ABC):
-    """Abstract base class for PointCloudData filters"""
+    """Abstract base class for :class:`PointCloudData` filters."""
 
     @abstractmethod
     def mask(self, pcd: PointCloudData) -> Vector_Bool_T:
-        """
-        Compute and return a boolean mask for the provided point cloud.
+        """Compute and return a boolean mask for the provided point cloud.
 
         Parameters
         ----------
-        pcd: Point
+        pcd : PointCloudData
+            Point cloud to be evaluated.
 
         Returns
         -------
         Vector_Bool_T
+            Boolean mask, ``True`` for points kept by the filter.
         """
         pass
 
     @validate_variables
     def reduce(self, pcd: PointCloudData) -> None:
-        """Reduces the point to only the points defined by the mask.
+        """Reduce the point cloud in place to the points selected by the mask.
 
         Parameters
         ----------
-        pcd: PointCloudData
-
-        Returns
-        -------
-        PointCloudData
+        pcd : PointCloudData
+            Point cloud mutated in place.
         """
         pcd.reduce(self.mask(pcd))
 
     def extract(self, pcd: PointCloudData) -> PointCloudData:
-        """Returns a new point cloud from the points selected by the mask.
+        """Return a new point cloud built from the points selected by the mask.
 
-        The existing point cloud is reduced to only the points defined by the negated mask.
+        The existing point cloud is reduced to only the points defined by the
+        negated mask.
 
         Parameters
         ----------
-        pcd: PointCloudData
+        pcd : PointCloudData
+            Source point cloud (mutated: keeps only the negated-mask points).
 
         Returns
         -------
         PointCloudData
+            New point cloud carrying the selected points.
         """
         return pcd.extract(self.mask(pcd))
 
     def sample(self, pcd: PointCloudData) -> PointCloudData:
-        """Returns a copy of the point cloud sampled using the boolean mask.
+        """Return a copy of the point cloud sampled using the boolean mask.
 
         Parameters
         ----------
-        pcd: PointCloudData
+        pcd : PointCloudData
+            Source point cloud (not mutated).
 
         Returns
         -------
         PointCloudData
+            New point cloud carrying the sampled points.
         """
         return pcd.sample(self.mask(pcd))
 
 
 class GenericFieldFilter(PointCloudFilter):
+    """Generic filter that evaluates a callable on a named field."""
+
     @validate_variables
     def __init__(self, field_label: str, filter_func: Callable[[npt.NDArray], Vector_Bool_T]) -> None:
-        """Generic filter class that will perform a custom filter on a defined field.
+        """Build a generic filter that operates on a single named field.
 
         Parameters
         ----------
         field_label : str
             A label or name for the field.
         filter_func : Callable[[NDArray], Vector_Bool_T]
-            A callable function used to perform filtering logic. Must return a boolean mask.
+            A callable function used to perform filtering logic. Must return a
+            boolean mask.
         """
         self.field_label = field_label
         self.filter_func = filter_func
 
     # TODO check if this is in use anywhere before changing the default names
     def mask(self, pcd: PointCloudData) -> Vector_Bool_T:
-        """Create a boolean mask from the defined field and function
+        """Create a boolean mask from the defined field and function.
 
         Parameters
         ----------
-        pcd: PointCloudData
+        pcd : PointCloudData
+            Point cloud to be evaluated.
 
         Returns
         -------
         Vector_Bool_T
+            Boolean mask returned by ``filter_func`` evaluated on the named
+            field.
         """
         if self.field_label == "cartesian_coordinates":
             data = pcd.xyz

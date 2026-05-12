@@ -6,9 +6,7 @@
 #
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
-"""
-GPU supported filters
-"""
+"""GPU-accelerated filters backed by cudf and cuspatial."""
 
 import copy
 import gc
@@ -41,25 +39,24 @@ logger = logging.getLogger(__name__.split(".")[0])
 
 
 def is_available() -> bool:
-    """Check if GPU support is available.
-    Checks the availability of a GPU for computation.
-
-    This function determines if a GPU is accessible in the environment.
+    """Check whether GPU support (cudf + cuspatial + geopandas) is importable.
 
     Returns
     -------
     bool
-        True if a GPU is available, False otherwise.
+        ``True`` if the GPU dependencies imported cleanly, ``False`` otherwise.
     """
     return _HAS_GPU
 
 
 def ensure_available():
-    """Check if GPU supporting is available and libraries installed
+    """Raise ``ImportError`` if GPU support is not available.
 
     Raises
     ------
     ImportError
+        If GPU support is unavailable; chained from the original
+        :class:`ImportError` or :class:`RuntimeError` when one was captured.
     """
     if not _HAS_GPU:
         msg = (
@@ -73,14 +70,18 @@ def ensure_available():
 
 
 class PolygonFilterGPU(PointCloudFilter):
+    """GPU-accelerated polygon filter projected on a specified plane."""
+
     @validate_variables
     def __init__(self, polygon: ValidatedPolygonT, plane: PlaneStrings = "xy") -> None:
-        """Filters points based on a polygon projected on a specified plane
+        """Filter points based on a polygon projected on a specified plane (GPU backend).
 
         Parameters
         ----------
-        polygon: ValidatedPolygonT
-        plane: PlaneStrings, default="xy"
+        polygon : ValidatedPolygonT
+            Polygon defining the filter region.
+        plane : PlaneStrings, default="xy"
+            Plane on which the polygon is projected.
         """
         ensure_available()
         self.polygon: Polygon = polygon
@@ -126,19 +127,23 @@ class PolygonFilterGPU(PointCloudFilter):
 
 
 class SphericalPolygonFilterGPU(PointCloudFilter):
+    """GPU-accelerated polygon filter defined in spherical-angle coordinates."""
+
     @validate_variables
     def __init__(self, polygon: ValidatedPolygonT):
-        """Filters points based on a polygon defined in spherical angle coordinates
+        """Filter points based on a polygon defined in spherical-angle coordinates (GPU backend).
 
         Parameters
         ----------
-        polygon: ValidatedPolygonT
+        polygon : ValidatedPolygonT
+            Polygon defining the filter region in (horizontal, vertical)
+            spherical-angle coordinates.
         """
         ensure_available()
         self.polygon: Polygon = polygon
 
     def mask(self, pcd: PointCloudData) -> Vector_Bool_T:
-        """Creates mask from points inside the spherical angle defined polygon.
+        """Create a mask of points inside the spherical-angle polygon.
 
         Parameters
         ----------
@@ -148,6 +153,7 @@ class SphericalPolygonFilterGPU(PointCloudFilter):
         Returns
         -------
         Vector_Bool_T
+            Boolean mask, ``True`` for points inside the polygon.
         """
         proj_pts = cudf.DataFrame({"x": pcd.hz.astype(float), "y": pcd.v.astype(float)}).interleave_columns()
 

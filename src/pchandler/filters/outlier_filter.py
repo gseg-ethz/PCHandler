@@ -6,9 +6,7 @@
 #
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
-"""
-Statistical outlier removal filters.
-"""
+"""Statistical outlier removal filters."""
 
 import logging
 from typing import Annotated
@@ -25,30 +23,36 @@ logger = logging.getLogger(__name__.split(".")[0])
 
 
 class BaseOutlierFilter(PointCloudFilter):
-    def __init__(self, std_ratio: Annotated[float, Field(gt=0, le=1)] = 0.95, number_of_neighbours: PositiveInt = 13):
-        """Base class for filters using a statistical outlier removal method
+    """Base class for filters that remove statistical outliers via Open3D."""
 
-        This uses algorithm is based on a standard deviation ratio and a number of neighbors considered.
+    def __init__(self, std_ratio: Annotated[float, Field(gt=0, le=1)] = 0.95, number_of_neighbours: PositiveInt = 13):
+        """Build a statistical-outlier-removal filter.
+
+        The underlying algorithm uses a standard-deviation ratio and a
+        configurable neighborhood size.
 
         Parameters
         ----------
-        std_ratio : float
-        number_of_neighbours : int
+        std_ratio : float, default=0.95
+            Standard-deviation ratio threshold (``0 < std_ratio <= 1``).
+        number_of_neighbours : int, default=13
+            Number of nearest neighbors used to estimate local statistics.
         """
         self.std_ratio = std_ratio
         self.number_of_neighbours = number_of_neighbours
 
     def mask(self, pcd: o3d.geometry.PointCloud) -> Vector_Bool_T:
-        """Create a boolean mask from the non-outlier points
+        """Create a boolean mask of inliers (non-outlier points).
 
         Parameters
         ----------
         pcd : o3d.geometry.PointCloud
-
+            Open3D point cloud to evaluate.
 
         Returns
         -------
         Vector_Bool_T
+            Boolean mask, ``True`` for inliers.
         """
         mask = np.zeros(len(pcd.points), dtype=np.bool_)
         _, inliers = pcd.remove_statistical_outlier(self.number_of_neighbours, self.std_ratio, True)
@@ -57,18 +61,20 @@ class BaseOutlierFilter(PointCloudFilter):
 
 
 class SphericalOutlierFilter(BaseOutlierFilter):
-    """Outlier filter for point clouds in spherical coordinates"""
+    """Outlier filter for point clouds in spherical coordinates."""
 
     def mask(self, pcd: PointCloudData) -> Vector_Bool_T:
-        """Create a boolean mask from the non-outlier points in spherical coordinates.
+        """Create a boolean mask of inliers using spherical-coordinate statistics.
 
         Parameters
         ----------
         pcd : PointCloudData
+            Source point cloud.
 
         Returns
         -------
         Vector_Bool_T
+            Boolean mask, ``True`` for inliers.
         """
         sp_pcd = o3d.geometry.PointCloud()
         sp_pcd.points = o3d.utility.Vector3dVector(
@@ -78,17 +84,19 @@ class SphericalOutlierFilter(BaseOutlierFilter):
 
 
 class CartesianOutlierFilter(BaseOutlierFilter):
-    """Outlier filter for point clouds in cartesian coordinates"""
+    """Outlier filter for point clouds in cartesian coordinates."""
 
     def mask(self, pcd: PointCloudData) -> Vector_Bool_T:
-        """Create a boolean mask from the non-outlier points in cartesian coordinates
+        """Create a boolean mask of inliers using cartesian-coordinate statistics.
 
         Parameters
         ----------
         pcd : PointCloudData
+            Source point cloud.
 
         Returns
         -------
         Vector_Bool_T
+            Boolean mask, ``True`` for inliers.
         """
         return super().mask(pcd.to_o3d())

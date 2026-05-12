@@ -6,9 +6,7 @@
 #
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
-"""
-Cartesian coordinate-based filters.
-"""
+"""Cartesian coordinate-based filters."""
 
 import logging
 from typing import Literal
@@ -44,14 +42,18 @@ def _get_offset(pcd: PointCloudData, mode: Literal["local", "global"] = "local")
 
 
 class BoxFilter(PointCloudFilter):
+    """Filter points by a 3D axis-aligned bounding box."""
+
     @validate_variables
     def __init__(self, minimum: Vector_3_T, maximum: Vector_3_T):
-        """Filters points based on a 3D bounding box
+        """Filter points based on a 3D bounding box.
 
         Parameters
         ----------
         minimum : Vector_3_T
+            Lower corner of the bounding box.
         maximum : Vector_3_T
+            Upper corner of the bounding box.
         """
         if np.any(minimum >= maximum):
             raise ValueError(
@@ -64,11 +66,12 @@ class BoxFilter(PointCloudFilter):
 
     @property
     def extents(self) -> Vector_3_T:
-        """Computes the extents of a 3D space.
+        """Compute the extents of the bounding box per axis.
 
         Returns
         -------
         Vector_3_T
+            ``maximum - minimum`` per axis.
         """
         return self.maximum - self.minimum
 
@@ -97,14 +100,18 @@ class BoxFilter(PointCloudFilter):
 
 
 class SphereFilter(PointCloudFilter):
+    """Filter points by a sphere with a defined center and radius."""
+
     @validate_variables
     def __init__(self, sphere_center: Vector_3_T, radius: PositiveFloat) -> None:
-        """Filters points based on a sphere with a defined center and radius
+        """Filter points based on a sphere with a defined center and radius.
 
         Parameters
         ----------
         sphere_center : Vector_3_T
+            Center of the sphere.
         radius : PositiveFloat
+            Radius of the sphere.
         """
         self.sphere_center = sphere_center
         self.radius = radius
@@ -131,14 +138,18 @@ class SphereFilter(PointCloudFilter):
 
 
 class PolygonFilter(PointCloudFilter):
+    """Filter points by a polygon projected on a specified plane."""
+
     @validate_variables
     def __init__(self, polygon: ValidatedPolygonT, plane: PlaneStrings = "xy") -> None:
-        """Filters points based on a polygon projected on a specified plane
+        """Filter points based on a polygon projected on a specified plane.
 
         Parameters
         ----------
-        polygon: ValidatedPolygonT
-        plane: PlaneStrings, default="xy"
+        polygon : ValidatedPolygonT
+            Polygon defining the filter region.
+        plane : PlaneStrings, default="xy"
+            Plane on which the polygon is projected.
         """
         self.polygon: Polygon = polygon
         self.plane = plane
