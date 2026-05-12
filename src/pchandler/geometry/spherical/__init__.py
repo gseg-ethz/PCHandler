@@ -6,9 +6,7 @@
 #
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
-"""
-Contains spherical geometry classes and functions.
-"""
+"""Spherical-geometry classes and helpers (Angle units, field-of-view tiles)."""
 
 from __future__ import annotations
 

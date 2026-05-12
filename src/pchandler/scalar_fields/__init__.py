@@ -6,9 +6,7 @@
 #
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
-"""
-Public API for ScalarField and ScalarFieldManager classes.
-"""
+"""Public API for :class:`ScalarField` and :class:`ScalarFieldManager` classes."""
 
 from __future__ import annotations
 

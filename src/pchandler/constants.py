@@ -6,6 +6,16 @@
 #
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
+"""Pre-defined name constants for common point-cloud field accessors.
+
+Exports :data:`RGB_NAMES`, :data:`NORMAL_NAMES`, :data:`XYZ_NAMES`,
+:data:`INTENSITY_NAMES`, :data:`REFLECTANCE_NAMES`, :data:`COMMON_FIELD_NAMES`,
+and :data:`COMMON_FIELD_BASES` — each backed by either
+:class:`_NameConstantsSingle` or :class:`_NameConstantsTriplet` so the same
+field can be reached via short, long, or triplet-style names (e.g. ``rgb``,
+``red`` / ``green`` / ``blue``, ``r`` / ``g`` / ``b``).
+"""
+
 from typing import NamedTuple, Optional
 
 __all__ = [

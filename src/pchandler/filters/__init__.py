@@ -6,9 +6,12 @@
 #
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
-"""
-Public API for pchandler.filters
-Re-exports key classes and functions from the submodules.
+"""Public API for :mod:`pchandler.filters`.
+
+Re-exports key filter classes (cartesian, spherical, downsample, outlier,
+scalar-field, GPU) via the lazy ``__getattr__`` mechanism so heavy or
+optional dependencies (e.g. ``cudf`` / ``cuspatial``) are not imported at
+package-import time.
 """
 
 from __future__ import annotations

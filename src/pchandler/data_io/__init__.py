@@ -6,9 +6,12 @@
 #
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
-"""
-Public API for pchandler.data_io.
-Re-exports key classes for easy IO access
+"""Public API for :mod:`pchandler.data_io`.
+
+Re-exports the per-format handler classes
+(:class:`Csv`, :class:`E57`, :class:`Las`, :class:`Ply`) via the lazy
+``__getattr__`` mechanism so optional file-format dependencies are not
+pulled in at import time.
 """
 
 from __future__ import annotations

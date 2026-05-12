@@ -51,7 +51,7 @@ logger = logging.getLogger(__name__)
 
 
 class PointCloudData(CartesianCoordinates):
-    """Point Cloud Class with automatic validation and coordinate optimisation"""
+    """Point cloud class with automatic validation and coordinate optimisation."""
 
     #: Contains and manages all the scalar fields associated with the point cloud coordinates
     scalar_fields: ScalarFieldManager = Field(default_factory=ScalarFieldManager)
@@ -72,24 +72,30 @@ class PointCloudData(CartesianCoordinates):
         socs_origin: Vector_3_Float_T | None = None,
         **kwargs: Any,
     ):
-        """
+        """Construct a :class:`PointCloudData` from XYZ coordinates plus optional per-point scalar fields.
 
         Parameters
         ----------
         xyz : |Array_Nx3_Float_T|
-            Input coordinates
+            Input coordinates.
         rgb : :class:`RGBFields` | |Array_Nx3_Float_T| | |Array_Nx3_Uint8_T| | None
+            Optional RGB colour per point.
         normals : |NormalFields| | |Array_Nx3_Float_T| | None
-            Normal vectors corresponding for each point (normalized to unit vectors)
-        intensity : |VectorT| | |ArrayT| | None
-        reflectance : |VectorT| | |ArrayT| | None
+            Normal vectors corresponding to each point (normalised to unit vectors).
+        intensity : :class:`ScalarField` | |VectorT| | None
+            Optional intensity scalar field.
+        reflectance : :class:`ScalarField` | |VectorT| | None
+            Optional reflectance scalar field.
         scalar_fields : ScalarFieldManager | dict[str, ScalarField | Array_Nx3_T | VectorT | Sequence] | None
             Additional custom scalar fields. ``dict`` values may also be
-            :class:`RGBFields` / :class:`NormalFields` instances.
-        socs_origin: |Vector_3_Float_T|
-            Scan original coordinate system (SOCS). Reference point for conversion to spherical coordinates.
-        numerical_optimization
-        kwargs : dict[str, Any]
+            :class:`RGBFields`, :class:`NormalFields`, or
+            :class:`ScalarFieldTriplet` instances.
+        socs_origin : |Vector_3_Float_T|
+            Scan original coordinate system (SOCS). Reference point for
+            conversion to spherical coordinates.
+        **kwargs : Any
+            Additional keyword arguments forwarded to
+            :class:`CartesianCoordinates`.
         """
         kwargs = {} | kwargs
         kwargs["scalar_fields"] = scalar_fields
@@ -114,26 +120,29 @@ class PointCloudData(CartesianCoordinates):
 
     @property
     def nbPoints(self) -> int:
-        """Returns the number of points in the point cloud
+        """Return the number of points in the point cloud.
 
         Returns
         -------
         int
+            Point count (number of XYZ rows).
         """
         return len(self)
 
     @field_validator("scalar_fields", mode="before")
     @classmethod
     def _convert_sfm(cls, value: dict | ScalarFieldManager | None = None) -> ScalarFieldManager:
-        """Ensure scalar_fields input is converted to a ScalarFieldManager
+        """Coerce ``scalar_fields`` input into a :class:`ScalarFieldManager`.
 
         Parameters
         ----------
-        value: dict | ScalarFieldManager | None
+        value : dict | ScalarFieldManager | None
+            Mapping of field name to data, an existing manager, or ``None``.
 
         Returns
         -------
         ScalarFieldManager
+            A populated manager (empty if ``value`` is ``None``).
         """
         if isinstance(value, dict):
             value = ScalarFieldManager(fields=value)
@@ -143,112 +152,106 @@ class PointCloudData(CartesianCoordinates):
 
     @field_serializer("scalar_fields")
     def _drop_parent_weakref(self, scalar_fields: ScalarFieldManager) -> ScalarFieldManager:
-        """Drop weakref to parent on serialization
+        """Drop the weakref to the parent point cloud on serialisation.
 
         Parameters
         ----------
-        scalar_fields: ScalarFieldManager
+        scalar_fields : ScalarFieldManager
+            The manager about to be serialised.
 
         Returns
         -------
-
+        ScalarFieldManager
+            The same manager with ``_parent`` cleared.
         """
         scalar_fields._parent = None
         return scalar_fields
 
     @property
     def normals(self: Self) -> NormalFields | None:
-        """Returns the normal field
+        """Return the normal field, if set.
 
         Returns
         -------
         NormalFields | None
+            Per-point unit normal vectors, or ``None`` if not set.
         """
         return self.scalar_fields.normals
 
     @normals.setter
     def normals(self, value: Optional[Array_Nx3_Float_T | NormalFields]) -> None:
-        """Set the normal field (`None` will clear the field)
+        """Set the normal field (``None`` clears it).
 
         Parameters
         ----------
         value : Array_Nx3_Float_T | NormalFields | None
-
-        Returns
-        -------
-
+            Unit normal vectors per point, or ``None`` to clear.
         """
         self.scalar_fields.normals = value
 
     @property
     def rgb(self) -> Optional[RGBFields]:
-        """Returns the RGB field
+        """Return the RGB field, if set.
 
         Returns
         -------
         RGBFields | None
+            Per-point RGB colour, or ``None`` if not set.
         """
         return self.scalar_fields.rgb
 
     @rgb.setter
     def rgb(self, value: Optional[Array_Nx3_Float_T | Array_Nx3_Uint8_T | RGBFields]) -> None:
-        """Set the RGB field (`None` will clear the field)
+        """Set the RGB field (``None`` clears it).
 
         Parameters
         ----------
         value : Array_Nx3_Float_T | Array_Nx3_Uint8_T | RGBFields | None
-
-        Returns
-        -------
-
+            Per-point RGB colour data, or ``None`` to clear.
         """
         self.scalar_fields.rgb = value
 
     @property
     def intensity(self) -> Optional[ScalarField]:
-        """Returns the intensity field
+        """Return the intensity field, if set.
 
         Returns
         -------
         ScalarField | None
+            Per-point intensity scalar field, or ``None`` if not set.
         """
         return self.scalar_fields.intensity
 
     @intensity.setter
     def intensity(self, value: Optional[VectorT | ScalarField]) -> None:
-        """Set the intensity field (`None` will clear the field)
+        """Set the intensity field (``None`` clears it).
 
         Parameters
         ----------
-        value: VectorT | ScalarField | None
-
-        Returns
-        -------
-
+        value : VectorT | ScalarField | None
+            Per-point intensity data, or ``None`` to clear.
         """
         self.scalar_fields.intensity = value
 
     @property
     def reflectance(self: Self) -> Optional[ScalarField]:
-        """Returns the reflectance field
+        """Return the reflectance field, if set.
 
         Returns
         -------
         ScalarField | None
+            Per-point reflectance scalar field, or ``None`` if not set.
         """
         return self.scalar_fields.reflectance
 
     @reflectance.setter
     def reflectance(self, value: Optional[VectorT | ScalarField]) -> None:
-        """Set the reflectance field (`None` will clear the field)
+        """Set the reflectance field (``None`` clears it).
 
         Parameters
         ----------
-        value: VectorT | ScalarField | None
-
-        Returns
-        -------
-
+        value : VectorT | ScalarField | None
+            Per-point reflectance data, or ``None`` to clear.
         """
         self.scalar_fields.reflectance = value
 
@@ -256,31 +259,66 @@ class PointCloudData(CartesianCoordinates):
     #     super().__setattr__(key, value)
 
     def __setitem__(self, key: IndexLike, value: ArrayT | PointCloudData) -> None:
+        """Raise :class:`IndexError` — index assignment is unsupported.
+
+        Parameters
+        ----------
+        key : IndexLike
+            Unused — present for the Python sequence protocol.
+        value : ArrayT | PointCloudData
+            Unused — present for the Python sequence protocol.
+
+        Raises
+        ------
+        IndexError
+            Always — ``PointCloudData`` is immutable via ``__setitem__``;
+            use :meth:`copy` or serialise to a ``dict`` and reinstantiate.
+        """
         raise IndexError(
             "Setting items in PointCloudData is not supported. Consider using the copy or "
             "dump data to a dict and reinstantiate."
         )
 
     def __hash__(self) -> int:
+        """Return an identity-based hash so the model is usable in sets.
+
+        Returns
+        -------
+        int
+            The CPython ``id(self)`` of the instance.
+        """
         return id(self)
 
     @classmethod
     def _reconstruct(cls, state: dict[str, Any]) -> Self:
+        """Re-bind the scalar-field manager's parent weakref after pickle reconstruction.
+
+        Parameters
+        ----------
+        state : dict[str, Any]
+            Pickled instance state forwarded to the parent class.
+
+        Returns
+        -------
+        Self
+            The reconstructed instance with its scalar-field parent re-linked.
+        """
         obj: Self = super(cls, cls)._reconstruct(state)
         obj.scalar_fields.parent = obj
         return obj
 
     def sample(self, mask: IndexLike) -> PointCloudData:
-        """Sample a copy of the point cloud
+        """Sample a copy of the point cloud restricted to ``mask``.
 
         Parameters
         ----------
-        mask: IndexLike
-            A vector like index object that corresponds to the number of points in the point cloud.
+        mask : IndexLike
+            A vector-like index object that corresponds to the number of points in the point cloud.
 
         Returns
         -------
         PointCloudData
+            A new point cloud containing only the masked points (and their scalar fields).
         """
         mask = self.create_mask(mask)
         sample = self.copy(
@@ -293,16 +331,12 @@ class PointCloudData(CartesianCoordinates):
         return sample
 
     def reduce(self, mask: IndexLike) -> None:
-        """Reduce the point cloud to a subset of points by a given mask
+        """Reduce the point cloud in-place to the subset selected by ``mask``.
 
         Parameters
         ----------
-        mask: IndexLike
-            A vector like index object that corresponds to the number of points in the point cloud.
-
-        Returns
-        -------
-
+        mask : IndexLike
+            A vector-like index object that corresponds to the number of points in the point cloud.
         """
         super().reduce(mask)
         self.scalar_fields.reduce(mask)
@@ -310,19 +344,20 @@ class PointCloudData(CartesianCoordinates):
             self.__dict__["spher"] = self.__dict__["spher"][mask]
 
     def extract(self, mask: IndexLike) -> Self:
-        """Extract a subset of points from the point cloud by a given mask.
+        """Extract a subset of points from the point cloud, removing them from ``self``.
 
-        The object `self` that extract is called on will be reduced by this point set and these points will be returned
-        as a new object
+        The object ``self`` that ``extract`` is called on is reduced by this point set, and the
+        extracted points are returned as a new object.
 
         Parameters
         ----------
-        mask: IndexLike
-            A vector like index object that corresponds to the number of points in the point cloud.
+        mask : IndexLike
+            A vector-like index object that corresponds to the number of points in the point cloud.
 
         Returns
         -------
-
+        Self
+            A new instance carrying the extracted points (and their scalar fields).
         """
         extracted = super().extract(mask)
         return extracted
@@ -333,21 +368,24 @@ class PointCloudData(CartesianCoordinates):
         *pcds: Self,
         **kwargs: dict[str, Any],
     ) -> Self:
-        """Merge a set of point clouds together
+        """Merge a set of point clouds together.
 
-        If point clouds contain similar scalar fields, these will be also merged.
-        Where a scalar field is missing in one point cloud, then that field will not be retained.
+        If point clouds contain similar scalar fields, these are also merged.
+        Where a scalar field is missing in one point cloud, that field is not retained.
 
-        The merge function will also manage any optimised shifts required by the new objects
+        The merge function also manages any optimised shifts required by the new objects.
 
         Parameters
         ----------
-        pcds: PointCloudData
-        kwargs: dict[str, Any]
+        *pcds : PointCloudData
+            Point clouds to merge in order.
+        **kwargs : dict[str, Any]
+            Additional keyword arguments forwarded to the base ``merge`` implementation.
 
         Returns
         -------
         PointCloudData
+            A new point cloud whose coordinates and scalar fields are the row-wise concatenation of ``pcds``.
         """
         scalar_fields = ScalarFieldManager.merge([pcd.scalar_fields for pcd in pcds])
         return super(cls, cls).merge(*pcds, scalar_fields=scalar_fields, **kwargs)
@@ -358,16 +396,22 @@ class PointCloudData(CartesianCoordinates):
     def to_o3d(self, as_tensor: Literal[True]) -> o3d.t.geometry.PointCloud: ...
 
     def to_o3d(self, as_tensor: bool = False) -> o3d.geometry.PointCloud | o3d.t.geometry.PointCloud:
-        """Converts the point cloud to an Open3D `PointCloud` object.
+        """Convert the point cloud to an Open3D ``PointCloud`` object.
 
         Parameters
         ----------
-        as_tensor: bool
-            Flag as to convert to an Open3D tensor based PointCloud object.
+        as_tensor : bool
+            If ``True``, build an Open3D tensor-based ``PointCloud`` (``o3d.t.geometry``).
 
         Returns
         -------
         |o3d.geometry.PointCloud| | |o3d.t.geometry.PointCloud|
+            The Open3D point cloud, in legacy or tensor form depending on ``as_tensor``.
+
+        Raises
+        ------
+        ModuleNotFoundError
+            If ``open3d`` is not installed.
         """
         try:
             import open3d as _o3d
@@ -412,15 +456,25 @@ class PointCloudData(CartesianCoordinates):
 
     @classmethod
     def from_o3d(cls, pcd_o3d: o3d.geometry.PointCloud | o3d.t.geometry.PointCloud) -> PointCloudData:
-        """Convert an Open3D `PointCloud` object to a `PointCloudData` object.
+        """Convert an Open3D ``PointCloud`` object to a :class:`PointCloudData`.
 
         Parameters
         ----------
-        pcd_o3d: |o3d.geometry.PointCloud| | |o3d.t.geometry.PointCloud|
+        pcd_o3d : |o3d.geometry.PointCloud| | |o3d.t.geometry.PointCloud|
+            Open3D point cloud, either legacy or tensor-based.
 
         Returns
         -------
         PointCloudData
+            The converted point cloud (colours/normals are carried over from the legacy Open3D variant; scalar
+            attributes are carried over from the tensor variant).
+
+        Raises
+        ------
+        ModuleNotFoundError
+            If ``open3d`` is not installed.
+        TypeError
+            If ``pcd_o3d`` is neither an ``o3d.geometry.PointCloud`` nor an ``o3d.t.geometry.PointCloud``.
         """
         try:
             import open3d as _o3d
@@ -449,11 +503,18 @@ class PointCloudData(CartesianCoordinates):
         return pcd
 
     def to_py4dgeo(self) -> Epoch:
-        """Convert the PointCloudData object to a py4dgeo Epoch.
+        """Convert the :class:`PointCloudData` to a py4dgeo :class:`Epoch`.
 
         Returns
         -------
         Epoch
+            A py4dgeo ``Epoch`` carrying the XYZ cloud, optional normals,
+            and the scalar fields packed as additional dimensions.
+
+        Raises
+        ------
+        ModuleNotFoundError
+            If ``py4dgeo`` is not installed.
         """
         try:
             from py4dgeo import Epoch as _Epoch
@@ -478,15 +539,23 @@ class PointCloudData(CartesianCoordinates):
 
     @classmethod
     def from_py4dgeo(cls, epoch: Epoch) -> PointCloudData:
-        """Convert a py4dgeo Epoch object to a PointCloudData object.
+        """Convert a py4dgeo :class:`Epoch` to a :class:`PointCloudData`.
 
         Parameters
         ----------
-        epoch: Epoch
+        epoch : Epoch
+            A py4dgeo ``Epoch`` to convert.
 
         Returns
         -------
         PointCloudData
+            A new point cloud built from the epoch's cloud, normals,
+            and additional dimensions.
+
+        Raises
+        ------
+        ModuleNotFoundError
+            If ``py4dgeo`` is not installed.
         """
         try:
             from py4dgeo import Epoch as _Epoch  # noqa: F401  # Availability probe; _Epoch is not used directly here.

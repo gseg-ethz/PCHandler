@@ -6,9 +6,11 @@
 #
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
-"""
-Public API for pchandler.geometry.
-Re-exports key classes and functions from the submodules.
+"""Public API for :mod:`pchandler.geometry`.
+
+Re-exports key classes and functions from the submodules
+(:mod:`coordinates`, :mod:`transforms`, :mod:`splitter`, :mod:`util`,
+:mod:`spherical`) via the lazy ``__getattr__`` mechanism.
 """
 
 from __future__ import annotations
