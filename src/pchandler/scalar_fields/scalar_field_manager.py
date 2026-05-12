@@ -6,6 +6,8 @@
 #
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
+"""ScalarFieldManager: container for the per-point scalar fields of a PointCloudData."""
+
 from __future__ import annotations
 
 import logging
@@ -82,15 +84,19 @@ class ScalarFieldManager:
     def __init__(self, fields: Optional[SFMLikeT | Self] = None, *, parent: Optional[PointCloudData] = None) -> None:
         """Initialise the scalar field manager.
 
-        Ensures all fields passed are converted to ScalarField objects.
-
-        If a parent point cloud is provided, it is stored as a weakref and scalar field lengths will be validated
-        against it.
+        Ensures all fields passed are converted to :class:`ScalarField` (or
+        the appropriate :class:`RGBFields` / :class:`NormalFields`) objects.
+        If a parent point cloud is provided, it is stored as a ``weakref`` and
+        scalar-field lengths will be validated against it.
 
         Parameters
         ----------
-        fields: dict[str, ScalarField | NormalFields | RGBFields | np.ndarray] | ScalarFieldManager | None
-        parent: PointCloudData | None
+        fields : dict[str, ScalarField | NormalFields | RGBFields | np.ndarray] | ScalarFieldManager | None
+            Initial scalar fields, either as raw dict, another manager, or
+            ``None`` (empty manager).
+        parent : PointCloudData, optional
+            Owning point cloud; stored as a weakref so that length validation
+            can be performed.
         """
         self._parent = weakref.ref(parent) if parent is not None else None
 
@@ -124,11 +130,12 @@ class ScalarFieldManager:
             raise TypeError(f"Unknown fields type: {type(fields)}")
 
     def validate_lengths(self) -> None:
-        """Check all scalar fields lengths match the number of points in the parent
+        """Check that every scalar field's length matches the parent point cloud's point count.
 
-        Returns
-        -------
-
+        Raises
+        ------
+        ValueError
+            If any scalar field's length differs from the parent point count.
         """
         if self.parent:
             for field in self.values():
@@ -138,28 +145,25 @@ class ScalarFieldManager:
             logger.info("No parent point cloud to validate scalar field lengths against")
 
     def __len__(self) -> int:
-        """Returns the number of scalar fields
-
-        Returns
-        -------
-        int
-        """
+        """Return the number of scalar fields in the manager."""
         return len(self.fields)
 
     def __iter__(self) -> Iterator[str]:
-        """Returns an iterator for the scalar fields"""
+        """Return an iterator over the scalar-field names."""
         return iter(self.fields)
 
     def __contains__(self, key: object) -> bool:
-        """Check if a scalar field exists
+        """Check whether a scalar field with name ``key`` exists.
 
         Parameters
         ----------
-        key: object
+        key : object
+            Field name; compared case-insensitively against stored names.
 
         Returns
         -------
         bool
+            ``True`` if a field with this name is registered.
         """
         return str(key).lower() in self.fields
 
@@ -170,15 +174,18 @@ class ScalarFieldManager:
     def __getitem__(self, key: IndexLike) -> Self: ...
 
     def __getitem__(self, key: str | LowerStr | IndexLike) -> Self | SF_T | None:
-        """Get a scalar field by name or a sample of the scalar field based on a mask.
+        """Get a scalar field by name, or a sample of the manager when indexed by a mask.
 
         Parameters
         ----------
-        key: str | LowerStr | IndexLike
+        key : str | LowerStr | IndexLike
+            Field name (str/LowerStr) or row mask / index.
 
         Returns
         -------
         SF_T | ScalarFieldManager | None
+            The requested scalar field, the sampled manager, or ``None`` if no
+            such field exists.
         """
         if isinstance(key, str):
             if key in RGB_NAMES.all:
@@ -198,18 +205,16 @@ class ScalarFieldManager:
         return self.sample(key)
 
     def __setitem__(self, name: LowerStr, value: SF_T | VectorT | Array_Nx3_T | None) -> None:
-        """Set the value of a scalar field.
-
-        Set to None to delete an existing field.
+        """Set the value of a scalar field (or delete it when ``value`` is ``None``).
 
         Parameters
         ----------
-        name: LowerStr
-        value: ScalarField | NormalFields | RGBFields | np.ndarray | None
-
-        Returns
-        -------
-
+        name : LowerStr
+            Name of the field to set; dispatched to RGB / Normals /
+            Intensity / Reflectance handlers when the name matches a known
+            alias.
+        value : ScalarField | NormalFields | RGBFields | np.ndarray | None
+            New value. ``None`` deletes the field if it exists.
         """
         # Delete value if None is passed or ignore
         if value is None:
@@ -247,39 +252,28 @@ class ScalarFieldManager:
             self.fields[name] = ScalarField(value, name=name, origin_dtype=origin_dtype)
 
     def __delitem__(self, key: str) -> None:
-        """Delete a scalar field
+        """Delete a scalar field by name.
 
         Parameters
         ----------
-        key: str
-
-        Returns
-        -------
-
+        key : str
+            Name of the field to delete.
         """
         del self.fields[key]
 
     def __getstate__(self):
-        """Return the object's state.
-
-        Returns
-        -------
-
-        """
+        """Return the object's state for pickling (drops the weakref parent)."""
         state = self.__dict__.copy()
         state["_parent"] = None
         return state
 
     def __setstate__(self, state: dict[str, Any] = None) -> None:
-        """Set the object's state.
+        """Restore the object's state from a pickled dict.
 
         Parameters
         ----------
-        state: dict[str, Any]
-
-        Returns
-        -------
-
+        state : dict[str, Any]
+            State previously returned by :meth:`__getstate__`.
         """
         self.__dict__.update(state)
 
@@ -324,15 +318,12 @@ class ScalarFieldManager:
 
     @parent.setter
     def parent(self, parent: PointCloudData) -> None:
-        """Set the parent point cloud object with a weakref.
+        """Set the parent point cloud (stored as a weakref) and re-validate field lengths.
 
         Parameters
         ----------
-        parent: PointCloudData
-
-        Returns
-        -------
-
+        parent : PointCloudData
+            New parent point cloud.
         """
         if self._parent is not None and self._parent() is not parent:
             logger.warning(
@@ -357,11 +348,12 @@ class ScalarFieldManager:
 
     @property
     def num_points(self) -> int:
-        """Return the number of points in the parent point cloud. If np parent is set, return -1.
+        """Return the number of points in the parent point cloud, or ``-1`` if no parent is set.
 
         Returns
         -------
         int
+            Parent point count, or ``-1``.
         """
         if self._parent is None:
             return -1
@@ -380,17 +372,12 @@ class ScalarFieldManager:
 
     @rgb.setter
     def rgb(self, value: Array_Nx3_Uint8_T | Array_Nx3_Float32_T | RGBFields | None) -> None:
-        """Set the RGB fields.
-
-        If set to None, the field will be deleted.
+        """Set the RGB fields. If set to ``None``, the field is deleted.
 
         Parameters
         ----------
-        value: Array_Nx3_Uint8_T | Array_Nx3_Float32_T | RGBFields | None
-
-        Returns
-        -------
-
+        value : Array_Nx3_Uint8_T | Array_Nx3_Float32_T | RGBFields | None
+            New RGB values (or ``None`` to delete).
         """
         self[RGB_NAMES.base] = RGBFields(value) if value is not None else None
 
@@ -406,43 +393,34 @@ class ScalarFieldManager:
 
     @normals.setter
     def normals(self, value: Optional[Array_Nx3_Float_T | NormalFields]):
-        """Set the normals fields.
-
-        If set to None, the field will be deleted.
+        """Set the normals field. If set to ``None``, the field is deleted.
 
         Parameters
         ----------
-        value: Array_Nx3_Float_T | NormalFields | None
-
-        Returns
-        -------
-
+        value : Array_Nx3_Float_T | NormalFields | None
+            New normals (or ``None`` to delete).
         """
         self[NORMAL_NAMES.base] = NormalFields(value) if value is not None else None
 
     @property
     def intensity(self) -> ScalarField | None:
-        """Get the intensity field
+        """Get the intensity field, or ``None`` if not set.
 
         Returns
         -------
         ScalarField | None
+            Intensity field, or ``None``.
         """
         return cast(ScalarField | None, self.fields.get(INTENSITY_NAMES.base, None))
 
     @intensity.setter
     def intensity(self, value: VectorT | ScalarField | None):
-        """Set the intensity field.
-
-        If set to None, the field will be deleted.
+        """Set the intensity field. If set to ``None``, the field is deleted.
 
         Parameters
         ----------
-        value: VectorT | ScalarField | None
-
-        Returns
-        -------
-
+        value : VectorT | ScalarField | None
+            New intensity values (or ``None`` to delete).
         """
         self[INTENSITY_NAMES.base] = ScalarField(value, name=INTENSITY_NAMES.base) if value is not None else None
 
@@ -458,17 +436,12 @@ class ScalarFieldManager:
 
     @reflectance.setter
     def reflectance(self, value: VectorT | ScalarField | None):
-        """Set the reflectance field.
-
-        If set to None, the field will be deleted.
+        """Set the reflectance field. If set to ``None``, the field is deleted.
 
         Parameters
         ----------
-        value: VectorT | ScalarField | None
-
-        Returns
-        -------
-
+        value : VectorT | ScalarField | None
+            New reflectance values (or ``None`` to delete).
         """
         self[REFLECTANCE_NAMES.base] = ScalarField(value, name=REFLECTANCE_NAMES.base) if value is not None else None
 
@@ -492,34 +465,30 @@ class ScalarFieldManager:
         return sampled
 
     def reduce(self, mask: IndexLike) -> None:
-        """
-        Reduces the entries in the fields based on the provided mask.
+        """Reduce every scalar field in place to the rows selected by ``mask``.
 
         Parameters
         ----------
         mask : IndexLike
-            The mask corresponds to indexing the rows or points in the parent point cloud.
-
-        Returns
-        -------
+            The mask corresponds to indexing the rows or points in the parent
+            point cloud.
         """
         for name, value in self.items():
             self.fields[name] = value[mask]
 
     def extract(self, mask: IndexLike) -> Self:
-        """
-        Extracts a subset of the current object based on the provided mask and returns a new instance.
-
-        The current object is also reduced by removing the extracted points.
+        """Return a new manager carrying the selected rows; also reduces ``self`` to the complement.
 
         Parameters
         ----------
         mask : IndexLike
-            The mask corresponds to indexing the rows or points in the parent point cloud.
+            The mask corresponds to indexing the rows or points in the parent
+            point cloud.
 
         Returns
         -------
         ScalarFieldManager
+            New manager containing the rows selected by ``mask``.
         """
         if len(self) == 0:
             return type(self)(fields={})
@@ -536,57 +505,54 @@ class ScalarFieldManager:
         return sample
 
     def add_field(self, sf_field: SF_T) -> None:
-        """Adds a new scalar field to the manager.
+        """Add a new scalar field to the manager (keyed by ``sf_field.name``).
 
         Parameters
         ----------
         sf_field : SF_T
-
-        Returns
-        -------
+            Scalar field to add.
         """
         self[sf_field.name] = sf_field
 
     def remove_field(self, field_name: LowerStr) -> None:
-        """Removes a scalar field from the manager.
+        """Remove a scalar field from the manager by name.
 
         Parameters
         ----------
-        field_name: LowerStr
-
-        Returns
-        -------
-
+        field_name : LowerStr
+            Name of the field to remove.
         """
         del self.fields[field_name.lower()]
 
     def create_field(self, name: str, data: VectorT | Array_Nx3_T) -> None:
-        """Create a scalar field from name and array
+        """Create a scalar field from a name and an array, then add it to the manager.
 
-        Supports Array_Nx3_T for the creation of RGB or Normals fields.
+        Supports ``Array_Nx3_T`` for the creation of RGB or Normals fields.
 
         Parameters
         ----------
-        name: str
-        data: VectorT | Array_Nx3_T
-
-        Returns
-        -------
-
+        name : str
+            Name of the new field.
+        data : VectorT | Array_Nx3_T
+            Field data.
         """
         sf = ScalarField(data, name=name)
         self.add_field(sf)
 
     def _get_rgb(self, name: LowerStr) -> SF_T | None:
-        """Handler for getting the RGB values based on the different RGB name conmventions.
+        """Dispatch RGB-name aliases when getting an RGB value.
 
         Parameters
         ----------
-        name: LowerStr
+        name : LowerStr
+            Alias (one of ``RGB_NAMES.names``, ``RGB_NAMES.scalars``, or
+            ``RGB_NAMES.reverse``).
 
         Returns
         -------
-
+        SF_T | None
+            The matching RGB field (or per-channel scalar), or ``None`` if RGB
+            is not set.
         """
         if self.rgb is None:
             return None
@@ -606,15 +572,19 @@ class ScalarFieldManager:
             raise KeyError(f"Unknown key made it into _handle_rgb : {name}")
 
     def _get_normals(self, name: LowerStr) -> SF_T | None:
-        """Handler for getting the normal values based on the different normal name conmventions
+        """Dispatch normal-name aliases when getting a normal value.
 
         Parameters
         ----------
-        name: LowerStr
+        name : LowerStr
+            Alias (one of ``NORMAL_NAMES.names``, ``NORMAL_NAMES.scalars``,
+            or ``NORMAL_NAMES.reverse``).
 
         Returns
         -------
-
+        SF_T | None
+            The matching normal field (or per-axis scalar), or ``None`` if
+            normals are not set.
         """
         if self.normals is None:
             return None
@@ -633,17 +603,17 @@ class ScalarFieldManager:
             raise KeyError(f"Unknown key made it into normals : {name}")
 
     def _set_rgb(self, name: LowerStr, value: RGBLikeT, origin_dtype: DtypeState | None = None) -> None:
-        """Handler for setting the RGB values based on the different RGB name conmventions.
+        """Dispatch RGB-name aliases when setting an RGB value.
 
         Parameters
         ----------
-        name: LowerStr
-        value: RGBLikeT
-        origin_dtype: DtypeState | None
-
-        Returns
-        -------
-
+        name : LowerStr
+            Alias (one of ``RGB_NAMES.names``, ``RGB_NAMES.scalars``,
+            ``RGB_NAMES.reverse``, or ``RGB_NAMES.float``).
+        value : RGBLikeT
+            New value to set.
+        origin_dtype : DtypeState, optional
+            Original dtype state (preserved on the resulting field).
         """
         if name in RGB_NAMES.names:
             self.fields[RGB_NAMES.base] = RGBFields(value, origin_dtype=cast(DtypeState, origin_dtype))
@@ -669,17 +639,17 @@ class ScalarFieldManager:
             raise KeyError(f"Unknown key made it into _handle_rgb : {name}")
 
     def _set_normals(self, name: LowerStr, value: NormalLikeT, origin_dtype: DtypeState | None = None) -> None:
-        """Handler for setting the normal values based on the different normal name conmventions.
+        """Dispatch normal-name aliases when setting a normal value.
 
         Parameters
         ----------
-        name: LowerStr
-        value: NormalLikeT
-        origin_dtype: DtypeState | None
-
-        Returns
-        -------
-
+        name : LowerStr
+            Alias (one of ``NORMAL_NAMES.names``, ``NORMAL_NAMES.scalars``,
+            or ``NORMAL_NAMES.reverse``).
+        value : NormalLikeT
+            New value to set.
+        origin_dtype : DtypeState, optional
+            Original dtype state (preserved on the resulting field).
         """
         if name in NORMAL_NAMES.names:
             self.fields[NORMAL_NAMES.base] = NormalFields(value, origin_dtype=cast(DtypeState, origin_dtype))
@@ -700,15 +670,23 @@ class ScalarFieldManager:
 
     @classmethod
     def merge(cls, scalar_field_managers: Iterable[Self]) -> Self:
-        """Merges a list of scalar field managers into one.
+        """Merge a list of scalar-field managers, keeping only the fields they all share.
 
         Parameters
         ----------
-        scalar_field_managers: Iterable[ScalarFieldManager]]
+        scalar_field_managers : Iterable[ScalarFieldManager]
+            Managers to merge.
 
         Returns
         -------
+        ScalarFieldManager
+            New manager containing every commonly-named scalar field
+            concatenated along axis 0.
 
+        Raises
+        ------
+        ValueError
+            If ``scalar_field_managers`` is empty.
         """
         sfm_key_sets = (set(sfm) for sfm in scalar_field_managers)
 
@@ -750,6 +728,7 @@ class ScalarFieldManager:
         return new_sfm
 
     def as_struct_array(self) -> np.ndarray:
+        """Return the scalar fields packed into a single numpy structured array."""
         dtype = []
         data = []
 

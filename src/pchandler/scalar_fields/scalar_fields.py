@@ -6,6 +6,8 @@
 #
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
+"""Per-point typed scalar-field classes (RGB, normals, intensity, segmentation, generic)."""
+
 from __future__ import annotations
 
 import logging
@@ -78,15 +80,22 @@ class DtypeState(NamedTuple):
 
     @classmethod
     def generate(cls, array: ArrayT | ArrayNx3 | BaseVector) -> DtypeState:
-        """Generates a DtypeState object from an array.
+        """Build a :class:`DtypeState` from an array's dtype and min/max range.
 
         Parameters
         ----------
-        array: ArrayT | ArrayNx3 | BaseVector
+        array : ArrayT | ArrayNx3 | BaseVector
+            Source array.
 
         Returns
         -------
         DtypeState
+            New state instance.
+
+        Raises
+        ------
+        TypeError
+            If ``array`` does not expose a ``dtype`` attribute.
         """
         if not hasattr(array, "dtype"):
             raise TypeError(f"Array does not have dtype attribute: {array}")
@@ -94,15 +103,17 @@ class DtypeState(NamedTuple):
 
     @staticmethod
     def validate(obj: DtypeState) -> None:
-        """Ensure that the lower value is less than the upper value.
+        """Ensure that the lower value is strictly less than the upper value.
 
         Parameters
         ----------
-        obj: DtypeState
+        obj : DtypeState
+            State to validate; no-op if ``obj`` is ``None``.
 
-        Returns
-        -------
-
+        Raises
+        ------
+        ValueError
+            If ``obj.lower >= obj.upper``.
         """
         if (obj is not None) and (obj.lower >= obj.upper):
             raise ValueError(f"lower must be less than upper. {obj=}")
@@ -117,14 +128,16 @@ class _ScalarKwargT(TypedDict, total=False):
 
 
 class AbstractScalarField(FixedLengthArray):
-    """Abstract scalar field class containing validation and conversion to origianl dtype methods
+    """Abstract scalar field with validation and conversion back to the original dtype.
 
     Parameters
     ----------
-    arr: VectorT | Array_Nx3_T
-    name: SfNameT
-    origin_dtype: SfOrigDtT
-
+    arr : VectorT | Array_Nx3_T
+        Underlying array of values.
+    name : SfNameT
+        Field name (lower-cased).
+    origin_dtype : SfOrigDtT
+        Original :class:`DtypeState` captured at construction.
     """
 
     name: LowerStr
@@ -195,33 +208,41 @@ class AbstractScalarField(FixedLengthArray):
 
 
 class ScalarField(BaseVector, AbstractScalarField):
+    """Generic scalar field backed by a 1D vector."""
+
     def __init__(self, arr: VectorT | Self, name: SfNameT = None, origin_dtype: SfOrigDtT = None):
-        """Scalar Field class to support individual fields represented by a vector (1D array) shape
+        """Initialise a :class:`ScalarField` from a 1D vector.
 
         Parameters
         ----------
-        arr: VectorT | Array_Nx3_T | Self
-        name: SfNameT, optional
-        origin_dtype: SfOrigDtT, optional
+        arr : VectorT | Array_Nx3_T | Self
+            Underlying 1D values.
+        name : SfNameT, optional
+            Field name; inferred from ``arr`` or class default if omitted.
+        origin_dtype : SfOrigDtT, optional
+            Original :class:`DtypeState`; auto-generated if omitted.
         """
         kwargs: dict[str, Any] = {"name": name, "origin_dtype": origin_dtype}
         super().__init__(arr, **kwargs)
 
 
 class ScalarFieldTriplet(ArrayNx3, AbstractScalarField):
-    """Scalar Field Triplet class to support RGB and Normal fields.
+    """Scalar field triplet (``(N, 3)``) used as the base for RGB and Normal fields.
 
     Parameters
     ----------
-    arr: Array_Nx3_T
+    arr : Array_Nx3_T
+        Underlying ``(N, 3)`` array.
     """
 
     def __init__(self, arr: Array_Nx3_T | Self, name: SfNameT = None, origin_dtype: SfOrigDtT = None):
+        """Initialise a :class:`ScalarFieldTriplet` from an ``(N, 3)`` array."""
         kwargs: dict[str, Any] = {"name": name, "origin_dtype": origin_dtype}
         super().__init__(arr, **kwargs)
 
     @classmethod
     def initialize(cls, size: int, value: Array_Nx3_Uint8_T | None = None, name: str = "") -> Self:
+        """Build a triplet of length ``size``, optionally pre-filled with ``value``."""
         dtype = cls.model_fields["arr"].annotation.__dict__["__args__"][1]
         if value is None:
             value = np.zeros((size, 3), dtype=dtype)
@@ -229,13 +250,12 @@ class ScalarFieldTriplet(ArrayNx3, AbstractScalarField):
 
 
 class RGBFields(ScalarFieldTriplet):
-    """RGB / Color Field
-
-     Represented by a scalar field triplet of Uint8 values.
+    """RGB / Color field, represented by a scalar field triplet of uint8 values.
 
     Parameters
     ----------
-    arr: Array_Nx3_Uint8_T
+    arr : Array_Nx3_Uint8_T
+        Underlying ``(N, 3)`` uint8 array.
     """
 
     arr: Array_Nx3_Uint8_T
@@ -258,22 +278,24 @@ class RGBFields(ScalarFieldTriplet):
     @field_validator("arr", mode="before")
     @classmethod
     def _normalise_to_uint8(cls, data: npt.NDArray[Any]) -> Array_Uint8_T:
-        """Automatically convert the input array to uint8
+        """Convert the input array to uint8 (pydantic before-validator).
 
         Parameters
         ----------
-        data: npt.NDArray[Any]
+        data : npt.NDArray[Any]
+            Input RGB array.
 
         Returns
         -------
         Array_Uint8_T
+            Uint8 RGB array.
         """
         return normalize_uint8(data)
 
     @field_validator("name", mode="before")
     @classmethod
     def _override_name(cls, value: Any) -> str:
-        """Set the scalar field name to the constant RGB_NAMES.base"""
+        """Force the scalar-field name to the canonical ``RGB_NAMES.base`` constant."""
         return RGB_NAMES.base
 
     @property
@@ -347,12 +369,12 @@ class RGBFields(ScalarFieldTriplet):
 
 
 class NormalFields(ScalarFieldTriplet):
-    """
-    Normal Vector Field represented by a scalar field triplet.
+    """Normal-vector field represented by a scalar field triplet of float32 unit vectors.
 
     Parameters
     ----------
-    arr: Array_Nx3_Float32_T
+    arr : Array_Nx3_Float32_T
+        Underlying ``(N, 3)`` float32 array.
     """
 
     arr: Array_Nx3_Float32_T
@@ -374,15 +396,22 @@ class NormalFields(ScalarFieldTriplet):
     @field_validator("arr", mode="before")
     @classmethod
     def _ensure_unit_vector(cls, array: Array_Nx3_Float_T) -> Array_Nx3_Float32_T:
-        """Converts the input array to a set of unit vectors.
+        """Convert the input array to a set of unit vectors (cast to float32).
 
         Parameters
         ----------
-        array: Array_Nx3_Float_T
+        array : Array_Nx3_Float_T
+            Input ``(N, 3)`` floating-point or signed-integer array.
 
         Returns
         -------
         Array_Nx3_Float32_T
+            Unit-length float32 normals.
+
+        Raises
+        ------
+        TypeError
+            If ``array.dtype`` is not floating-point or signed-integer.
         """
         if not (np.issubdtype(array.dtype, np.floating) or np.issubdtype(array.dtype, np.signedinteger)):
             raise TypeError("Dtype of normals array must be of type floating or signed integer}")
@@ -397,7 +426,7 @@ class NormalFields(ScalarFieldTriplet):
     @field_validator("name", mode="before")
     @classmethod
     def _override_name(cls, value: Any) -> str:
-        """Force the scalar field name to the constant"""
+        """Force the scalar-field name to the canonical ``NORMAL_NAMES.base`` constant."""
         return NORMAL_NAMES.base
 
     @property
@@ -418,21 +447,22 @@ class NormalFields(ScalarFieldTriplet):
     # TODO need to sort out the parameters in this method signature as name is not required
     @classmethod
     def initialize(cls, length: int, value: Array_Nx3_Float_T | Vector_Float_T | None = None, name: str = "") -> Self:
-        """Initialize an array for the normals field
-
-        When passing in a set of values, the
+        """Build a :class:`NormalFields` of length ``length``, optionally seeded with ``value``.
 
         Parameters
         ----------
-        length: int
-        value: Array_Nx3_Float32_T | None, optional
-            Existing set of values to initialize the array with
-        name: str, optional
-            in case of initializing from an array, an additional field of
+        length : int
+            Number of rows to allocate.
+        value : Array_Nx3_Float32_T, optional
+            Existing values to initialise the array with (defaults to unit
+            vectors along ``+Z``).
+        name : str, optional
+            Field name; default is empty.
 
         Returns
         -------
-
+        NormalFields
+            New normals field of the requested length.
         """
         dtype = cls.model_fields["arr"].annotation.__dict__["__args__"][1]
         if value is None:
@@ -442,17 +472,18 @@ class NormalFields(ScalarFieldTriplet):
 
 
 class SegmentationMap(ScalarField):
-    """
-    Segmentation map scalar field class. Supports uint8 and uint16 dtypes for indexing different point cloud segments.
+    """Segmentation-map scalar field (uint8 or uint16) keyed by point-cloud segment.
 
     Parameters
     ----------
-    arr: Vector_Uint8_T | Vector_Uint16_T
+    arr : Vector_Uint8_T | Vector_Uint16_T
+        Per-point segment index.
     """
 
     arr: Vector_Uint8_T | Vector_Uint16_T
 
     def __init__(self, arr: Vector_Uint8_T | Vector_Uint16_T | Self, **kwargs: Unpack[_ScalarKwargT]):
+        """Initialise a :class:`SegmentationMap` from a uint8/uint16 vector."""
         super().__init__(arr, **kwargs)
 
     @classmethod
@@ -483,81 +514,82 @@ class SegmentationMap(ScalarField):
 
 
 class ScalarFieldUint8(ScalarField):
-    """
-    Scalar field that only supports uint8 dtype.
-    """
+    """Scalar field constrained to ``uint8`` dtype."""
 
     arr: Vector_Uint8_T
 
     def __init__(self, arr: Vector_Uint8_T | Self, **kwargs: Unpack[_ScalarKwargT]):
-        """
+        """Initialise a :class:`ScalarFieldUint8` from a uint8 vector.
 
         Parameters
         ----------
-        arr: Vector_Uint8_T | Self
-        kwargs: Unpack[_ScalarKwargT]
+        arr : Vector_Uint8_T | Self
+            Underlying uint8 vector.
+        **kwargs : Unpack[_ScalarKwargT]
+            Optional ``name`` and ``origin_dtype``.
         """
         super().__init__(arr, **kwargs)
 
 
 class ScalarFieldBoolean(ScalarField):
-    """
-    Scalar field that only supports boolean arrays.
-    """
+    """Scalar field constrained to boolean arrays."""
 
     arr: Vector_Bool_T
 
     def __init__(self, arr: Vector_Bool_T | Self, **kwargs: Unpack[_ScalarKwargT]):
-        """
+        """Initialise a :class:`ScalarFieldBoolean` from a boolean vector.
 
         Parameters
         ----------
-        arr: Vector_Bool_T | Self
-        kwargs: Unpack[_ScalarKwargT]
+        arr : Vector_Bool_T | Self
+            Underlying boolean vector.
+        **kwargs : Unpack[_ScalarKwargT]
+            Optional ``name`` and ``origin_dtype``.
         """
         super().__init__(arr, **kwargs)
 
 
 class ScalarFieldFloat32(ScalarField):
-    """
-    Scalar field class which supports only Float32 dtypes
-    """
+    """Scalar field constrained to ``float32`` dtype."""
 
     arr: Vector_Float32_T
 
     def __init__(self, arr: Vector_Float32_T | Self, **kwargs: Unpack[_ScalarKwargT]):
-        """
+        """Initialise a :class:`ScalarFieldFloat32` from a float32 vector.
 
         Parameters
         ----------
-        arr: Vector_Float32_T | Self
-        kwargs: Unpack[_ScalarKwargT]
+        arr : Vector_Float32_T | Self
+            Underlying float32 vector.
+        **kwargs : Unpack[_ScalarKwargT]
+            Optional ``name`` and ``origin_dtype``.
         """
         super().__init__(arr, **kwargs)
 
 
 class NormalisedInt16ScalarField(ScalarField):
-    """
-    Scalar field class that automatically normalizes the input to Int16 dtype
-    """
+    """Scalar field whose values are normalised into ``int16`` at validation time."""
 
     arr: Annotated[Vector_Int16_T, BeforeValidator(normalize_int16)]
 
     def __init__(self, arr: VectorT | Self, **kwargs: Unpack[_ScalarKwargT]):
-        """
+        """Initialise a :class:`NormalisedInt16ScalarField` from any numeric vector.
 
         Parameters
         ----------
-        arr: VectorT | Self
-        kwargs: Unpack[_ScalarKwargT]
+        arr : VectorT | Self
+            Underlying values (will be normalised to int16).
+        **kwargs : Unpack[_ScalarKwargT]
+            Optional ``name`` and ``origin_dtype``.
         """
         super().__init__(arr, **kwargs)
 
     def to_uint8(self) -> ScalarFieldUint8:
-        """Returns a converted copy of the scalar field with the dtype set to uint8.
+        """Return a converted copy of the scalar field with the dtype set to uint8.
 
         Returns
         -------
         ScalarFieldUint8
+            New uint8 scalar field carrying the same name and origin dtype.
         """
         return ScalarFieldUint8(normalize_uint8(self.arr), name=self.name, origin_dtype=self.origin_dtype)
