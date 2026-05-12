@@ -14,15 +14,15 @@ from __future__ import annotations
 
 import copy
 import logging
-import threading
 import uuid
 import weakref
-from typing import TYPE_CHECKING, ClassVar, Optional, cast
+from typing import TYPE_CHECKING, Optional, cast
 from uuid import UUID
 
 import numpy as np
 from GSEGUtils.base_types import Array_Nx3_T, Vector_3_T
 from GSEGUtils.constants import validate_variables
+from GSEGUtils.singleton import SingletonMeta
 
 from pchandler.geometry.util import MinMaxPoints
 
@@ -32,18 +32,6 @@ if TYPE_CHECKING:
 __all__ = ['OptimizedShiftManager', 'OptimizedShift']
 
 logger = logging.getLogger(__name__)
-
-
-class SingletonMeta(type):
-    """Thread-safe implementation of the Singleton Metaclass"""
-    _instances: ClassVar[dict[type, object]] = {}
-    _lock: ClassVar[threading.RLock] = threading.RLock()
-
-    def __call__(cls, *args, **kwargs):
-        with cls._lock:
-            if cls not in cls._instances:
-                cls._instances[cls] = super().__call__(*args, **kwargs)
-            return cls._instances[cls]
 
 
 class OptimizedShiftManager(metaclass=SingletonMeta):
