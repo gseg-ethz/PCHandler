@@ -60,6 +60,18 @@ jobs:
           path: ~/.cache/pip
           key: pip-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
 
+      # pyproject.toml pins GSEGUtils via git+ssh:// (DEP-01). CI runners have
+      # no GitHub SSH key by default and GSEGUtils is private (Private :: Do
+      # Not Upload). Load the GSEGUTILS_DEPLOY_KEY repo secret into the SSH
+      # agent so `pip install .[dev]` can clone the SHA-pinned GSEGUtils. The
+      # public half of this keypair is registered as a read-only deploy key on
+      # the GSEGUtils repository. See .planning/phases/01-cross-repo-foundation/
+      # 01-VERIFICATION.md for the auth setup audit trail.
+      - name: Set up SSH agent for private GSEGUtils dep
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.GSEGUTILS_DEPLOY_KEY }}
+
       - name: Install dev deps
         run: pip install .[dev]
 
