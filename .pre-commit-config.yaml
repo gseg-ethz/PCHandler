@@ -28,3 +28,31 @@ repos:
       - id: ruff-check
         args: ["--fix"]
       - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.17.1
+    hooks:
+      - id: mypy
+        args: ["--config-file", "mypy.ini"]
+        pass_filenames: false
+        # The pydantic.mypy plugin is loaded by mypy at startup (see mypy.ini
+        # `plugins = pydantic.mypy`). mirrors-mypy runs in an isolated venv,
+        # so plugin packages must be declared as additional_dependencies here.
+        # GSEGUtils is intentionally omitted: the per-module `[mypy-pchandler.*]
+        # ignore_errors` blocks already silence every site that consumes it,
+        # and the git+ssh source cannot resolve in CI's isolated venv anyway.
+        additional_dependencies:
+          - "pydantic~=2.11"
+          - "numpy>=2.0,<2.4"
+          - "numpydantic~=1.6"
+
+  - repo: local
+    hooks:
+      - id: pyright-informational
+        name: pyright (informational, never blocks)
+        entry: bash -c 'pyright "$@" || true' --
+        language: system
+        types: [python]
+        require_serial: true
+        pass_filenames: false
+        verbose: true

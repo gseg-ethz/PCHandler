@@ -94,6 +94,7 @@ doc = [
 dev = [
     "ruff~=0.15",             # lint + format
     "mypy~=1.17",             # static typing
+    "pyright~=1.1",           # informational type checker (warn-only, D-12)
     "pre-commit~=4.3",        # git hooks runner
     "pytest~=8.4",            # test framework
     "coverage~=7.0",          # coverage reporting
