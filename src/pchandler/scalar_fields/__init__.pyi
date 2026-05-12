@@ -7,7 +7,7 @@
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
 # Auto-generated stub for lazy exports
-from typing import Any, Final, NoReturn
+from typing import Final, NoReturn
 
 from .scalar_field_manager import SF_T, ScalarFieldManager
 from .scalar_fields import NormalFields, RGBFields, ScalarField, ScalarFieldTriplet

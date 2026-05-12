@@ -14,7 +14,7 @@ Provides helper functions for transforming point clouds and converting between c
 
 from __future__ import annotations
 
-from typing import Any, Literal, Self
+from typing import Self
 
 import numpy as np
 from GSEGUtils.base_arrays import BaseArray, FixedLengthArray, NumericMixins
@@ -26,6 +26,7 @@ from pydantic import (
 
 class _TransformArray(NumericMixins):
     """Base Validated Transformation Array class"""
+
     def __matmul__(self, other: Array_Float_T | BaseArray) -> Array_Float_T | BaseArray:
         """Matrix multiplication ensuring other `BaseArray` inherited objects return as their own type
 
@@ -72,6 +73,7 @@ class _Transform3x3(_TransformArray):
     ----------
     arr : Array_3x3_T
     """
+
     arr: Array_3x3_T = Field(default_factory=lambda: np.eye(3))
 
 
@@ -82,6 +84,7 @@ class _Transform4x4(_TransformArray):
     ----------
     arr : Array_4x4_T
     """
+
     arr: Array_4x4_T = Field(default_factory=lambda: np.eye(4))
 
 
@@ -195,6 +198,7 @@ class Transform(_Transform4x4):
         affine[:3, 3] = translation.astype(np.float32)
         affine[np.diag_indices(3)] *= scale
         return cls(affine)
+
 
 #     def as_record(self, forward=True):
 #         if forward:

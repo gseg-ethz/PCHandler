@@ -87,7 +87,6 @@ def no_parent_sfm(rgb_field, normals_field, scalar_field, intensity_field, refle
 
 
 class TestSfmInitialisation:
-
     def test_init_no_kwargs(self):
         sfm = ScalarFieldManager()
         assert isinstance(sfm, ScalarFieldManager)

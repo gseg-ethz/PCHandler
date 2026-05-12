@@ -9,15 +9,14 @@
 """
 Scalar field based filters
 """
+
 import logging
 from typing import Annotated, cast
 
 import numpy as np
-from GSEGUtils.constants import validate_variables
-from numpy.typing import NDArray
-from pydantic import Field, NonNegativeFloat
-
 from GSEGUtils.base_types import Vector_Bool_T
+from GSEGUtils.constants import validate_variables
+from pydantic import Field, NonNegativeFloat
 
 from pchandler import PointCloudData
 from pchandler.filters import PointCloudFilter

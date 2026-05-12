@@ -6,11 +6,11 @@
 #
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
+from pathlib import Path
 from types import ModuleType
 
 # Auto-generated stub for lazy exports
-from typing import Final, Literal, NoReturn, overload, Callable
-from pathlib import Path
+from typing import Callable, Final, Literal, NoReturn, overload
 
 from . import base_types as base_types
 from . import constants as constants
@@ -52,5 +52,5 @@ def __getattr__(
     name: Literal["data_io", "geometry", "filters", "scalar_fields", "base_types", "constants"],
 ) -> ModuleType: ...
 @overload
-def __getattr__(name: Literal["load_file"]) -> Callable[[str|Path], PointCloudData]: ...
+def __getattr__(name: Literal["load_file"]) -> Callable[[str | Path], PointCloudData]: ...
 def __getattr__(name: str) -> NoReturn: ...

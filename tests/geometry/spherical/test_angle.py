@@ -9,7 +9,6 @@ from pchandler.geometry.spherical import Angle, AngleArray
 
 
 class TestAngle:
-
     @pytest.mark.parametrize(
         "value, unit, expected_rad",
         [
@@ -164,7 +163,6 @@ class TestAngle:
 
 
 class TestAngleArrayDirect:
-
     def test_direct_anglearray_construction(self):
         arr = AngleArray([0, 180], AngleUnit.DEGREE)
         assert isinstance(arr, AngleArray)
@@ -243,7 +241,6 @@ class TestAngleArrayDirect:
 
 
 class TestAngleComparison:
-
     def test_scalar_eq_ne(self):
         a = Angle(90, AngleUnit.DEGREE)
         b = Angle(np.pi / 2, AngleUnit.RAD)
@@ -299,7 +296,6 @@ class TestAngleComparison:
 
 
 class TestAngleMath:
-
     @pytest.mark.parametrize(
         "angle1_val, angle1_unit, angle2_val, angle2_unit",
         [
@@ -326,7 +322,6 @@ class TestAngleMath:
 
 
 class TestAnglePickle:
-
     @pytest.mark.parametrize(
         "angle_val, angle_unit",
         [

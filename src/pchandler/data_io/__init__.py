@@ -10,14 +10,13 @@
 Public API for pchandler.data_io.
 Re-exports key classes for easy IO access
 """
+
 from __future__ import annotations
 
 import importlib
 from typing import TYPE_CHECKING
 
-__all__ = [
-    "core", "util"
-]
+__all__ = ["core", "util"]
 
 _lazy_map: dict[str, str | tuple[str, str]] = {
     "Csv": ("csv", "CsvHandler"),
@@ -26,7 +25,7 @@ _lazy_map: dict[str, str | tuple[str, str]] = {
     "Ply": ("ply", "PlyHandler"),
     # "Pcd": ("pcd", "PcdHandler"),
     "find_point_cloud_in_directory": "core",
-    "load_file": "util"
+    "load_file": "util",
 }
 
 __all__ = __all__ + list(_lazy_map)

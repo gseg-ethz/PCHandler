@@ -8,8 +8,15 @@
 
 from typing import NamedTuple, Optional
 
-__all__ = ['RGB_NAMES', 'NORMAL_NAMES', 'XYZ_NAMES', 'INTENSITY_NAMES', 'REFLECTANCE_NAMES',
-           'COMMON_FIELD_NAMES', 'COMMON_FIELD_BASES']
+__all__ = [
+    "RGB_NAMES",
+    "NORMAL_NAMES",
+    "XYZ_NAMES",
+    "INTENSITY_NAMES",
+    "REFLECTANCE_NAMES",
+    "COMMON_FIELD_NAMES",
+    "COMMON_FIELD_BASES",
+]
 
 
 TripletT = tuple[str, str, str]
@@ -81,14 +88,15 @@ class _NameConstantsTriplet(NamedTuple):
 
         raise ValueError("Could not find name in positional names")
 
+
 #: Pre-defined names for RGB field access
 RGB_NAMES: _NameConstantsTriplet = _NameConstantsTriplet(
-    base = "rgb",
-    char = ("r", "g", "b"),
-    words = ("red", "green", "blue"),
-    float = ("rf", "gf", "bf"),
-    extra_names = ("colour", "colours", "color", "colors"),
-    reverse = "bgr"
+    base="rgb",
+    char=("r", "g", "b"),
+    words=("red", "green", "blue"),
+    float=("rf", "gf", "bf"),
+    extra_names=("colour", "colours", "color", "colors"),
+    reverse="bgr",
 )
 
 #: Pre-defined names for Normals field access
@@ -109,18 +117,19 @@ XYZ_NAMES: _NameConstantsTriplet = _NameConstantsTriplet(
 )
 
 #: Pre-defined names for Intensity field access
-INTENSITY_NAMES: _NameConstantsSingle = _NameConstantsSingle(
-    base="intensity",
-    char="i",
-    extra_names=("intensities",))
+INTENSITY_NAMES: _NameConstantsSingle = _NameConstantsSingle(base="intensity", char="i", extra_names=("intensities",))
 
 #: Pre-defined names for Reflectance field access
 REFLECTANCE_NAMES: _NameConstantsSingle = _NameConstantsSingle(
     base="reflectance",
 )
 
-COMMON_FIELD_NAMES: tuple[_NameConstantsSingle | _NameConstantsTriplet, ...] = \
-    (RGB_NAMES, NORMAL_NAMES, INTENSITY_NAMES, REFLECTANCE_NAMES)
+COMMON_FIELD_NAMES: tuple[_NameConstantsSingle | _NameConstantsTriplet, ...] = (
+    RGB_NAMES,
+    NORMAL_NAMES,
+    INTENSITY_NAMES,
+    REFLECTANCE_NAMES,
+)
 
 COMMON_FIELD_BASES = (field.base for field in COMMON_FIELD_NAMES)
 

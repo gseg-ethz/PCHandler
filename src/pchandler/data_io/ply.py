@@ -7,6 +7,7 @@
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
 """PLY file format handler class"""
+
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -30,6 +31,7 @@ class PlyHandler(AbstractIOHandler):
     * .ply
 
     """
+
     FORMATS = [".ply"]
 
     @classmethod

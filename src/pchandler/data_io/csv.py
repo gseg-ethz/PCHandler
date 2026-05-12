@@ -7,6 +7,7 @@
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
 """CSV / ASCII file format handler class"""
+
 import logging
 from pathlib import Path
 from typing import Any, Iterable, NamedTuple, Optional, Unpack
@@ -42,11 +43,13 @@ class AsciiInfo(NamedTuple):
     num_points : int | None
         Number of data points in the file or None if unspecified.
     """
+
     header: list[str]
     delimiter: str
     fields: list[str]
     num_fields: int
     num_points: int | None
+
 
 # TODO write tests for the pcd_kwargs in each of the load functions
 class CsvHandler(AbstractIOHandler):
@@ -62,6 +65,7 @@ class CsvHandler(AbstractIOHandler):
     * .pts
 
     """
+
     FORMATS = [".txt", ".csv", ".xyz", ".asc", ".ascii", ".pts"]
 
     @classmethod

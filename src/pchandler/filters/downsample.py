@@ -17,9 +17,9 @@ from typing import Annotated, Literal, cast
 
 import numpy as np
 import numpy.typing as npt
+from GSEGUtils.base_types import Vector_Bool_T
 from GSEGUtils.constants import validate_variables
 from GSEGUtils.util import unique_rows_fast
-from GSEGUtils.base_types import Vector_Bool_T
 from pydantic import Field, PositiveFloat
 
 from pchandler import PointCloudData
@@ -57,9 +57,7 @@ def _computed_weighted_values(
                 weight_sum = weight_sum[:, None]
 
             if field_name == "rgb":
-                logger.warning(
-                    f"RGB colours are not retained. " f"A weighted value is taken using {obj.weighting_method=}"
-                )
+                logger.warning(f"RGB colours are not retained. A weighted value is taken using {obj.weighting_method=}")
 
             elif field_name == "normals":
                 logger.warning(

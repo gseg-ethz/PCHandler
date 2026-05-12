@@ -11,21 +11,19 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Literal, Optional, Self, Sequence, cast, overload, Mapping, TypeAlias, Union, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Literal, Optional, Self, Sequence, TypeAlias, cast, overload
 
 import numpy as np
-
-from pydantic import Field, field_serializer, field_validator, AliasChoices
-
 from GSEGUtils.base_types import (
     Array_Nx3_Float_T,
     Array_Nx3_T,
     Array_Nx3_Uint8_T,
     ArrayT,
     IndexLike,
+    Vector_3_Float_T,
     VectorT,
-    Vector_3_Float_T
 )
+from pydantic import Field, field_serializer, field_validator
 
 from pchandler.geometry.coordinates import CartesianCoordinates
 from pchandler.scalar_fields import (
@@ -38,17 +36,18 @@ from pchandler.scalar_fields import (
 )
 
 if TYPE_CHECKING:
-    from py4dgeo import Epoch
     import open3d as o3d
+    from py4dgeo import Epoch
 else:
     o3d: TypeAlias = Any
     Epoch: TypeAlias = Any
 
 
-__all__ = ['PointCloudData',]
+__all__ = [
+    "PointCloudData",
+]
 
 logger = logging.getLogger(__name__)
-
 
 
 class PointCloudData(CartesianCoordinates):
@@ -67,9 +66,9 @@ class PointCloudData(CartesianCoordinates):
         normals: NormalFields | Array_Nx3_Float_T | None = None,
         intensity: ScalarField | VectorT | None = None,
         reflectance: ScalarField | VectorT | None = None,
-        scalar_fields: (ScalarFieldManager
-                                 | dict[str, ScalarField | ScalarFieldTriplet | Array_Nx3_T | VectorT | Sequence]
-                                 | None) = None,
+        scalar_fields: (
+            ScalarFieldManager | dict[str, ScalarField | ScalarFieldTriplet | Array_Nx3_T | VectorT | Sequence] | None
+        ) = None,
         socs_origin: Vector_3_Float_T | None = None,
         **kwargs: Any,
     ):
@@ -94,7 +93,7 @@ class PointCloudData(CartesianCoordinates):
 
         kwargs = {} | kwargs
         kwargs["scalar_fields"] = scalar_fields
-        kwargs['socs_origin'] = socs_origin
+        kwargs["socs_origin"] = socs_origin
 
         super().__init__(xyz=xyz, **kwargs)  # type: ignore[call-overload]
 
@@ -258,8 +257,8 @@ class PointCloudData(CartesianCoordinates):
 
     def __setitem__(self, key: IndexLike, value: ArrayT | PointCloudData) -> None:
         raise IndexError(
-            f"Setting items in PointCloudData is not supported. Consider using the copy or "
-            f"dump data to a dict and reinstantiate."
+            "Setting items in PointCloudData is not supported. Consider using the copy or "
+            "dump data to a dict and reinstantiate."
         )
 
     def __hash__(self) -> int:
@@ -334,7 +333,7 @@ class PointCloudData(CartesianCoordinates):
         *pcds: Self,
         **kwargs: dict[str, Any],
     ) -> Self:
-        """ Merge a set of point clouds together
+        """Merge a set of point clouds together
 
         If point clouds contain similar scalar fields, these will be also merged.
         Where a scalar field is missing in one point cloud, then that field will not be retained.
@@ -450,7 +449,6 @@ class PointCloudData(CartesianCoordinates):
 
         return pcd
 
-
     def to_py4dgeo(self) -> Epoch:
         """Convert the PointCloudData object to a py4dgeo Epoch.
 
@@ -475,9 +473,9 @@ class PointCloudData(CartesianCoordinates):
         #     pcd = self
 
         return _Epoch(
-            cloud = self.xyz,
-            normals = self.normals if self.normals is not None else None,
-            additional_dimensions= self.scalar_fields.as_struct_array()
+            cloud=self.xyz,
+            normals=self.normals if self.normals is not None else None,
+            additional_dimensions=self.scalar_fields.as_struct_array(),
         )
 
     @classmethod
@@ -504,7 +502,7 @@ class PointCloudData(CartesianCoordinates):
             sfs[name] = epoch.additional_dimensions[name].squeeze()
 
         pcd = cls(epoch.cloud, scalar_fields=sfs)
-        if epoch.__dict__['_normals'] is not None:
+        if epoch.__dict__["_normals"] is not None:
             pcd.normals = epoch.normals
 
         return pcd

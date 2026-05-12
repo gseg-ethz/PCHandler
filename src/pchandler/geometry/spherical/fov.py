@@ -81,9 +81,10 @@ import warnings
 from dataclasses import dataclass, field
 from fractions import Fraction
 from itertools import chain
-from typing import Any, Generator, Iterable, Optional, Self, TypeAlias, cast, NamedTuple
+from typing import Any, Generator, Iterable, Optional, Self, TypeAlias, cast
 
 import numpy as np
+from GSEGUtils.base_types import Vector_Bool_T, Vector_Float_T, VectorT
 from GSEGUtils.constants import DEFAULT_CONFIG, EPS, PI, TWO_PI, validate_variables
 from pydantic import (
     BaseModel,
@@ -95,10 +96,9 @@ from pydantic import (
     validate_call,
 )
 
-from GSEGUtils.base_types import VectorT, Vector_Bool_T, Vector_Float_T
 from pchandler.geometry.spherical import Angle, AngleArray
 
-__all__ = ['FoV', 'FoVTree']
+__all__ = ["FoV", "FoVTree"]
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -335,7 +335,7 @@ class FoV(BaseModel):
         tuple[float, float] | None
 
         """
-        low = max(a0, b0)   # Left or top components
+        low = max(a0, b0)  # Left or top components
         high = min(a1, b1)  # Right or bottom components
         return (low, high) if low < high or np.isclose(low, high) else None
 
@@ -362,7 +362,7 @@ class FoV(BaseModel):
             if np.isclose(fov2.left, -PI) and np.isclose(fov2.right, PI):
                 return wrapping_fov.left, wrapping_fov.right
 
-            raise ValueError(f"Intersections on both sides of the wrapping FoV detected and not supported")
+            raise ValueError("Intersections on both sides of the wrapping FoV detected and not supported")
             # Two cases:
             #  - Where the non-wrapping FoV is a full circle (encasing) the wrapping FoV
             #  - Where the non-wrapping FoV touches/overlaps both edges of the wrapping FoV. Creating two intersections
@@ -409,8 +409,8 @@ class FoV(BaseModel):
 
         # Case 1 and 4: Both non-wrapping or both wrapping
         else:
-            left=min(self.left, fov2.left)
-            right=max(self.right, fov2.right)
+            left = min(self.left, fov2.left)
+            right = max(self.right, fov2.right)
 
         return type(self)(
             left=left,
@@ -419,7 +419,7 @@ class FoV(BaseModel):
             bottom=max(self.bottom, fov2.bottom),
         )
 
-    def intersect(self, fov2: Self) -> Self|None:
+    def intersect(self, fov2: Self) -> Self | None:
         """Returns the intersection of this FoV with another.
 
         Parameters
@@ -432,12 +432,7 @@ class FoV(BaseModel):
         """
 
         # Case 1: no vertical intersection, therefore no intersection.
-        vertical_intersection = self._interval_intersection_1d(
-            a0=self.top,
-            a1=self.bottom,
-            b0=fov2.top,
-            b1=fov2.bottom
-        )
+        vertical_intersection = self._interval_intersection_1d(a0=self.top, a1=self.bottom, b0=fov2.top, b1=fov2.bottom)
 
         if vertical_intersection is None:
             return None
@@ -625,12 +620,8 @@ class FoV(BaseModel):
             extended_fov = type(self).from_center_with_extent(self.center(), (width_target, height_target))
             return extended_fov.tile(target_extent, False)
 
-        horizontal_steps = AngleArray(
-            np.append(np.arange(self.left, self.right, target_extent.width()), self.right)
-        )
-        elevation_steps = AngleArray(
-            np.append(np.arange(self.top, self.bottom, target_extent.height()), self.bottom)
-        )
+        horizontal_steps = AngleArray(np.append(np.arange(self.left, self.right, target_extent.width()), self.right))
+        elevation_steps = AngleArray(np.append(np.arange(self.top, self.bottom, target_extent.height()), self.bottom))
 
         horizontal_bins = list(zip(horizontal_steps[:-1], horizontal_steps[1:]))
         vertical_bins = list(zip(elevation_steps[:-1], elevation_steps[1:]))

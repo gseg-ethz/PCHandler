@@ -14,10 +14,9 @@ from functools import total_ordering
 from typing import Any, Generator, Self, cast
 
 import numpy as np
-from GSEGUtils.util import AngleUnit, convert_angles
 from GSEGUtils.base_types import Array_Float_T, ArrayT
-from numpy.typing import NDArray, DTypeLike, ArrayLike
-
+from GSEGUtils.util import AngleUnit, convert_angles
+from numpy.typing import DTypeLike, NDArray
 
 
 def _rebuild_angle(cls, internal_value, display_unit):
@@ -45,7 +44,7 @@ class AngleBase:
 
     _INTERNAL_UNIT = AngleUnit.RAD
 
-    def __init__(self, value: float | ArrayT, unit: AngleUnit=AngleUnit.RAD):
+    def __init__(self, value: float | ArrayT, unit: AngleUnit = AngleUnit.RAD):
         """AngleBase class provides the basic functions for interacting with angles
 
         These include storage, unit conversion, comparison and numerical operations.
@@ -63,8 +62,7 @@ class AngleBase:
         self._internal_value = value
         self._display_unit = unit
 
-
-    def to(self, unit: AngleUnit) -> Array_Float_T|float:
+    def to(self, unit: AngleUnit) -> Array_Float_T | float:
         """Convert stored radians → `unit`.
 
         Parameters
@@ -192,7 +190,7 @@ class AngleBase:
         """
         return self.in_unit(AngleUnit.GON)
 
-    def __array__(self, dtype: DTypeLike | None=None) -> NDArray:
+    def __array__(self, dtype: DTypeLike | None = None) -> NDArray:
         """Enables numpy array operations on the angle(s)
 
         Parameters
@@ -254,7 +252,7 @@ class AngleBase:
 
     def __mul__(self, other):
         if isinstance(other, AngleBase):
-            raise NotImplementedError(f"Multiplication not defined between two AngleBase types.")
+            raise NotImplementedError("Multiplication not defined between two AngleBase types.")
         return Angle(self.display_value * other, self.display_unit)
 
     def __rmul__(self, other):
@@ -269,7 +267,7 @@ class AngleBase:
         return Angle(self.display_value / other, self.display_unit)
 
     def __rtruediv__(self, other):
-        raise NotImplementedError(f"Division not with AngleBase as divisor.")
+        raise NotImplementedError("Division not with AngleBase as divisor.")
         # other / self
         # if isinstance(other, AngleBase):
         #     vals = np.divide(other.to(other.display_unit), self.to(other.display_unit))
@@ -281,13 +279,13 @@ class AngleBase:
 
     def __mod__(self, other: Any) -> Self | float:
         if isinstance(other, AngleBase):
-            raise NotImplementedError(f"Modulo not defined between two AngleBase types.")
+            raise NotImplementedError("Modulo not defined between two AngleBase types.")
         # return self.__binary_op(other, np.mod)
         mod_val = self.display_value % other
         return type(self)(mod_val, self.display_unit)
 
     def __rmod__(self, other):
-        raise NotImplementedError(f"Modulo not defined for divisor as AngleBase.")
+        raise NotImplementedError("Modulo not defined for divisor as AngleBase.")
 
     # def __divmod__(self, other):
     #     if isinstance(other, AngleBase):
@@ -357,6 +355,7 @@ class Angle(AngleBase):
     unit : AngleUnit
         The unit of the angle, such as radians or degrees.
     """
+
     def __new__(cls, value: float | Array_Float_T | str, unit: AngleUnit = AngleUnit.RAD):
         """Returns a new instance of Angle or AngleArray based on the input value and unit.
 

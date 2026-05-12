@@ -27,9 +27,8 @@ except (ImportError, RuntimeError) as e:
 else:
     _HAS_GPU = True
 
-from GSEGUtils.constants import validate_variables
 from GSEGUtils.base_types import Vector_Bool_T
-from numpy.typing import NDArray
+from GSEGUtils.constants import validate_variables
 from shapely.geometry import Polygon
 
 from pchandler import PointCloudData
@@ -125,7 +124,6 @@ class PolygonFilterGPU(PointCloudFilter):
 
 
 class SphericalPolygonFilterGPU(PointCloudFilter):
-
     @validate_variables
     def __init__(self, polygon: ValidatedPolygonT):
         """Filters points based on a polygon defined in spherical angle coordinates

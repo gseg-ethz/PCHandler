@@ -12,18 +12,7 @@ import logging
 import weakref
 from collections import Counter
 from collections.abc import ItemsView, KeysView, ValuesView
-from typing import (
-    TYPE_CHECKING,
-    Iterable,
-    Iterator,
-    Optional,
-    Self,
-    Sized,
-    TypeAlias,
-    cast,
-    overload,
-    Any
-)
+from typing import TYPE_CHECKING, Any, Iterable, Iterator, Optional, Self, Sized, TypeAlias, cast, overload
 
 import numpy as np
 from GSEGUtils.base_arrays import BaseArray
@@ -41,14 +30,7 @@ from GSEGUtils.base_types import (
 )
 from GSEGUtils.validators import normalize_uint8
 
-from pchandler.constants import (
-    INTENSITY_NAMES,
-    NORMAL_NAMES,
-    REFLECTANCE_NAMES,
-    RGB_NAMES,
-    ALL_FIELD_NAMES
-
-)
+from pchandler.constants import INTENSITY_NAMES, NORMAL_NAMES, REFLECTANCE_NAMES, RGB_NAMES
 from pchandler.scalar_fields.scalar_fields import (
     AbstractScalarField,
     DtypeState,
@@ -62,7 +44,7 @@ from pchandler.scalar_fields.scalar_fields import (
 if TYPE_CHECKING:
     from pchandler import PointCloudData
 
-__all__ = ['ScalarFieldManager']
+__all__ = ["ScalarFieldManager"]
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -354,7 +336,7 @@ class ScalarFieldManager:
         """
         if self._parent is not None and self._parent() is not parent:
             logger.warning(
-                f"Parent already set as {self._parent()}. " f"Will be overwritten by {parent}!",
+                f"Parent already set as {self._parent()}. Will be overwritten by {parent}!",
                 stack_info=True,
                 stacklevel=1,
             )
@@ -773,16 +755,11 @@ class ScalarFieldManager:
         data = []
 
         for name, value in self.fields.items():
-            data.append(
-                value
-            )
+            data.append(value)
 
-            dtype.append(
-                (name, value.dtype, value.shape)
-            )
+            dtype.append((name, value.dtype, value.shape))
 
         array = np.empty(1, dtype=dtype)
         for name, value in self.fields.items():
             array[value.name] = value.arr
         return array
-

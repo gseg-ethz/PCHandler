@@ -7,7 +7,7 @@
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
 # Auto-generated stub for lazy exports
-from typing import Any, Final, NoReturn
+from typing import Final, NoReturn
 
 from .cartesian_filters import BoxFilter, PolygonFilter, SphereFilter
 from .core import GenericFieldFilter, PointCloudFilter, ValidatedPolygonT

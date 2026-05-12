@@ -85,7 +85,6 @@ def test_generate_transform():
     assert np.allclose(transform.arr, expected), "Composite transformation generation failed."
 
 
-
 def test_transform_inplace_multiplication(random_transform):
     """Test in-place matrix multiplication."""
     original_transform = random_transform.arr.copy()

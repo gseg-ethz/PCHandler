@@ -9,6 +9,7 @@
 """
 Base module for I/O handlers and supporting methods
 """
+
 import copy
 import logging
 from abc import ABC, abstractmethod
@@ -27,11 +28,10 @@ from typing import (
 
 import numpy as np
 import numpy.typing as npt
-from GSEGUtils.base_types import Vector_3_T
+from GSEGUtils.base_types import Array_Nx3_T, DtypeDict, Vector_3_T
 from numpy._typing._dtype_like import _DTypeDict
 
 from pchandler import PointCloudData
-from GSEGUtils.base_types import Array_Nx3_T, DtypeDict
 from pchandler.constants import (
     COMMON_FIELD_NAMES,
     INTENSITY_NAMES,
@@ -39,8 +39,8 @@ from pchandler.constants import (
     REFLECTANCE_NAMES,
     RGB_NAMES,
     XYZ_NAMES,
-    _NameConstantsTriplet,
     _NameConstantsSingle,
+    _NameConstantsTriplet,
 )
 from pchandler.geometry import OptimizedShift
 from pchandler.scalar_fields import (
@@ -99,6 +99,7 @@ def find_point_cloud_in_directory(
 
 class AbstractIOHandler(ABC):
     """Abstract I/O handler class"""
+
     FORMATS: list[str] = []
 
     @classmethod
@@ -127,7 +128,6 @@ class AbstractIOHandler(ABC):
         prefix: str = "scalar_",
         **pcd_kw: Unpack[PointCloudDataKW],
     ) -> PointCloudData | Generator[PointCloudData, None, None]: ...
-
 
     @classmethod
     @abstractmethod
@@ -176,7 +176,7 @@ class AbstractIOHandler(ABC):
             if len(headers) > 0:
                 return headers
 
-            raise ValueError(f"Unable to resolve field names without header info or user selection.")
+            raise ValueError("Unable to resolve field names without header info or user selection.")
 
         # Todo: Check if this logic is sound
         if len(selection) == 0 or set(selection.values()).issubset(headers.values()) or not headers:
@@ -417,7 +417,6 @@ class AbstractIOHandler(ABC):
         array = np.empty((len(pcd),), dtype=cast(_DTypeDict, dtype_dict))
 
         for i, coord in enumerate(XYZ_NAMES.char):
-
             if pcd.numerical_optimization_shift is None:
                 array[coord] = getattr(pcd, coord)
             else:

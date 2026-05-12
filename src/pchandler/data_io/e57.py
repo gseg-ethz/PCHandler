@@ -7,6 +7,7 @@
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
 """CSV / ASCII file format handler class"""
+
 import logging
 from pathlib import Path
 from typing import Generator, Optional, Unpack
@@ -20,7 +21,7 @@ from pchandler.data_io.core import AbstractIOHandler, PointCloudDataKW
 
 logger = logging.getLogger(__name__.split(".")[0])
 
-__all__ = ['E57Handler']
+__all__ = ["E57Handler"]
 
 
 class E57Handler(AbstractIOHandler):
@@ -33,6 +34,7 @@ class E57Handler(AbstractIOHandler):
 
     * .e57
     """
+
     FORMATS = [".e57"]
 
     SUPPORTED_FIELDS = {"x": "cartesianX", "y": "cartesianY", "z": "cartesianZ"}
@@ -197,7 +199,9 @@ class E57Handler(AbstractIOHandler):
                 transform=read_transform,
             )
 
-            pcd = PointCloudData(np.column_stack((data["cartesianX"], data["cartesianY"], data["cartesianZ"])), **pcd_kw)
+            pcd = PointCloudData(
+                np.column_stack((data["cartesianX"], data["cartesianY"], data["cartesianZ"])), **pcd_kw
+            )
 
             if retain_rgb:
                 if "colorRed" in data:

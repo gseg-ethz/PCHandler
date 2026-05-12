@@ -31,13 +31,13 @@ import numpy.typing as npt
 from GSEGUtils.base_arrays import ArrayNx2, ArrayNx3, FixedLengthArray
 from GSEGUtils.base_types import (
     Array_3x3_T,
-    Array_Nx3_Float_T,
-    Array_Nx2_Float_T,
     Array_4x4_T,
+    Array_Nx2_Float_T,
+    Array_Nx3_Float_T,
     Array_Nx3_T,
     IndexLike,
     Vector_3_T,
-    Vector_Float_T
+    Vector_Float_T,
 )
 from GSEGUtils.constants import DEFAULT_CONFIG
 from pydantic import UUID4, AliasChoices, Field, PrivateAttr, validate_call
@@ -51,7 +51,7 @@ from pchandler.geometry.transforms import (
 )
 from pchandler.geometry.util import MinMaxPoints
 
-__all__ = ['CartesianCoordinates', 'AbstractCoordinates', 'Abstract2dCoordinates', 'Abstract3dCoordinates']
+__all__ = ["CartesianCoordinates", "AbstractCoordinates", "Abstract2dCoordinates", "Abstract3dCoordinates"]
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +90,7 @@ class Abstract2dCoordinates(ArrayNx2, AbstractCoordinates, ABC):
 
 
 class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates, ABC):
-    """ Abstract coordinates with support for a transformation to custom coordinate system and a scan center parameter.
+    """Abstract coordinates with support for a transformation to custom coordinate system and a scan center parameter.
 
     Parameters
     ----------
@@ -101,17 +101,20 @@ class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates, ABC):
         Scan center coordinate in the current coordinate system.
 
     """
+
     project_transformation: Optional[Array_4x4_T] = None
     socs_origin: Optional[Vector_3_T] = None
 
     @property
     @abstractmethod
     def xyz(self) -> npt.NDArray[np.floating]: ...
+
     """Return the cartesian coordinates as XYZ"""
 
     @property
     @abstractmethod
     def spher(self) -> npt.NDArray[np.floating]: ...
+
     """Return the spherical coordinates as RHV"""
 
     def __matmul__(self, other: Any) -> Self:
@@ -147,7 +150,7 @@ class Abstract3dCoordinates(ArrayNx3, AbstractCoordinates, ABC):
 
 
 class CartesianCoordinates(Abstract3dCoordinates):
-    """ Cartesian Coordinate class with support for numerical optimizations and helper access methods.
+    """Cartesian Coordinate class with support for numerical optimizations and helper access methods.
 
     Parameters
     ----------
@@ -161,6 +164,7 @@ class CartesianCoordinates(Abstract3dCoordinates):
         Scan center coordinate in the current coordinate system.
 
     """
+
     arr: Array_Nx3_T = Field(..., validation_alias=AliasChoices("arr", "xyz"))
     unshifted_bbox: Optional[MinMaxPoints] = Field(default=None)
     _shift_applied_by: Optional[OptimizedShift] = PrivateAttr(default=None)
@@ -324,7 +328,7 @@ class CartesianCoordinates(Abstract3dCoordinates):
         try:
             shift = osm.register_coordinates_to_shift(self, self.numerical_optimization_shift)  # type: ignore[arg-type]
             if shift is not self.numerical_optimization_shift:
-                logger.info(f"The input numerical_optimization_shift was not feasible and was replaced by a new one.")
+                logger.info("The input numerical_optimization_shift was not feasible and was replaced by a new one.")
                 object.__setattr__(self, "numerical_optimization_shift", shift)
 
         except OptimizedShiftManager.ShiftNotFeasibleError:
@@ -442,15 +446,15 @@ class CartesianCoordinates(Abstract3dCoordinates):
             if cart_coords[0].numerical_optimization_shift and cart_coords[
                 0
             ].numerical_optimization_shift.check_addibility(bbox_pts):
-                logger.info(f"Linking to numerical optimization shift of first instance.")
+                logger.info("Linking to numerical optimization shift of first instance.")
                 common_nos = cart_coords[0].numerical_optimization_shift
 
             elif OptimizedShiftManager().is_shift_possible(bbox_pts):
-                logger.info(f"Creating new numerical optimization shift instance.")
+                logger.info("Creating new numerical optimization shift instance.")
                 common_nos = OptimizedShift()
 
             else:
-                logger.info(f"Unable to create new numerical optimization shift instance applicable to all points.")
+                logger.info("Unable to create new numerical optimization shift instance applicable to all points.")
                 common_nos = None
 
             cart_coord_copies = list()
@@ -707,7 +711,7 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
 @validate_call(config=DEFAULT_CONFIG)
 def rhv2xyz(spher: Array_Nx3_T, scan_origin: Optional[Vector_3_T] = None) -> Array_Nx3_T:
-    """ Convert spherical coordinates (RHV) to Cartesian coordinates (XYZ).
+    """Convert spherical coordinates (RHV) to Cartesian coordinates (XYZ).
 
     This function transforms 3D points given in spherical coordinates
     (radius, azimuth, elevation) to Cartesian coordinates (x, y, z).

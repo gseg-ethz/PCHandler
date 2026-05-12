@@ -9,14 +9,13 @@
 """
 Spherical coordinate based filters
 """
+
 import logging
 
 import numpy as np
-from numpy.typing import NDArray
+from GSEGUtils.base_types import Vector_Bool_T
 from shapely import contains_xy
 from shapely.geometry import Polygon
-
-from GSEGUtils.base_types import Vector_Bool_T
 
 from pchandler import PointCloudData
 from pchandler.filters import PointCloudFilter

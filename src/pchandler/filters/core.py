@@ -18,8 +18,8 @@ from typing import Annotated, Callable, Sequence, cast
 
 import numpy as np
 import numpy.typing as npt
-from GSEGUtils.constants import validate_variables
 from GSEGUtils.base_types import Vector_Bool_T
+from GSEGUtils.constants import validate_variables
 from pydantic import BeforeValidator
 from shapely import Polygon
 

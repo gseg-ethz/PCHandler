@@ -31,12 +31,10 @@ def fov_gon_values(fov_rad_values):
 
 
 class TestFov:
-
     def test_init(self, fov_rad_values, fov_deg_values, fov_gon_values):
         for unit, values in zip(
             (AngleUnit.DEGREE, AngleUnit.RAD, AngleUnit.GON), (fov_deg_values, fov_rad_values, fov_gon_values)
         ):
-
             left = Angle(values[0], unit=unit)
             right = Angle(values[1], unit=unit)
             top = Angle(values[2], unit=unit)
@@ -101,7 +99,7 @@ class TestFov:
     def test_from_angles(self):
         # Case not crossing pi narrow
         hz = np.linspace(-0.2, 0.3, 1000, endpoint=True)
-        v= np.linspace(0.2, 1.45, 1000, endpoint=True)
+        v = np.linspace(0.2, 1.45, 1000, endpoint=True)
 
         fov = FoV.from_angles(horizontal=hz, vertical=v)
 
@@ -182,7 +180,6 @@ class TestFov:
         assert math.isclose(fov.right, 3.7)
         assert math.isclose(fov.top, -4.0)
         assert math.isclose(fov.bottom, 6.0)
-
 
     def test_intersect(self):
         fov1 = FoV(top=0.4, bottom=2.4, right=1.3, left=0.3)
@@ -353,6 +350,7 @@ class TestFoVTree:
         assert isinstance(new_tree, FoVTree)
         assert len(new_tree.children) == 4
 
+
 def _fov_are_equal(fov1: FoV, fov2: FoV):
     array_1 = np.array([fov1.left, fov1.right, fov1.top, fov1.bottom])
     array_2 = np.array([fov2.left, fov2.right, fov2.top, fov2.bottom])
@@ -362,44 +360,43 @@ def _fov_are_equal(fov1: FoV, fov2: FoV):
 
 
 class TestFoVUnion:
-
     def test_joint_both(self):
-        fov1 = FoV(top='20deg', bottom='80deg', left='-40deg', right='80deg')
-        fov2 = FoV(top='12deg', bottom='64deg', left='-20deg', right='130deg')
-        expected = FoV(top='12deg', bottom='80deg', left='-40deg', right='130deg')
+        fov1 = FoV(top="20deg", bottom="80deg", left="-40deg", right="80deg")
+        fov2 = FoV(top="12deg", bottom="64deg", left="-20deg", right="130deg")
+        expected = FoV(top="12deg", bottom="80deg", left="-40deg", right="130deg")
         union = fov1.union(fov2)
         assert _fov_are_equal(expected, union)
 
     def test_joint_first_fov_wraps(self):
-        fov1 = FoV(top='20deg', bottom='80deg', left='160deg', right='-100deg')
-        fov2 = FoV(top='12deg', bottom='64deg', left='-120deg', right='30deg')
-        expected = FoV(top='12deg', bottom='80deg', left='160deg', right='30deg')
+        fov1 = FoV(top="20deg", bottom="80deg", left="160deg", right="-100deg")
+        fov2 = FoV(top="12deg", bottom="64deg", left="-120deg", right="30deg")
+        expected = FoV(top="12deg", bottom="80deg", left="160deg", right="30deg")
         union = fov1.union(fov2)
         assert _fov_are_equal(expected, union)
 
     def test_joint_second_fov_wraps(self):
-        fov1 = FoV(top='20deg', bottom='80deg', left='50deg', right='160deg')
-        fov2 = FoV(top='12deg', bottom='64deg', left='120deg', right='-130deg')
-        expected = FoV(top='12deg', bottom='80deg', left='50deg', right='-130deg')
+        fov1 = FoV(top="20deg", bottom="80deg", left="50deg", right="160deg")
+        fov2 = FoV(top="12deg", bottom="64deg", left="120deg", right="-130deg")
+        expected = FoV(top="12deg", bottom="80deg", left="50deg", right="-130deg")
         union = fov1.union(fov2)
         assert _fov_are_equal(expected, union)
 
     def test_joint_both_wrap(self):
-        fov1 = FoV(top='20deg', bottom='80deg', left='150deg', right='-160deg')
-        fov2 = FoV(top='12deg', bottom='64deg', left='170deg', right='-140deg')
-        expected = FoV(top='12deg', bottom='80deg', left='150deg', right='-140deg')
+        fov1 = FoV(top="20deg", bottom="80deg", left="150deg", right="-160deg")
+        fov2 = FoV(top="12deg", bottom="64deg", left="170deg", right="-140deg")
+        expected = FoV(top="12deg", bottom="80deg", left="150deg", right="-140deg")
         union = fov1.union(fov2)
         assert _fov_are_equal(expected, union)
 
     def test_disjointed(self):
-        fov1 = FoV(top='20deg', bottom='50deg', left='-140deg', right='-20deg')
-        fov2 = FoV(top='80deg', bottom='120deg', left='30deg', right='120deg')
-        expected = FoV(top='20deg', bottom='120deg', left='-140deg', right='120deg')
+        fov1 = FoV(top="20deg", bottom="50deg", left="-140deg", right="-20deg")
+        fov2 = FoV(top="80deg", bottom="120deg", left="30deg", right="120deg")
+        expected = FoV(top="20deg", bottom="120deg", left="-140deg", right="120deg")
         union = fov1.union(fov2)
         assert _fov_are_equal(expected, union)
 
     def test_basic(self):
-        fov1 = FoV(top='20deg', bottom=2.4, right=1.3, left=0.3)
+        fov1 = FoV(top="20deg", bottom=2.4, right=1.3, left=0.3)
         fov2 = FoV(top=0.2, bottom=2.2, right=1.5, left=-1)
 
         union = fov1.union(fov2)
@@ -411,65 +408,66 @@ class TestFoVUnion:
         assert math.isclose(union.bottom, 2.4)
         # Not testing for crossing of PI / TWO_PI
 
+
 class TestFoVIntersection:
     def test_overlap_hz_and_v(self):
-        fov1 = FoV(top='20deg', bottom='80deg', left='-40deg', right='80deg')
-        fov2 = FoV(top='12deg', bottom='64deg', left='-20deg', right='130deg')
-        expected = FoV(top='20deg', bottom='64deg', left='-20deg', right='80deg')
+        fov1 = FoV(top="20deg", bottom="80deg", left="-40deg", right="80deg")
+        fov2 = FoV(top="12deg", bottom="64deg", left="-20deg", right="130deg")
+        expected = FoV(top="20deg", bottom="64deg", left="-20deg", right="80deg")
         intersect = fov1.intersect(fov2)
         assert _fov_are_equal(expected, intersect)
 
     def test_joint_first_fov_wraps(self):
-        fov1 = FoV(top='20deg', bottom='80deg', left='160deg', right='-100deg')
-        fov2 = FoV(top='12deg', bottom='64deg', left='-120deg', right='30deg')
-        expected = FoV(top='20deg', bottom='64deg', left='-120deg', right='-100deg')
+        fov1 = FoV(top="20deg", bottom="80deg", left="160deg", right="-100deg")
+        fov2 = FoV(top="12deg", bottom="64deg", left="-120deg", right="30deg")
+        expected = FoV(top="20deg", bottom="64deg", left="-120deg", right="-100deg")
         intersect = fov1.intersect(fov2)
         assert _fov_are_equal(expected, intersect)
 
     def test_joint_second_fov_wraps(self):
-        fov1 = FoV(top='20deg', bottom='80deg', left='50deg', right='160deg')
-        fov2 = FoV(top='12deg', bottom='64deg', left='120deg', right='-130deg')
-        expected = FoV(top='20deg', bottom='64deg', left='120deg', right='160deg')
+        fov1 = FoV(top="20deg", bottom="80deg", left="50deg", right="160deg")
+        fov2 = FoV(top="12deg", bottom="64deg", left="120deg", right="-130deg")
+        expected = FoV(top="20deg", bottom="64deg", left="120deg", right="160deg")
         intersect = fov1.intersect(fov2)
         assert _fov_are_equal(expected, intersect)
 
     def test_joint_both_wrap(self):
-        fov1 = FoV(top='20deg', bottom='80deg', left='150deg', right='-160deg')
-        fov2 = FoV(top='12deg', bottom='64deg', left='170deg', right='-140deg')
-        expected = FoV(top='20deg', bottom='64deg', left='170deg', right='-160deg')
+        fov1 = FoV(top="20deg", bottom="80deg", left="150deg", right="-160deg")
+        fov2 = FoV(top="12deg", bottom="64deg", left="170deg", right="-140deg")
+        expected = FoV(top="20deg", bottom="64deg", left="170deg", right="-160deg")
         intersect = fov1.intersect(fov2)
         assert _fov_are_equal(expected, intersect)
 
     def test_disjointed_vertically(self):
-        fov1 = FoV(top='20deg', bottom='50deg', left='-140deg', right='-20deg')
-        fov2 = FoV(top='80deg', bottom='120deg', left='-130deg', right='-120deg')
+        fov1 = FoV(top="20deg", bottom="50deg", left="-140deg", right="-20deg")
+        fov2 = FoV(top="80deg", bottom="120deg", left="-130deg", right="-120deg")
         intersect = fov1.intersect(fov2)
         assert intersect is None
 
     def test_disjointed_horizontally(self):
-        fov1 = FoV(top='20deg', bottom='50deg', left='-140deg', right='-20deg')
-        fov2 = FoV(top='10deg', bottom='120deg', left='5deg', right='20deg')
+        fov1 = FoV(top="20deg", bottom="50deg", left="-140deg", right="-20deg")
+        fov2 = FoV(top="10deg", bottom="120deg", left="5deg", right="20deg")
         intersect = fov1.intersect(fov2)
         assert intersect is None
 
     def test_intersect_both_hz_sides(self):
-        fov1 = FoV(top='20deg', bottom='50deg', left='140deg', right='-140deg')
-        fov2 = FoV(top='10deg', bottom='120deg', left='-160deg', right='160deg')
+        fov1 = FoV(top="20deg", bottom="50deg", left="140deg", right="-140deg")
+        fov2 = FoV(top="10deg", bottom="120deg", left="-160deg", right="160deg")
 
         with pytest.raises(ValueError):
             fov1.intersect(fov2)
 
     def test_intersect_full_circle_non_wrapping(self):
-        fov1 = FoV(top='20deg', bottom='50deg', left='-140deg', right='-20deg')
-        fov2 = FoV(top='10deg', bottom='120deg', left=-PI, right=PI)
-        expected = FoV(top='20deg', bottom='50deg', left='-140deg', right='-20deg')
+        fov1 = FoV(top="20deg", bottom="50deg", left="-140deg", right="-20deg")
+        fov2 = FoV(top="10deg", bottom="120deg", left=-PI, right=PI)
+        expected = FoV(top="20deg", bottom="50deg", left="-140deg", right="-20deg")
         intersect = fov1.intersect(fov2)
         assert _fov_are_equal(expected, intersect)
 
     def test_intersect_full_circle_wrapping(self):
-        fov1 = FoV(top='20deg', bottom='50deg', left='140deg', right='-20deg')
-        fov2 = FoV(top='10deg', bottom='120deg', left=-PI, right=PI)
-        expected = FoV(top='20deg', bottom='50deg', left='140deg', right='-20deg')
+        fov1 = FoV(top="20deg", bottom="50deg", left="140deg", right="-20deg")
+        fov2 = FoV(top="10deg", bottom="120deg", left=-PI, right=PI)
+        expected = FoV(top="20deg", bottom="50deg", left="140deg", right="-20deg")
         intersect = fov1.intersect(fov2)
         assert _fov_are_equal(expected, intersect)
 

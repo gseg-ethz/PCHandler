@@ -7,6 +7,7 @@
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
 """PCD file format handler class"""
+
 import logging
 from pathlib import Path
 
@@ -23,6 +24,7 @@ class PcdHandler(AbstractIOHandler):
 
     * .pcd
     """
+
     FORMATS = [".pcd"]
 
     @classmethod

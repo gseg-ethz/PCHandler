@@ -13,10 +13,9 @@ from typing import TYPE_CHECKING, Iterable, NamedTuple, Optional, Self
 
 import alphashape
 import numpy as np
+from GSEGUtils.base_types import Array_Nx3_T, Vector_3_T
 from shapely.affinity import scale, translate
 from shapely.geometry import MultiPolygon, Polygon
-
-from GSEGUtils.base_types import Array_Nx3_T, Vector_3_T
 
 if TYPE_CHECKING:
     from pchandler import PointCloudData
@@ -106,6 +105,7 @@ class MinMaxPoints(NamedTuple):
     maximum : Vector_3_T
         The maximum point in the 3D space.
     """
+
     minimum: Vector_3_T
     maximum: Vector_3_T
 

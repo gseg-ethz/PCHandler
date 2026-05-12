@@ -47,7 +47,7 @@ def invalid_delimiter(tmp_path_factory):
         f.write("//X Y Z\n")
         f.write("200\n")
         for i in range(20):
-            f.write(f"{i}-{i+1}-{i*2}\n")
+            f.write(f"{i}-{i + 1}-{i * 2}\n")
     return file
 
 
@@ -57,7 +57,7 @@ def delim_space(tmp_path_factory):
     with open(file, "w") as f:
         f.write("//X Y Z\n")
         for i in range(20):
-            f.write(f"{i} {i+1} {i*2}\n")
+            f.write(f"{i} {i + 1} {i * 2}\n")
     return file
 
 
@@ -67,7 +67,7 @@ def delim_semicolon(tmp_path_factory):
     with open(file, "w") as f:
         f.write("//X Y Z\n")
         for i in range(20):
-            f.write(f"{i};{i+1};{i*2}\n")
+            f.write(f"{i};{i + 1};{i * 2}\n")
     return file
 
 
@@ -77,7 +77,7 @@ def delim_comma(tmp_path_factory):
     with open(file, "w") as f:
         f.write("//X Y Z\n")
         for i in range(20):
-            f.write(f"{i},{i+1},{i*2}\n")
+            f.write(f"{i},{i + 1},{i * 2}\n")
     return file
 
 
@@ -87,7 +87,7 @@ def delim_tab(tmp_path_factory):
     with open(file, "w") as f:
         f.write("//X Y Z\n")
         for i in range(20):
-            f.write(f"{i}\t{i+1}\t{i*2}\n")
+            f.write(f"{i}\t{i + 1}\t{i * 2}\n")
     return file
 
 
@@ -101,7 +101,7 @@ def inconsistent_column_number(tmp_path_factory):
         f.write("4,5,6,7,8\n")
 
         for i in range(18):
-            f.write(f"\n{i},{i+1},{i*2}")
+            f.write(f"\n{i},{i + 1},{i * 2}")
 
     return file
 
@@ -114,7 +114,7 @@ def column_names_not_last_row(tmp_path_factory):
         f.write("// GeneralComment \n")
         f.write("// Another Comment with punctuation which should break it. \n")
         for i in range(20):
-            f.write(f"{i},{i+1},{i*2}\n")
+            f.write(f"{i},{i + 1},{i * 2}\n")
 
     return file
 

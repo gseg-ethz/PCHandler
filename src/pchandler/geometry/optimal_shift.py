@@ -7,7 +7,7 @@
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
 """
-    Enables point clouds to use optimized coordinates without precision loss.
+Enables point clouds to use optimized coordinates without precision loss.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ import copy
 import logging
 import uuid
 import weakref
-from typing import TYPE_CHECKING, Optional, cast
+from typing import TYPE_CHECKING, Optional
 from uuid import UUID
 
 import numpy as np
@@ -29,7 +29,7 @@ from pchandler.geometry.util import MinMaxPoints
 if TYPE_CHECKING:
     from pchandler.geometry.coordinates import CartesianCoordinates
 
-__all__ = ['OptimizedShiftManager', 'OptimizedShift']
+__all__ = ["OptimizedShiftManager", "OptimizedShift"]
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +45,7 @@ class OptimizedShiftManager(metaclass=SingletonMeta):
     FLOAT32_DECIMAL_PRECISION : int
         Default decimal precision for floating point calculations.
     """
+
     _by_uuid: weakref.WeakValueDictionary[uuid.UUID, OptimizedShift]
     _minimum_decimal_places: int
     FLOAT32_DECIMAL_PRECISION: int = 7
@@ -150,9 +151,7 @@ class OptimizedShiftManager(metaclass=SingletonMeta):
         bool
         """
         return bool(
-            np.all(
-                np.subtract(np.max(values, axis=0), np.min(values, axis=0))
-                < self.maximum_number_representable)
+            np.all(np.subtract(np.max(values, axis=0), np.min(values, axis=0)) < self.maximum_number_representable)
         )
 
     def update_uuid(self, old_uuid: uuid.UUID, new_uuid: uuid.UUID) -> None:
@@ -259,6 +258,7 @@ class OptimizedShift:
     uuid: uuid.UUID
     shift: Vector_3_T
     """
+
     _uuid: uuid.UUID
     _shift: Vector_3_T
     _member_coordinate_sets: weakref.WeakSet[CartesianCoordinates]

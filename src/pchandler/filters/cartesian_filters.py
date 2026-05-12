@@ -15,6 +15,7 @@ from typing import Literal
 
 import numpy as np
 import numpy.typing as npt
+from GSEGUtils.base_types import Vector_3_T, Vector_Bool_T
 from GSEGUtils.constants import validate_variables
 from pydantic import PositiveFloat
 from shapely import contains_xy  # type: ignore[import-untyped]
@@ -22,7 +23,6 @@ from shapely.affinity import translate  # type: ignore[import-untyped]
 from shapely.geometry import Polygon  # type: ignore[import-untyped]
 
 from pchandler import PointCloudData
-from GSEGUtils.base_types import Vector_3_T, Vector_Bool_T
 from pchandler.filters import PointCloudFilter, ValidatedPolygonT
 
 logger = logging.getLogger(__name__.split(".")[0])
@@ -166,7 +166,7 @@ class PolygonFilter(PointCloudFilter):
 
         offset = _get_offset(pcd, mode)
 
-        polygon = translate(self.polygon, * (-1 * offset[dims]))
+        polygon = translate(self.polygon, *(-1 * offset[dims]))
 
         mask: npt.NDArray[np.bool_] = contains_xy(polygon, pcd.xyz[:, dims[0]], pcd.xyz[:, dims[1]])
         return mask

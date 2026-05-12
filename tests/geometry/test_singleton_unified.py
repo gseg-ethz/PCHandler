@@ -1,4 +1,5 @@
 """Regression test for COUPLE-01: SingletonMeta unification across worktrees."""
+
 from GSEGUtils.singleton import SingletonMeta
 
 from pchandler.geometry.optimal_shift import OptimizedShiftManager

@@ -12,23 +12,22 @@ def load_file(file_path: str | Path, **kwargs) -> PointCloudData:
 
     # Lazy import only the required handler based on file extension
     suffix_to_handler = {
-        '.las': ('Las', 'load'),
-        '.laz': ('Las', 'load'),
-        '.txt': ('Csv', 'load'),
-        '.asc': ('Csv', 'load'),
-        '.csv': ('Csv', 'load'),
-        '.pts': ('Csv', 'load'),
-        '.e57': ('E57', 'load'),
-        '.ply': ('Ply', 'load'),
+        ".las": ("Las", "load"),
+        ".laz": ("Las", "load"),
+        ".txt": ("Csv", "load"),
+        ".asc": ("Csv", "load"),
+        ".csv": ("Csv", "load"),
+        ".pts": ("Csv", "load"),
+        ".e57": ("E57", "load"),
+        ".ply": ("Ply", "load"),
     }
 
     handler_name, method_name = suffix_to_handler[file_path.suffix]
 
     # Import only the required handler using the lazy loading mechanism
     from pchandler import data_io
+
     handler = getattr(data_io, handler_name)
     loader = getattr(handler, method_name)
 
     return loader(file_path, **kwargs)
-
-

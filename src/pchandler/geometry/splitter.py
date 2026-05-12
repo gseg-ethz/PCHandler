@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__.split(".")[0])
 NUM_CPUS = cpu_count()
 FoVSplitMethodT = Literal["iterative"] | Literal["direct"]
 
+
 def check_number_jobs(n_jobs: int):
     """Validate the number of jobs to be started based on the CPU count
 
@@ -52,11 +53,13 @@ def check_number_jobs(n_jobs: int):
 
     return n_jobs
 
+
 NumberJobsT = Annotated[int, Field(gt=-NUM_CPUS, le=NUM_CPUS), BeforeValidator(check_number_jobs)]
 
 
 class PointCloudSplitter(ABC):
     """Abstract class for point cloud splitting algorithms"""
+
     @abstractmethod
     def split(self, pcd: PointCloudData) -> dict[str, PointCloudData]:
         """Splits a point cloud into multiple segments.
@@ -75,6 +78,7 @@ class PointCloudSplitter(ABC):
 
 class FoVTreePointCloudSplitter(PointCloudSplitter):
     """Splits a point cloud into smaller subsets based on a field-of-view (FoV) tree"""
+
     # Todo: Check how validate_variables interacts with initializers...got weird errors
     # DISCUSS: Still relevant?
     @validate_variables

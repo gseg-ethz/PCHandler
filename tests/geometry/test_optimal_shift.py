@@ -88,7 +88,6 @@ def opt_shift() -> OptimizedShift:
 
 
 class TestOptimizedShift:
-
     def test_initialisation(self):
         OptimizedShiftManager._instances = {}
         opt_shift = OptimizedShift(np.array([1, 2, 3]))

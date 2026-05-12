@@ -7,7 +7,7 @@
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
 # Auto-generated stub for lazy exports
-from typing import Any, Final, NoReturn
+from typing import Final, NoReturn
 
 from . import coordinates as coordinates
 from . import spherical as spherical

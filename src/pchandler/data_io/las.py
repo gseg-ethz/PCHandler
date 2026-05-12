@@ -7,6 +7,7 @@
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
 """LAS/LAZ file format handler class"""
+
 import logging
 from pathlib import Path
 from typing import Optional, Unpack
@@ -18,7 +19,7 @@ from GSEGUtils.validators import normalize_uint16
 
 from pchandler import PointCloudData
 from pchandler.constants import INTENSITY_NAMES, NORMAL_NAMES, RGB_NAMES, XYZ_NAMES
-from pchandler.data_io.core import AbstractIOHandler, _get_rgb_or_normal_field_names, PointCloudDataKW
+from pchandler.data_io.core import AbstractIOHandler, PointCloudDataKW, _get_rgb_or_normal_field_names
 from pchandler.geometry import OptimizedShift
 
 __all__ = ["LasHandler"]
@@ -34,6 +35,7 @@ class LasHandler(AbstractIOHandler):
      * .las
      * .laz
     """
+
     FORMATS = [".las", ".laz"]
 
     # TODO check how socs_origin is being passed to PointCloudData. Should support to stop optimal shift be shared?

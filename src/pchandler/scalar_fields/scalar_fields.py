@@ -25,7 +25,6 @@ import numpy as np
 import numpy.typing as npt
 from GSEGUtils.base_arrays import ArrayNx3, BaseVector, FixedLengthArray
 from GSEGUtils.base_types import (
-    Array_Float32_T,
     Array_Nx3_Float32_T,
     Array_Nx3_Float_T,
     Array_Nx3_T,
@@ -35,8 +34,8 @@ from GSEGUtils.base_types import (
     LowerStr,
     SfNameT,
     Vector_Bool_T,
-    Vector_Float_T,
     Vector_Float32_T,
+    Vector_Float_T,
     Vector_Int16_T,
     Vector_Uint8_T,
     Vector_Uint16_T,
@@ -47,8 +46,18 @@ from pydantic import BeforeValidator, field_validator, model_validator
 
 from pchandler.constants import NORMAL_NAMES, RGB_NAMES
 
-__all__ = ['ScalarField', 'RGBFields', 'NormalFields', 'SegmentationMap', 'ScalarFieldUint8', 'ScalarFieldBoolean',
-           'ScalarFieldFloat32', 'NormalisedInt16ScalarField', 'AbstractScalarField', 'DtypeState']
+__all__ = [
+    "ScalarField",
+    "RGBFields",
+    "NormalFields",
+    "SegmentationMap",
+    "ScalarFieldUint8",
+    "ScalarFieldBoolean",
+    "ScalarFieldFloat32",
+    "NormalisedInt16ScalarField",
+    "AbstractScalarField",
+    "DtypeState",
+]
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -62,6 +71,7 @@ class DtypeState(NamedTuple):
     lower: npt.NDArray[np.number] | float | int
     upper: npt.NDArray[np.number] | float | int
     """
+
     dtype: npt.DTypeLike
     lower: npt.NDArray[np.number] | float | int
     upper: npt.NDArray[np.number] | float | int
@@ -116,6 +126,7 @@ class AbstractScalarField(FixedLengthArray):
     origin_dtype: SfOrigDtT
 
     """
+
     name: LowerStr
     origin_dtype: DtypeState
 
@@ -204,6 +215,7 @@ class ScalarFieldTriplet(ArrayNx3, AbstractScalarField):
     ----------
     arr: Array_Nx3_T
     """
+
     def __init__(self, arr: Array_Nx3_T | Self, name: SfNameT = None, origin_dtype: SfOrigDtT = None):
         kwargs: dict[str, Any] = {"name": name, "origin_dtype": origin_dtype}
         super().__init__(arr, **kwargs)
@@ -225,6 +237,7 @@ class RGBFields(ScalarFieldTriplet):
     ----------
     arr: Array_Nx3_Uint8_T
     """
+
     arr: Array_Nx3_Uint8_T
     name: str = RGB_NAMES.base
 
@@ -341,6 +354,7 @@ class NormalFields(ScalarFieldTriplet):
     ----------
     arr: Array_Nx3_Float32_T
     """
+
     arr: Array_Nx3_Float32_T
     name: str = NORMAL_NAMES.base
 
@@ -356,11 +370,10 @@ class NormalFields(ScalarFieldTriplet):
         """
         super().__init__(arr, **kwargs)
 
-
     # noinspection PyNestedDecorators
     @field_validator("arr", mode="before")
     @classmethod
-    def _ensure_unit_vector(cls, array: Array_Nx3_Float_T) -> Array_Nx3_Float32_T :
+    def _ensure_unit_vector(cls, array: Array_Nx3_Float_T) -> Array_Nx3_Float32_T:
         """Converts the input array to a set of unit vectors.
 
         Parameters
@@ -436,6 +449,7 @@ class SegmentationMap(ScalarField):
     ----------
     arr: Vector_Uint8_T | Vector_Uint16_T
     """
+
     arr: Vector_Uint8_T | Vector_Uint16_T
 
     def __init__(self, arr: Vector_Uint8_T | Vector_Uint16_T | Self, **kwargs: Unpack[_ScalarKwargT]):
@@ -463,7 +477,7 @@ class SegmentationMap(ScalarField):
             arr = np.zeros(vector_length, dtype=np.uint16)
 
         else:
-            raise ValueError(f"Segmentation map for more than {2 ** 16} classes {len(pt_cloud_sizes)} not supported.")
+            raise ValueError(f"Segmentation map for more than {2**16} classes {len(pt_cloud_sizes)} not supported.")
 
         return cls(arr, name=name)
 
@@ -472,6 +486,7 @@ class ScalarFieldUint8(ScalarField):
     """
     Scalar field that only supports uint8 dtype.
     """
+
     arr: Vector_Uint8_T
 
     def __init__(self, arr: Vector_Uint8_T | Self, **kwargs: Unpack[_ScalarKwargT]):
@@ -489,6 +504,7 @@ class ScalarFieldBoolean(ScalarField):
     """
     Scalar field that only supports boolean arrays.
     """
+
     arr: Vector_Bool_T
 
     def __init__(self, arr: Vector_Bool_T | Self, **kwargs: Unpack[_ScalarKwargT]):
@@ -506,6 +522,7 @@ class ScalarFieldFloat32(ScalarField):
     """
     Scalar field class which supports only Float32 dtypes
     """
+
     arr: Vector_Float32_T
 
     def __init__(self, arr: Vector_Float32_T | Self, **kwargs: Unpack[_ScalarKwargT]):
