@@ -1,12 +1,12 @@
 {
   "pythonVersion": "3.12",
 
-  "include": ["src/pchandler", "scripts", "tests"],
+  "include": ["src/pchandler", "tests"],
   "exclude": [".venv", ".tox", "build", "dist", "**/__pycache__"],
 
-  "typeCheckingMode": "basic",
+  "typeCheckingMode": "strict",
   "reportMissingImports": "error",
   "reportMissingModuleSource": "warning",
   "reportUnusedImport": "warning",
-  "reportMissingTypeStubs": "none"
+  "reportMissingTypeStubs": "warning"
 }
