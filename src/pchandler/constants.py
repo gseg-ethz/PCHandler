@@ -1,3 +1,16 @@
+# pchandler – Toolbox for point-cloud handling, processing and analysis
+#
+# Copyright (c) 2022–2026 ETH Zurich
+# Department of Civil, Environmental and Geomatic Engineering (D-BAUG)
+# Institute of Geodesy and Photogrammetry
+# Geosensors and Engineering Geodesy
+#
+# Authors:
+#   Nicholas Meyer
+#   Jon Allemand
+#
+# SPDX-License-Identifier: BSD-3-Clause
+
 # pchandler - Toolbox for point-cloud handling, processing and analysis
 #
 # Copyright (c) 2025, Nicholas Meyer, Geosensors and Engineering Geodesy,
@@ -91,7 +104,24 @@ class _NameConstantsTriplet(NamedTuple):
 
         return tuple(tuple(group) for group in groups)
 
-    def get_position(self, name):
+    def get_position(self, name: str) -> int:
+        """Return the index (0, 1, or 2) of ``name`` within this triplet.
+
+        Parameters
+        ----------
+        name
+            Field name to look up across the per-position groups.
+
+        Returns
+        -------
+        int
+            Positional index (0 = first column, 1 = second, 2 = third).
+
+        Raises
+        ------
+        ValueError
+            If ``name`` does not appear in any positional group.
+        """
         for i, positional_names in enumerate(self.positional):
             if name in positional_names:
                 return i
