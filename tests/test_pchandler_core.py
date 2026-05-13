@@ -419,9 +419,9 @@ class BaseTestPointCloudData:
                 assert mask.ndim == 1
                 assert mask.shape[0] == len(pcd)
                 assert mask.dtype == np.bool_
-                assert mask[1] == True
-                assert mask[3] == True
-                assert mask[5] == True
+                assert mask[1]
+                assert mask[3]
+                assert mask[5]
 
             def test_mask(self, pcd):
                 mask_in = np.zeros(len(pcd), dtype=np.bool_)
