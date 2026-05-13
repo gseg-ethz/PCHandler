@@ -1058,3 +1058,85 @@ class TestCartesianNOSChange(BaseTestNOSChange):
 
 class TestCartesianConversions(BaseTestConversions):
     pass
+
+
+# ---------------------------------------------------------------------------
+# FRAG-02 regression tests: four primary cases of _process_shift + degraded
+# fallback (Plan 03-07-02). The four primary cases overlap with the existing
+# `BaseTestNOSInit.test_process_shift`, but these module-level tests assert the
+# named-method dispatch path (post-refactor) and the degraded Case-4 -> Case-3
+# fallback that was previously implicit.
+# ---------------------------------------------------------------------------
+
+
+def test_process_shift_case_1_no_init():
+    """FRAG-02 Case 1 primary: prev=None, nos=None -> coords unchanged, _shift_applied_by=None.
+
+    Note: must pass ``numerical_optimization_shift=None`` explicitly; the field
+    default_factory mints a zero-vector OptimizedShift (see
+    coordinates.py:238). Matches BaseTestNOSInit.test_process_shift Case 1.
+    """
+    world_xyz = np.array([[1.0, 2.0, 3.0]], dtype=np.float64)
+    cc = CartesianCoordinates(world_xyz, numerical_optimization_shift=None)
+    assert cc.numerical_optimization_shift is None
+    assert cc._shift_applied_by is None
+    assert cc.arr.dtype == np.float64
+
+
+def test_process_shift_case_2_initial_shift():
+    """FRAG-02 Case 2 primary: prev=None, nos exists -> coords shifted, dtype float32."""
+    world_xyz = np.array([[100.0, 200.0, 300.0], [100.1, 200.1, 300.1]], dtype=np.float64)
+    nos = OptimizedShift(np.array([100.0, 200.0, 300.0]))
+    cc = CartesianCoordinates(world_xyz, numerical_optimization_shift=nos)
+    assert cc.numerical_optimization_shift is nos
+    assert cc._shift_applied_by is nos
+    assert cc.arr.dtype == np.float32
+
+
+def test_process_shift_case_3_revert_to_prev_shift():
+    """FRAG-02 Case 3 primary: prev exists, nos=None -> coords reverted, _shift_applied_by=None."""
+    world_xyz = np.array([[100.0, 200.0, 300.0], [100.1, 200.1, 300.1]], dtype=np.float64)
+    nos = OptimizedShift(np.array([100.0, 200.0, 300.0]))
+    cc = CartesianCoordinates(world_xyz, numerical_optimization_shift=nos)
+    # Now flip nos to None to exercise Case 3
+    cc.numerical_optimization_shift = None
+    assert cc.numerical_optimization_shift is None
+    assert cc._shift_applied_by is None
+    assert cc.arr.dtype == np.float64
+
+
+def test_process_shift_case_4_swap_shifts():
+    """FRAG-02 Case 4 primary: prev exists, nos exists (different) -> swap, both registered."""
+    world_xyz = np.array([[100.0, 200.0, 300.0], [100.1, 200.1, 300.1]], dtype=np.float64)
+    nos_a = OptimizedShift(np.array([100.0, 200.0, 300.0]))
+    nos_b = OptimizedShift(np.array([101.0, 201.0, 301.0]))
+    cc = CartesianCoordinates(world_xyz, numerical_optimization_shift=nos_a)
+    cc.numerical_optimization_shift = nos_b
+    assert cc.numerical_optimization_shift is nos_b
+    assert cc._shift_applied_by is nos_b
+
+
+def test_process_shift_case_4_degraded_to_case_3(monkeypatch):
+    """FRAG-02 Case 4 -> Case 3 degraded fallback: manager rejects NOS, falls back to revert."""
+    from pchandler.geometry.optimal_shift import OptimizedShiftManager
+
+    # Set up Case 4 prerequisite: cc with an existing prev shift
+    world_xyz = np.array([[100.0, 200.0, 300.0], [100.1, 200.1, 300.1]], dtype=np.float64)
+    nos_a = OptimizedShift(np.array([100.0, 200.0, 300.0]))
+    cc = CartesianCoordinates(world_xyz, numerical_optimization_shift=nos_a)
+    assert cc._shift_applied_by is nos_a
+
+    # Force manager to raise ShiftNotFeasibleError on the NEXT register
+    def _reject(self, coords, shift):
+        raise OptimizedShiftManager.ShiftNotFeasibleError("test forced rejection")
+
+    monkeypatch.setattr(OptimizedShiftManager, "register_coordinates_to_shift", _reject)
+
+    # Trigger the state machine; Flip B should fire (NOS -> None)
+    new_nos = OptimizedShift(np.array([1e10, 1e10, 1e10]))
+    cc.numerical_optimization_shift = new_nos
+
+    # Final state: degraded-fallback Case 3 (reverted to prev's frame, then nos=None)
+    assert cc.numerical_optimization_shift is None
+    assert cc._shift_applied_by is None
+    assert cc.arr.dtype == np.float64
