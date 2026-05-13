@@ -777,7 +777,7 @@ class FoV(BaseModel):
         Angle
         """
         warnings.warn(
-            "elevation_min property has been deprecated. Please use the 'top' property",
+            "horizontal_min property has been deprecated. Please use the 'left' property",
             DeprecationWarning,
             stacklevel=2,
         )
@@ -797,7 +797,7 @@ class FoV(BaseModel):
         Angle
         """
         warnings.warn(
-            "horizontal_max property has been deprecated. Please use the 'top' property",
+            "horizontal_max property has been deprecated. Please use the 'right' property",
             DeprecationWarning,
             stacklevel=2,
         )
