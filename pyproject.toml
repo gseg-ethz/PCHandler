@@ -34,7 +34,7 @@ dependencies = [
 	"shapely ~= 2.1",
 	"typing-extensions ~= 4.13",
 
-    "GSEGUtils @ git+ssh://git@github.com/gseg-ethz/GSEGUtils.git@f623e7ad1003b18df13e222c65cc1f906ff49ecf",
+    "GSEGUtils @ git+ssh://git@github.com/gseg-ethz/GSEGUtils.git@84126c7d24c2a5f71e24c76f4162cc0bb8390754",
 ]
 
 [tool.setuptools]
@@ -113,8 +113,14 @@ dev = [
     "pytest~=8.4",            # test framework
     "pytest-cov~=5.0",        # pytest coverage plugin (used by ci.yml --cov)
     "coverage~=7.0",          # coverage reporting
+    "pytest-benchmark ~= 5.2",  # Phase 4 D-30 — opt-in microbenchmark plugin (excluded from CI)
 ]
 cuda11 = ["geopandas ~= 1.0", "cudf-cu11 == 25.4.*", "cuspatial-cu11 == 25.4.*", "cuproj-cu11 == 25.4.*",
 	"cuml-cu11 == 25.4.*", "dask-cudf-cu11 == 25.4.*", ]
 cuda12 = ["geopandas ~= 1.0", "cudf-cu12 == 25.4.*", "cuspatial-cu12 == 25.4.*", "cuproj-cu12 == 25.4.*",
 	"cuml-cu12 == 25.4.*", "dask-cudf-cu12 == 25.4.*", ]
+
+[tool.pytest.ini_options]
+markers = [
+    "benchmark: opt-in microbenchmark (excluded from CI via `-m \"not benchmark\"`)",
+]
