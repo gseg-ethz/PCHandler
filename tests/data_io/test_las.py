@@ -1,11 +1,13 @@
 import tempfile
 from pathlib import Path
 
+import laspy
 import numpy as np
 from GSEGUtils.validators import normalize_uint16
 
 from pchandler import PointCloudData
 from pchandler.data_io import Las as LasHandler
+from pchandler.geometry import OptimizedShift
 from tests.data_io.test_core import BaseLoadSave
 
 base_directory = Path(__file__).resolve().parent.parent
@@ -54,3 +56,19 @@ class TestLasHandler(BaseLoadSave):
 
         assert not np.allclose(las_pcd.intensity, i)
         assert np.all(las_pcd.intensity == normalize_uint16(i))
+
+    def test_las_load_with_nos_in_pcd_kw(self):
+        """BUG-08: caller's NOS in **pcd_kw wins over the LAS-header default; no crash."""
+        custom_shift = OptimizedShift(np.array([1.0, 2.0, 3.0]))
+        # Pass via the kwarg path (which routes into pcd_kw inside the loader).
+        pcd = LasHandler.load(self.reference, numerical_optimization_shift=custom_shift)
+        assert pcd.numerical_optimization_shift is custom_shift
+
+    def test_las_load_without_nos_uses_header_default(self):
+        """BUG-08: no NOS in pcd_kw -> LAS-header default applies (no regression)."""
+        pcd = LasHandler.load(self.reference)
+        assert pcd.numerical_optimization_shift is not None
+        # The default is OptimizedShift(las.header.offsets); compare values.
+        with laspy.open(self.reference) as f:
+            expected_offsets = np.array(f.header.offsets, dtype=np.float64)
+        np.testing.assert_array_equal(pcd.numerical_optimization_shift.value, expected_offsets)
