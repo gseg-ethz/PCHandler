@@ -236,7 +236,15 @@ class OptimizedShiftManager(metaclass=SingletonMeta):
         OptimizedShiftManager.ShiftUUIDAlreadyTaken
             Shift with the same UUID already exists in the manager.
         """
-        if shift.uuid in self._by_uuid and id(shift) is not id(self._by_uuid[shift.uuid]):
+        # WR-02 (Phase 3 code review): the previous form
+        # ``id(shift) is not id(self._by_uuid[shift.uuid])`` compared two
+        # freshly-minted ``int`` objects with ``is``. Since CPython only
+        # interns ints in [-5, 256], two ``id()`` calls on real memory
+        # addresses almost always satisfy ``is not`` — the comparison was
+        # essentially "always True" and would incorrectly reject a no-op
+        # re-register of the same instance. ``object is object`` is the
+        # unambiguous identity check.
+        if shift.uuid in self._by_uuid and self._by_uuid[shift.uuid] is not shift:
             raise OptimizedShiftManager.ShiftUUIDAlreadyTaken()
 
         self._by_uuid[shift.uuid] = shift
