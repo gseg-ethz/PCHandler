@@ -23,6 +23,7 @@
 
 from __future__ import annotations
 
+import numbers
 import re
 from collections.abc import Sequence
 from functools import total_ordering
@@ -254,91 +255,149 @@ class AngleBase:
         return np.array(self).max()
 
     def __add__(self, other) -> Self:
-        """Add another angle or a plain number (interpreted as radians)."""
-        try:
-            if isinstance(other, AngleBase):
+        r"""Add another angle or a real-number / ndarray operand (interpreted as radians).
+
+        Notes
+        -----
+        Per Phase 3 D-29 the ``+`` / ``-`` operators ARE expanded to allow
+        ``AngleArray + AngleArray`` with matching shapes (element-wise);
+        mismatched shapes raise ``ValueError`` naming both shapes. The
+        previously-bare ``except Exception`` was masking these failure modes
+        (and internal bugs like ``AttributeError`` on ``internal_value``) as
+        misleading ``NotImplementedError``\ s; the explicit isinstance ladder
+        below distinguishes the three failure modes (unsupported operand,
+        shape mismatch, internal bug) and uses Python's ``return
+        NotImplemented`` sentinel for the unsupported-operand path.
+        """
+        if isinstance(other, AngleBase):
+            try:
                 new_val = self.internal_value + other.internal_value
-            else:
-                new_val = self.radians + other
-        except Exception as err:
-            raise NotImplementedError(f"Add not defined between type: {type(other)} and {type(self)}") from err
+            except ValueError as err:  # numpy broadcast / shape mismatch
+                raise ValueError(
+                    f"AngleBase add: shape {np.shape(self.internal_value)} and "
+                    f"{np.shape(other.internal_value)} do not broadcast"
+                ) from err
+        elif isinstance(other, (numbers.Real, np.ndarray)):
+            new_val = self.radians + other
+        else:
+            return NotImplemented  # Python protocol; reflected dunder gets a chance
 
         new_instance = type(self)(new_val, self._INTERNAL_UNIT)
         new_instance.display_unit = self.display_unit
         return new_instance
 
     def __radd__(self, other) -> Any:
-        """Right-side add: delegate to ``other.__add__`` with our radian value."""
-        try:
-            return other.__add__(self.radians)
-        except Exception as err:
-            raise NotImplementedError(f"Add not defined between type: {type(other)} and {type(self)}") from err
+        """Right-side add (FRAG-05): delegate to ``other.__add__`` with our radian value.
+
+        Returns ``NotImplemented`` when ``other`` is neither another
+        :class:`AngleBase` nor a numeric scalar / :class:`numpy.ndarray`, so
+        Python's reflected-op protocol can fall through to raising
+        :class:`TypeError`.
+        """
+        if isinstance(other, AngleBase):
+            try:
+                new_val = self.internal_value + other.internal_value
+            except ValueError as err:  # numpy broadcast / shape mismatch
+                raise ValueError(
+                    f"AngleBase radd: shape {np.shape(self.internal_value)} and "
+                    f"{np.shape(other.internal_value)} do not broadcast"
+                ) from err
+        elif isinstance(other, (numbers.Real, np.ndarray)):
+            new_val = self.radians + other
+        else:
+            return NotImplemented
+
+        new_instance = type(self)(new_val, self._INTERNAL_UNIT)
+        new_instance.display_unit = self.display_unit
+        return new_instance
 
     def __sub__(self, other):
-        """Subtract another angle or plain number (interpreted as radians)."""
-        try:
-            if isinstance(other, AngleBase):
-                new_val = self.internal_value - other.internal_value
-            else:
-                new_val = self.radians - other
-        except Exception as err:
-            raise NotImplementedError(f"Subtraction not defined between type: {type(other)} and {type(self)}") from err
+        """Subtract another angle or a real-number / ndarray operand (interpreted as radians).
 
+        Notes
+        -----
+        See :meth:`__add__` notes (Phase 3 D-29). The asymmetry between
+        ``__sub__`` (uses ``Angle(...)``) and ``__add__`` (uses
+        ``type(self)(...)``) is preserved deliberately for Phase 3; a future
+        angles-API phase reconciles via ``_wrap_result`` (CONTEXT Deferred
+        Ideas / RESEARCH note).
+        """
+        if isinstance(other, AngleBase):
+            try:
+                new_val = self.internal_value - other.internal_value
+            except ValueError as err:
+                raise ValueError(
+                    f"AngleBase sub: shape {np.shape(self.internal_value)} and "
+                    f"{np.shape(other.internal_value)} do not broadcast"
+                ) from err
+        elif isinstance(other, (numbers.Real, np.ndarray)):
+            new_val = self.radians - other
+        else:
+            return NotImplemented
+
+        # NOTE (Phase 3 D-26 / Deferred Ideas): __sub__ uses Angle(...) while
+        # __add__ uses type(self)(...). Asymmetry preserved deliberately for
+        # Phase 3; a future angles-API phase reconciles via `_wrap_result`.
         new_instance = Angle(new_val, self._INTERNAL_UNIT)
         new_instance.display_unit = self.display_unit
         return new_instance
 
     def __rsub__(self, other):
-        """Right-side subtract: delegate to ``other.__sub__`` with our radian value."""
-        try:
-            return other.__sub__(self.radians)
-        except Exception as err:
-            raise NotImplementedError(
-                f"Subtraction not defined between types: {type(other)} and {type(self)}."
-            ) from err
+        """Right-side subtract (FRAG-05): explicit isinstance ladder; ``NotImplemented`` for unsupported."""
+        if isinstance(other, AngleBase):
+            try:
+                new_val = other.internal_value - self.internal_value
+            except ValueError as err:
+                raise ValueError(
+                    f"AngleBase rsub: shape {np.shape(self.internal_value)} and "
+                    f"{np.shape(other.internal_value)} do not broadcast"
+                ) from err
+        elif isinstance(other, (numbers.Real, np.ndarray)):
+            new_val = other - self.radians
+        else:
+            return NotImplemented
+
+        new_instance = Angle(new_val, self._INTERNAL_UNIT)
+        new_instance.display_unit = self.display_unit
+        return new_instance
 
     def __mul__(self, other):
-        """Multiply by a scalar; multiplication between two angle types is undefined."""
+        """Multiply by a scalar; double-AngleBase multiplication is forbidden (Phase 3 D-26)."""
         if isinstance(other, AngleBase):
-            raise NotImplementedError("Multiplication not defined between two AngleBase types.")
+            return NotImplemented  # forbid: deferred to future angles-API phase
         return Angle(self.display_value * other, self.display_unit)
 
     def __rmul__(self, other):
         """Right-side multiplication; same semantics as :meth:`__mul__`."""
-        return self.__mul__(other)
-        # if isinstance(other, AngleBase):
-        #     raise NotImplementedError(f"Multiplication not defined between two AngleBase types.")
-        # return self.__binary_op(other, np.multiply)
+        if isinstance(other, AngleBase):
+            return NotImplemented  # forbid: deferred to future angles-API phase
+        return Angle(self.display_value * other, self.display_unit)
 
     def __truediv__(self, other):
-        """Divide by a scalar or angle; angle/angle returns a dimensionless ratio."""
+        """Divide by a scalar; double-AngleBase division forbidden (Phase 3 D-26)."""
         if isinstance(other, AngleBase):
-            return self.internal_value / other.internal_value
+            return NotImplemented  # forbid: deferred to future angles-API phase
         return Angle(self.display_value / other, self.display_unit)
 
     def __rtruediv__(self, other):
-        """Reject division when the divisor is an :class:`AngleBase`."""
-        raise NotImplementedError("Division not with AngleBase as divisor.")
-        # other / self
-        # if isinstance(other, AngleBase):
-        #     vals = np.divide(other.to(other.display_unit), self.to(other.display_unit))
-        #     unit = other._display_unit
-        #     return Angle(vals, unit)
-        # else:
-        #     vals = np.divide(other, self.to(self.display_unit))
-        #     return Angle(vals, self.display_unit)
+        """Reject division when the divisor is an :class:`AngleBase` (Phase 3 D-26)."""
+        if isinstance(other, AngleBase):
+            return NotImplemented  # forbid: deferred to future angles-API phase
+        return NotImplemented  # other / Angle is undefined for any operand
 
     def __mod__(self, other: Any) -> Self | float:
-        """Compute ``self % other`` (only defined when ``other`` is not an angle)."""
+        """Compute ``self % other`` (double-AngleBase modulo forbidden; Phase 3 D-26)."""
         if isinstance(other, AngleBase):
-            raise NotImplementedError("Modulo not defined between two AngleBase types.")
+            return NotImplemented  # forbid: deferred to future angles-API phase
         # return self.__binary_op(other, np.mod)
         mod_val = self.display_value % other
         return type(self)(mod_val, self.display_unit)
 
     def __rmod__(self, other):
-        """Reject modulo when the divisor is an :class:`AngleBase`."""
-        raise NotImplementedError("Modulo not defined for divisor as AngleBase.")
+        """Reject modulo when the divisor is an :class:`AngleBase` (Phase 3 D-26)."""
+        if isinstance(other, AngleBase):
+            return NotImplemented  # forbid: deferred to future angles-API phase
+        return NotImplemented  # other % Angle is undefined for any operand
 
     # def __divmod__(self, other):
     #     if isinstance(other, AngleBase):

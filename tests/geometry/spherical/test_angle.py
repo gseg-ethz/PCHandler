@@ -58,15 +58,15 @@ class TestAngle:
         assert a.display_unit == AngleUnit.RAD
         assert len(a._internal_value) == 0
 
+        # FRAG-05 (Phase 3 D-26 / D-29): the forbidden double-AngleBase paths now
+        # return Python's NotImplemented sentinel, which Python's reflected-op
+        # protocol converts to TypeError. Calling the dunder directly returns the
+        # sentinel; using the operator surfaces the TypeError.
         a = Angle(1.0)
-        with pytest.raises(NotImplementedError):
-            a.__rmod__(3)
-
-        with pytest.raises(NotImplementedError):
-            a.__rtruediv__(3)
-
-        with pytest.raises(NotImplementedError):
-            a * Angle(3)
+        assert a.__rmod__(3) is NotImplemented
+        assert a.__rtruediv__(3) is NotImplemented
+        with pytest.raises(TypeError):
+            _ = a * Angle(3)
 
     def test_parse_various_inputs(self):
         # tuple form
@@ -208,19 +208,23 @@ class TestAngleArrayDirect:
         b = arr + 3
         assert np.all(b._internal_value == arr.radians + 3)
 
-        with pytest.raises(NotImplementedError):
+        # FRAG-05 (Phase 3 D-26): unsupported operands now flow through Python's
+        # reflected-op protocol, surfacing as TypeError rather than the
+        # previously-masked NotImplementedError. Forbidden double-AngleBase
+        # paths (e.g. arr * Angle) likewise reach TypeError via NotImplemented.
+        with pytest.raises(TypeError):
             "asd" + arr
 
-        with pytest.raises(NotImplementedError):
+        with pytest.raises(TypeError):
             "asd" - arr
 
-        with pytest.raises(NotImplementedError):
+        with pytest.raises(TypeError):
             arr + "abc"
 
-        with pytest.raises(NotImplementedError):
+        with pytest.raises(TypeError):
             arr - "abc"
 
-        with pytest.raises(NotImplementedError):
+        with pytest.raises(TypeError):
             arr * Angle(2)
 
     def test_str(self):
