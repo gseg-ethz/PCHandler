@@ -19,8 +19,6 @@ classifiers = [
 #	"Programming Language :: Python :: 3.10",
 #	"Programming Language :: Python :: 3.11",
 	"Programming Language :: Python :: 3.12",
-
-    "Private :: Do Not Upload" # REMOVE BEFORE FLIGHT -- PyPI will always reject packages with classifiers beginning with Private ::
 ]
 
 dependencies = [

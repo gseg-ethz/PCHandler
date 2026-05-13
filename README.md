@@ -159,3 +159,10 @@ Optional GPU Acceleration
 - [cuDF](https://docs.rapids.ai/api/cudf/stable/) — GPU DataFrame operations to accelerate tabular point attributes and transforms.
 - [cuSpatial](https://docs.rapids.ai/api/cuspatial/stable/) — GPU-accelerated spatial/trajectory operations for large-scale geospatial workloads.
 - [cuML](https://docs.rapids.ai/api/cuml/stable/) — GPU-accelerated machine learning algorithms useful for clustering, outlier detection, and similar tasks.
+
+## Publication Policy
+
+This package is internal to ETH Zurich's GSEG group and is not published to PyPI.
+The `release-please` workflow produces build artefacts attached to GitHub Releases;
+internal users install via `pip install <wheel-url>` from those releases. There is
+no PyPI publish step; introducing one requires explicit ADR-level review.
