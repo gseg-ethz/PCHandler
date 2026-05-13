@@ -696,32 +696,50 @@ class OptimizedShift:
     def _reconstruct(u: UUID, shift_vec: Vector_3_T) -> "OptimizedShift":
         """Reconstruct an :class:`OptimizedShift` from previously-pickled state.
 
+        The destination-process :class:`OptimizedShiftManager` may already hold
+        a shift under UUID ``u``. Three cases (FRAG-01 / Phase 3 D-18):
+
+        1. **No existing shift under** ``u``: construct + register with the
+           pickled UUID. Cross-pickle UUID continuity is preserved.
+        2. **Existing shift, same vector**: return the existing instance. The
+           pickled stream's references collapse onto the destination instance.
+        3. **Existing shift, divergent vector**: mint a fresh ``uuid.uuid4()``
+           and register a NEW shift carrying the pickled ``shift_vec``. The
+           pre-existing shift under ``u`` is left untouched. World-frame
+           coordinates are preserved at the cost of UUID continuity; cross-PCD
+           merge on the destination now requires explicit reframing.
+
         Parameters
         ----------
         u : UUID
-            UUID of the shift.
+            UUID from the pickled state.
         shift_vec : Vector_3_T
-            Shift vector.
+            Shift vector from the pickled state.
 
         Returns
         -------
         OptimizedShift
-            Either the existing manager-held shift with matching UUID, or a
-            freshly-constructed shift registered with the manager.
+            Either the pre-existing manager instance (case 2) or a freshly-
+            constructed instance routed through :meth:`_construct_with_uuid`
+            (cases 1 and 3).
         """
         mgr = OptimizedShiftManager()
         existing = mgr.get_by_uuid(u)
-
         if existing is not None:
-            return existing
-
-        # TODO implement the creation of a new shift object if ever there's a difference with the existing one
-        new = object.__new__(OptimizedShift)
-        new._uuid = u
-        new._shift = shift_vec
-        new._member_coordinate_sets = weakref.WeakSet()
-        mgr.register_shift(new)
-        return new
+            if np.array_equal(existing._shift, shift_vec):
+                return existing
+            # Case 3: divergent vector → mint fresh UUID
+            old_u = u
+            u = uuid.uuid4()
+            logger.info(
+                "OptimizedShift._reconstruct: UUID collision with divergent vector "
+                "(old UUID %s); minted fresh UUID %s for the pickled shift vector. "
+                "World-frame coordinates preserved; cross-PCD merge requires "
+                "explicit reframing.",
+                old_u,
+                u,
+            )
+        return OptimizedShift._construct_with_uuid(u, shift_vec)
 
     def reattach_member(self, coordinate_set: CartesianCoordinates) -> None:
         """Reattach a coordinate set to this shift without changing the other members.
