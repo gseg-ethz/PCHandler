@@ -1,7 +1,9 @@
+import alphashape
 import numpy as np
 import pytest
 
 from pchandler import PointCloudData
+from pchandler.geometry import util as geom_util
 from pchandler.geometry.util import MinMaxPoints, get_outline_polygon
 
 
@@ -98,3 +100,69 @@ class TestGetOutlinePolygon:
     def test_invalid_plane_input(self):
         with pytest.raises(ValueError):
             get_outline_polygon(PointCloudData([[0, 0, 0], [1, 1, 1], [2, 2, 2]]), plane="invalid")
+
+    # Phase 4 PERF-02 D-25 #1: deterministic by default (seed=None → default_rng(0)).
+    def test_determinism_default_seed(self):
+        # Small jitter-sensitive synthetic fixture: 500 points in a unit cube.
+        # Pre-fix this test would be flaky across runs (global np.random RNG);
+        # post-fix the default seed=None resolves to default_rng(0).
+        rng = np.random.default_rng(123)
+        pcd = PointCloudData(rng.standard_normal((500, 3)))
+        a = get_outline_polygon(pcd, "xy")
+        b = get_outline_polygon(pcd, "xy")
+        # Shapely's geometric equality (D-25 #1).
+        assert a.equals(b)
+
+    # Phase 4 PERF-02 D-25 #2: deterministic with explicit seed.
+    def test_determinism_explicit_seed(self):
+        rng = np.random.default_rng(7)
+        pcd = PointCloudData(rng.standard_normal((500, 3)))
+        a = get_outline_polygon(pcd, "xy", seed=42)
+        b = get_outline_polygon(pcd, "xy", seed=42)
+        assert a.equals(b)
+        # Different seeds should yield distinguishable polygons. The jitter is
+        # 1e-6 — small but enough on a 500-pt cloud to perturb the alpha-shape
+        # decision boundary. If a future numpy or alphashape change makes this
+        # case insensitive, swap to a larger nb_points override; for now the
+        # researcher's discretionary verification confirms inequality.
+        c = get_outline_polygon(pcd, "xy", seed=0)
+        assert not a.equals(c)
+
+    # Phase 4 PERF-02 D-25 #3: auto-cap triggers when nb_points=-1 and input
+    # exceeds _DEFAULT_OUTLINE_MAX_POINTS. We monkeypatch the constant low and
+    # capture alphashape's input shape via a wrapper (D-25 Claude's Discretion).
+    def test_auto_cap_triggers(self, monkeypatch):
+        monkeypatch.setattr(geom_util, "_DEFAULT_OUTLINE_MAX_POINTS", 10)
+        rng = np.random.default_rng(0)
+        pcd = PointCloudData(rng.standard_normal((100, 3)))
+
+        captured: dict[str, tuple[int, ...]] = {}
+        real_alphashape = alphashape.alphashape
+
+        def _capture(arr, *args, **kwargs):
+            captured["shape"] = np.asarray(arr).shape
+            return real_alphashape(arr, *args, **kwargs)
+
+        monkeypatch.setattr(alphashape, "alphashape", _capture)
+        _ = get_outline_polygon(pcd, "xy")
+        # Post-trim, alphashape sees 10 rows (the monkeypatched cap), not 100.
+        assert captured["shape"][0] == 10
+
+    # Phase 4 PERF-02 D-25 #4: explicit nb_points overrides the auto-cap.
+    def test_auto_cap_respects_explicit_nb_points(self, monkeypatch):
+        # Even with a tiny default cap, an explicit nb_points wins.
+        monkeypatch.setattr(geom_util, "_DEFAULT_OUTLINE_MAX_POINTS", 10)
+        rng = np.random.default_rng(0)
+        pcd = PointCloudData(rng.standard_normal((1000, 3)))
+
+        captured: dict[str, tuple[int, ...]] = {}
+        real_alphashape = alphashape.alphashape
+
+        def _capture(arr, *args, **kwargs):
+            captured["shape"] = np.asarray(arr).shape
+            return real_alphashape(arr, *args, **kwargs)
+
+        monkeypatch.setattr(alphashape, "alphashape", _capture)
+        _ = get_outline_polygon(pcd, "xy", nb_points=50)
+        # Explicit nb_points=50 overrides the auto-cap (10).
+        assert captured["shape"][0] == 50
