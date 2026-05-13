@@ -296,48 +296,108 @@ class CartesianCoordinates(Abstract3dCoordinates):
                 self, "unshifted_bbox", MinMaxPoints.from_points(self.arr, already_applied_shift_vec=applied_shift)
             )
 
-    def _process_shift(self):
+    def _process_shift(self) -> None:
         """Resolve the four-case state machine between ``_shift_applied_by`` and ``numerical_optimization_shift``.
 
-        Cases:
+        Notes
+        -----
+        Cases (row = ``prev_shift``, col = ``self.numerical_optimization_shift``):
 
-        - Case 1 -- ``prev_shift is None``, ``NOS is None``:
-          basic init, register to NOS.
-        - Case 2 -- ``prev_shift is None``, ``NOS`` exists:
-          revert to ``prev_shift``, convert to ``float64``, unregister
-          ``prev_shift``.
-        - Case 3 -- ``prev_shift`` exists, ``NOS is None``:
-          register to NOS.
-        - Case 4 -- ``prev_shift`` exists, ``NOS`` exists:
-          if same, register to NOS; else apply the difference, unregister
-          ``prev``, register ``NOS``.
+        +-----------------+--------------------------+-----------------------------+
+        |                 | NOS is None              | NOS exists                  |
+        +=================+==========================+=============================+
+        | prev is None    | Case 1: ``_apply_no_     | Case 2: ``_apply_initial_   |
+        |                 | shift_init`` (primary)   | shift`` (primary)           |
+        +-----------------+--------------------------+-----------------------------+
+        | prev exists     | Case 3: ``_revert_to_    | Case 4: ``_swap_shifts``    |
+        |                 | prev_shift`` (primary)   | (primary)                   |
+        +-----------------+--------------------------+-----------------------------+
+
+        The side effect at the top of this method calls
+        :meth:`_register_with_shift_at_osm`, which may flip the column of NOS:
+
+        - **Flip A:** NOS becomes a SUBSTITUTE ``OptimizedShift`` (manager rejected
+          the requested shift and chose a feasible existing one). Cases 2 and 4
+          remain in their primary slot but with a different ``OptimizedShift``
+          instance.
+        - **Flip B:** NOS becomes ``None`` (no feasible shift; degrade to
+          ``float64``). Case 2 **degrades** into Case 1; Case 4 **degrades** into
+          Case 3.
+
+        Each named case method handles only the primary entry; degraded-fallback
+        routing is decided by the post-side-effect ``(prev, nos)`` tuple read at
+        the bottom of this method. The terminal call to
+        :meth:`_set_shift_applied_by` is the single owner of writes to
+        ``_shift_applied_by``; none of the four case methods write that slot
+        directly (FRAG-02 / Phase 2 D-12 sanctioned write paths).
         """
-        prev_shift = self._shift_applied_by
         if self.numerical_optimization_shift is not None:
-            self._register_with_shift_at_osm()  # This could possibly set self.nos to None
+            self._register_with_shift_at_osm()
+            # After this call:
+            #   Flip A: NOS may be a SUBSTITUTE OptimizedShift (manager rejected
+            #           the requested one and chose a feasible existing shift).
+            #   Flip B: NOS may be None (no feasible shift; degrade to float64).
 
-        # Case 1 - Initialisation with NOS = None
-        if prev_shift is None and self.numerical_optimization_shift is None:
-            return
+        prev = self._shift_applied_by
+        nos = self.numerical_optimization_shift
 
-        # Case 2 - Initialization with a NOS value
-        elif prev_shift is None and self.numerical_optimization_shift is not None:
-            self.update_shift(-self.numerical_optimization_shift.value)
-
-        # Case 3 - Case where a point cloud has a previous shift but should no longer be "optimized"
-        elif prev_shift is not None and self.numerical_optimization_shift is None:
-            self.update_shift(prev_shift.value)
-            prev_shift.unregister(self)
-
-        # Case 4 - Case when pcd has been pickled but another optimization shift is provided,
-        #          or has changed since it was pickled
-        elif prev_shift is not None and self.numerical_optimization_shift is not None:
-            if prev_shift is not self.numerical_optimization_shift:
-                delta_shift = prev_shift.value - self.numerical_optimization_shift.value
-                self.update_shift(delta_shift)
-                prev_shift.unregister(self)
+        if prev is None and nos is None:
+            self._apply_no_shift_init()
+        elif prev is None and nos is not None:
+            self._apply_initial_shift(nos)
+        elif prev is not None and nos is None:
+            self._revert_to_prev_shift(prev)
+        else:
+            assert prev is not None and nos is not None  # type narrowing
+            self._swap_shifts(prev, nos)
 
         self._set_shift_applied_by(self.numerical_optimization_shift)
+
+    def _apply_no_shift_init(self) -> None:
+        """Case 1 (primary) or degraded from Case 2 (Flip B): no shift requested or feasible.
+
+        No state change here -- the terminal :meth:`_set_shift_applied_by` in
+        :meth:`_process_shift` is the single owner of writes to
+        ``_shift_applied_by``.
+        """
+        # Intentionally empty; _process_shift sets _shift_applied_by terminally.
+        return
+
+    def _apply_initial_shift(self, nos: OptimizedShift) -> None:
+        """Case 2 (primary): first-time shift application; ``prev`` was None.
+
+        Parameters
+        ----------
+        nos : OptimizedShift
+            The active numerical-optimization shift.
+        """
+        self.update_shift(-nos.value)
+
+    def _revert_to_prev_shift(self, prev: OptimizedShift) -> None:
+        """Case 3 (primary) or degraded from Case 4 (Flip B): revert to prev's frame, unregister.
+
+        Parameters
+        ----------
+        prev : OptimizedShift
+            The previously-applied shift.
+        """
+        self.update_shift(prev.value)
+        prev.unregister(self)
+
+    def _swap_shifts(self, prev: OptimizedShift, nos: OptimizedShift) -> None:
+        """Case 4 (primary): swap shift instances; if different, apply delta and re-register.
+
+        Parameters
+        ----------
+        prev : OptimizedShift
+            Previously-applied shift.
+        nos : OptimizedShift
+            New numerical-optimization shift.
+        """
+        if prev is not nos:
+            delta_shift = prev.value - nos.value
+            self.update_shift(delta_shift)
+            prev.unregister(self)
 
     def reduce(self, index: IndexLike) -> None:
         """Reduce the coordinates to the point set selected by ``index`` (in place).
