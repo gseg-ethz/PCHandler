@@ -597,7 +597,24 @@ class CartesianCoordinates(Abstract3dCoordinates):
             else:
                 # Computed fields (e.g. unshifted_bbox) pass through unvalidated by design.
                 validated_state[field] = value
+
+        # WR-06 (Phase 3 code review): ``_shift_applied_by`` is declared as
+        # ``PrivateAttr`` (line 237). Pydantic v2's ``model_construct(**state)``
+        # only populates *model fields* — PrivateAttrs are populated via
+        # ``__pydantic_private__`` and are NOT settable through kwargs.
+        # ``model_dump`` (above) deliberately adds ``_shift_applied_by`` to the
+        # state dict to round-trip it, but the reverse leg was incomplete: the
+        # PrivateAttr defaulted to ``None``, and the subsequent
+        # ``_process_shift`` saw "fresh init" semantics instead of mid-swap.
+        # Pop the PrivateAttr out of validated_state BEFORE ``model_construct``
+        # (which would silently drop it) and restore it via the sanctioned
+        # D-12 typed setter AFTER. Scope: tightly-scoped one-line setter call,
+        # NOT a refactor — D-20 declared the broader ``_reconstruct`` redesign
+        # out of scope for Phase 3, but this latent PrivateAttr-loss defect
+        # silently corrupted shift state across every pickle round trip.
+        shift_applied_by = validated_state.pop("_shift_applied_by", None)
         obj: Self = cls.model_construct(**validated_state)
+        obj._set_shift_applied_by(shift_applied_by)
         logger.debug("%s with id=%s reconstructed", cls, obj.id)
         obj._process_shift()
 
