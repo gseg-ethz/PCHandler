@@ -518,11 +518,14 @@ class PointCloudData(CartesianCoordinates):
     def to_py4dgeo(self) -> Epoch:
         """Convert the :class:`PointCloudData` to a py4dgeo :class:`Epoch`.
 
+        The optional numerical optimization shift is reverted so py4dgeo
+        receives float64 world-frame coordinates (mirrors :meth:`to_o3d`).
+
         Returns
         -------
-        Epoch
-            A py4dgeo ``Epoch`` carrying the XYZ cloud, optional normals,
-            and the scalar fields packed as additional dimensions.
+        py4dgeo.Epoch
+            Epoch carrying ``xyz`` in world-frame, plus optional normals and
+            additional scalar-field dimensions.
 
         Raises
         ------
@@ -532,22 +535,22 @@ class PointCloudData(CartesianCoordinates):
         try:
             from py4dgeo import Epoch as _Epoch
         except ModuleNotFoundError as e:
-            raise ModuleNotFoundError(
-                "py4dgeo is not installed. Install it to use PointCloudData.from_py4dgeo()."
-            ) from e
+            raise ModuleNotFoundError("py4dgeo is not installed. Install it to use PointCloudData.to_py4dgeo().") from e
 
-        # TODO implement and test this to ensure coordinates are passed like open3D
-        # if self.numerical_optimization_shift is not None:
-        #     pcd = self.copy(
-        #         update={"numerical_optimization_shift": None, "scalar_fields": None}, link_to_same_NOS=False
-        #     )
-        # else:
-        #     pcd = self
+        # BUG-07 (D-15): mirror to_o3d's un-shift pattern so py4dgeo receives
+        # float64 world-frame coordinates rather than shifted float32.
+        if self.numerical_optimization_shift is not None:
+            pcd = self.copy(
+                update={"numerical_optimization_shift": None, "scalar_fields": None},
+                link_to_same_NOS=False,
+            )
+        else:
+            pcd = self
 
         return _Epoch(
-            cloud=self.xyz,
-            normals=self.normals if self.normals is not None else None,
-            additional_dimensions=self.scalar_fields.as_struct_array(),
+            cloud=pcd.xyz,
+            normals=pcd.normals if pcd.normals is not None else None,
+            additional_dimensions=pcd.scalar_fields.as_struct_array(),
         )
 
     @classmethod
