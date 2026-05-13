@@ -516,7 +516,12 @@ class CartesianCoordinates(Abstract3dCoordinates):
     def __setattr__(self, key, value):
         """Guard ``_shift_applied_by`` and rerun ``_process_shift`` on ``numerical_optimization_shift`` assignment."""
         if key == "_shift_applied_by":
-            raise AttributeError("Cannot assign to '{key}'")
+            # WR-03 (Phase 3 code review): the previous string literal was
+            # ``"Cannot assign to '{key}'"`` (no ``f`` prefix); ``{key}`` was
+            # surfaced verbatim instead of being interpolated. Restore the
+            # diagnostic and point users at the sanctioned write path
+            # (FRAG-02 / D-12: ``_set_shift_applied_by``).
+            raise AttributeError(f"Cannot assign to '{key}' directly; use _set_shift_applied_by()")
         if key == "numerical_optimization_shift":
             object.__setattr__(self, key, value)
             self._process_shift()
