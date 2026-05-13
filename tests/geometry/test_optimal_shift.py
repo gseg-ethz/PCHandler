@@ -579,3 +579,64 @@ def test_optimized_shift_register_accepts_unshifted_world_frame():
     shift = OptimizedShift(np.array([100.0, 200.0, 300.0]))
     shift.register(cc)
     assert cc in shift, "register(unshifted_coords) must put coords in the shift's member set"
+
+
+def _make_pcd_with_nos():
+    """Build a small PCD with a non-trivial NOS for pickle tests."""
+    world_xyz = np.array(
+        [[100.0, 200.0, 300.0], [100.1, 200.1, 300.1], [100.2, 200.2, 300.2]],
+        dtype=np.float64,
+    )
+    nos = OptimizedShift(np.array([100.0, 200.0, 300.0]))
+    return PointCloudData(world_xyz, numerical_optimization_shift=nos)
+
+
+def test_pcd_unpickle_fresh_manager_preserves_world_frame():
+    """FRAG-01 scenario 1: unpickle on a fresh manager preserves world frame."""
+    pcd = _make_pcd_with_nos()
+    source_world_frame = pcd.xyz + pcd.numerical_optimization_shift.value
+    blob = pickle.dumps(pcd)
+
+    # Simulate fresh destination manager (Phase 1 hot-patch ae401dd pattern)
+    SingletonMeta._instances.pop(OptimizedShiftManager, None)
+
+    restored = pickle.loads(blob)
+    restored_world_frame = restored.xyz + restored.numerical_optimization_shift.value
+    np.testing.assert_array_equal(source_world_frame, restored_world_frame)
+
+
+def test_pcd_unpickle_uuid_match_vector_match_returns_existing():
+    """FRAG-01 scenario 2: same-UUID-same-vector → returns the existing manager instance."""
+    pcd = _make_pcd_with_nos()
+    pre_existing = pcd.numerical_optimization_shift  # already registered at construction
+    blob = pickle.dumps(pcd)
+    # Manager state unchanged between pickle.dumps and pickle.loads
+    restored = pickle.loads(blob)
+    assert restored.numerical_optimization_shift is pre_existing
+
+
+def test_pcd_unpickle_uuid_match_vector_mismatch_mints_new():
+    """FRAG-01 scenario 3: same-UUID-different-vector → mints fresh UUID, preserves world frame."""
+    pcd = _make_pcd_with_nos()
+    source_uuid = pcd.numerical_optimization_shift._uuid
+    source_vec = pcd.numerical_optimization_shift.value
+    source_world_frame = pcd.xyz + source_vec
+    blob = pickle.dumps(pcd)
+
+    # Mutate destination manager: clear, then register a bogus shift under the
+    # source UUID but with a divergent vector. Use _construct_with_uuid (the
+    # private staticmethod) to bypass __init__'s auto-mint behaviour.
+    SingletonMeta._instances.pop(OptimizedShiftManager, None)
+    bogus = OptimizedShift._construct_with_uuid(source_uuid, np.array([999.0, 999.0, 999.0]))
+    assert OptimizedShiftManager().get_by_uuid(source_uuid) is bogus
+
+    restored = pickle.loads(blob)
+    # Mint-new-UUID branch fired: destination NOS has a different UUID
+    assert restored.numerical_optimization_shift._uuid != source_uuid
+    # The pickled vector is preserved on the new shift
+    np.testing.assert_array_equal(restored.numerical_optimization_shift.value, source_vec)
+    # And the world frame is preserved (most important assertion)
+    np.testing.assert_array_equal(
+        restored.xyz + restored.numerical_optimization_shift.value,
+        source_world_frame,
+    )
