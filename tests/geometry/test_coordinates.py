@@ -469,6 +469,79 @@ class BaseTestCartesianCoordinates:
         assert new_cart_obj.arr is cart_obj.arr  # still has the same reference as the object wasn't deleted
 
     @staticmethod
+    def test_reconstruct_pickle_round_trip_validates_positive(cart_obj):
+        """Plan 02-02 / SEC-02 / D-13 positive regression.
+
+        ``pickle.loads(pickle.dumps(coord))`` round-trips with per-field
+        validation: every field passes its TypeAdapter check before reaching
+        ``model_construct``. Verifies the validated path produces an equal
+        :class:`CartesianCoordinates`, including ``_shift_applied_by``.
+        """
+        blob = pickle.dumps(cart_obj)
+        revived = pickle.loads(blob)
+        assert isinstance(revived, type(cart_obj))
+        assert revived.id == cart_obj.id
+        np.testing.assert_array_equal(np.asarray(revived.arr), np.asarray(cart_obj.arr))
+        # _shift_applied_by may be None for an unshifted PCD, OR an OptimizedShift
+        # instance for a shifted one — match the original.
+        if cart_obj._shift_applied_by is None:
+            assert revived._shift_applied_by is None
+        else:
+            assert isinstance(revived._shift_applied_by, type(cart_obj._shift_applied_by))
+
+    @staticmethod
+    def test_reconstruct_rejects_wrong_dtype_state():
+        """Plan 02-02 / SEC-02 / D-13 negative — security regression.
+
+        A hand-crafted state dict with ``arr=np.array(["a", "b"])`` (wrong
+        dtype + wrong shape) MUST raise :class:`pydantic.ValidationError`
+        when passed through :meth:`CartesianCoordinates._reconstruct`.
+        Per-field :class:`TypeAdapter.validate_python` rejects the malformed
+        ``arr`` before ``model_construct`` runs.
+
+        Without the SEC-02 fix, ``model_construct(**state)`` would have
+        accepted the malformed array, producing a broken
+        :class:`CartesianCoordinates` that downstream filters would then
+        crash on at use time (or worse, silently propagate).
+        """
+        malicious_state = {
+            "arr": np.array(["a", "b"]),  # wrong dtype + wrong shape
+            "id": None,
+            "project_transformation": None,
+            "socs_origin": None,
+            "unshifted_bbox": None,
+            "numerical_optimization_shift": None,
+            "_shift_applied_by": None,
+        }
+        with pytest.raises(ValidationError):
+            CartesianCoordinates._reconstruct(malicious_state)
+
+    @staticmethod
+    def test_reconstruct_field_set_pinned(cart_obj):
+        """Plan 02-02 / regression guard: model_dump() field set is stable.
+
+        If a future field is added to Abstract3dCoordinates /
+        CartesianCoordinates without a corresponding entry in
+        ``_FIELD_VALIDATORS``, this test fails — forcing the maintainer to
+        update the validator dict.
+
+        ``unshifted_bbox`` is the only computed field deliberately skipped
+        from ``_FIELD_VALIDATORS`` (W-7 / RESEARCH §"Open Question 1"
+        Rec. (b)); other fields MUST have a validator entry.
+        """
+        from pchandler.geometry.coordinates import _FIELD_VALIDATORS
+
+        dumped = cart_obj.model_dump()
+        # All dumped fields except `unshifted_bbox` (computed, W-7) MUST appear in
+        # _FIELD_VALIDATORS. `id` is now also keyed (W-2).
+        exempt = {"unshifted_bbox"}
+        unvalidated = set(dumped.keys()) - set(_FIELD_VALIDATORS.keys()) - exempt
+        assert not unvalidated, (
+            f"New fields in CartesianCoordinates.model_dump() must be added to "
+            f"_FIELD_VALIDATORS (or explicitly exempted): {unvalidated}"
+        )
+
+    @staticmethod
     def test_copy_default(cart_obj):
         # Deep copy, new ID must be generated, no refs maintained except link to same NOS
         cart_obj.project_transformation = np.eye(4)
