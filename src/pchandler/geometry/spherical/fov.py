@@ -962,11 +962,14 @@ class FoVTree:
         )
 
         if len(tiles) * len(tiles[0]) <= min_children:
-            flat_tiles = [tile for row in tiles for tile in row]
+            # 2D row-col identifier (BUG-05 D-11/D-12): unique within siblings AND
+            # unique against the recursive quad path below (which uses "{r}-{c}" too).
             fov_children: dict[str, FoVTree] = {
-                str(i): cls(identifier + str(i), tile, {}) for i, tile in enumerate(flat_tiles)
+                f"{r}-{c}": cls(identifier + f"{r}-{c}", tile, {})
+                for r, row in enumerate(tiles)
+                for c, tile in enumerate(row)
             }
-            return cls(identifier, fov, fov_children)  # TODO: BUG! Rebuild identifier function to work 2D
+            return cls(identifier, fov, fov_children)
 
         q0 = tiles[: len(tiles) // 2]
         q1 = tiles[len(tiles) // 2 :]
@@ -976,10 +979,10 @@ class FoVTree:
         q11 = [row[len(row) // 2 :] for row in q1]
 
         fov_children = {
-            "0": cast(FoVTree, cls.build_from_tiles(q00, min_children, identifier=(identifier + "0"))),
-            "1": cast(FoVTree, cls.build_from_tiles(q01, min_children, identifier=(identifier + "1"))),
-            "2": cast(FoVTree, cls.build_from_tiles(q10, min_children, identifier=(identifier + "2"))),
-            "3": cast(FoVTree, cls.build_from_tiles(q11, min_children, identifier=(identifier + "3"))),
+            "0-0": cast(FoVTree, cls.build_from_tiles(q00, min_children, identifier=(identifier + "0-0"))),
+            "0-1": cast(FoVTree, cls.build_from_tiles(q01, min_children, identifier=(identifier + "0-1"))),
+            "1-0": cast(FoVTree, cls.build_from_tiles(q10, min_children, identifier=(identifier + "1-0"))),
+            "1-1": cast(FoVTree, cls.build_from_tiles(q11, min_children, identifier=(identifier + "1-1"))),
         }
 
         fov_children = {k: v for k, v in fov_children.items() if v is not None}
