@@ -362,6 +362,29 @@ class TestFoVTree:
         assert len(new_tree.children) == 4
 
 
+def test_fovtree_flat_tiles_unique_identifiers(fov_):
+    """BUG-05: flat-tiles fallback produces unique identifiers across siblings."""
+    # fov_ extent is 1x1 (left=0, right=1, top=0, bottom=1); a 0.5x0.5 target
+    # tile yields a 2x2 grid -> total 4 children <= min_children=4 -> flat-tiles path.
+    tiles = fov_.tile(FoV(left=0.0, right=0.5, top=0.0, bottom=0.5))
+    tree = FoVTree.build_from_tiles(tiles, min_children=4)
+    assert tree is not None
+    ids = [ident for ident, _ in tree.to_list()]
+    assert len(ids) == len(set(ids)), f"duplicate identifiers in flat-tiles tree: {ids}"
+
+
+def test_fovtree_mixed_recursive_and_flat_unique_identifiers(fov_):
+    """BUG-05: mixed recursive + flat-tiles paths produce globally unique identifiers."""
+    # 4x4 grid (target tile 0.25x0.25 over a 1x1 fov_) yields 16 > min_children=4,
+    # forcing the recursive quad-split; sub-quadrants (each 2x2 == 4 <= 4) hit the
+    # flat-tiles fallback. Exercises both code paths in the same tree.
+    tiles = fov_.tile(FoV(left=0.0, right=0.25, top=0.0, bottom=0.25))
+    tree = FoVTree.build_from_tiles(tiles, min_children=4)
+    assert tree is not None
+    ids = [ident for ident, _ in tree.to_list()]
+    assert len(ids) == len(set(ids)), f"duplicate identifiers in mixed tree: {ids}"
+
+
 def _fov_are_equal(fov1: FoV, fov2: FoV):
     array_1 = np.array([fov1.left, fov1.right, fov1.top, fov1.bottom])
     array_2 = np.array([fov2.left, fov2.right, fov2.top, fov2.bottom])
