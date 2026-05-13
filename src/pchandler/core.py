@@ -629,7 +629,13 @@ class PointCloudData(CartesianCoordinates):
             sfs[name] = epoch.additional_dimensions[name].squeeze()
 
         pcd = cls(epoch.cloud, scalar_fields=sfs)
-        if epoch.__dict__["_normals"] is not None:
-            pcd.normals = epoch.normals
+        # IN-04 (Phase 3 code review): use py4dgeo's public property
+        # ``Epoch.normals`` rather than the implementation-detail private
+        # slot ``epoch.__dict__["_normals"]``. The property returns ``None``
+        # when normals are unset, matching the prior guard semantics without
+        # the brittle dict-key reach.
+        normals = epoch.normals
+        if normals is not None:
+            pcd.normals = normals
 
         return pcd
