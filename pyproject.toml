@@ -36,7 +36,7 @@ dependencies = [
 	"shapely ~= 2.1",
 	"typing-extensions ~= 4.13",
 
-    "GSEGUtils @ git+ssh://git@github.com/gseg-ethz/GSEGUtils.git@367aa73d9cb509003ebcb1997d533d891470aa08",
+    "GSEGUtils @ git+ssh://git@github.com/gseg-ethz/GSEGUtils.git@c91033cb2e4a8fba9759f60fda66c7efa42f55ab",
 ]
 
 [tool.setuptools]
