@@ -61,7 +61,7 @@ from GSEGUtils.base_types import (
     Vector_Float_T,
 )
 from GSEGUtils.constants import DEFAULT_CONFIG
-from pydantic import UUID4, AliasChoices, Field, PrivateAttr, validate_call
+from pydantic import UUID4, AliasChoices, ConfigDict, Field, PrivateAttr, TypeAdapter, validate_call
 
 from pchandler.geometry import OptimizedShift, OptimizedShiftManager
 from pchandler.geometry.spherical import FoV
@@ -79,6 +79,35 @@ logger = logging.getLogger(__name__)
 TransformT = Union[_Transform4x4, _Transform3x3, Transform]
 
 CartesianT = TypeVar("CartesianT", bound="CartesianCoordinates")
+
+
+# SEC-02 / D-10: cached per-field validators for CartesianCoordinates._reconstruct.
+# OptimizedShift and MinMaxPoints are NOT BaseModel subclasses (OptimizedShift
+# inherits object; MinMaxPoints inherits tuple via NamedTuple), so
+# arbitrary_types_allowed is REQUIRED on the slots that carry them. Pydantic
+# falls back to isinstance() for arbitrary types — the SEC-02 mitigation is
+# therefore shape-level (rejects wrong dtype on arr + wrong instance class on
+# the shift slots); the FRAG-01 depth-level question is owned by Phase 3.
+#
+# `unshifted_bbox` is a computed field (derived from `arr` and
+# `numerical_optimization_shift`), not user input. We skip it from
+# _FIELD_VALIDATORS per RESEARCH §"Open Question 1" Recommendation (b); see
+# also the parallel `# computed field` comment at the `object.__setattr__`
+# call site in `compute_unshifted_bbox`. `model_dump()` emits unshifted_bbox
+# as a plain tuple, and `isinstance(plain_tuple, MinMaxPoints)` returns False
+# under pydantic's arbitrary-type fallback — so adding it to
+# _FIELD_VALIDATORS would force ValidationError on every legitimate
+# round-trip (W-7).
+_ARB_CFG = ConfigDict(arbitrary_types_allowed=True)
+_FIELD_VALIDATORS: dict[str, TypeAdapter[Any]] = {
+    "id": TypeAdapter(UUID4),  # W-2: include `id` so "every pickled field validated" holds literally.
+    "arr": TypeAdapter(Array_Nx3_T),
+    "numerical_optimization_shift": TypeAdapter(Optional[OptimizedShift], config=_ARB_CFG),
+    "_shift_applied_by": TypeAdapter(Optional[OptimizedShift], config=_ARB_CFG),
+    "socs_origin": TypeAdapter(Optional[Vector_3_T]),
+    "project_transformation": TypeAdapter(Optional[Array_4x4_T]),
+    # `unshifted_bbox`: SKIPPED — see comment above (W-7).
+}
 
 
 class Abstract3dKw(TypedDict, total=False):
@@ -242,8 +271,8 @@ class CartesianCoordinates(Abstract3dCoordinates):
         prev_shift: Optional[OptimizedShift] = kwargs.pop("_shift_applied_by", None)
         super().__init__(**kwargs)  # type: ignore[misc]
 
-        # Set the private attribute after initialization
-        object.__setattr__(self, "_shift_applied_by", prev_shift)
+        # Set the private attribute after initialization (D-12 typed helper).
+        self._set_shift_applied_by(prev_shift)
 
         self.compute_unshifted_bbox()
         self._process_shift()
@@ -259,6 +288,10 @@ class CartesianCoordinates(Abstract3dCoordinates):
         if self.unshifted_bbox is None or overwrite:
             applied_shift = None if self._shift_applied_by is None else self._shift_applied_by.value
 
+            # unshifted_bbox is a computed field (not user-input); bypassing __setattr__
+            # avoids re-validation of an internally-derived value. Mirrored in
+            # _FIELD_VALIDATORS comment: this field is intentionally absent from the
+            # dict per W-7 / RESEARCH §"Open Question 1" Recommendation (b).
             object.__setattr__(
                 self, "unshifted_bbox", MinMaxPoints.from_points(self.arr, already_applied_shift_vec=applied_shift)
             )
@@ -304,7 +337,7 @@ class CartesianCoordinates(Abstract3dCoordinates):
                 self.update_shift(delta_shift)
                 prev_shift.unregister(self)
 
-        object.__setattr__(self, "_shift_applied_by", self.numerical_optimization_shift)
+        self._set_shift_applied_by(self.numerical_optimization_shift)
 
     def reduce(self, index: IndexLike) -> None:
         """Reduce the coordinates to the point set selected by ``index`` (in place).
@@ -365,11 +398,60 @@ class CartesianCoordinates(Abstract3dCoordinates):
             shift = osm.register_coordinates_to_shift(self, self.numerical_optimization_shift)  # type: ignore[arg-type]
             if shift is not self.numerical_optimization_shift:
                 logger.info("The input numerical_optimization_shift was not feasible and was replaced by a new one.")
-                object.__setattr__(self, "numerical_optimization_shift", shift)
+                self._set_nos_no_reentry(shift)
 
         except OptimizedShiftManager.ShiftNotFeasibleError:
             logger.warning("No numerical_optimization_shift was feasible. Will continue in float64 mode.")
-            object.__setattr__(self, "numerical_optimization_shift", None)
+            self._set_nos_no_reentry(None)
+
+    def _set_shift_applied_by(self, value: Optional[OptimizedShift]) -> None:
+        """Write the private ``_shift_applied_by`` slot, bypassing the ``__setattr__`` guard (D-12).
+
+        Sanctioned call sites: end of :meth:`__init__` and end of
+        :meth:`_process_shift`. The ``__setattr__`` override raises on direct
+        assignment to ``_shift_applied_by``, so this helper provides the only
+        sanctioned write path.
+
+        Parameters
+        ----------
+        value : OptimizedShift or None
+            The shift instance whose canonical frame ``self.arr`` is expressed
+            in, or ``None`` if no shift has been applied.
+
+        Raises
+        ------
+        AssertionError
+            If ``value`` is neither ``None`` nor an :class:`OptimizedShift`
+            instance.
+        """
+        assert value is None or isinstance(value, OptimizedShift), (
+            f"_shift_applied_by must be Optional[OptimizedShift]; got {type(value)}"
+        )
+        object.__setattr__(self, "_shift_applied_by", value)
+
+    def _set_nos_no_reentry(self, value: Optional[OptimizedShift]) -> None:
+        """Write ``numerical_optimization_shift`` without re-entering ``_process_shift`` (D-12).
+
+        Used by :meth:`_register_with_shift_at_osm` to update NOS after the OSM
+        has decided on a feasible shift. Calling
+        ``self.numerical_optimization_shift = value`` here would loop back into
+        :meth:`_register_with_shift_at_osm` via the :meth:`__setattr__` override.
+
+        Parameters
+        ----------
+        value : OptimizedShift or None
+            The shift to register, or ``None`` to clear.
+
+        Raises
+        ------
+        AssertionError
+            If ``value`` is neither ``None`` nor an :class:`OptimizedShift`
+            instance.
+        """
+        assert value is None or isinstance(value, OptimizedShift), (
+            f"numerical_optimization_shift must be Optional[OptimizedShift]; got {type(value)}"
+        )
+        object.__setattr__(self, "numerical_optimization_shift", value)
 
     def __setattr__(self, key, value):
         """Guard ``_shift_applied_by`` and rerun ``_process_shift`` on ``numerical_optimization_shift`` assignment."""
@@ -404,15 +486,54 @@ class CartesianCoordinates(Abstract3dCoordinates):
 
     def __reduce__(self) -> Any:
         """Return the (callable, state) tuple used by :mod:`pickle` to reconstruct ``self``."""
-        logger.debug(f"Running `{self.__class__}.reduce()` on {self.id}")
+        logger.debug("Running `%s.reduce()` on %s", self.__class__, self.id)
         state = self.model_dump()
         # state["_shift_applied"] = self._shift_applied
         return self._reconstruct, (state,)
 
     @classmethod
     def _reconstruct(cls, state: dict) -> Self:
-        obj: Self = cls.model_construct(**state)
-        logger.debug(f"{cls} with id={obj.id} reconstructed")
+        """Reconstruct from pickled state with per-field validation (SEC-02 / D-10).
+
+        Validates each pickled field via :class:`pydantic.TypeAdapter` before
+        passing the validated dict to :meth:`model_construct`.
+        ``model_construct`` remains the *post-validation* instantiation path so
+        that ``__init__``'s side effects -- especially
+        :meth:`_register_with_shift_at_osm` re-entering the
+        :class:`OptimizedShiftManager` singleton -- do not fire mid-unpickle
+        (the FRAG-01 fragility that Phase 3 owns).
+
+        ``unshifted_bbox`` is a computed field (derived from ``arr`` and
+        ``numerical_optimization_shift``); it falls through the validator dict
+        unvalidated by design (W-7 / RESEARCH §"Open Question 1" Rec. (b)).
+
+        Parameters
+        ----------
+        state : dict
+            The pickled state dict, exactly as produced by ``self.model_dump()``
+            in :meth:`__reduce__`.
+
+        Returns
+        -------
+        Self
+            A fully-initialised :class:`CartesianCoordinates`.
+
+        Raises
+        ------
+        pydantic.ValidationError
+            If any field in ``state`` fails its :class:`TypeAdapter`
+            validation (wrong dtype, wrong shape, wrong instance class).
+        """
+        validated_state: dict[str, Any] = {}
+        for field, value in state.items():
+            adapter = _FIELD_VALIDATORS.get(field)
+            if adapter is not None:
+                validated_state[field] = adapter.validate_python(value)
+            else:
+                # Computed fields (e.g. unshifted_bbox) pass through unvalidated by design.
+                validated_state[field] = value
+        obj: Self = cls.model_construct(**validated_state)
+        logger.debug("%s with id=%s reconstructed", cls, obj.id)
         obj._process_shift()
 
         return obj
