@@ -702,3 +702,23 @@ class TestPcdConversions(BaseTestPcdConversions):
 
 class TestPcdO3DSupport(BaseOpen3DSupport):
     pass
+
+
+def test_to_py4dgeo_round_trip_world_frame():
+    """BUG-07: to_py4dgeo passes world-frame float64 coordinates to py4dgeo.Epoch."""
+    pytest.importorskip("py4dgeo")  # gate on optional dep
+
+    # Build a PCD with a non-zero NOS so the un-shift code path actually runs.
+    world_xyz = np.array(
+        [[100.0, 200.0, 300.0], [100.1, 200.1, 300.1], [100.2, 200.2, 300.2]],
+        dtype=np.float64,
+    )
+    nos = OptimizedShift(np.array([100.0, 200.0, 300.0]))
+    pcd = PointCloudData(world_xyz, numerical_optimization_shift=nos)
+
+    epoch = pcd.to_py4dgeo()
+    expected = pcd.xyz + pcd.numerical_optimization_shift.value
+    np.testing.assert_array_equal(epoch.cloud, expected)
+    assert epoch.cloud.dtype == np.float64, (
+        f"to_py4dgeo must produce float64 world-frame coords; got {epoch.cloud.dtype}"
+    )
