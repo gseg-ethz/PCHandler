@@ -290,6 +290,7 @@ class OptimizedShift:
     _uuid: uuid.UUID
     _shift: Vector_3_T
     _member_coordinate_sets: weakref.WeakSet[CartesianCoordinates]
+    _minimum_decimal_places: Optional[int] = None
     # _member_coordinate_sets_unshifted_bbox: weakref.WeakKeyDictionary[CartesianCoordinates, MinMaxPoints]
 
     @validate_variables
@@ -387,7 +388,7 @@ class OptimizedShift:
         if all_bboxes:
             combined = MinMaxPoints.from_minmax_points(all_bboxes)
 
-            if OptimizedShiftManager().is_shift_needed(np.vstack((combined.minimum, combined.maximum)) - new_shift):
+            if self._is_shift_needed(np.vstack((combined.minimum, combined.maximum)) - new_shift):
                 raise OptimizedShiftManager.ShiftNotFeasibleError(
                     f"The provided shift {new_shift} is not feasible for the coordinate sets registered to this shift."
                 )
@@ -399,6 +400,64 @@ class OptimizedShift:
         self._shift = new_shift
 
         logger.debug(f"Updated shift to {new_shift}. New uuid: {new_uuid}.")
+
+    @property
+    def minimum_decimal_places(self) -> int:
+        """Per-instance precision threshold; falls through to the manager default when unset.
+
+        Returns
+        -------
+        int
+            This shift's configured minimum decimal places, or the
+            :class:`OptimizedShiftManager` default if not overridden.
+        """
+        if self._minimum_decimal_places is not None:
+            return self._minimum_decimal_places
+        return OptimizedShiftManager().minimum_decimal_places
+
+    @property
+    def maximum_number_representable(self) -> float:
+        """Maximum number representable in float32 given this instance's threshold.
+
+        Returns
+        -------
+        float
+            ``10 ** (FLOAT32_DECIMAL_PRECISION - self.minimum_decimal_places)``.
+        """
+        return 10 ** (OptimizedShiftManager.FLOAT32_DECIMAL_PRECISION - self.minimum_decimal_places)
+
+    def _is_shift_needed(self, values: Array_Nx3_T) -> bool:
+        """Check whether ``values`` exceed this instance's representable range.
+
+        Parameters
+        ----------
+        values : Array_Nx3_T
+            Candidate coordinates to evaluate against this shift's threshold.
+
+        Returns
+        -------
+        bool
+            ``True`` if at least one component would lose precision without a shift.
+        """
+        return bool(np.any(np.abs(values) >= self.maximum_number_representable))
+
+    def _is_shift_possible(self, values: Array_Nx3_T) -> bool:
+        """Check whether the range of ``values`` fits this instance's representable span.
+
+        Parameters
+        ----------
+        values : Array_Nx3_T
+            Candidate coordinates to evaluate against this shift's threshold.
+
+        Returns
+        -------
+        bool
+            ``True`` if a finite shift can bring all values inside the
+            float32 representable range for this instance.
+        """
+        return bool(
+            np.all(np.subtract(np.max(values, axis=0), np.min(values, axis=0)) < self.maximum_number_representable)
+        )
 
     @property
     def __array_interface__(self) -> dict[str, Any]:
@@ -484,7 +543,7 @@ class OptimizedShift:
     def _can_add_without_change(self, unshifted_pts: Array_Nx3_T) -> bool:
         # TODO: Check usage [can points be shifted and unshifted]
         shifted = np.subtract(unshifted_pts, self._shift)
-        return not OptimizedShiftManager().is_shift_needed(shifted)
+        return not self._is_shift_needed(shifted)
 
     def _add_member(self, coordinate_set: CartesianCoordinates) -> None:
         """Add the point‐cloud under the existing shift."""
@@ -538,7 +597,7 @@ class OptimizedShift:
             all_bboxes.append(additional_bbox)
         combined = MinMaxPoints.from_minmax_points(all_bboxes)
 
-        if not OptimizedShiftManager().is_shift_possible(np.vstack((combined.minimum, combined.maximum))):
+        if not self._is_shift_possible(np.vstack((combined.minimum, combined.maximum))):
             raise OptimizedShiftManager.ShiftNotFeasibleError()
 
         # round the center to keep ints
