@@ -286,12 +286,16 @@ class RGBFields(ScalarFieldTriplet):
         """
         super().__init__(arr, **kwargs)
 
-    # TODO should we still do this for floating point values? Should there be a check if they're in the range of 0-255?
     # noinspection PyNestedDecorators
     @field_validator("arr", mode="before")
     @classmethod
     def _normalise_to_uint8(cls, data: npt.NDArray[Any]) -> Array_Uint8_T:
         """Convert the input array to uint8 (pydantic before-validator).
+
+        Float-input contract is RGB in ``[0.0, 1.0]``: out-of-range values clip-and-saturate
+        against ``source_range=(0.0, 1.0)`` per COUPLE-05 D-12 / D-17 site 2 (HIGH confidence).
+        Integer input takes the iinfo bypass path (D-15) and ``source_range`` is silently
+        ignored at runtime.
 
         Parameters
         ----------
@@ -303,7 +307,7 @@ class RGBFields(ScalarFieldTriplet):
         Array_Uint8_T
             Uint8 RGB array.
         """
-        return normalize_uint8(data)
+        return normalize_uint8(data, source_range=(0.0, 1.0))
 
     @field_validator("name", mode="before")
     @classmethod
@@ -605,4 +609,8 @@ class NormalisedInt16ScalarField(ScalarField):
         ScalarFieldUint8
             New uint8 scalar field carrying the same name and origin dtype.
         """
-        return ScalarFieldUint8(normalize_uint8(self.arr), name=self.name, origin_dtype=self.origin_dtype)
+        return ScalarFieldUint8(
+            normalize_uint8(self.arr, source_range=(0.0, 1.0)),
+            name=self.name,
+            origin_dtype=self.origin_dtype,
+        )

@@ -245,10 +245,12 @@ class TestRgbField:
     @pytest.mark.parametrize(
         "arr",
         (
+            # COUPLE-05 D-17 site 2 ratified contract: RGB float input MUST be in [0, 1].
+            # Out-of-`[0, 1]` float parametrizations were removed in 04-06b because the
+            # explicit `source_range=(0.0, 1.0)` kwarg makes [-1, 1] / [0, 255] / [-128, 127]
+            # float inputs clip-and-saturate (D-12) rather than auto-rescale by min/max.
+            # Integer inputs still round-trip via the D-15 iinfo bypass.
             np.random.rand(10000, 3),
-            np.random.rand(10000, 3) * 2 - 1,
-            np.random.rand(10000, 3) * (2**8 - 1),
-            np.random.randint(-(2**7), 2**7, (10000, 3)).astype(np.float32),
             np.random.randint(-(2**7), 2**7, (10000, 3), dtype=np.int8),
             np.random.randint(0, 2**16, (10000, 3), dtype=np.uint16),
             np.random.randint(0, 2**8, (10000, 3), dtype=np.uint8),
