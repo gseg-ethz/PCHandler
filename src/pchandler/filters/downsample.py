@@ -189,9 +189,7 @@ class VoxelDownsample:
         values = pcd.xyz
         ndim = values.shape[1]
 
-        unique, unique_inverse = np.unique(
-            np.round(values / self.voxel_size).astype(np.int32), axis=0, return_inverse=True
-        )
+        unique, unique_inverse = unique_rows_fast(np.round(values / self.voxel_size).astype(np.int32))
 
         centroids, sfm, _, _ = _calculate_centroids_and_weights(self, unique, ndim, unique_inverse, values, pcd)
 

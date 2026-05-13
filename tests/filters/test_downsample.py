@@ -109,6 +109,23 @@ class TestVoxelDownsampleFilter:
         with pytest.raises(ValueError):
             voxel_downsample.sample(pcd_all)
 
+    def test_voxel_downsample_unique_set_equivalent_to_np_unique(self, pcd_all):
+        """PERF-01 D-22 #1: VoxelDownsample.sample produces the same set of unique voxels.
+
+        Sort order changes for inputs with negative int32 values (unique_rows_fast
+        is byte-sort; np.unique(axis=0) is lex-sort). Row-order is undocumented;
+        set-based comparison is the contractual invariant.
+        """
+        vs = 0.1
+        f = VoxelDownsample(voxel_size=vs)
+        out = f.sample(pcd_all)
+
+        # Recompute the expected unique-set directly via Python
+        binned = np.round(pcd_all.xyz / vs).astype(np.int32)
+        expected_set = set(map(tuple, np.unique(binned, axis=0)))
+        actual_set = set(map(tuple, np.round(out.xyz / vs).astype(np.int32)))
+        assert actual_set == expected_set
+
 
 class TestAngleBinDownsample:
     def test_init(self, angle_bin_downsample):
