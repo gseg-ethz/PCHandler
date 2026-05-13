@@ -356,8 +356,19 @@ class OptimizedShift:
         """Return a hash based on the shift's UUID."""
         return hash(self._uuid)
 
-    def __eq__(self, other) -> bool:
-        """Two shifts compare equal when their UUIDs are equal."""
+    def __eq__(self, other: object) -> bool:
+        """Two shifts compare equal when their UUIDs are equal.
+
+        WR-04 (Phase 3 code review): return :data:`NotImplemented` (which the
+        Python runtime treats as "fall back to the other operand's
+        ``__eq__`` or default to identity") on a non-:class:`OptimizedShift`
+        operand rather than raising :class:`AttributeError`. ``__eq__`` is
+        called by hash-set deduplication and by ``Optional[OptimizedShift]``
+        comparisons throughout the merge / un-shift surfaces, where ``None``
+        is a routine operand; the previous form crashed on the first ``None``.
+        """
+        if not isinstance(other, OptimizedShift):
+            return NotImplemented
         return self.uuid == other.uuid
 
     def __reduce__(self):

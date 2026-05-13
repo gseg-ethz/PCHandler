@@ -567,6 +567,33 @@ def test_optimized_shift_per_instance_feasibility():
     )
 
 
+def test_optimized_shift_eq_returns_notimplemented_on_non_shift():
+    """WR-04: OptimizedShift.__eq__ does not crash on non-OptimizedShift operand.
+
+    ``__eq__`` is exercised by hash-set deduplication and by
+    ``Optional[OptimizedShift]`` comparisons throughout merge/un-shift
+    surfaces, where ``None`` is a routine operand. The previous form
+    raised ``AttributeError`` on the first ``None`` (``None.uuid`` does
+    not exist); returning :data:`NotImplemented` for unsupported types
+    is the Python equality protocol's documented contract and lets the
+    runtime fall back to identity comparison.
+    """
+    shift = OptimizedShift(np.array([1.0, 2.0, 3.0]))
+
+    # None operand: previously raised AttributeError. Must compare False.
+    assert (shift == None) is False  # noqa: E711 - explicit None equality test
+    assert (None == shift) is False  # noqa: E711
+    assert (shift != None) is True  # noqa: E711
+
+    # Other non-shift operands: also False (not a TypeError, not a crash).
+    assert (shift == 42) is False
+    assert (shift == "shift") is False
+
+    # set() deduplication of Optional[OptimizedShift]: must not crash.
+    bag = {shift, None, shift}
+    assert len(bag) == 2 and None in bag and shift in bag
+
+
 def test_optimized_shift_register_accepts_unshifted_world_frame():
     """BUG-06 positive: register takes world-frame (unshifted) coordinates as documented."""
     # Build a small set of world-frame coordinates clustered around (100, 200, 300)
