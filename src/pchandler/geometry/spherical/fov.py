@@ -174,20 +174,49 @@ class FoV(BaseModel):
     def construct_without_bounds_check(
         cls, *, left: AngleLikeT, right: AngleLikeT, top: AngleLikeT, bottom: AngleLikeT
     ) -> Self:
-        """Constuct a FoV without bounds check.
+        """Construct a FoV without bounds check.
 
-        Enables construction of FoV which cross over the FoV angular bounds
+        Enables construction of an :class:`FoV` whose angular limits cross over
+        the standard wraparound boundary (e.g., a horizontal FoV spanning
+        ``350`` to ``10`` degrees).
 
         Parameters
         ----------
         left : AngleLikeT
+            Left horizontal bound. May be greater than ``right`` to denote a
+            wraparound region.
         right : AngleLikeT
+            Right horizontal bound.
         top : AngleLikeT
+            Top vertical bound.
         bottom : AngleLikeT
+            Bottom vertical bound. May be less than ``top`` for wraparound.
 
         Returns
         -------
         FoV
+            A new :class:`FoV` constructed via
+            :meth:`pydantic.BaseModel.model_construct`, bypassing the
+            ``_check_elevation`` and ``_check_bottom_and_top`` model validators.
+
+        Notes
+        -----
+        This method bypasses the ``_check_elevation`` and
+        ``_check_bottom_and_top`` model validators via :meth:`model_construct`.
+        It exists for legitimate use cases -- FoVs that cross the angular
+        wraparound (e.g., a horizontal FoV spanning ``350`` to ``10`` degrees).
+        The caller is responsible for ensuring the
+        (``left``, ``right``, ``top``, ``bottom``) quadruple represents a
+        meaningful angular region; downstream FoV operations may produce
+        surprising results if the invariant is violated.
+
+        This is FRAG-06 documentation (Plan 02-06 / D-22): the
+        ``model_construct`` call below is deliberate and the design is correct
+        as-is. The method is **not** a security bypass --
+        ``construct_without_bounds_check`` is callable only by code that
+        already has full control over the FoV construction, and the validators
+        it skips are domain-shape checks (angular ordering), not security-shape
+        checks.
         """
         new_instance = cls.model_construct(
             _fields_set={"left", "right", "top", "bottom"},
