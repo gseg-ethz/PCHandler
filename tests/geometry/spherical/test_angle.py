@@ -345,3 +345,64 @@ class TestAnglePickle:
 
         assert np.allclose(a, unpickled_a)
         assert unpickled_a.display_unit == angle_unit
+
+
+# ---------------------------------------------------------------------------
+# FRAG-05 regression tests (Plan 03-07-04): supported / unsupported /
+# internal-bug / shape-mismatch / matching-shape (D-29 expanded permissiveness).
+# These guard the bare-except -> explicit-isinstance-ladder migration locked
+# by CONTEXT D-25/D-26/D-29.
+# ---------------------------------------------------------------------------
+
+
+def test_angle_arith_supported_operands():
+    """FRAG-05: Angle + Angle and Angle - Angle work in supported operand cases."""
+    a = Angle(1, AngleUnit.RAD)
+    b = Angle(2, AngleUnit.RAD)
+    assert (a + b).radians == pytest.approx(3.0)
+    assert (a - b).radians == pytest.approx(-1.0)
+
+
+@pytest.mark.parametrize("op", ["+", "-", "*", "/", "%"])
+def test_angle_arith_unsupported_operands_typeerror(op):
+    """FRAG-05: unsupported operand triggers Python's TypeError fallback (not NotImplementedError)."""
+    a = Angle(1, AngleUnit.RAD)
+    with pytest.raises(TypeError):
+        eval(f"a {op} 'two'", {"a": a})
+
+
+def test_angle_arith_internal_bug_propagates(monkeypatch):
+    """FRAG-05: AttributeError on internal_value propagates (no longer masked as NotImplementedError).
+
+    Monkeypatch the AngleBase.internal_value property to raise AttributeError;
+    the dunder must NOT swallow it. The previously-bare ``except Exception``
+    would have masked this as ``NotImplementedError``; per CONTEXT D-26 the
+    explicit isinstance ladder lets the native exception type propagate.
+    """
+    from pchandler.geometry.spherical.angle import AngleBase
+
+    a = Angle(1, AngleUnit.RAD)
+    b = Angle(2, AngleUnit.RAD)
+
+    def _broken_internal_value(self):
+        raise AttributeError("simulated internal bug")
+
+    monkeypatch.setattr(AngleBase, "internal_value", property(_broken_internal_value))
+    with pytest.raises(AttributeError):
+        _ = a + b
+
+
+def test_anglearray_add_shape_mismatch_raises_valueerror():
+    """FRAG-05: AngleArray + AngleArray with mismatched shapes -> ValueError naming both shapes."""
+    a = AngleArray([1.0, 2.0, 3.0], AngleUnit.RAD)
+    b = AngleArray([4.0, 5.0], AngleUnit.RAD)
+    with pytest.raises(ValueError, match=r"shape.*do not broadcast"):
+        _ = a + b
+
+
+def test_anglearray_add_matching_shape_elementwise():
+    """FRAG-05 D-29: AngleArray + AngleArray matching shape succeeds element-wise."""
+    a = AngleArray([1.0, 2.0, 3.0], AngleUnit.RAD)
+    b = AngleArray([4.0, 5.0, 6.0], AngleUnit.RAD)
+    result = a + b
+    np.testing.assert_array_almost_equal(result.radians, [5.0, 7.0, 9.0])
