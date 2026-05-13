@@ -663,6 +663,36 @@ class OptimizedShift:
             pcd.update_shift(delta)
 
     @staticmethod
+    def _construct_with_uuid(u: UUID, shift_vec: Vector_3_T) -> "OptimizedShift":
+        """Build a fresh OptimizedShift carrying ``u`` + ``shift_vec`` and register it.
+
+        Used by :meth:`_reconstruct` only — for the bypass-``__init__`` pickle
+        reconstruction path. Normal construction goes via :meth:`__init__` and
+        never routes through this helper.
+
+        Parameters
+        ----------
+        u : UUID
+            The UUID to assign to the new shift. Caller is responsible for
+            ensuring no collision in the manager registry (either passed-from-
+            pickled-state when the manager has no entry under ``u``, or a
+            freshly-minted ``uuid.uuid4()`` on the mint-new-UUID branch).
+        shift_vec : Vector_3_T
+            The shift vector from the pickled state.
+
+        Returns
+        -------
+        OptimizedShift
+            A new shift, already registered with the singleton manager.
+        """
+        new = object.__new__(OptimizedShift)
+        new._uuid = u
+        new._shift = shift_vec
+        new._member_coordinate_sets = weakref.WeakSet()
+        OptimizedShiftManager().register_shift(new)
+        return new
+
+    @staticmethod
     def _reconstruct(u: UUID, shift_vec: Vector_3_T) -> "OptimizedShift":
         """Reconstruct an :class:`OptimizedShift` from previously-pickled state.
 
