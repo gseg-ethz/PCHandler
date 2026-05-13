@@ -374,9 +374,20 @@ class AngleBase:
         return Angle(self.display_value * other, self.display_unit)
 
     def __truediv__(self, other):
-        """Divide by a scalar; double-AngleBase division forbidden (Phase 3 D-26)."""
+        """Divide by a scalar or angle; angle/angle returns a dimensionless ratio.
+
+        Notes
+        -----
+        Unlike :meth:`__mul__` / :meth:`__mod__`, angle/angle is a defined
+        operation in today's API (returns the dimensionless ratio of internal
+        radian values). Preserved verbatim from the pre-FRAG-05 implementation
+        because the original code did NOT ``raise NotImplementedError`` for
+        the AngleBase operand; the FRAG-05 sentinel swap therefore does not
+        apply here. See CONTEXT D-26 footnote: forbid-preservation is
+        mechanism-only on paths that previously raised.
+        """
         if isinstance(other, AngleBase):
-            return NotImplemented  # forbid: deferred to future angles-API phase
+            return self.internal_value / other.internal_value
         return Angle(self.display_value / other, self.display_unit)
 
     def __rtruediv__(self, other):
