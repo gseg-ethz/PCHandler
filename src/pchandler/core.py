@@ -539,6 +539,13 @@ class PointCloudData(CartesianCoordinates):
 
         # BUG-07 (D-15): mirror to_o3d's un-shift pattern so py4dgeo receives
         # float64 world-frame coordinates rather than shifted float32.
+        # The temporary copy exists *solely* to obtain world-frame XYZ -- it is
+        # constructed with ``scalar_fields=None`` which causes ``_convert_sfm``
+        # to substitute an empty :class:`ScalarFieldManager`. Therefore normals
+        # and scalar fields must be read from ``self`` (the original), not from
+        # ``pcd`` (the cleared copy); the latter would silently ship empty
+        # arrays to py4dgeo. CR-01 (Phase 3 code review) -- ``to_o3d`` follows
+        # the same pattern, reading sfm fields from ``self``.
         if self.numerical_optimization_shift is not None:
             pcd = self.copy(
                 update={"numerical_optimization_shift": None, "scalar_fields": None},
@@ -549,8 +556,8 @@ class PointCloudData(CartesianCoordinates):
 
         return _Epoch(
             cloud=pcd.xyz,
-            normals=pcd.normals if pcd.normals is not None else None,
-            additional_dimensions=pcd.scalar_fields.as_struct_array(),
+            normals=self.normals if self.normals is not None else None,
+            additional_dimensions=self.scalar_fields.as_struct_array(),
         )
 
     @classmethod

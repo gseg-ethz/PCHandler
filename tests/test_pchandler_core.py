@@ -722,3 +722,44 @@ def test_to_py4dgeo_round_trip_world_frame():
     assert epoch.cloud.dtype == np.float64, (
         f"to_py4dgeo must produce float64 world-frame coords; got {epoch.cloud.dtype}"
     )
+
+
+def test_to_py4dgeo_preserves_normals_and_scalar_fields_with_nos():
+    """CR-01: to_py4dgeo must preserve normals and scalar fields when a NOS is active.
+
+    Phase 3 BUG-07's un-shift copy substitutes an empty
+    :class:`ScalarFieldManager`; reading normals/SFs from the copy (instead of
+    from ``self``) would silently ship empty arrays to py4dgeo. This regression
+    test asserts both survive the un-shift round trip.
+    """
+    pytest.importorskip("py4dgeo")  # gate on optional dep
+
+    world_xyz = np.array(
+        [[100.0, 200.0, 300.0], [100.1, 200.1, 300.1], [100.2, 200.2, 300.2]],
+        dtype=np.float64,
+    )
+    normals = np.array(
+        [[0.0, 0.0, 1.0], [0.0, 1.0, 0.0], [1.0, 0.0, 0.0]],
+        dtype=np.float64,
+    )
+    intensity = np.array([0.1, 0.5, 0.9], dtype=np.float64)
+    nos = OptimizedShift(np.array([100.0, 200.0, 300.0]))
+    pcd = PointCloudData(
+        world_xyz,
+        numerical_optimization_shift=nos,
+        scalar_fields={"normals": normals, "intensity": intensity},
+    )
+
+    epoch = pcd.to_py4dgeo()
+
+    # Normals must survive the un-shift copy (not be clobbered by the
+    # ``scalar_fields=None`` substitution in to_py4dgeo's temporary copy).
+    assert epoch.normals is not None, "to_py4dgeo dropped normals on a NOS-shifted PCD"
+    np.testing.assert_array_equal(np.asarray(epoch.normals), normals)
+
+    # Scalar fields must survive as additional_dimensions; the structured array
+    # is non-empty and contains the "intensity" field.
+    add_dims = epoch.additional_dimensions
+    assert add_dims.dtype.names is not None, "additional_dimensions has no fields"
+    assert "intensity" in add_dims.dtype.names, f"to_py4dgeo dropped scalar fields; got names={add_dims.dtype.names}"
+    np.testing.assert_array_equal(add_dims["intensity"].squeeze(), intensity)
