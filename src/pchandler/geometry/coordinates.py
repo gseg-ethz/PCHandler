@@ -553,7 +553,6 @@ class CartesianCoordinates(Abstract3dCoordinates):
         """Return the (callable, state) tuple used by :mod:`pickle` to reconstruct ``self``."""
         logger.debug("Running `%s.reduce()` on %s", self.__class__, self.id)
         state = self.model_dump()
-        # state["_shift_applied"] = self._shift_applied
         return self._reconstruct, (state,)
 
     @classmethod
