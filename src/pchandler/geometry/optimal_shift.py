@@ -27,10 +27,11 @@ import copy
 import logging
 import uuid
 import weakref
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, NewType, Optional
 from uuid import UUID
 
 import numpy as np
+import numpy.typing as npt
 from GSEGUtils.base_types import Array_Nx3_T, Vector_3_T
 from GSEGUtils.constants import validate_variables
 from GSEGUtils.singleton import SingletonMeta
@@ -40,7 +41,23 @@ from pchandler.geometry.util import MinMaxPoints
 if TYPE_CHECKING:
     from pchandler.geometry.coordinates import CartesianCoordinates
 
-__all__ = ["OptimizedShiftManager", "OptimizedShift"]
+# BUG-06 type tags (Phase 3 D-09 / D-28):
+#   All public-method inputs on OptimizedShift / OptimizedShiftManager that
+#   take coordinate arrays SHOULD annotate as ``Unshifted`` (world-frame,
+#   caller's original frame). Internal ``_``-prefixed helpers may take
+#   ``Shifted`` (after subtracting ``self._shift``); the method's parameter
+#   annotation names the convention.
+#
+# The NewType is over ``npt.NDArray[np.float64]`` (NOT numpydantic's
+# ``Array_Nx3_T``) because mypy strict rejects ``NewType(name, Array_Nx3_T)``
+# as "must be subclassable" (RESEARCH OPEN-Q2 + CONTEXT D-28 ratification).
+# Runtime shape/dtype validation continues via numpydantic on the ``_shift``
+# field and ``validate_variables`` on ``__init__`` / ``value.setter``.
+_CoordsF = npt.NDArray[np.float64]
+Unshifted = NewType("Unshifted", _CoordsF)
+Shifted = NewType("Shifted", _CoordsF)
+
+__all__ = ["OptimizedShiftManager", "OptimizedShift", "Unshifted", "Shifted"]
 
 logger = logging.getLogger(__name__)
 
@@ -281,6 +298,16 @@ class OptimizedShift:
     Holds the translation vector and weak references to the
     :class:`CartesianCoordinates` instances linked to it.
 
+    All public methods on this class take ``Unshifted`` (world-frame,
+    caller's original frame) coordinate arrays. Internal ``_``-prefixed
+    helpers may take ``Shifted`` coordinates (after subtracting
+    ``self._shift``), and name the convention in their parameter
+    annotation. ``Unshifted`` / ``Shifted`` are :func:`typing.NewType`
+    aliases over ``npt.NDArray[np.float64]``; the tag is a static-check
+    signal only. Runtime shape/dtype validation is delegated to
+    numpydantic on the ``_shift`` field and to ``validate_variables`` on
+    public-method inputs.
+
     Parameters
     ----------
     shift_vec : Vector_3_T, optional
@@ -426,13 +453,14 @@ class OptimizedShift:
         """
         return 10 ** (OptimizedShiftManager.FLOAT32_DECIMAL_PRECISION - self.minimum_decimal_places)
 
-    def _is_shift_needed(self, values: Array_Nx3_T) -> bool:
+    def _is_shift_needed(self, values: Unshifted) -> bool:
         """Check whether ``values`` exceed this instance's representable range.
 
         Parameters
         ----------
-        values : Array_Nx3_T
-            Candidate coordinates to evaluate against this shift's threshold.
+        values : Unshifted
+            Candidate world-frame coordinates to evaluate against this
+            shift's threshold.
 
         Returns
         -------
@@ -441,13 +469,14 @@ class OptimizedShift:
         """
         return bool(np.any(np.abs(values) >= self.maximum_number_representable))
 
-    def _is_shift_possible(self, values: Array_Nx3_T) -> bool:
+    def _is_shift_possible(self, values: Unshifted) -> bool:
         """Check whether the range of ``values`` fits this instance's representable span.
 
         Parameters
         ----------
-        values : Array_Nx3_T
-            Candidate coordinates to evaluate against this shift's threshold.
+        values : Unshifted
+            Candidate world-frame coordinates to evaluate against this
+            shift's threshold.
 
         Returns
         -------
@@ -520,13 +549,14 @@ class OptimizedShift:
                 self._member_coordinate_sets.data.discard(wr)  # type: ignore[attr-defined]
                 break
 
-    def check_addibility(self, unshifted_pts: Array_Nx3_T) -> bool:
+    def check_addibility(self, unshifted_pts: Unshifted) -> bool:
         """Check whether ``unshifted_pts`` can be absorbed into this shift.
 
         Parameters
         ----------
-        unshifted_pts : Array_Nx3_T
-            Candidate points (in their original, unshifted frame).
+        unshifted_pts : Unshifted
+            Candidate points in their original, world-frame (un-shifted)
+            frame.
 
         Returns
         -------
@@ -540,9 +570,22 @@ class OptimizedShift:
         except OptimizedShiftManager.ShiftNotFeasibleError:
             return False
 
-    def _can_add_without_change(self, unshifted_pts: Array_Nx3_T) -> bool:
+    def _can_add_without_change(self, unshifted_pts: Unshifted) -> bool:
+        """Return ``True`` if ``unshifted_pts`` fits this shift unchanged.
+
+        Parameters
+        ----------
+        unshifted_pts : Unshifted
+            Candidate points in their world-frame (un-shifted) frame.
+            ``self._shift`` is subtracted internally to produce a local
+            ``Shifted`` array before the feasibility check.
+        """
         # TODO: Check usage [can points be shifted and unshifted]
         shifted = np.subtract(unshifted_pts, self._shift)
+        # Cast: subtracting self._shift puts the points in this shift's
+        # local frame; _is_shift_needed semantically operates on Unshifted
+        # arrays (representable-range check), and the same range test is
+        # valid for the shifted local frame here.
         return not self._is_shift_needed(shifted)
 
     def _add_member(self, coordinate_set: CartesianCoordinates) -> None:
@@ -573,18 +616,22 @@ class OptimizedShift:
         self._shift = new_shift
         self._add_member(coordinate_set)
 
-    def _compute_new_shift(self, additional_bbox: Optional[MinMaxPoints | Array_Nx3_T] = None) -> Vector_3_T:
+    def _compute_new_shift(self, additional_bbox: Optional[MinMaxPoints | Unshifted] = None) -> Vector_3_T:
         """Compute a new shift vector covering all registered members plus an optional extra bbox.
 
         Parameters
         ----------
-        additional_bbox : MinMaxPoints or Array_Nx3_T, optional
-            An additional bounding box to include in the calculation.
+        additional_bbox : MinMaxPoints or Unshifted, optional
+            An additional bounding box (or world-frame coordinate array) to
+            include in the calculation.
 
         Returns
         -------
         Vector_3_T
-            New shift vector (rounded to whole hundreds).
+            New shift vector (rounded to whole hundreds). This is a
+            translation offset in world-frame coordinates, NOT an
+            ``Unshifted`` or ``Shifted`` coordinate array — kept as
+            ``Vector_3_T`` per RESEARCH Open Issue #1.
 
         Raises
         ------
