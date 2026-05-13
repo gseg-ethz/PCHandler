@@ -103,6 +103,7 @@ from pydantic import (
     ConfigDict,
     Field,
     NonNegativeFloat,
+    ValidationInfo,
     field_validator,
     model_validator,
     validate_call,
@@ -159,9 +160,17 @@ class FoV(BaseModel):
 
     @field_validator("top", "bottom", mode="after")
     @classmethod
-    def _check_elevation(cls, v: Angle) -> Angle:
+    def _check_elevation(cls, v: Angle, info: ValidationInfo) -> Angle:
+        """Reject elevation angles outside ``[0, π]`` with a field-accurate error.
+
+        IN-01 (Phase 3 code review): the validator is registered for BOTH
+        ``top`` and ``bottom``; the error message previously said "Top angle
+        ..." in both cases, which mis-attributed bottom-bound violations.
+        ``ValidationInfo.field_name`` exposes the bound field at call time.
+        """
         if not 0 - EPS <= v.internal_value <= np.pi + EPS:
-            raise ValueError(f"Top angle {v.radians} not in [0, π]")
+            field_label = (info.field_name or "Elevation").capitalize()
+            raise ValueError(f"{field_label} angle {v.radians} not in [0, π]")
         return v
 
     @model_validator(mode="after")

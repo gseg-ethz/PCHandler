@@ -427,6 +427,23 @@ def test_fovtree_getitem_root_and_empty_passthrough(fov_):
     assert leaf["whatever"] is leaf
 
 
+def test_fov_check_elevation_uses_field_name_in_error():
+    """IN-01: ``_check_elevation`` validator reports the offending field name.
+
+    The validator is bound to both ``top`` and ``bottom``; previously it
+    hard-coded "Top angle ..." for both, mis-attributing bottom-bound
+    violations.  Use ``ValidationInfo.field_name`` to surface the correct
+    label.
+    """
+    with pytest.raises(ValidationError) as bottom_err:
+        FoV(left=0, right=1, top=1, bottom=-1)
+    assert "Bottom angle" in str(bottom_err.value)
+
+    with pytest.raises(ValidationError) as top_err:
+        FoV(left=0, right=1, top=-1, bottom=1)
+    assert "Top angle" in str(top_err.value)
+
+
 def test_fovtree_getitem_unknown_segment_raises(fov_):
     """CR-02: unknown child segment raises KeyError with a contextual message."""
     tiles = fov_.tile(FoV(left=0.0, right=0.5, top=0.0, bottom=0.5))
