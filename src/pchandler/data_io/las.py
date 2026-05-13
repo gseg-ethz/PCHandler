@@ -187,7 +187,7 @@ class LasHandler(AbstractIOHandler):
                     f"Values range [{pcd.intensity.min()}, {pcd.intensity.max()}] has been normalized and scaled to"
                     f"Uint16 range required by LAS format: [0, {np.iinfo(np.uint16).max}]."
                 )
-                las.intensity = normalize_uint16(pcd.intensity)
+                las.intensity = normalize_uint16(pcd.intensity, source_range=(0.0, 1.0))
 
         # Clear the previous sfs used
         for name in XYZ_NAMES.char + tuple(rgb_fields) + tuple(intensity_fields):
