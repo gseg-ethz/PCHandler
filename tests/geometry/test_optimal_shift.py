@@ -565,3 +565,17 @@ def test_optimized_shift_per_instance_feasibility():
     assert loose_shift._is_shift_possible(bbox_values), (
         "Loose (manager default) shift instance must accept range-200 values"
     )
+
+
+def test_optimized_shift_register_accepts_unshifted_world_frame():
+    """BUG-06 positive: register takes world-frame (unshifted) coordinates as documented."""
+    # Build a small set of world-frame coordinates clustered around (100, 200, 300)
+    world_xyz = np.array(
+        [[100.0, 200.0, 300.0], [100.1, 200.1, 300.1], [100.2, 200.2, 300.2]],
+        dtype=np.float64,
+    )
+    cc = CartesianCoordinates(world_xyz)
+    # Register at a shift close to the centroid so the shift is feasible.
+    shift = OptimizedShift(np.array([100.0, 200.0, 300.0]))
+    shift.register(cc)
+    assert cc in shift, "register(unshifted_coords) must put coords in the shift's member set"
