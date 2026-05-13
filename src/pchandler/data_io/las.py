@@ -92,11 +92,14 @@ class LasHandler(AbstractIOHandler):
         data = las._points.array
         field_names = cls._validate_field_selection(scalar_fields, header_names, remove_prefix, prefix)
 
-        if force_no_numerical_shift:
-            pcd = PointCloudData(las.xyz, numerical_optimization_shift=None, **pcd_kw)
-        else:
-            # TODO error multiple "numerical_optimization_shift" passed in ("pcd_kw")
-            pcd = PointCloudData(las.xyz, numerical_optimization_shift=OptimizedShift(las.header.offsets), **pcd_kw)
+        # BUG-08 (D-16): caller wins on numerical_optimization_shift. If the caller
+        # passed it in pcd_kw, that value is used; otherwise the LAS-header-derived
+        # default applies (unless force_no_numerical_shift suppresses it entirely).
+        nos: Optional[OptimizedShift] = pcd_kw.pop(
+            "numerical_optimization_shift",
+            None if force_no_numerical_shift else OptimizedShift(las.header.offsets),
+        )
+        pcd = PointCloudData(las.xyz, numerical_optimization_shift=nos, **pcd_kw)
         cls.extract_scalar_fields(pcd, data, data.size, field_names)
 
         logger.info(f"Successfully loaded LAZ file: {path}")
