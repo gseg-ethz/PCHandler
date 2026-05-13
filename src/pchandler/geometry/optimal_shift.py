@@ -560,9 +560,27 @@ class OptimizedShift:
         ----------
         coordinate_set : CartesianCoordinates
             Coordinate set to unregister; no-op if not currently registered.
+
+        Notes
+        -----
+        WR-05 (Phase 3 code review): we deliberately do NOT use
+        :meth:`weakref.WeakSet.discard` / :meth:`~weakref.WeakSet.remove` /
+        :meth:`~weakref.WeakSet.__contains__` here because internally those
+        call ``set.discard(weakref.ref(item))``, and ``set`` lookups confirm
+        bucket membership via ``__eq__``. :class:`CartesianCoordinates`
+        inherits its ``__eq__`` from :class:`numpy.ndarray` (via numpydantic
+        / :class:`GSEGUtils.base_arrays.BaseArray`), which returns an array
+        rather than a scalar — every public ``WeakSet`` method that touches
+        ``__eq__`` therefore raises :class:`ValueError`
+        ("truth value of an array with more than one element is ambiguous").
+
+        The identity-based manual loop below is the workaround: iterate the
+        underlying ``set[weakref.ref]`` and match referents via ``is`` (object
+        identity), bypassing ``__eq__`` entirely. The ``type: ignore`` annotates
+        the documented CPython attribute access; ``__contains__`` on
+        :class:`OptimizedShift` itself is also identity-based for the same
+        reason (see :meth:`__contains__`).
         """
-        if coordinate_set not in self:
-            return
         for wr in list(self._member_coordinate_sets.data):  # type: ignore[attr-defined]
             if wr() is coordinate_set:
                 self._member_coordinate_sets.data.discard(wr)  # type: ignore[attr-defined]
