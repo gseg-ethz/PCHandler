@@ -763,3 +763,41 @@ def test_to_py4dgeo_preserves_normals_and_scalar_fields_with_nos():
     assert add_dims.dtype.names is not None, "additional_dimensions has no fields"
     assert "intensity" in add_dims.dtype.names, f"to_py4dgeo dropped scalar fields; got names={add_dims.dtype.names}"
     np.testing.assert_array_equal(add_dims["intensity"].squeeze(), intensity)
+
+
+def test_pcd_reconstruct_rejects_bad_scalar_fields_state():
+    """WR-01: PointCloudData._reconstruct rejects a malformed scalar_fields payload.
+
+    A hand-crafted state dict with ``scalar_fields`` set to an arbitrary
+    non-:class:`ScalarFieldManager` value (here: a plain string) MUST raise
+    :class:`pydantic.ValidationError` rather than silently being passed
+    through to ``model_construct``. This is the SEC-02 / D-10 subclass
+    extension: the parent ``_FIELD_VALIDATORS`` dict in coordinates.py does
+    not cover subclass-only fields, so PointCloudData._reconstruct must
+    validate ``scalar_fields`` itself via ``_SCALAR_FIELDS_ADAPTER``.
+    """
+    xyz = random_coordinates(1, 0)
+    pcd = PointCloudData(xyz, numerical_optimization_shift=None)
+    func, state = pcd.__reduce__()
+    state_dict = state[0]
+    state_dict["scalar_fields"] = "hostile payload, not a ScalarFieldManager"
+    with pytest.raises(ValidationError):
+        func(state_dict)
+
+
+def test_pcd_reconstruct_round_trip_validates_scalar_fields_positive(rgb_, normals_, intensity_):
+    """WR-01: positive round-trip — pickled scalar_fields survive validated reconstruction.
+
+    Counterpart to the negative case above: a well-formed state dict (the
+    output of ``__reduce__``) reconstructs into an equivalent
+    :class:`PointCloudData` with intact :class:`ScalarFieldManager`.
+    """
+    import pickle
+
+    xyz = random_coordinates(1, 0)
+    pcd = PointCloudData(xyz, rgb=rgb_, normals=normals_, intensity=intensity_, numerical_optimization_shift=None)
+    revived = pickle.loads(pickle.dumps(pcd))
+    assert isinstance(revived.scalar_fields, ScalarFieldManager)
+    assert set(revived.scalar_fields.keys()) == set(pcd.scalar_fields.keys())
+    # scalar_fields' parent weakref is rebound on _reconstruct.
+    assert revived.scalar_fields.parent is revived

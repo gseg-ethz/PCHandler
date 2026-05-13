@@ -36,7 +36,7 @@ from GSEGUtils.base_types import (
     Vector_3_Float_T,
     VectorT,
 )
-from pydantic import Field, field_serializer, field_validator
+from pydantic import ConfigDict, Field, TypeAdapter, field_serializer, field_validator
 
 from pchandler.geometry.coordinates import CartesianCoordinates
 from pchandler.scalar_fields import (
@@ -46,6 +46,18 @@ from pchandler.scalar_fields import (
     ScalarField,
     ScalarFieldManager,
     ScalarFieldTriplet,
+)
+
+# WR-01 (Phase 3 code review) / SEC-02 extension: ``scalar_fields`` is a
+# subclass-only field on :class:`PointCloudData`, so the parent's
+# ``_FIELD_VALIDATORS`` dict (in ``coordinates.py``) does not cover it. A
+# hostile pickle stream could otherwise ship anything in
+# ``state["scalar_fields"]`` and bypass the per-field validation pass.
+# :class:`ScalarFieldManager` is a :class:`pydantic.BaseModel` subclass, so
+# strict-mode validation without ``arbitrary_types_allowed`` is sufficient.
+_SCALAR_FIELDS_ADAPTER: TypeAdapter[ScalarFieldManager] = TypeAdapter(
+    ScalarFieldManager,
+    config=ConfigDict(arbitrary_types_allowed=True),
 )
 
 if TYPE_CHECKING:
@@ -306,6 +318,18 @@ class PointCloudData(CartesianCoordinates):
     def _reconstruct(cls, state: dict[str, Any]) -> Self:
         """Re-bind the scalar-field manager's parent weakref after pickle reconstruction.
 
+        Per-field validation policy (SEC-02 / D-10 / WR-01 extension): the
+        parent ``CartesianCoordinates._reconstruct`` already validates every
+        field in its ``_FIELD_VALIDATORS`` dict, but ``scalar_fields`` is a
+        subclass-only field and falls through unvalidated in the parent. This
+        override validates ``state["scalar_fields"]`` against a dedicated
+        :class:`pydantic.TypeAdapter` **before** delegating to the parent, so
+        the "every pickled field validated" contract holds for
+        ``PointCloudData``-shaped pickles too. A hostile pickle stream that
+        smuggles a non-:class:`ScalarFieldManager` payload now raises
+        :class:`pydantic.ValidationError` rather than silently producing a
+        broken instance.
+
         Parameters
         ----------
         state : dict[str, Any]
@@ -315,7 +339,20 @@ class PointCloudData(CartesianCoordinates):
         -------
         Self
             The reconstructed instance with its scalar-field parent re-linked.
+
+        Raises
+        ------
+        pydantic.ValidationError
+            If ``state["scalar_fields"]`` does not validate as a
+            :class:`ScalarFieldManager` (e.g. wrong type, malformed contents),
+            **or** if any field validated by the parent fails its own
+            :class:`TypeAdapter`.
         """
+        if "scalar_fields" in state:
+            state = {
+                **state,
+                "scalar_fields": _SCALAR_FIELDS_ADAPTER.validate_python(state["scalar_fields"]),
+            }
         obj: Self = super(cls, cls)._reconstruct(state)
         obj.scalar_fields.parent = obj
         return obj

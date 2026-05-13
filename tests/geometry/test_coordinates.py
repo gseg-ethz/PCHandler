@@ -528,13 +528,26 @@ class BaseTestCartesianCoordinates:
         ``unshifted_bbox`` is the only computed field deliberately skipped
         from ``_FIELD_VALIDATORS`` (W-7 / RESEARCH §"Open Question 1"
         Rec. (b)); other fields MUST have a validator entry.
+
+        Subclasses (e.g. :class:`PointCloudData`) may add fields outside the
+        parent's validator dict. WR-01 (Phase 3 code review): they MUST then
+        provide their own per-subclass adapter and validate the field in
+        their own ``_reconstruct`` override. Subclass-known fields are
+        passed via the ``subclass_exempt`` extension; the base test stays
+        strict on the parent's surface.
         """
         from pchandler.geometry.coordinates import _FIELD_VALIDATORS
 
         dumped = cart_obj.model_dump()
         # All dumped fields except `unshifted_bbox` (computed, W-7) MUST appear in
-        # _FIELD_VALIDATORS. `id` is now also keyed (W-2).
-        exempt = {"unshifted_bbox"}
+        # _FIELD_VALIDATORS. `id` is now also keyed (W-2). PointCloudData adds
+        # `scalar_fields`, validated in its own _reconstruct via _SCALAR_FIELDS_ADAPTER
+        # (WR-01 / SEC-02 subclass extension).
+        from pchandler import PointCloudData
+
+        exempt: set[str] = {"unshifted_bbox"}
+        if isinstance(cart_obj, PointCloudData):
+            exempt.add("scalar_fields")
         unvalidated = set(dumped.keys()) - set(_FIELD_VALIDATORS.keys()) - exempt
         assert not unvalidated, (
             f"New fields in CartesianCoordinates.model_dump() must be added to "
