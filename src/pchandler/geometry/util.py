@@ -37,11 +37,22 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__.split(".")[0])
 
+# Phase 4 PERF-02 D-24 — auto-cap for nb_points=-1.
+# When ``get_outline_polygon`` is called with the default ``nb_points=-1`` and
+# the projected point cloud exceeds this size, it is trimmed via a seeded
+# random permutation (see D-23 for the seed mechanism). Callers that need the
+# pre-Phase-4 "use all points" behaviour must pass ``nb_points=len(pcd)``.
+_DEFAULT_OUTLINE_MAX_POINTS = 100_000
 
-def get_outline_polygon(  # noqa: C901  # Plane-axis dispatch + alpha-shape branching; refactor deferred to Phase 6 / PERF-02.
-    pcd: PointCloudData, plane: str, alpha_value: float = 10.0, nb_points: int = -1
+
+def get_outline_polygon(  # noqa: C901  # Plane-axis + alpha-shape branching; refactor deferred to Phase 6.
+    pcd: PointCloudData,
+    plane: str,
+    alpha_value: float = 10.0,
+    nb_points: int = -1,
+    seed: int | None = None,
 ) -> Polygon:
-    """Compute the outline of the point cloud as a polygon in a specific 2D projection.
+    r"""Compute the outline of the point cloud as a polygon in a specific 2D projection.
 
     Parameters
     ----------
@@ -52,7 +63,18 @@ def get_outline_polygon(  # noqa: C901  # Plane-axis dispatch + alpha-shape bran
     alpha_value : float, default=10.0
         The alpha value for the alpha shape algorithm, controlling the detail of the outline.
     nb_points : int, default=-1
-        The number of points to use for the computation. If -1, all points are used.
+        The number of points to use for the computation. If ``-1`` (the
+        default), the function auto-caps the projection at
+        ``_DEFAULT_OUTLINE_MAX_POINTS = 100_000`` points (see Notes). Pass a
+        positive value to fix the sample size explicitly, or
+        ``nb_points=len(pcd)`` to restore the pre-Phase-4 "use all points"
+        behaviour.
+    seed : int or None, default=None
+        Seed for the internal ``numpy.random.Generator`` used by both the
+        sampling permutation and the dimensionality-stabilising jitter.
+        ``None`` (the default) resolves to seed ``0`` — i.e. the function is
+        deterministic by default (see Notes). Pass an explicit integer to
+        produce a different (but still deterministic) outline.
 
     Returns
     -------
@@ -65,6 +87,31 @@ def get_outline_polygon(  # noqa: C901  # Plane-axis dispatch + alpha-shape bran
         If the specified plane is invalid.
     NotImplementedError
         If the outline computation results in an unsupported geometry type.
+
+    Notes
+    -----
+    Phase 4 PERF-02 introduced two intentional behavioural changes to this
+    function (Phase 4 D-23 + D-24):
+
+    1. **Deterministic by default (D-23).** Before Phase 4 the trim
+       permutation and the dimensionality-stabilising jitter used numpy's
+       global RNG, so repeated calls on the same point cloud produced
+       different polygons across runs. Both call sites now use
+       ``rng = numpy.random.default_rng(seed if seed is not None else 0)``;
+       ``seed=None`` is the deterministic path. Callers that want repeatable
+       results across configurations can pass ``seed`` explicitly.
+
+    2. **Auto-cap at 100 000 points (D-24).** Before Phase 4, passing
+       ``nb_points=-1`` (the default) caused the function to feed all
+       projected points to ``alphashape.alphashape``, whose runtime scales
+       super-linearly with the input size (15 s at 100 k points on a typical
+       dev host; minutes at 1 M points). The default now auto-trims the
+       projection to ``_DEFAULT_OUTLINE_MAX_POINTS`` (100 000) via the seeded
+       permutation, giving bounded runtime regardless of input size. Callers
+       that previously relied on ``nb_points=-1`` consuming all points must
+       now pass ``nb_points=len(pcd)`` explicitly to restore that behaviour.
+       This change has no deprecation cycle — the new default IS the
+       documented behaviour going forward.
     """
     match plane:
         case "xy":
@@ -76,15 +123,29 @@ def get_outline_polygon(  # noqa: C901  # Plane-axis dispatch + alpha-shape bran
         case _:
             raise ValueError
 
+    # Seeded RNG (D-23): seed=None resolves to default_rng(0) so the default
+    # call path is deterministic across runs. Both the trim permutation and
+    # the jitter draw from this instance — no global numpy RNG state is
+    # mutated.
+    rng = np.random.default_rng(seed if seed is not None else 0)
+
     # Normalise the points
     proj_pts_mean = proj_pts.mean(axis=0)
     proj_pts_scale = proj_pts.max(axis=0) - proj_pts.min(axis=0)
     proj_pts_norm = (proj_pts - proj_pts_mean) / proj_pts_scale
+
+    # Trim policy (D-24): explicit nb_points > 0 wins; otherwise auto-cap at
+    # _DEFAULT_OUTLINE_MAX_POINTS. The trim only fires when the input is
+    # actually larger than max_points — smaller inputs pass through.
     if nb_points > 0:
-        proj_pts_norm = proj_pts_norm[np.random.permutation(proj_pts_norm.shape[0])[:nb_points], :]
+        max_points = nb_points
+    else:
+        max_points = _DEFAULT_OUTLINE_MAX_POINTS
+    if max_points < proj_pts_norm.shape[0]:
+        proj_pts_norm = proj_pts_norm[rng.permutation(proj_pts_norm.shape[0])[:max_points], :]
 
     # Add noise to reduce the risk of underdefined dimensionality
-    noise = np.random.normal(scale=1e-6, size=proj_pts_norm.shape)
+    noise = rng.normal(scale=1e-6, size=proj_pts_norm.shape)
     proj_pts_norm = proj_pts_norm + noise
 
     als_norm = alphashape.alphashape(proj_pts_norm, alpha=alpha_value)
