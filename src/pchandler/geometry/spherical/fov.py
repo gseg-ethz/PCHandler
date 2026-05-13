@@ -1039,17 +1039,47 @@ class FoVTree:
     #     pass
 
     def __getitem__(self, identifier: str) -> Self:
-        """Look up a child by ``identifier`` (descending into nested children for long ids)."""
-        # TODO: extend to complete for full string
-        if not identifier or identifier == "root" or self.children is None:
+        """Look up a (potentially nested) descendant by its concatenated identifier.
+
+        CR-02 (Phase 3 code review): ``build_from_tiles`` now emits 3-character
+        ``"<r>-<c>"`` identifiers (both the flat-tile branch and the recursive
+        quad branch), so a depth-2 leaf path is concatenated as e.g.
+        ``"0-00-1"``. The previous hex-stride implementation
+        (``ceil(log16(len(children)))``) computed a per-level identifier length
+        of ``1`` for a 4-child node, which made ``tree["0-0"]`` look up the
+        non-existent key ``"0"`` and raise :class:`KeyError`.
+
+        This implementation splits the input on the fixed 3-character level
+        boundary, descending one child at a time. An empty / ``"root"``
+        identifier returns ``self`` (parity with previous behaviour). An
+        unknown head raises :class:`KeyError` with a contextual message
+        rather than silently falling through.
+
+        Parameters
+        ----------
+        identifier : str
+            Concatenated child identifier (e.g. ``"0-0"``, ``"0-00-1"``).
+
+        Returns
+        -------
+        Self
+            The descendant node addressed by ``identifier``.
+
+        Raises
+        ------
+        KeyError
+            If any segment of ``identifier`` does not match a child of the
+            corresponding ancestor.
+        """
+        if not identifier or identifier == "root" or not self.children:
             return self
 
-        child_identifier_length = np.ceil(math.log(len(self.children), 16)).astype(int)
-
-        if len(identifier) > child_identifier_length:
-            return self.children[identifier[:child_identifier_length]][identifier[child_identifier_length:]]
-
-        return self.children[identifier]
+        # Child ids from build_from_tiles are exactly 3 chars: "<r>-<c>".
+        head, rest = identifier[:3], identifier[3:]
+        if head not in self.children:
+            raise KeyError(f"No child '{head}' under {self.identifier!r}")
+        child = self.children[head]
+        return child if not rest else child[rest]
 
     def is_leaf(self):
         """Check whether this FoVTree node is a leaf (has no child nodes).

@@ -385,6 +385,57 @@ def test_fovtree_mixed_recursive_and_flat_unique_identifiers(fov_):
     assert len(ids) == len(set(ids)), f"duplicate identifiers in mixed tree: {ids}"
 
 
+def test_fovtree_getitem_flat_tile_lookup(fov_):
+    """CR-02: __getitem__ resolves the flat-tile 3-char ``"<r>-<c>"`` identifiers."""
+    # 2x2 grid -> flat-tile branch; sibling ids are "0-0", "0-1", "1-0", "1-1".
+    tiles = fov_.tile(FoV(left=0.0, right=0.5, top=0.0, bottom=0.5))
+    tree = FoVTree.build_from_tiles(tiles, min_children=4)
+    assert tree is not None
+    assert tree.children is not None
+    for key in ("0-0", "0-1", "1-0", "1-1"):
+        assert tree[key] is tree.children[key]
+
+
+def test_fovtree_getitem_nested_recursive_lookup(fov_):
+    """CR-02: __getitem__ descends into nested ``"<r>-<c>"`` paths concatenated by build_from_tiles."""
+    # 4x4 grid -> recursive quad-split at root, flat-tile branch in each
+    # quadrant. Every leaf identifier is the concatenation of a 3-char
+    # parent id + 3-char child id, e.g. ``"0-00-0"``.
+    tiles = fov_.tile(FoV(left=0.0, right=0.25, top=0.0, bottom=0.25))
+    tree = FoVTree.build_from_tiles(tiles, min_children=4)
+    assert tree is not None
+    # Materialise every leaf identifier and round-trip through __getitem__.
+    for leaf_id, leaf_fov in tree.to_list():
+        resolved = tree[leaf_id]
+        # The leaf's stored identifier is the *full* concatenated path; verify
+        # we landed on the same node by comparing identifier strings.
+        assert resolved.identifier == leaf_id, (
+            f"tree[{leaf_id!r}] resolved to identifier={resolved.identifier!r}, expected {leaf_id!r}"
+        )
+        assert resolved.node is leaf_fov
+
+
+def test_fovtree_getitem_root_and_empty_passthrough(fov_):
+    """CR-02: ``""`` and ``"root"`` and a leaf return self (back-compat with previous behaviour)."""
+    tiles = fov_.tile(FoV(left=0.0, right=0.5, top=0.0, bottom=0.5))
+    tree = FoVTree.build_from_tiles(tiles, min_children=4)
+    assert tree is not None
+    assert tree[""] is tree
+    assert tree["root"] is tree
+    # Leaf: children is None, any identifier returns self.
+    leaf = tree["0-0"]
+    assert leaf["whatever"] is leaf
+
+
+def test_fovtree_getitem_unknown_segment_raises(fov_):
+    """CR-02: unknown child segment raises KeyError with a contextual message."""
+    tiles = fov_.tile(FoV(left=0.0, right=0.5, top=0.0, bottom=0.5))
+    tree = FoVTree.build_from_tiles(tiles, min_children=4)
+    assert tree is not None
+    with pytest.raises(KeyError, match="No child '9-9' under"):
+        _ = tree["9-9"]
+
+
 def _fov_are_equal(fov1: FoV, fov2: FoV):
     array_1 = np.array([fov1.left, fov1.right, fov1.top, fov1.bottom])
     array_2 = np.array([fov2.left, fov2.right, fov2.top, fov2.bottom])
