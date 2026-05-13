@@ -535,3 +535,33 @@ def test_pcd_optimized_shift_general(osm):
     assert pcd.numerical_optimization_shift is not pcd3.numerical_optimization_shift
 
     assert np.any(shift_3 != shift_2)
+
+
+def test_optimized_shift_per_instance_feasibility():
+    """BUG-04: per-instance _minimum_decimal_places gates feasibility independently of the manager.
+
+    Notes
+    -----
+    Values are chosen so that the per-axis range (200) falls between the two
+    instances' representable spans:
+      - tight: ``_minimum_decimal_places=9`` → max_repr = 10**(7-9) = 0.01  → 200 > 0.01, rejected.
+      - loose: manager default 3            → max_repr = 10**(7-3) = 10000 → 200 < 10000, accepted.
+
+    The verbatim "1e10 magnitude" values from the plan/research draft were
+    impossible to differentiate (both instances reject 1e10); corrected here
+    per executor Rule 1 — Bug.
+    """
+    # Per-axis range = 200 (max=100, min=-100). See docstring math.
+    bbox_values = np.array([[100.0, 100.0, 100.0], [-100.0, -100.0, -100.0]])
+
+    tight_shift = OptimizedShift(np.zeros(3))
+    tight_shift._minimum_decimal_places = 9
+    assert not tight_shift._is_shift_possible(bbox_values), (
+        "Tight (9 decimals) shift instance must reject range-200 values"
+    )
+
+    loose_shift = OptimizedShift(np.zeros(3))
+    # _minimum_decimal_places stays None → falls through to manager default (3)
+    assert loose_shift._is_shift_possible(bbox_values), (
+        "Loose (manager default) shift instance must accept range-200 values"
+    )
