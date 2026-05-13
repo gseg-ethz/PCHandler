@@ -326,7 +326,6 @@ class OptimizedShift:
     _shift: Vector_3_T
     _member_coordinate_sets: weakref.WeakSet[CartesianCoordinates]
     _minimum_decimal_places: Optional[int] = None
-    # _member_coordinate_sets_unshifted_bbox: weakref.WeakKeyDictionary[CartesianCoordinates, MinMaxPoints]
 
     @validate_variables
     def __init__(self, shift_vec: Optional[Vector_3_T] = None) -> None:
@@ -341,7 +340,6 @@ class OptimizedShift:
         self._uuid = uuid.uuid4()
         self._shift = np.zeros((3,), dtype=np.float64) if shift_vec is None else shift_vec
         self._member_coordinate_sets = weakref.WeakSet()
-        # self._member_coordinate_sets_unshifted_bbox = weakref.WeakKeyDictionary()
         OptimizedShiftManager().register_shift(self)
 
     def __contains__(self, value: CartesianCoordinates) -> bool:
@@ -628,7 +626,6 @@ class OptimizedShift:
     def _add_member(self, coordinate_set: CartesianCoordinates) -> None:
         """Add the point‐cloud under the existing shift."""
         self._member_coordinate_sets.add(coordinate_set)
-        # self._member_coordinate_sets_unshifted_bbox[coordinate_set] = MinMaxPoints.from_points(coordinate_set.arr)
 
     def _expand_and_add(self, coordinate_set: CartesianCoordinates) -> None:
         """Attempt to expand the current optimised shift to include the new coordinate set.
@@ -791,7 +788,3 @@ class OptimizedShift:
         """
         # add to the weakref set
         self._member_coordinate_sets.add(coordinate_set)
-        # store its unshifted bounding box
-        # self._member_coordinate_sets_unshifted_bbox[coordinate_set] = (
-        #     MinMaxPoints.from_points(coordinate_set.xyz, already_applied_shift_vec = self._shift)
-        # )
