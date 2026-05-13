@@ -52,6 +52,8 @@ def _rebuild_angle(cls, internal_value, display_unit):
         The reconstructed angle.
     """
     # internal_value already in INTERNAL_UNIT (rad)
+    # Slotted-class pickle reconstructor: AngleBase uses __slots__ (not Pydantic),
+    # so object.__new__ + manual __init__ is the standard pattern -- not a bypass.
     obj = object.__new__(cls)
     AngleBase.__init__(obj, internal_value, display_unit)
     return obj
@@ -121,6 +123,8 @@ class AngleBase:
             New instance sharing the underlying radian array.
         """
         # 1) Allocate a new empty instance of the same class
+        # Slotted-class fast-path: share the underlying radian array without re-running
+        # convert_angles. AngleBase uses __slots__ (not Pydantic) -- not a bypass.
         new = object.__new__(type(self))
         # 2) Shallow‐share the internal rad‐array and swap the unit
         new._internal_value = self._internal_value
