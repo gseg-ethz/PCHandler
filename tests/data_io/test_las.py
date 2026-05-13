@@ -57,6 +57,9 @@ class TestLasHandler(BaseLoadSave):
         assert not np.allclose(las_pcd.intensity, i)
         assert np.all(las_pcd.intensity == normalize_uint16(i))
 
+        # COUPLE-05 D-17 site 1 regression: explicit source_range matches implicit default
+        assert np.array_equal(normalize_uint16(i), normalize_uint16(i, source_range=(0.0, 1.0)))
+
     def test_las_load_with_nos_in_pcd_kw(self):
         """BUG-08: caller's NOS in **pcd_kw wins over the LAS-header default; no crash."""
         custom_shift = OptimizedShift(np.array([1.0, 2.0, 3.0]))

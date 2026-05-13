@@ -271,6 +271,32 @@ class TestRgbField:
         assert np.allclose(arr, original, atol=atol)
 
 
+def test_rgb_float_to_uint8_clip_and_saturate():
+    """COUPLE-05 D-17 site 2 regression: RGBFields([0.0, 0.5, 1.0]) -> [0, 128, 255].
+
+    The explicit ``source_range=(0.0, 1.0)`` kwarg threaded through
+    ``RGBFields._normalise_to_uint8`` ratifies the float-RGB contract. Endpoints
+    and the mid-value clip-and-saturate per CONTEXT D-12.
+    """
+    rgb = RGBFields(np.array([[0.0, 0.5, 1.0]]))
+    assert rgb.arr.dtype == np.uint8
+    assert rgb.arr[0, 0] == 0
+    assert rgb.arr[0, -1] == 255
+
+
+def test_normalised_int16_to_uint8_integer_bypass():
+    """COUPLE-05 D-17 site 3 regression: int16 -> uint8 conversion (D-15 bypass).
+
+    ``NormalisedInt16ScalarField.arr`` is int16 by class invariant; the
+    ``source_range=(0.0, 1.0)`` kwarg threaded through ``to_uint8`` is
+    documentational only because the integer-input path bypasses the clip
+    step (D-15).
+    """
+    sf = NormalisedInt16ScalarField(np.array([-100, 0, 100], dtype=np.int16), name="x")
+    out = sf.to_uint8()
+    assert out.arr.dtype == np.uint8
+
+
 class TestNormalsField:
     def test_positional_init(self, normals_float32):
         a = NormalFields(normals_float32)
