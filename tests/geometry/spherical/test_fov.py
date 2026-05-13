@@ -30,6 +30,17 @@ def fov_gon_values(fov_rad_values):
     return _rad2gon(fov_rad_values)
 
 
+@pytest.fixture(scope="function")
+def fov_():
+    """Minimal valid FoV used for deprecation-warning assertions (BUG-03)."""
+    return FoV(
+        left=Angle(0, unit=AngleUnit.RAD),
+        right=Angle(1, unit=AngleUnit.RAD),
+        top=Angle(0, unit=AngleUnit.RAD),
+        bottom=Angle(1, unit=AngleUnit.RAD),
+    )
+
+
 class TestFov:
     def test_init(self, fov_rad_values, fov_deg_values, fov_gon_values):
         for unit, values in zip(
@@ -483,3 +494,20 @@ class TestFoVIntersection:
         assert math.isclose(intersect.top, 0.4)
         assert math.isclose(intersect.bottom, 2.2)
         # Not testing for crossing of PI / TWO_PI
+
+
+@pytest.mark.parametrize(
+    "prop_name, expected_msg",
+    [
+        ("horizontal_min", "horizontal_min property has been deprecated. Please use the 'left' property"),
+        ("horizontal_max", "horizontal_max property has been deprecated. Please use the 'right' property"),
+        ("elevation_min", "elevation_min property has been deprecated. Please use the 'top' property"),
+        ("elevation_max", "elevation_max property has been deprecated. Please use the 'bottom' property"),
+    ],
+)
+def test_fov_deprecated_property_warning_message(fov_, prop_name, expected_msg):
+    """BUG-03: each deprecated FoV property emits the correct warning text."""
+    with pytest.warns(DeprecationWarning) as record:
+        _ = getattr(fov_, prop_name)
+    assert len(record) == 1
+    assert str(record[0].message) == expected_msg
