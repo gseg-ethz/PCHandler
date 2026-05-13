@@ -19,7 +19,32 @@
 #
 # Author: Nicholas Meyer (meyernic@ethz.ch)
 
-"""Multiprocessing-based point-cloud splitters keyed on FoV trees."""
+"""Multiprocessing-based point-cloud splitters keyed on FoV trees.
+
+The :class:`FoVTreePointCloudSplitter` and the free function
+:func:`split_pc_with_fov_tree` accept a ``prefer`` keyword
+(``Literal["auto", "serial", "processes"]``, default ``"auto"``) that
+controls how the per-FoV filter tasks are dispatched
+(Phase 4 PERF-03 / D-26 / D-27).
+
+* ``"serial"`` — always run the per-task loop in-process. No joblib.
+* ``"processes"`` — always dispatch through ``joblib.Parallel`` with the
+  ``loky`` backend.
+* ``"auto"`` — pick serial when ``len(fov_list) <= _SERIAL_THRESHOLD`` and
+  parallel otherwise. The threshold is a module-level constant
+  (``_SERIAL_THRESHOLD = 16``) picked from a dev-host benchmark on which
+  parallel never won at any tested tree size up to 435 FoVs on 100 k-point
+  PCDs or 128 FoVs on 1 M-point PCDs (RESEARCH.md §"Plan 04-03 D-28").
+  ``loky``'s per-process startup (~0.5–2.0 s plus pickling the PCD)
+  dominates the per-task FoV-filter cost on that hardware. The default
+  is therefore intentionally conservative.
+
+Override the auto policy explicitly with ``prefer="processes"`` to test
+the parallel path on bigger hardware, or with ``prefer="serial"`` to
+force the inline loop regardless of tree size. The threshold is a
+maintainable constant — bump it in a future patch release if dev-bench
+on different hardware suggests another inflection.
+"""
 
 import logging
 import warnings
@@ -40,6 +65,13 @@ logger = logging.getLogger(__name__.split(".")[0])
 
 NUM_CPUS = cpu_count()
 FoVSplitMethodT = Literal["iterative"] | Literal["direct"]
+PreferT = Literal["auto", "serial", "processes"]
+
+# Phase 4 PERF-03 D-28 — researcher-locked. Dev-host bench (32 logical cores,
+# loky backend, n_jobs=-1) shows parallel never wins below this on 100 k–1 M
+# pt PCDs at any tested FoV count up to 435. Conservative default for the
+# ``prefer="auto"`` path; power users override with ``prefer="processes"``.
+_SERIAL_THRESHOLD: int = 16
 
 
 def check_number_jobs(n_jobs: int):
@@ -104,6 +136,7 @@ class FoVTreePointCloudSplitter(PointCloudSplitter):
         remove_empty: bool = True,
         n_jobs: NumberJobsT = -1,
         method: FoVSplitMethodT = "iterative",
+        prefer: PreferT = "auto",
     ):
         """Initialize the splitter with configuration options.
 
@@ -117,11 +150,20 @@ class FoVTreePointCloudSplitter(PointCloudSplitter):
             Number of parallel jobs to use. Defaults to all available cores.
         method : FoVSplitMethodT
             'iterative' or 'direct'
+        prefer : {"auto", "serial", "processes"}, default="auto"
+            Dispatch policy for the per-FoV filter tasks (Phase 4 PERF-03
+            / D-26 / D-27). ``"auto"`` runs serially when
+            ``len(fov_list) <= _SERIAL_THRESHOLD`` (= 16) and falls back to
+            ``joblib.Parallel`` with the ``loky`` backend otherwise.
+            ``"serial"`` forces the inline loop regardless of tree size;
+            ``"processes"`` forces the parallel path regardless of tree
+            size. See the module docstring for the threshold rationale.
         """
         self.fov_tree = fov_tree
         self.remove_empty = remove_empty
         self.n_jobs = n_jobs
         self.method: FoVSplitMethodT = method
+        self.prefer: PreferT = prefer
 
     def split(self, pcd: PointCloudData) -> dict[str, PointCloudData]:
         """Split the point cloud based on the FoVTree.
@@ -162,13 +204,14 @@ class FoVTreePointCloudSplitter(PointCloudSplitter):
         """
         fov_list: list[tuple[str, FoV]] = fov_tree.to_list()
 
-        if len(fov_list) > 1:
+        effective_prefer = self.prefer
+        if effective_prefer == "serial" or (effective_prefer == "auto" and len(fov_list) <= _SERIAL_THRESHOLD):
+            splits = [self._process_direct_task(pcd, fov_id, fov) for fov_id, fov in fov_list]
+        else:
             with parallel_config(backend="loky", n_jobs=self.n_jobs, verbose=50, prefer="processes"):
                 splits = Parallel(return_as="list")(
                     delayed(self._process_direct_task)(pcd, fov_id, fov) for fov_id, fov in fov_list
                 )
-        else:
-            splits = [self._process_direct_task(pcd, fov_list[0][0], fov_list[0][1])]
 
         pcd.reduce(np.zeros(len(pcd), dtype=np.bool_))
         return dict(splits)
@@ -213,15 +256,16 @@ class FoVTreePointCloudSplitter(PointCloudSplitter):
         tasks = [(pcd, fov_tree)]
 
         while tasks:
-            if len(tasks) > 1:
-                # Process tasks at the current level concurrently
+            effective_prefer = self.prefer
+            if effective_prefer == "serial" or (effective_prefer == "auto" and len(tasks) <= _SERIAL_THRESHOLD):
+                # Process sequentially under the serial / sub-threshold-auto branch.
+                level_results = [self._process_iterative_task(task_pcd, task_fov) for task_pcd, task_fov in tasks]
+            else:
+                # Process tasks at the current level concurrently.
                 with parallel_config(backend="loky", n_jobs=self.n_jobs, verbose=50, prefer="processes"):
                     level_results = Parallel(return_as="list")(
                         delayed(self._process_iterative_task)(task_pcd, task_fov) for task_pcd, task_fov in tasks
                     )
-            else:
-                # Process sequentially when only one task is present
-                level_results = [self._process_iterative_task(tasks[0][0], tasks[0][1])]
 
             new_tasks = []
             for res, child_tasks in level_results:
@@ -267,10 +311,21 @@ class FoVTreePointCloudSplitter(PointCloudSplitter):
 
 
 def split_pc_with_fov_tree(
-    pcd: PointCloudData, fov_tree: FoVTree, remove_empty: bool = True, n_jobs: NumberJobsT = -1
+    pcd: PointCloudData,
+    fov_tree: FoVTree,
+    remove_empty: bool = True,
+    n_jobs: NumberJobsT = -1,
+    prefer: PreferT = "auto",
 ) -> dict[str, PointCloudData]:
     # -> list[tuple[str, FoV, PointCloudData]]:
     """Split a PointCloudData instance using a FoVTree (free-function variant).
+
+    This free-function variant honours the same ``prefer`` dispatch policy as
+    :class:`FoVTreePointCloudSplitter` (Phase 4 PERF-03 / D-27). The
+    recursive child-fan-out at each tree level is dispatched either
+    serially or through ``joblib.Parallel`` per the same
+    :data:`_SERIAL_THRESHOLD`-gated rule used by ``_direct_split`` /
+    ``_iterative_split``.
 
     Parameters
     ----------
@@ -282,6 +337,12 @@ def split_pc_with_fov_tree(
         Whether to remove empty splits (i.e., regions with no points).
     n_jobs : int, default=-1
         The number of parallel jobs to use. If -1, all available cores are used.
+    prefer : {"auto", "serial", "processes"}, default="auto"
+        Dispatch policy. Forwards the same semantics as
+        :class:`FoVTreePointCloudSplitter`: ``"auto"`` runs serially when the
+        per-level fan-out has ``<= _SERIAL_THRESHOLD`` children, parallel
+        otherwise. ``"serial"`` / ``"processes"`` force one path
+        unconditionally.
 
     Returns
     -------
@@ -294,10 +355,12 @@ def split_pc_with_fov_tree(
         return {fov_tree.identifier: pcd}
         # return [(fov_tree.identifier, fov_tree.node, pcd,)]
 
-    # Setup arguments for call
+    # Setup arguments for call (forward prefer recursively so child subtrees
+    # honour the same dispatch policy as the root call).
     if fov_tree.children is not None:
         split_packages = [
-            (FoVFilter(child.node).extract(pcd), child, remove_empty, n_jobs) for child in fov_tree.children.values()
+            (FoVFilter(child.node).extract(pcd), child, remove_empty, n_jobs, prefer)
+            for child in fov_tree.children.values()
         ]
     else:
         split_packages = []
@@ -306,9 +369,15 @@ def split_pc_with_fov_tree(
         split_packages = [sp for sp in split_packages if len(sp[0])]
     # print(*[FoV(**sp[0].fov, unit="rad") for sp in split_packages], sep='\n')
 
-    split = Parallel(n_jobs=n_jobs, prefer="processes", verbose=50, timeout=10 * 60)(
-        delayed(split_pc_with_fov_tree)(*split_package) for split_package in split_packages
-    )
+    # Phase 4 PERF-03 D-26 / D-27: threshold-gated dispatch — same rule as
+    # FoVTreePointCloudSplitter. Note the SAME `_SERIAL_THRESHOLD` constant
+    # applies to the per-level child fan-out here.
+    if prefer == "serial" or (prefer == "auto" and len(split_packages) <= _SERIAL_THRESHOLD):
+        split = [split_pc_with_fov_tree(*split_package) for split_package in split_packages]
+    else:
+        split = Parallel(n_jobs=n_jobs, prefer="processes", verbose=50, timeout=10 * 60)(
+            delayed(split_pc_with_fov_tree)(*split_package) for split_package in split_packages
+        )
 
     split_dict = {k: v for d in split for k, v in d.items()}
     return split_dict
