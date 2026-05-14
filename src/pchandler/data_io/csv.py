@@ -426,10 +426,7 @@ def _get_header(file: Path, comment: str = "//") -> tuple[list[str], int | None]
                 number_points = int(line) if line.isdigit() else None
                 break
 
-            # noqa rationale: `lstrip("//")` strips any leading `/` character, not the
-            # literal prefix "//"; this matches existing behaviour. Replace with
-            # `line.removeprefix(comment)` in a future bug-fix phase (BUG sweep).
-            header.append(line.lstrip("//").strip("\n\r").strip())  # noqa: B005
+            header.append(line.removeprefix(comment).strip("\n\r").strip())
 
     return header, number_points
 
