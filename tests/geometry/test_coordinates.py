@@ -1189,6 +1189,27 @@ def test_process_shift_case_4_swap_shifts():
     assert cc._shift_applied_by is nos_b
 
 
+def test_reconstruct_cross_process_world_frame_assertion():
+    """TEST-01 sibling: ``CartesianCoordinates._reconstruct`` preserves world frame on pickle round-trip.
+
+    Companion to ``test_optimal_shift.TestReconstructCrossProcess`` — that
+    class exercises the ``OptimizedShift._reconstruct`` three-branch state
+    machine; this one exercises the ``CartesianCoordinates._reconstruct``
+    SEC-02 / D-10 per-field validation path. Both compose during a PCD
+    pickle round-trip.
+    """
+    world_xyz = np.array(
+        [[100.0, 200.0, 300.0], [100.1, 200.1, 300.1], [100.2, 200.2, 300.2]],
+        dtype=np.float64,
+    )
+    nos = OptimizedShift(np.array([100.0, 200.0, 300.0]))
+    cc = CartesianCoordinates(world_xyz, numerical_optimization_shift=nos)
+    source_world = cc.arr.astype(np.float64) + cc.numerical_optimization_shift.value
+    restored = pickle.loads(pickle.dumps(cc))
+    restored_world = restored.arr.astype(np.float64) + restored.numerical_optimization_shift.value
+    np.testing.assert_array_equal(source_world, restored_world)
+
+
 def test_process_shift_case_4_degraded_to_case_3(monkeypatch):
     """FRAG-02 Case 4 -> Case 3 degraded fallback: manager rejects NOS, falls back to revert."""
     from pchandler.geometry.optimal_shift import OptimizedShiftManager

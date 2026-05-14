@@ -1,5 +1,7 @@
 import copy
 import gc
+import logging
+import multiprocessing as mp
 import pickle
 import uuid
 import weakref
@@ -13,6 +15,28 @@ from pchandler.geometry import OptimizedShift, OptimizedShiftManager
 from pchandler.geometry.coordinates import CartesianCoordinates
 from pchandler.geometry.util import MinMaxPoints
 from pchandler.scalar_fields import ScalarFieldManager
+
+
+def _child_unpickle_and_assert(blob: bytes, queue) -> None:
+    """Run in a spawn-child: unpickle PCD, compute world frame, ``queue.put`` it.
+
+    MUST be module-level (RESEARCH Pitfall 3): spawn-child re-imports this
+    module, so class-method or nested-function helpers raise ``AttributeError``
+    on the child side.
+    """
+    # Re-import inside the child for spawn-context isolation. The import below
+    # is intentional even if the parent already imported the same names — spawn
+    # creates a fresh interpreter that re-executes module top-level code.
+    import pickle as _pickle
+
+    import numpy as _np
+
+    pcd_revived = _pickle.loads(blob)
+    if pcd_revived.numerical_optimization_shift is not None:
+        world = pcd_revived.xyz.astype(_np.float64) + pcd_revived.numerical_optimization_shift.value
+    else:
+        world = pcd_revived.xyz.astype(_np.float64)
+    queue.put(world.tolist())
 
 
 def random_coordinates(scale: float, offset: float) -> np.ndarray:
@@ -671,6 +695,171 @@ def test_pcd_unpickle_uuid_match_vector_mismatch_mints_new():
         restored.xyz + restored.numerical_optimization_shift.value,
         source_world_frame,
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 6 TEST-01 — cross-process unpickle + UUID-collision contract
+# (D-04 / ROADMAP SC #1 — Plan 06-01)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def assert_pchandler_caplog_propagation(caplog: pytest.LogCaptureFixture) -> None:
+    """Smoke-fixture: verify ``caplog`` receives ``pchandler.*`` INFO records.
+
+    Mitigates RESEARCH §A1 [ASSUMED] (pchandler logger propagation to caplog).
+    Triggers a known-emitting INFO path on the ``pchandler`` logger by hitting
+    ``OptimizedShift._reconstruct``'s divergent-vector branch and asserts the
+    INFO record reaches ``caplog``. If propagation is broken, TEST-01's
+    caplog assertions would silently pass vacuously.
+
+    Note: ``_by_uuid`` is a ``WeakValueDictionary``; the pre-registered shift
+    must be kept alive via a local strong reference for ``get_by_uuid`` to
+    return it during ``_reconstruct``.
+    """
+    caplog.set_level(logging.INFO, logger="pchandler")
+    SingletonMeta._instances.pop(OptimizedShiftManager, None)
+    shift_vec = np.array([1.0, 2.0, 3.0], dtype=np.float64)
+    bogus_uuid = uuid.uuid4()
+    _alive = OptimizedShift._construct_with_uuid(bogus_uuid, shift_vec)  # noqa: F841
+    # Reconstruct under same UUID with divergent vector → INFO emitter
+    OptimizedShift._reconstruct(bogus_uuid, np.array([10.0, 20.0, 30.0], dtype=np.float64))
+    assert caplog.records, (
+        "pchandler logger propagation broken — investigate. "
+        "Expected an INFO record from OptimizedShift._reconstruct divergent-vector "
+        "branch; caplog received zero records."
+    )
+    caplog.clear()
+    # Reset OSM so the test gets a clean manager.
+    del _alive
+    SingletonMeta._instances.pop(OptimizedShiftManager, None)
+
+
+class TestReconstructCrossProcess:
+    """TEST-01 / D-04 / SC #1: cross-process pickle + UUID-collision three-branch state machine.
+
+    The three-branch state machine is documented at
+    ``src/pchandler/geometry/optimal_shift.py:789-835``. The class also asserts
+    spawn-child fidelity for the no-collision branch (the spawn child runs in
+    a freshly-instantiated ``OptimizedShiftManager``, so the pickled UUID is
+    free and ``_reconstruct`` takes case 1).
+    """
+
+    def test_subprocess_unpickle_preserves_world_frame(self):
+        """Scenario 1 (cross-process): spawn child unpickles PCD, world frame preserved.
+
+        Per RESEARCH §D-04: ``mp.get_context("spawn")`` matches CI's macOS/Win
+        default and produces a known-clean subinterpreter (no fork-inherited
+        OSM state, Pitfall 1).
+        """
+        rng = np.random.default_rng(0)
+        # Large-coord world frame tightly clustered around a shift origin so
+        # the shift is feasible (range << maximum_number_representable).
+        origin = np.array([1e6, 2e6, 3e6], dtype=np.float64)
+        xyz_world_frame = origin + rng.random((100, 3)) * 10.0
+        nos = OptimizedShift(origin)
+        pcd = PointCloudData(xyz_world_frame, numerical_optimization_shift=nos)
+        assert pcd.numerical_optimization_shift is not None, (
+            "Test fixture broken: expected the NOS to be feasible for this coord cluster."
+        )
+        parent_world = pcd.xyz.astype(np.float64) + pcd.numerical_optimization_shift.value
+
+        blob = pickle.dumps(pcd)
+        ctx = mp.get_context("spawn")
+        queue = ctx.Queue()
+        p = ctx.Process(target=_child_unpickle_and_assert, args=(blob, queue))
+        p.start()
+        try:
+            child_world = np.array(queue.get(timeout=30))
+        finally:
+            p.join(timeout=30)
+        assert p.exitcode == 0, f"spawn child exited with {p.exitcode}"
+        np.testing.assert_allclose(child_world, parent_world, atol=1e-6)
+
+    def test_reconstruct_uuid_collision_same_vec_reuses(self):
+        """Scenario 2 (within-process, branch 2 of _reconstruct): same-UUID-same-vector reuses existing.
+
+        Per Phase 3 D-18 branch 2: the unpickled NOS IS the pre-existing
+        manager-held instance (object identity, not just equality).
+
+        Note: ``_by_uuid`` is a ``WeakValueDictionary``; the pre-registered
+        shift survives because the constructed PCD holds a strong reference.
+        """
+        SingletonMeta._instances.pop(OptimizedShiftManager, None)
+        shift_vec = np.array([100.0, 200.0, 300.0], dtype=np.float64)
+        known_uuid = uuid.uuid4()
+        # Pre-register a shift under known_uuid with shift_vec; this is the
+        # "existing same-vector" instance the unpickle is expected to reuse.
+        existing = OptimizedShift._construct_with_uuid(known_uuid, shift_vec)
+
+        # Build a PCD whose NOS already IS that existing shift, then pickle.
+        world_xyz = np.array(
+            [[100.0, 200.0, 300.0], [100.1, 200.1, 300.1], [100.2, 200.2, 300.2]],
+            dtype=np.float64,
+        )
+        pcd = PointCloudData(world_xyz, numerical_optimization_shift=existing)
+        blob = pickle.dumps(pcd)
+        unpickled = pickle.loads(blob)
+
+        # Branch 2: object identity preserved across pickle round-trip on
+        # same-UUID-same-vector.
+        assert unpickled.numerical_optimization_shift is existing
+        assert unpickled.numerical_optimization_shift._uuid == known_uuid
+        # Keep PCD alive across the assertions; without it the WeakValue could
+        # be GC'd between pickle and assert in aggressive-GC interpreters.
+        del pcd
+
+    def test_reconstruct_uuid_collision_divergent_vec_mints(
+        self,
+        caplog: pytest.LogCaptureFixture,
+        assert_pchandler_caplog_propagation,
+    ):
+        """Scenario 3 (within-process, branch 3 of _reconstruct): divergent-vector mints fresh UUID.
+
+        Per Phase 3 D-18 branch 3: a UUID collision with a divergent vector
+        mints a fresh ``uuid.uuid4()`` and registers a new shift. World-frame
+        coordinates are preserved at the cost of UUID continuity. The
+        ``pchandler`` INFO record "UUID collision with divergent vector" must
+        fire on the destination side.
+        """
+        caplog.set_level(logging.INFO, logger="pchandler")
+
+        SingletonMeta._instances.pop(OptimizedShiftManager, None)
+        known_uuid = uuid.uuid4()
+        vec_a = np.array([100.0, 200.0, 300.0], dtype=np.float64)
+        vec_b = np.array([900.0, 900.0, 900.0], dtype=np.float64)
+        # Build a PCD whose NOS carries (known_uuid, vec_b); pickle records that pair.
+        nos_b = OptimizedShift._construct_with_uuid(known_uuid, vec_b)
+        world_xyz = np.array(
+            [[900.0, 900.0, 900.0], [900.1, 900.1, 900.1], [900.2, 900.2, 900.2]],
+            dtype=np.float64,
+        )
+        pcd = PointCloudData(world_xyz, numerical_optimization_shift=nos_b)
+        source_world = pcd.xyz.astype(np.float64) + pcd.numerical_optimization_shift.value
+        blob = pickle.dumps(pcd)
+
+        # Reset destination manager and pre-register (known_uuid, vec_a) — a
+        # divergent vector under the same UUID. ``_by_uuid`` is a
+        # WeakValueDictionary; bind the registered shift to a local so it
+        # survives until ``_reconstruct`` queries the manager.
+        SingletonMeta._instances.pop(OptimizedShiftManager, None)
+        _alive_a = OptimizedShift._construct_with_uuid(known_uuid, vec_a)  # noqa: F841
+
+        unpickled = pickle.loads(blob)
+        unpickled_world = unpickled.xyz.astype(np.float64) + unpickled.numerical_optimization_shift.value
+
+        # Branch 3: fresh UUID minted; vec_b preserved on the new shift.
+        assert unpickled.numerical_optimization_shift._uuid != known_uuid
+        np.testing.assert_array_equal(unpickled.numerical_optimization_shift._shift, vec_b)
+        # World-frame preserved despite UUID mint.
+        np.testing.assert_array_equal(unpickled_world, source_world)
+        # INFO log fired.
+        assert any(
+            "UUID collision with divergent vector" in r.message and r.levelname == "INFO" for r in caplog.records
+        ), (
+            "Expected INFO log 'UUID collision with divergent vector' on branch 3 of "
+            f"_reconstruct; got records: {[(r.levelname, r.message) for r in caplog.records]}"
+        )
 
 
 # ---------------------------------------------------------------------------
