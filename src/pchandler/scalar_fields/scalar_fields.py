@@ -254,12 +254,33 @@ class ScalarFieldTriplet(ArrayNx3, AbstractScalarField):
         super().__init__(arr, **kwargs)
 
     @classmethod
-    def initialize(cls, size: int, value: Array_Nx3_Uint8_T | None = None, name: str = "") -> Self:
-        """Build a triplet of length ``size``, optionally pre-filled with ``value``."""
+    def initialize(
+        cls,
+        size: int,
+        value: Array_Nx3_Uint8_T | None = None,
+        name: str = "",
+        origin_dtype: SfOrigDtT = None,
+    ) -> Self:
+        """Build a triplet of length ``size``, optionally pre-filled with ``value``.
+
+        Parameters
+        ----------
+        size : int
+            Number of rows to allocate.
+        value : Array_Nx3_Uint8_T, optional
+            Pre-existing values to seed the triplet with; zeros if omitted.
+        name : str, optional
+            Field name; default is empty.
+        origin_dtype : SfOrigDtT, optional
+            Original :class:`DtypeState` to attach to the resulting field —
+            preserved across :meth:`ScalarFieldManager._set_rgb` per-channel
+            sets so that round-trips through PLY / LAS write the field back in
+            its source dtype (DEBT-04).
+        """
         dtype = cls.model_fields["arr"].annotation.__dict__["__args__"][1]
         if value is None:
             value = np.zeros((size, 3), dtype=dtype)
-        return cls(value, name=name)
+        return cls(value, name=name, origin_dtype=origin_dtype)
 
 
 class RGBFields(ScalarFieldTriplet):

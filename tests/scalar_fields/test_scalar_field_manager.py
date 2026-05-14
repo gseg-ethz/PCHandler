@@ -573,3 +573,62 @@ class TestClassMethods:
 
         # TODO test for the other cases?
         # DECIDE do we want to handle different names with SF objects to the fields keys?
+
+
+# ---------------------------------------------------------------------------
+# DEBT-04 — origin_dtype propagation through _set_rgb per-channel branch
+# (Phase 6 Plan 06-03 Task 5)
+# ---------------------------------------------------------------------------
+
+
+class TestRgbOriginDtypePropagation:
+    """DEBT-04: ``_set_rgb`` per-channel branch must propagate ``origin_dtype``.
+
+    Before this plan, setting a single RGB channel (e.g. ``red``) on a PCD
+    whose source RGB was uint16 silently re-derived a new ``DtypeState`` from
+    the assigned uint8 values, losing the source-dtype contract used by
+    ``revert_sf_types=True`` PLY/LAS writers downstream.
+    """
+
+    def test_rgb_origin_dtype_set_get_per_channel(self):
+        """Per-channel red-only set with explicit origin_dtype is preserved on .rgb."""
+        N = 10
+        from pchandler.scalar_fields.scalar_fields import DtypeState
+
+        pcd = PointCloudData(np.random.rand(N, 3))
+        origin_dtype = DtypeState(dtype=np.dtype("uint16"), lower=0, upper=2**16 - 1)
+        red_field = ScalarField(np.full(N, 100, dtype=np.uint8), name="red", origin_dtype=origin_dtype)
+
+        # Per-channel set goes through ScalarFieldManager._set_rgb scalars branch,
+        # which (DEBT-04) must propagate origin_dtype to RGBFields.initialize().
+        pcd.scalar_fields["red"] = red_field
+
+        assert pcd.scalar_fields.rgb is not None, "RGBFields was not auto-created on per-channel set"
+        assert pcd.scalar_fields.rgb.origin_dtype is not None
+        assert pcd.scalar_fields.rgb.origin_dtype.dtype == np.dtype("uint16"), (
+            f"origin_dtype lost on per-channel _set_rgb: got "
+            f"{pcd.scalar_fields.rgb.origin_dtype.dtype}, expected uint16"
+        )
+
+    def test_rgb_origin_dtype_set_get_per_channel_roundtrip(self, tmp_path):
+        """origin_dtype survives PLY save+reload after per-channel set (full integration)."""
+        from pchandler import load_file
+        from pchandler.data_io.ply import PlyHandler
+        from pchandler.scalar_fields.scalar_fields import DtypeState
+
+        N = 10
+        pcd = PointCloudData(np.random.rand(N, 3))
+        origin_dtype = DtypeState(dtype=np.dtype("uint16"), lower=0, upper=2**16 - 1)
+        red_field = ScalarField(np.full(N, 100, dtype=np.uint8), name="red", origin_dtype=origin_dtype)
+        pcd.scalar_fields["red"] = red_field
+
+        out = tmp_path / "rgb_origin_dtype_roundtrip.ply"
+        PlyHandler.save(pcd, out, revert_sf_types=True)
+        reloaded = load_file(out)
+
+        assert reloaded.scalar_fields.rgb is not None
+        # The PLY writer used revert_sf_types=True, so the on-disk red column is
+        # uint16; the reloaded RGBFields normalises back to uint8 in-memory but
+        # the origin_dtype captured at load-time records the on-disk dtype.
+        assert reloaded.scalar_fields.rgb.origin_dtype is not None
+        assert reloaded.scalar_fields.rgb.origin_dtype.dtype == np.dtype("uint16")

@@ -640,10 +640,12 @@ class ScalarFieldManager:
         if name in RGB_NAMES.float:
             value = cast(Array_Uint8_T, normalize_uint8(value))
 
-        # TODO update initialize to receive and origin_dtype in case it's being defined by a sequence of vectors
         if name in RGB_NAMES.scalars:
             if self.rgb is None:
-                self.rgb = RGBFields.initialize(self.num_points)
+                # DEBT-04: propagate origin_dtype on first-channel-set so the
+                # field's source dtype is preserved across save+reload (mirrors
+                # the sibling :meth:`_set_normals` per-channel branch below).
+                self.rgb = RGBFields.initialize(self.num_points, origin_dtype=origin_dtype)
 
             index = RGB_NAMES.get_position(name)
             self.rgb.arr[:, index] = Vector_Uint8_T(value)  # Perform validation as it's being assigned directly
