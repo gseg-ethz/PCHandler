@@ -998,55 +998,6 @@ class FoVTree:
 
         return cls(identifier, fov, fov_children)
 
-    # TODO - Reimplement Low priority / Historical
-    # @classmethod
-    # def build_by_splitting(cls, fov: FoV, target_ratio: float, target_fov_extent: tuple[tuple[float, float], str],
-    #                        max_denominator: int, identifier: str = "") -> Self:
-    #     # TODO: Rework stopping criteria
-    #     assert target_fov_extent[1] in ("rad", "gon", "deg")
-    #
-    #     target_extent = target_fov_extent[0]
-    #     angle_unit = target_fov_extent[1]
-    #
-    #     shape = cls.calculate_optimal_shape(fov, target_ratio, target_fov_extent, max_denominator)
-    #
-    #     if (fov.extent(unit=angle_unit)[0] < target_extent[0] * shape[0] or
-    #             fov.extent(unit=angle_unit)[1] < target_extent[1] * shape[1]):
-    #         fov_tiles = fov.equal_tiles(target_fov_extent)
-    #         shape = (len(fov_tiles), 1)
-    #         fov_children = {child_identifier: cls(identifier + child_identifier, child, {})
-    #                         for child_identifier, child in cls.add_identifier(fov_tiles, shape)}
-    #     else:
-    #         fov_splits = fov.split(shape)
-    #         fov_children = {
-    #             child_identifier: cls.build_by_splitting(
-    #                 child, target_ratio, target_fov_extent,
-    #                 max_denominator * 2, identifier + child_identifier,
-    #             )
-    #             for child_identifier, child in cls.add_identifier(fov_splits, shape)
-    #         }
-    #
-    #     return cls(identifier, fov, fov_children)
-
-    # @classmethod
-    # def build_by_tiling(cls, fov: FoV, target_fov_extent: tuple[tuple[float, float], str],
-    #                     identifier: str = "") -> Self:
-    #     fov_tiles = fov.equal_tiles(target_fov_extent)
-    #
-    #     identifier_length = np.ceil(math.log(len(fov_tiles), 16)).astype(int)
-    #     fov_with_identifier = tuple([(((identifier_length - len(hex_str := f"{i:x}")) * "0" + hex_str), fov)
-    #                                  for i, fov in enumerate(fov_tiles)])
-    #
-    #     fov_children = {child_identifier: cls(identifier + child_identifier, child, {})
-    #                     for child_identifier, child in fov_with_identifier}
-    #
-    #     return cls(identifier, fov, fov_children)
-
-    # @classmethod
-    # def build(cls, fov: FoV, target_fov_extent: FoV):
-    #     tiles = fov.tile((target_fov_extent.extent("rad"), "rad"))
-    #     pass
-
     def __getitem__(self, identifier: str) -> Self:
         """Look up a (potentially nested) descendant by its concatenated identifier.
 
