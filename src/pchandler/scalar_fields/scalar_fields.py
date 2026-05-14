@@ -482,9 +482,8 @@ class NormalFields(ScalarFieldTriplet):
         """Return the Z component of the normal vector."""
         return self.arr[:, 2]
 
-    # TODO need to sort out the parameters in this method signature as name is not required
     @classmethod
-    def initialize(cls, length: int, value: Array_Nx3_Float_T | Vector_Float_T | None = None, name: str = "") -> Self:
+    def initialize(cls, length: int, value: Array_Nx3_Float_T | Vector_Float_T | None = None) -> Self:
         """Build a :class:`NormalFields` of length ``length``, optionally seeded with ``value``.
 
         Parameters
@@ -494,8 +493,6 @@ class NormalFields(ScalarFieldTriplet):
         value : Array_Nx3_Float32_T, optional
             Existing values to initialise the array with (defaults to unit
             vectors along ``+Z``).
-        name : str, optional
-            Field name; default is empty.
 
         Returns
         -------
@@ -506,7 +503,7 @@ class NormalFields(ScalarFieldTriplet):
         if value is None:
             value = np.zeros((length, 3), dtype=dtype)
             value[:, 2] = 1
-        return cls(value, name=name)
+        return cls(value)
 
 
 class SegmentationMap(ScalarField):
