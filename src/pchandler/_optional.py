@@ -24,44 +24,99 @@
 Private module — do not import from outside pchandler. External callers should
 use the public re-exports: ``pchandler.filters.gpu.is_available()``,
 ``pchandler.filters.gpu.ensure_available()``.
+
+Each optional dependency is probed lazily: at module load only
+``importlib.util.find_spec`` is called (no side effects, no native-extension
+initialisation).  The actual ``import`` is deferred to the first call of the
+corresponding ``ensure_*_available()`` or ``is_*_available()`` function and
+the result is memoised so the import occurs at most once per process.
 """
 
+import importlib.util
 import logging
 from typing import Optional
 
-_HAS_OPEN3D: bool = False
+logger = logging.getLogger(__name__.split(".")[0])
+
+# ---------------------------------------------------------------------------
+# Module-level availability flags (cheap spec-only probe — no actual import)
+# ---------------------------------------------------------------------------
+
+# True iff the package can be found on sys.path; does *not* import it.
+_OPEN3D_FOUND: bool = importlib.util.find_spec("open3d") is not None
+_PY4DGEO_FOUND: bool = importlib.util.find_spec("py4dgeo") is not None
+_GPU_FOUND: bool = (
+    importlib.util.find_spec("cudf") is not None
+    and importlib.util.find_spec("cuspatial") is not None
+    and importlib.util.find_spec("geopandas") is not None
+)
+
+# ---------------------------------------------------------------------------
+# Per-dependency lazy-import state (populated on first ensure_*/is_* call)
+# ---------------------------------------------------------------------------
+
+_HAS_OPEN3D: Optional[bool] = None  # None → not yet probed
 _OPEN3D_ERROR: Optional[Exception] = None
 
-try:
-    import open3d  # noqa: F401
-except (ImportError, RuntimeError) as e:
-    _OPEN3D_ERROR = e
-else:
-    _HAS_OPEN3D = True
-
-_HAS_PY4DGEO: bool = False
+_HAS_PY4DGEO: Optional[bool] = None
 _PY4DGEO_ERROR: Optional[Exception] = None
 
-try:
-    import py4dgeo  # noqa: F401
-except (ImportError, RuntimeError) as e:
-    _PY4DGEO_ERROR = e
-else:
-    _HAS_PY4DGEO = True
-
-_HAS_GPU: bool = False
+_HAS_GPU: Optional[bool] = None
 _GPU_ERROR: Optional[Exception] = None
 
-try:
-    import cudf  # noqa: F401
-    import cuspatial  # noqa: F401
-    import geopandas  # noqa: F401
-except (ImportError, RuntimeError) as e:
-    _GPU_ERROR = e
-else:
-    _HAS_GPU = True
 
-logger = logging.getLogger(__name__.split(".")[0])
+# ---------------------------------------------------------------------------
+# Lazy probers — each imports the dependency once and memoises the outcome
+# ---------------------------------------------------------------------------
+
+
+def _probe_open3d() -> bool:
+    """Import ``open3d`` exactly once and memoise the result."""
+    global _HAS_OPEN3D, _OPEN3D_ERROR
+    if _HAS_OPEN3D is None:
+        try:
+            import open3d  # noqa: F401
+
+            _HAS_OPEN3D = True
+        except (ImportError, RuntimeError) as e:
+            _OPEN3D_ERROR = e
+            _HAS_OPEN3D = False
+    return bool(_HAS_OPEN3D)
+
+
+def _probe_py4dgeo() -> bool:
+    """Import ``py4dgeo`` exactly once and memoise the result."""
+    global _HAS_PY4DGEO, _PY4DGEO_ERROR
+    if _HAS_PY4DGEO is None:
+        try:
+            import py4dgeo  # noqa: F401
+
+            _HAS_PY4DGEO = True
+        except (ImportError, RuntimeError) as e:
+            _PY4DGEO_ERROR = e
+            _HAS_PY4DGEO = False
+    return bool(_HAS_PY4DGEO)
+
+
+def _probe_gpu() -> bool:
+    """Import cudf/cuspatial/geopandas exactly once and memoise the result."""
+    global _HAS_GPU, _GPU_ERROR
+    if _HAS_GPU is None:
+        try:
+            import cudf  # noqa: F401
+            import cuspatial  # noqa: F401
+            import geopandas  # noqa: F401
+
+            _HAS_GPU = True
+        except (ImportError, RuntimeError) as e:
+            _GPU_ERROR = e
+            _HAS_GPU = False
+    return bool(_HAS_GPU)
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
 
 def is_open3d_available() -> bool:
@@ -72,7 +127,9 @@ def is_open3d_available() -> bool:
     bool
         ``True`` if ``open3d`` imported cleanly, ``False`` otherwise.
     """
-    return _HAS_OPEN3D
+    if not _OPEN3D_FOUND:
+        return False
+    return _probe_open3d()
 
 
 def ensure_open3d_available() -> None:
@@ -84,7 +141,7 @@ def ensure_open3d_available() -> None:
         If ``open3d`` is not installed; chained from the original exception
         when one was captured.
     """
-    if not _HAS_OPEN3D:
+    if not _probe_open3d():
         msg = "Open3d is not installed. Install with `pip install pchandler[extra]`."
         if _OPEN3D_ERROR is not None:
             raise ModuleNotFoundError(msg) from _OPEN3D_ERROR
@@ -99,7 +156,9 @@ def is_py4dgeo_available() -> bool:
     bool
         ``True`` if ``py4dgeo`` imported cleanly, ``False`` otherwise.
     """
-    return _HAS_PY4DGEO
+    if not _PY4DGEO_FOUND:
+        return False
+    return _probe_py4dgeo()
 
 
 def ensure_py4dgeo_available() -> None:
@@ -111,7 +170,7 @@ def ensure_py4dgeo_available() -> None:
         If ``py4dgeo`` is not installed; chained from the original exception
         when one was captured.
     """
-    if not _HAS_PY4DGEO:
+    if not _probe_py4dgeo():
         msg = "py4dgeo is not installed. Install with `pip install pchandler[extra]`."
         if _PY4DGEO_ERROR is not None:
             raise ModuleNotFoundError(msg) from _PY4DGEO_ERROR
@@ -126,7 +185,9 @@ def is_gpu_available() -> bool:
     bool
         ``True`` if the GPU dependencies imported cleanly, ``False`` otherwise.
     """
-    return _HAS_GPU
+    if not _GPU_FOUND:
+        return False
+    return _probe_gpu()
 
 
 def ensure_gpu_available() -> None:
@@ -138,7 +199,7 @@ def ensure_gpu_available() -> None:
         If GPU support is unavailable; chained from the original
         :class:`ImportError` or :class:`RuntimeError` when one was captured.
     """
-    if not _HAS_GPU:
+    if not _probe_gpu():
         msg = (
             "GPU support is not available. "
             "Install with `pip install pchandler[cuda11]` or `pip install pchandler[cuda12]`."
