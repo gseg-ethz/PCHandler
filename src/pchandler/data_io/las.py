@@ -171,14 +171,18 @@ class LasHandler(AbstractIOHandler):
         las.change_scaling(scales=scales, offsets=offsets)
         las.xyz = pcd.xyz + offsets
 
-        # RGB values
-        if (rgb_fields := _get_rgb_or_normal_field_names(scalar_fields, RGB_NAMES)) and pcd.rgb:
+        # RGB values — walrus always binds rgb_fields so the cleanup loop below
+        # can unconditionally remove those names from scalar_fields regardless
+        # of whether pcd.rgb is present.
+        rgb_fields: list[str] = _get_rgb_or_normal_field_names(scalar_fields, RGB_NAMES)
+        if rgb_fields and pcd.rgb is not None:
             for field in rgb_fields:
                 index = RGB_NAMES.get_position(field)
                 setattr(las, RGB_NAMES.words[index], getattr(pcd.rgb, RGB_NAMES.char[index]))
 
         # Intensities - LAS expects unsigned 16bit (Uint16)
-        if (intensity_fields := set(scalar_fields).intersection(INTENSITY_NAMES.all)) and pcd.intensity:
+        intensity_fields: set[str] = set(scalar_fields).intersection(INTENSITY_NAMES.all)
+        if intensity_fields and pcd.intensity is not None:
             # Case 1 - Leave data as is for Uint8 and Uint16
             if pcd.intensity.dtype == np.uint8 or pcd.intensity.dtype == np.uint16:
                 las.intensity = pcd.intensity.copy()
