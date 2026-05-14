@@ -667,3 +667,74 @@ def test_pcd_unpickle_uuid_match_vector_mismatch_mints_new():
         restored.xyz + restored.numerical_optimization_shift.value,
         source_world_frame,
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 API-06 regression tests (Plan 05-05)
+# ---------------------------------------------------------------------------
+
+
+class TestOptimizedShiftManagerApiCompletion:
+    """API-06: manager setter removed; getter + init kwarg preserved (D-16, D-19 T01-T02)."""
+
+    def test_setter_removed(self):
+        """T01: Writing to OSM().minimum_decimal_places raises AttributeError (D-16)."""
+        osm = OptimizedShiftManager()
+        with pytest.raises(AttributeError, match="(has no setter|can't set attribute|read.only)"):
+            osm.minimum_decimal_places = 5
+
+    def test_init_kwarg_then_getter(self):
+        """T02: OSM getter returns the value supplied via the init kwarg (D-16)."""
+        # clear_instantiated_osm autouse fixture resets the singleton per-function
+        osm = OptimizedShiftManager(minimum_decimal_places=4)
+        assert osm.minimum_decimal_places == 4
+
+
+class TestOptimizedShiftApiCompletion:
+    """API-06: per-instance setter + init kwarg on OptimizedShift (D-17, D-18, D-19 T03-T06)."""
+
+    def test_per_instance_setter_happy(self):
+        """T03: Assigning a feasible precision to an OptimizedShift succeeds (D-17)."""
+        rng = np.random.default_rng(42)
+        shift = OptimizedShift(np.zeros(3, dtype=np.float64))
+        # Register a small coord set (range << 10^4; well within any reasonable threshold)
+        xyz = rng.random((10, 3)).astype(np.float64)
+        PointCloudData(xyz, numerical_optimization_shift=shift)
+
+        shift.minimum_decimal_places = 4
+        assert shift.minimum_decimal_places == 4
+
+    def test_per_instance_setter_reverts_on_infeasible(self):
+        """T04: Setter reverts _minimum_decimal_places on ShiftNotFeasibleError (D-17).
+
+        A precision of 18 is far above the float64 ceiling (~15 significant
+        digits); maximum_number_representable = 10**(7-18) = 1e-11.  Even a
+        coord range of 2 (which is ~2 in float64) exceeds that limit, so
+        _is_shift_possible returns False.
+        """
+        rng = np.random.default_rng(42)
+        shift = OptimizedShift(np.zeros(3, dtype=np.float64))
+        # Register a coord set with a tiny but nonzero range
+        xyz = rng.random((10, 3)).astype(np.float64) + 1.0  # range ~1
+        PointCloudData(xyz, numerical_optimization_shift=shift)
+
+        old_value = shift.minimum_decimal_places  # either None→manager or explicitly set
+
+        with pytest.raises(OptimizedShiftManager.ShiftNotFeasibleError):
+            shift.minimum_decimal_places = 18  # impossibly tight
+
+        # Revert invariant: value must equal the old observable minimum_decimal_places
+        assert shift.minimum_decimal_places == old_value
+
+    def test_init_kwarg(self):
+        """T05: OptimizedShift(shift_vec=..., minimum_decimal_places=5) stores the value (D-18)."""
+        shift = OptimizedShift(
+            shift_vec=np.array([1000.0, 2000.0, 3000.0], dtype=np.float64),
+            minimum_decimal_places=5,
+        )
+        assert shift.minimum_decimal_places == 5
+
+    def test_init_kwarg_fallback_to_manager(self):
+        """T06: OptimizedShift() without kwarg falls back to the manager default (Phase 3 D-08)."""
+        shift = OptimizedShift(shift_vec=np.array([1000.0, 2000.0, 3000.0], dtype=np.float64))
+        assert shift.minimum_decimal_places == OptimizedShiftManager().minimum_decimal_places
