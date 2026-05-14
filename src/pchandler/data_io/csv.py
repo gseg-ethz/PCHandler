@@ -344,6 +344,8 @@ def _get_field_counts(
             field_counts.add(len(fields))
 
         # Ensure the number of fields per line are consistent
+        if not field_counts:
+            return 0
         if len(field_counts) > 1:
             return 0
 
