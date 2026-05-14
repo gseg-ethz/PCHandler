@@ -979,11 +979,15 @@ class FoVTree:
             bottom=tiles[-1][-1].bottom,
         )
 
+        sep = "_" if identifier else ""
+
         if len(tiles) * len(tiles[0]) <= min_children:
-            # 2D row-col identifier (BUG-05 D-11/D-12): unique within siblings AND
-            # unique against the recursive quad path below (which uses "{r}-{c}" too).
+            # 2D row-col identifier (BUG-05 D-11/D-12 + quick task 260514-noz):
+            # unique within siblings AND unique against the recursive quad
+            # path below. Multi-digit r/c (>= 10) are tolerated because levels
+            # are joined by "_", not concatenated.
             fov_children: dict[str, FoVTree] = {
-                f"{r}-{c}": cls(identifier + f"{r}-{c}", tile, {})
+                f"{r}-{c}": cls(identifier + sep + f"{r}-{c}", tile, {})
                 for r, row in enumerate(tiles)
                 for c, tile in enumerate(row)
             }
@@ -997,10 +1001,10 @@ class FoVTree:
         q11 = [row[len(row) // 2 :] for row in q1]
 
         fov_children = {
-            "0-0": cast(FoVTree, cls.build_from_tiles(q00, min_children, identifier=(identifier + "0-0"))),
-            "0-1": cast(FoVTree, cls.build_from_tiles(q01, min_children, identifier=(identifier + "0-1"))),
-            "1-0": cast(FoVTree, cls.build_from_tiles(q10, min_children, identifier=(identifier + "1-0"))),
-            "1-1": cast(FoVTree, cls.build_from_tiles(q11, min_children, identifier=(identifier + "1-1"))),
+            "0-0": cast(FoVTree, cls.build_from_tiles(q00, min_children, identifier=(identifier + sep + "0-0"))),
+            "0-1": cast(FoVTree, cls.build_from_tiles(q01, min_children, identifier=(identifier + sep + "0-1"))),
+            "1-0": cast(FoVTree, cls.build_from_tiles(q10, min_children, identifier=(identifier + sep + "1-0"))),
+            "1-1": cast(FoVTree, cls.build_from_tiles(q11, min_children, identifier=(identifier + sep + "1-1"))),
         }
 
         fov_children = {k: v for k, v in fov_children.items() if v is not None}
@@ -1010,24 +1014,21 @@ class FoVTree:
     def __getitem__(self, identifier: str) -> Self:
         """Look up a (potentially nested) descendant by its concatenated identifier.
 
-        CR-02 (Phase 3 code review): ``build_from_tiles`` now emits 3-character
-        ``"<r>-<c>"`` identifiers (both the flat-tile branch and the recursive
-        quad branch), so a depth-2 leaf path is concatenated as e.g.
-        ``"0-00-1"``. The previous hex-stride implementation
-        (``ceil(log16(len(children)))``) computed a per-level identifier length
-        of ``1`` for a 4-child node, which made ``tree["0-0"]`` look up the
-        non-existent key ``"0"`` and raise :class:`KeyError`.
+        ``build_from_tiles`` joins per-level segments with ``"_"`` and uses
+        ``"<r>-<c>"`` within a single level. The parser partitions the input
+        identifier on the first ``"_"``: ``head`` selects the immediate
+        child, ``rest`` (the remainder) is recursed into that child. When
+        ``rest`` is empty, the child itself is returned.
 
-        This implementation splits the input on the fixed 3-character level
-        boundary, descending one child at a time. An empty / ``"root"``
-        identifier returns ``self`` (parity with previous behaviour). An
-        unknown head raises :class:`KeyError` with a contextual message
-        rather than silently falling through.
+        Multi-digit ``r``/``c`` indices (>= 10) are tolerated because level
+        boundaries are explicit (the ``"_"`` separator) rather than a fixed
+        stride.
 
         Parameters
         ----------
         identifier : str
-            Concatenated child identifier (e.g. ``"0-0"``, ``"0-00-1"``).
+            Concatenated child identifier (e.g. ``"0-0"``, ``"0-0_0-0"``,
+            ``"11-3"``).
 
         Returns
         -------
@@ -1043,8 +1044,7 @@ class FoVTree:
         if not identifier or identifier == "root" or not self.children:
             return self
 
-        # Child ids from build_from_tiles are exactly 3 chars: "<r>-<c>".
-        head, rest = identifier[:3], identifier[3:]
+        head, _, rest = identifier.partition("_")
         if head not in self.children:
             raise KeyError(f"No child '{head}' under {self.identifier!r}")
         child = self.children[head]
