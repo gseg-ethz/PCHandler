@@ -279,7 +279,7 @@ class E57Handler(AbstractIOHandler):
         return pcd
 
     @classmethod
-    def _save_single_e57(
+    def _save_single_e57(  # noqa: C901  # Multi-branch E57 write — shift-mode + scalar-field policy + rgb/intensity; deferred to Phase 6 refactor.
         cls,
         e57: pye57.E57,
         pcd: PointCloudData,
@@ -304,4 +304,84 @@ class E57Handler(AbstractIOHandler):
         **config : dict
             Reserved for future use.
         """
-        raise NotImplementedError("Implemented in T01 (happy-path) + T02 (shift + scalar-field policy)")
+        from pye57.e57 import SUPPORTED_POINT_FIELDS as _PYE57_SUPPORTED_POINT_FIELDS
+
+        _supported_pye57_keys = frozenset(_PYE57_SUPPORTED_POINT_FIELDS.keys())
+
+        # ------------------------------------------------------------------ #
+        # 1. Determine pose (rotation quaternion + translation)               #
+        # ------------------------------------------------------------------ #
+        # Identity quaternion [w, x, y, z] per RESEARCH §"Pitfall 1".
+        identity_rotation = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float64)
+
+        if pcd.numerical_optimization_shift is None:
+            rotation = identity_rotation
+            translation = np.zeros(3, dtype=np.float64)
+            xyz_to_write = pcd.xyz
+        elif embed_shift_in_transform:
+            # Embed the shift in the E57 per-scan translation pose.
+            # Write shifted (float32-friendly) coords; load reconstructs OptimizedShift.
+            rotation = identity_rotation
+            translation = pcd.numerical_optimization_shift.value.astype(np.float64)
+            xyz_to_write = pcd.xyz
+        else:
+            # Write world-frame coordinates; identity pose (no shift in file).
+            rotation = identity_rotation
+            translation = np.zeros(3, dtype=np.float64)
+            xyz_to_write = pcd.xyz + pcd.numerical_optimization_shift.value
+
+        # ------------------------------------------------------------------ #
+        # 2. Build the data dict for write_scan_raw                          #
+        # ------------------------------------------------------------------ #
+        xyz_arr = np.asarray(xyz_to_write)
+        data: dict[str, np.ndarray] = {
+            "cartesianX": xyz_arr[:, 0].astype(np.float64),
+            "cartesianY": xyz_arr[:, 1].astype(np.float64),
+            "cartesianZ": xyz_arr[:, 2].astype(np.float64),
+        }
+
+        if pcd.rgb is not None:
+            rgb_arr = np.asarray(pcd.rgb)
+            data["colorRed"] = rgb_arr[:, 0]
+            data["colorGreen"] = rgb_arr[:, 1]
+            data["colorBlue"] = rgb_arr[:, 2]
+
+        if pcd.intensity is not None:
+            data["intensity"] = np.asarray(pcd.intensity).astype(np.float32)
+
+        # ------------------------------------------------------------------ #
+        # 3. Scalar-field skip-and-warn policy (D-05)                        #
+        # ------------------------------------------------------------------ #
+        # Skip RGB/intensity — handled above in step 2 already.
+        # pcd.scalar_fields stores rgb as 'rgb', intensity as 'intensity'.
+        # SUPPORTED_SCALAR_FIELDS_MAP has 'r'/'g'/'b'/'intensity'; the base
+        # name 'rgb' is not a pye57 key, so we must skip it explicitly.
+        _skip_keys = frozenset({"r", "g", "b", "rgb", "intensity"})
+        unsupported: list[str] = []
+
+        for sf_name in pcd.scalar_fields.keys():
+            if sf_name in _skip_keys:
+                continue
+            mapped_key = cls.SUPPORTED_SCALAR_FIELDS_MAP.get(sf_name, sf_name)
+            if mapped_key in _supported_pye57_keys:
+                data[mapped_key] = np.asarray(pcd.scalar_fields[sf_name])
+            else:
+                unsupported.append(sf_name)
+
+        if unsupported:
+            if strict:
+                raise ValueError(
+                    f"E57Handler.save: scalar fields not supported by pye57: {unsupported}. "
+                    f"Supported: {sorted(_PYE57_SUPPORTED_POINT_FIELDS.keys())}"
+                )
+            for sf_name in unsupported:
+                logger.warning(
+                    "E57Handler.save: skipping unsupported scalar field %r (pye57 only supports %s)",
+                    sf_name,
+                    sorted(_PYE57_SUPPORTED_POINT_FIELDS.keys()),
+                )
+
+        # ------------------------------------------------------------------ #
+        # 4. Write the scan                                                   #
+        # ------------------------------------------------------------------ #
+        e57.write_scan_raw(data, rotation=rotation, translation=translation)
