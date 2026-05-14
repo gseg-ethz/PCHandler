@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Annotated, Callable, Sequence, cast
+from typing import Annotated, Callable, Final, Sequence, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -38,6 +38,11 @@ from pchandler import PointCloudData
 from pchandler.scalar_fields import SF_T
 
 logger = logging.getLogger(__name__.split(".")[0])
+
+# DEBT-06 / Phase 6 D-16: target field-name constants for :class:`GenericFieldFilter`.
+# Module-private (leading underscore) — not part of the public surface.
+_GFF_TARGET_CARTESIAN: Final[str] = "cartesian_coordinates"
+_GFF_TARGET_SPHERICAL: Final[str] = "spherical_coordinates"
 
 
 class PointCloudFilter(ABC):
@@ -122,7 +127,6 @@ class GenericFieldFilter(PointCloudFilter):
         self.field_label = field_label
         self.filter_func = filter_func
 
-    # TODO check if this is in use anywhere before changing the default names
     def mask(self, pcd: PointCloudData) -> Vector_Bool_T:
         """Create a boolean mask from the defined field and function.
 
@@ -137,9 +141,9 @@ class GenericFieldFilter(PointCloudFilter):
             Boolean mask returned by ``filter_func`` evaluated on the named
             field.
         """
-        if self.field_label == "cartesian_coordinates":
+        if self.field_label == _GFF_TARGET_CARTESIAN:
             data = pcd.xyz
-        elif self.field_label == "spherical_coordinates":
+        elif self.field_label == _GFF_TARGET_SPHERICAL:
             data = pcd.spher
         elif self.field_label in pcd.scalar_fields:
             data = cast(SF_T, pcd.scalar_fields[self.field_label]).arr
