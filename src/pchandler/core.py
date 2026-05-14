@@ -23,6 +23,7 @@
 
 from __future__ import annotations
 
+import copy
 import logging
 from typing import TYPE_CHECKING, Any, Literal, Optional, Self, Sequence, cast, overload
 
@@ -177,6 +178,10 @@ class PointCloudData(CartesianCoordinates):
     def _drop_parent_weakref(self, scalar_fields: ScalarFieldManager) -> ScalarFieldManager:
         """Drop the weakref to the parent point cloud on serialisation.
 
+        A shallow copy is used so the live ``scalar_fields`` object is **not**
+        mutated — mutating it directly would permanently sever the back-link on
+        the source :class:`PointCloudData` instance.
+
         Parameters
         ----------
         scalar_fields : ScalarFieldManager
@@ -185,10 +190,11 @@ class PointCloudData(CartesianCoordinates):
         Returns
         -------
         ScalarFieldManager
-            The same manager with ``_parent`` cleared.
+            A detached copy of the manager with ``_parent`` cleared.
         """
-        scalar_fields._parent = None
-        return scalar_fields
+        detached = copy.copy(scalar_fields)
+        detached._parent = None
+        return detached
 
     @property
     def normals(self: Self) -> NormalFields | None:
