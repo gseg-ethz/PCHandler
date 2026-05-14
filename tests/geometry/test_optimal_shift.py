@@ -12,6 +12,7 @@ from pchandler import PointCloudData
 from pchandler.geometry import OptimizedShift, OptimizedShiftManager
 from pchandler.geometry.coordinates import CartesianCoordinates
 from pchandler.geometry.util import MinMaxPoints
+from pchandler.scalar_fields import ScalarFieldManager
 
 
 def random_coordinates(scale: float, offset: float) -> np.ndarray:
@@ -163,6 +164,9 @@ class TestOptimizedShift:
         for k, v in state[0].items():
             if isinstance(v, np.ndarray):
                 assert np.all(v == dumped[k])
+            elif isinstance(v, ScalarFieldManager):
+                # model_dump returns a detached copy (CR-01 fix); compare by type only.
+                assert isinstance(dumped[k], ScalarFieldManager)
             else:
                 assert v == dumped[k]
 

@@ -376,12 +376,29 @@ class OptimizedShift:
         """Return the (callable, state) tuple used by :mod:`pickle` to reconstruct ``self``."""
         return self._reconstruct, (self._uuid, self._shift)
 
-    def __deepcopy__(self, memo):
-        """Deep-copy returns a fresh :class:`OptimizedShift` carrying a copy of the shift vector."""
-        # Construct new
-        new_vec = copy.deepcopy(self._shift, memo)
-        new_shift = type(self)(new_vec)
+    def __deepcopy__(self, memo: dict) -> OptimizedShift:
+        """Deep-copy returns a fresh :class:`OptimizedShift` carrying a copy of the shift vector.
+
+        The copy gets its own UUID and is registered with :class:`OptimizedShiftManager`
+        as an independent shift.  Member coordinate sets are *not* copied because they
+        are weak references to live objects — the caller is responsible for re-linking
+        any :class:`CartesianCoordinates` instances that should belong to the copy.
+
+        The ``memo`` dict is populated *before* deepcopying sub-objects to prevent
+        infinite recursion if there are circular references back to ``self``.
+        """
+        # Allocate via __new__ so we can populate memo before __init__ triggers
+        # any recursive deepcopy calls.
+        new_shift: OptimizedShift = object.__new__(type(self))
         memo[id(self)] = new_shift
+
+        # Now safe to deepcopy the scalar shift vector (no cycles expected but memo
+        # is already set, so a cycle would resolve correctly).
+        new_shift._shift = copy.deepcopy(self._shift, memo)
+        new_shift._uuid = uuid.uuid4()
+        new_shift._minimum_decimal_places = self._minimum_decimal_places
+        new_shift._member_coordinate_sets = weakref.WeakSet()
+        OptimizedShiftManager().register_shift(new_shift)
 
         return new_shift
 
