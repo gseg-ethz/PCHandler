@@ -29,9 +29,9 @@ import numpy.typing as npt
 from GSEGUtils.base_types import Vector_3_T, Vector_Bool_T
 from GSEGUtils.constants import validate_variables
 from pydantic import PositiveFloat
-from shapely import contains_xy  # type: ignore[import-untyped]
-from shapely.affinity import translate  # type: ignore[import-untyped]
-from shapely.geometry import Polygon  # type: ignore[import-untyped]
+from shapely import contains_xy
+from shapely.affinity import translate
+from shapely.geometry import Polygon
 
 from pchandler import PointCloudData
 from pchandler.filters import PointCloudFilter, ValidatedPolygonT

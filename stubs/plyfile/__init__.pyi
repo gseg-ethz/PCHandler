@@ -3,7 +3,9 @@
 
 from typing import Any
 
-import numpy as np
+import numpy.typing as npt
+
+NDArray = npt.NDArray[Any]
 
 class PlyElement:
     count: int
@@ -12,7 +14,7 @@ class PlyElement:
     @classmethod
     def describe(
         cls,
-        data: np.ndarray,
+        data: NDArray,
         name: str,
         comments: list[str] | None = ...,
     ) -> "PlyElement": ...

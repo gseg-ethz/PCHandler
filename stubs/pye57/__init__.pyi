@@ -3,14 +3,16 @@
 
 from typing import Any
 
-import numpy as np
+import numpy.typing as npt
+
+NDArray = npt.NDArray[Any]
 
 class ScanHeader:
     point_fields: list[str]
     has_pose: bool
-    rotation: np.ndarray
-    translation: np.ndarray
-    rotation_matrix: np.ndarray
+    rotation: NDArray
+    translation: NDArray
+    rotation_matrix: NDArray
 
 class E57:
     scan_count: int
@@ -26,14 +28,14 @@ class E57:
         row_column: bool = False,
         transform: bool = True,
         ignore_missing_fields: bool = False,
-    ) -> dict[str, np.ndarray]: ...
+    ) -> dict[str, NDArray]: ...
     def write_scan_raw(
         self,
-        data: dict[str, np.ndarray],
+        data: dict[str, NDArray],
         *,
         name: str | None = None,
-        rotation: np.ndarray | None = None,
-        translation: np.ndarray | None = None,
+        rotation: NDArray | None = None,
+        translation: NDArray | None = None,
         scan_header: ScanHeader | None = None,
     ) -> None: ...
     def close(self) -> None: ...

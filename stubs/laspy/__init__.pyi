@@ -3,7 +3,9 @@
 
 from typing import Any
 
-import numpy as np
+import numpy.typing as npt
+
+NDArray = npt.NDArray[Any]
 
 class ExtraBytesParams:
     def __init__(
@@ -17,8 +19,8 @@ class ExtraBytesParams:
     ) -> None: ...
 
 class LasData:
-    xyz: np.ndarray
-    intensity: np.ndarray
+    xyz: NDArray
+    intensity: NDArray
 
     @property
     def header(self) -> Any: ...
@@ -27,7 +29,7 @@ class LasData:
     def change_scaling(self, scales: Any = ..., offsets: Any = ...) -> None: ...
     def add_extra_dim(self, params: ExtraBytesParams) -> None: ...
     def write(self, path: str) -> None: ...
-    def __getattr__(self, name: str) -> np.ndarray: ...
+    def __getattr__(self, name: str) -> NDArray: ...
     def __setattr__(self, name: str, value: Any) -> None: ...
 
 def read(path: Any) -> LasData: ...

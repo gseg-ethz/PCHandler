@@ -1,8 +1,12 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Narrow handwritten stub for open3d.core — Tensor class."""
 
-import numpy as np
+from typing import Any
+
+import numpy.typing as npt
+
+NDArray = npt.NDArray[Any]
 
 class Tensor:
-    def __init__(self, arr: np.ndarray) -> None: ...
-    def numpy(self) -> np.ndarray: ...
+    def __init__(self, arr: NDArray) -> None: ...
+    def numpy(self) -> NDArray: ...

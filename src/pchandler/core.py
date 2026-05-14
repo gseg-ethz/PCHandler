@@ -24,7 +24,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Literal, Optional, Self, Sequence, TypeAlias, cast, overload
+from typing import TYPE_CHECKING, Any, Literal, Optional, Self, Sequence, cast, overload
 
 import numpy as np
 from GSEGUtils.base_types import (
@@ -63,9 +63,6 @@ _SCALAR_FIELDS_ADAPTER: TypeAdapter[ScalarFieldManager] = TypeAdapter(
 if TYPE_CHECKING:
     import open3d as o3d
     from py4dgeo import Epoch
-else:
-    o3d: TypeAlias = Any
-    Epoch: TypeAlias = Any
 
 
 __all__ = [

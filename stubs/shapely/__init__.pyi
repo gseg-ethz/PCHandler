@@ -3,7 +3,9 @@
 
 from typing import Any
 
-import numpy as np
+import numpy.typing as npt
 from shapely.geometry import Polygon as Polygon
 
-def contains_xy(geom: Any, x: Any, y: Any = ...) -> np.ndarray: ...
+NDArray = npt.NDArray[Any]
+
+def contains_xy(geom: Any, x: Any, y: Any = ...) -> NDArray: ...

@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any, Generator, Iterable, Optional, Unpack
 
 import numpy as np
-import pye57  # type: ignore[import-untyped]
+import pye57
 
 from pchandler import PointCloudData
 from pchandler.constants import INTENSITY_NAMES, RGB_NAMES

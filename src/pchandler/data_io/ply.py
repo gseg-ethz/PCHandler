@@ -26,7 +26,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional, Unpack
 
-from plyfile import PlyData, PlyElement  # type: ignore
+from plyfile import PlyData, PlyElement
 
 from pchandler import PointCloudData
 from pchandler.data_io.core import AbstractIOHandler, PointCloudDataKW

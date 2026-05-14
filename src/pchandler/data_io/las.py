@@ -25,7 +25,7 @@ import logging
 from pathlib import Path
 from typing import Optional, Unpack
 
-import laspy  # type: ignore[import-untyped]
+import laspy
 import numpy as np
 from GSEGUtils.base_types import Vector_3_T
 from GSEGUtils.validators import normalize_uint16

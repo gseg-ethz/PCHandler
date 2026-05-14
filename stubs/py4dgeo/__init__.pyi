@@ -3,20 +3,22 @@
 
 from typing import Any
 
-import numpy as np
+import numpy.typing as npt
+
+NDArray = npt.NDArray[Any]
 
 class Epoch:
     def __init__(
         self,
-        cloud: np.ndarray,
-        normals: np.ndarray | None = None,
-        additional_dimensions: np.ndarray | None = None,
+        cloud: NDArray,
+        normals: NDArray | None = None,
+        additional_dimensions: NDArray | None = None,
         timestamp: Any = None,
         scanpos_info: dict[str, Any] | None = None,
     ) -> None: ...
     @property
-    def cloud(self) -> np.ndarray: ...
+    def cloud(self) -> NDArray: ...
     @property
-    def normals(self) -> np.ndarray | None: ...
+    def normals(self) -> NDArray | None: ...
     @property
-    def additional_dimensions(self) -> np.ndarray: ...
+    def additional_dimensions(self) -> NDArray: ...
