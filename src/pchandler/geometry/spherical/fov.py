@@ -623,6 +623,13 @@ class FoV(BaseModel):
         Returns
         -------
         list[FoV]
+
+        Notes
+        -----
+        ``split((1, 1))`` returns ``[self]`` -- the original instance is reused
+        by identity (not value-equality). Downstream code may rely on
+        ``splits[0] is fov`` for this single-tile case (e.g., FoVTree's
+        no-op-split short-circuit).
         """
         if not (shape[0] > 0 and shape[1] > 0):
             raise ValueError(f"split() shape must have positive horizontal and vertical counts; got {shape!r}")
