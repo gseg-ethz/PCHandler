@@ -23,7 +23,7 @@
 
 import logging
 from pathlib import Path
-from typing import Generator, Optional, Unpack
+from typing import Any, Generator, Iterable, Optional, Unpack
 
 import numpy as np
 import pye57  # type: ignore[import-untyped]
@@ -46,6 +46,13 @@ class E57Handler(AbstractIOHandler):
     Supported file extensions:
 
     * .e57
+
+    Notes
+    -----
+    ``save`` supports both a single :class:`~pchandler.PointCloudData` and an iterable of them.
+    Arbitrary scalar fields outside ``pye57.e57.SUPPORTED_POINT_FIELDS`` are skipped with a
+    ``logger.warning`` by default.  Pass ``strict=True`` to raise ``ValueError`` instead.
+    The ``SUPPORTED_SCALAR_FIELDS_MAP`` limitation remains in place for all write operations.
     """
 
     FORMATS = [".e57"]
@@ -130,18 +137,58 @@ class E57Handler(AbstractIOHandler):
             raise ValueError(f"Input point cloud index passed is outside of the range [0, num_scans). Got {pcd_index}")
 
     @classmethod
-    def save(cls, path: str | Path, /, pcd: PointCloudData, **config) -> None:  # type: ignore[override]
-        """Save the point cloud data to an E57 file.
-
-        ** NOT CURRENTLY IMPLEMENTED **
+    def save(
+        cls,
+        pcd: PointCloudData | Iterable[PointCloudData],
+        path: str | Path,
+        /,
+        *,
+        embed_shift_in_transform: bool = True,
+        strict: bool = False,
+        **config: Any,
+    ) -> None:
+        """Save one or more point clouds to an E57 file.
 
         Parameters
         ----------
+        pcd : PointCloudData or Iterable[PointCloudData]
+            Single point cloud or an iterable of point clouds. Each element is written
+            as a separate scan inside the same E57 file.
         path : str or Path
-        pcd : PointCloudData
+            Output file path.  Always opened with ``mode="w"`` (truncate or create).
+        embed_shift_in_transform : bool, default=True
+            When ``True`` (default) and the point cloud carries a numerical-optimisation
+            shift, the shifted XYZ coordinates are written as cartesianX/Y/Z and the
+            shift vector is stored in the per-scan E57 translation pose.  On reload with
+            ``read_transform=True``, :class:`~pchandler.geometry.OptimizedShift` is
+            reconstructed automatically.
+
+            When ``False``, the world-frame coordinates (``pcd.xyz + shift``) are
+            written with an identity pose — useful for consumers that do not honour E57
+            scan transforms.
+        strict : bool, default=False
+            When ``True``, any scalar field whose name is not in
+            ``pye57.e57.SUPPORTED_POINT_FIELDS`` raises ``ValueError`` listing all
+            unsupported names.  When ``False`` (default), unsupported fields are skipped
+            with a ``logger.warning``.
         **config : dict
+            Additional keyword arguments (reserved for future use).
+
+        Returns
+        -------
+        None
         """
-        raise NotImplementedError
+        logger.info(f"Saving E57 file: {path}")
+        if isinstance(pcd, PointCloudData):
+            pcd_iter: list[PointCloudData] = [pcd]
+        else:
+            pcd_iter = list(pcd)
+
+        with pye57.E57(str(path), mode="w") as e57:
+            for single_pcd in pcd_iter:
+                cls._save_single_e57(
+                    e57, single_pcd, embed_shift_in_transform=embed_shift_in_transform, strict=strict, **config
+                )
 
     # TODO implement tests on file with multiple scans
     @classmethod
@@ -230,3 +277,31 @@ class E57Handler(AbstractIOHandler):
             logger.info(f"Successfully loaded scan {pcd_index} from E57 file: {path}")
 
         return pcd
+
+    @classmethod
+    def _save_single_e57(
+        cls,
+        e57: pye57.E57,
+        pcd: PointCloudData,
+        /,
+        *,
+        embed_shift_in_transform: bool,
+        strict: bool,
+        **config: Any,
+    ) -> None:
+        """Write a single :class:`~pchandler.PointCloudData` scan to an open pye57.E57 handle.
+
+        Parameters
+        ----------
+        e57 : pye57.E57
+            An already-open pye57 file handle (``mode="w"``).
+        pcd : PointCloudData
+            Point cloud to write.
+        embed_shift_in_transform : bool
+            See :meth:`save`.
+        strict : bool
+            See :meth:`save`.
+        **config : dict
+            Reserved for future use.
+        """
+        raise NotImplementedError("Implemented in T01 (happy-path) + T02 (shift + scalar-field policy)")
