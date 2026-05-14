@@ -674,6 +674,23 @@ class CartesianCoordinates(Abstract3dCoordinates):
         Returns
         -------
         CartesianCoordinates
+
+        Notes
+        -----
+        Behaviour when input PCDs have mixed numerical_optimization_shift:
+
+        1. If the *first* PCD's NOS passes ``check_addibility(combined_bbox)``,
+           link the merged PCD to that NOS. (Most common; INFO log "Linking…".)
+        2. Else if a fresh ``OptimizedShift()`` would be feasible for the
+           combined bbox under the manager's precision floor, mint one and link.
+           INFO log "Creating new numerical optimization shift instance."
+        3. Else, set ``numerical_optimization_shift = None`` on the merged PCD
+           (degrade to float64 frame). INFO log "Unable to create new…".
+
+        Phase 3 mint-new-UUID on cross-process unpickle (D-18) means downstream
+        merge across pickle boundaries may surface different OptimizedShift
+        instances on the destination than were pickled on the source; world-frame
+        is preserved either way (see DESIGN-DECISIONS.md §"Pickle & state").
         """
         if len(cart_coords) == 0:
             raise ValueError("Cannot merge empty list of CartesianCoordinates")
