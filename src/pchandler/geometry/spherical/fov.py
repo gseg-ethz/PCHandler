@@ -624,7 +624,8 @@ class FoV(BaseModel):
         -------
         list[FoV]
         """
-        assert shape[0] > 0 and shape[1] > 0
+        if not (shape[0] > 0 and shape[1] > 0):
+            raise ValueError(f"split() shape must have positive horizontal and vertical counts; got {shape!r}")
         if shape[0] == shape[1] == 1:
             return [self]
 
@@ -665,7 +666,8 @@ class FoV(BaseModel):
         -------
         list[FoV]
         """
-        assert float(width) > 0 and float(height) > 0
+        if not (float(width) > 0 and float(height) > 0):
+            raise ValueError(f"equal_tiles() width and height must be positive; got width={width!r}, height={height!r}")
         # assert any(target < own for target, own in zip(target_extent[0], self.extent(target_extent[1])))
 
         return self.split(
@@ -959,7 +961,8 @@ class FoVTree:
         FoVTree
             Root of the constructed tree, or ``None`` if ``tiles`` is empty.
         """
-        assert min_children > 1
+        if not (min_children > 1):
+            raise ValueError(f"FoVTree.build_from_tiles() requires min_children > 1; got {min_children!r}")
         if not tiles or not tiles[0]:
             return None
 
