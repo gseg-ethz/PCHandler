@@ -694,29 +694,38 @@ class TestOptimizedShiftApiCompletion:
     """API-06: per-instance setter + init kwarg on OptimizedShift (D-17, D-18, D-19 T03-T06)."""
 
     def test_per_instance_setter_happy(self):
-        """T03: Assigning a feasible precision to an OptimizedShift succeeds (D-17)."""
+        """T03: Assigning a feasible precision to an OptimizedShift succeeds (D-17).
+
+        Note: the PointCloudData must be kept alive so its CartesianCoordinates
+        remains in the WeakSet during the setter call.
+        """
         rng = np.random.default_rng(42)
         shift = OptimizedShift(np.zeros(3, dtype=np.float64))
-        # Register a small coord set (range << 10^4; well within any reasonable threshold)
+        # Register a small coord set (range ~1; well within maximum_number_representable=10^4)
         xyz = rng.random((10, 3)).astype(np.float64)
-        PointCloudData(xyz, numerical_optimization_shift=shift)
+        pcd = PointCloudData(xyz, numerical_optimization_shift=shift)  # noqa: F841
 
         shift.minimum_decimal_places = 4
         assert shift.minimum_decimal_places == 4
+        del pcd  # allow GC after test
 
     def test_per_instance_setter_reverts_on_infeasible(self):
         """T04: Setter reverts _minimum_decimal_places on ShiftNotFeasibleError (D-17).
 
         A precision of 18 is far above the float64 ceiling (~15 significant
         digits); maximum_number_representable = 10**(7-18) = 1e-11.  Even a
-        coord range of 2 (which is ~2 in float64) exceeds that limit, so
-        _is_shift_possible returns False.
+        coord range of ~1 in float64 exceeds that limit, so _is_shift_possible
+        returns False.
+
+        Note: the PointCloudData must be kept alive so its CartesianCoordinates
+        remains in the WeakSet; without a reference the coord set is GC'd before
+        the setter walks the member list.
         """
         rng = np.random.default_rng(42)
         shift = OptimizedShift(np.zeros(3, dtype=np.float64))
-        # Register a coord set with a tiny but nonzero range
+        # Keep the PCD alive so the coord set stays in shift._member_coordinate_sets
         xyz = rng.random((10, 3)).astype(np.float64) + 1.0  # range ~1
-        PointCloudData(xyz, numerical_optimization_shift=shift)
+        pcd = PointCloudData(xyz, numerical_optimization_shift=shift)  # noqa: F841
 
         old_value = shift.minimum_decimal_places  # either None→manager or explicitly set
 
@@ -725,6 +734,7 @@ class TestOptimizedShiftApiCompletion:
 
         # Revert invariant: value must equal the old observable minimum_decimal_places
         assert shift.minimum_decimal_places == old_value
+        del pcd  # allow GC after test
 
     def test_init_kwarg(self):
         """T05: OptimizedShift(shift_vec=..., minimum_decimal_places=5) stores the value (D-18)."""

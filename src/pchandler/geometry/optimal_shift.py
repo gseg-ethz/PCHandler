@@ -124,17 +124,6 @@ class OptimizedShiftManager(metaclass=SingletonMeta):
         """
         return self._minimum_decimal_places
 
-    @minimum_decimal_places.setter
-    def minimum_decimal_places(self, value: int) -> None:  # TODO input value name correct?
-        """Set the minimum number of decimal places supported by the manager.
-
-        Parameters
-        ----------
-        value : int
-            New minimum decimal places.
-        """
-        pass  # Todo: Should probably check all registered GlobalShifts and their pcds if they conform to new limit
-
     @property
     def maximum_number_representable(self) -> float:
         """Return the maximum number representable with the configured float precision.
@@ -320,6 +309,10 @@ class OptimizedShift:
     ----------
     shift_vec : Vector_3_T, optional
         A vector representing the shift. Defaults to ``(0, 0, 0)``.
+    minimum_decimal_places : int, optional
+        Per-instance precision floor. When ``None`` (default), falls back to
+        :attr:`OptimizedShiftManager.minimum_decimal_places`. Settable
+        post-init via the validating setter on the same property.
     """
 
     _uuid: uuid.UUID
@@ -328,7 +321,12 @@ class OptimizedShift:
     _minimum_decimal_places: Optional[int] = None
 
     @validate_variables
-    def __init__(self, shift_vec: Optional[Vector_3_T] = None) -> None:
+    def __init__(
+        self,
+        shift_vec: Optional[Vector_3_T] = None,
+        *,
+        minimum_decimal_places: Optional[int] = None,
+    ) -> None:
         """Initialize an :class:`OptimizedShift`.
 
         Parameters
@@ -336,9 +334,14 @@ class OptimizedShift:
         shift_vec : Vector_3_T, optional
             A vector representing the shift. If not provided, defaults to
             ``(0, 0, 0)``.
+        minimum_decimal_places : int, optional
+            Per-instance precision floor. When ``None`` (default), falls back
+            to :attr:`OptimizedShiftManager.minimum_decimal_places`. Settable
+            post-init via the validating setter on the same property.
         """
         self._uuid = uuid.uuid4()
         self._shift = np.zeros((3,), dtype=np.float64) if shift_vec is None else shift_vec
+        self._minimum_decimal_places = minimum_decimal_places
         self._member_coordinate_sets = weakref.WeakSet()
         OptimizedShiftManager().register_shift(self)
 
@@ -458,6 +461,45 @@ class OptimizedShift:
         if self._minimum_decimal_places is not None:
             return self._minimum_decimal_places
         return OptimizedShiftManager().minimum_decimal_places
+
+    @minimum_decimal_places.setter
+    def minimum_decimal_places(self, value: int) -> None:
+        """Set the per-instance precision floor.
+
+        Walks ``self._member_coordinate_sets``; if any registered set would
+        become infeasible under the new precision (via
+        ``self._is_shift_possible`` — Phase 3 D-08), raises
+        :class:`OptimizedShiftManager.ShiftNotFeasibleError` listing the
+        offending coordinate-set UUIDs.
+
+        Reverts ``self._minimum_decimal_places`` to the previous value **only**
+        if ``_is_shift_possible`` flags an infeasible coord set
+        (:class:`OptimizedShiftManager.ShiftNotFeasibleError`). Other
+        exceptions propagate without revert so the caller sees the real
+        root cause.
+
+        Notes
+        -----
+        Iteration uses a list-snapshot of ``self._member_coordinate_sets`` to
+        guard against WeakSet mutation under concurrent GC
+        (RESEARCH §"Pitfall 5").
+        """
+        old_value = self._minimum_decimal_places
+        self._minimum_decimal_places = value
+        try:
+            infeasible: list[str] = []
+            for coord_set in list(self._member_coordinate_sets):
+                if not self._is_shift_possible(coord_set.xyz):
+                    cs_id = getattr(coord_set, "_uuid", None) or repr(coord_set)
+                    infeasible.append(str(cs_id))
+            if infeasible:
+                raise OptimizedShiftManager.ShiftNotFeasibleError(
+                    f"Setting minimum_decimal_places={value} would make registered coordinate sets "
+                    f"infeasible: {infeasible}"
+                )
+        except OptimizedShiftManager.ShiftNotFeasibleError:
+            self._minimum_decimal_places = old_value
+            raise
 
     @property
     def maximum_number_representable(self) -> float:
