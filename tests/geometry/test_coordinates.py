@@ -1346,3 +1346,61 @@ def test_process_shift_case_4_degraded_to_case_3(monkeypatch):
     assert cc.numerical_optimization_shift is None
     assert cc._shift_applied_by is None
     assert cc.arr.dtype == np.float64
+
+
+def test_copy_shift_applied_by_routes_through_helper_case_1_no_init():
+    """Plan 06-04 D-15 / DEBT-02 — Case 1 (prev=None, nos=None) copy preserves _shift_applied_by=None."""
+    world_xyz = np.array([[1.0, 2.0, 3.0]], dtype=np.float64)
+    cc = CartesianCoordinates(world_xyz, numerical_optimization_shift=None)
+    assert cc._shift_applied_by is None
+    copied = cc.copy()
+    assert copied._shift_applied_by is cc._shift_applied_by
+    assert copied._shift_applied_by is None
+
+
+def test_copy_shift_applied_by_routes_through_helper_case_2_initial_shift():
+    """Plan 06-04 D-15 / DEBT-02 — Case 2 (prev=None -> nos) copy preserves _shift_applied_by."""
+    world_xyz = np.array([[100.0, 200.0, 300.0], [100.1, 200.1, 300.1]], dtype=np.float64)
+    nos = OptimizedShift(np.array([100.0, 200.0, 300.0]))
+    cc = CartesianCoordinates(world_xyz, numerical_optimization_shift=nos)
+    assert cc._shift_applied_by is nos
+    copied = cc.copy()
+    assert copied._shift_applied_by is cc._shift_applied_by
+    assert copied._shift_applied_by is nos
+
+
+def test_copy_shift_applied_by_routes_through_helper_case_3_revert_to_prev():
+    """Plan 06-04 D-15 / DEBT-02 — Case 3 (prev existed, then None) copy preserves _shift_applied_by=None."""
+    world_xyz = np.array([[100.0, 200.0, 300.0], [100.1, 200.1, 300.1]], dtype=np.float64)
+    nos = OptimizedShift(np.array([100.0, 200.0, 300.0]))
+    cc = CartesianCoordinates(world_xyz, numerical_optimization_shift=nos)
+    cc.numerical_optimization_shift = None
+    assert cc._shift_applied_by is None
+    copied = cc.copy()
+    assert copied._shift_applied_by is cc._shift_applied_by
+    assert copied._shift_applied_by is None
+
+
+def test_copy_shift_applied_by_routes_through_helper_case_4_swap_shifts():
+    """Plan 06-04 D-15 / DEBT-02 — Case 4 (swap) copy preserves _shift_applied_by post-swap."""
+    world_xyz = np.array([[100.0, 200.0, 300.0], [100.1, 200.1, 300.1]], dtype=np.float64)
+    nos_a = OptimizedShift(np.array([100.0, 200.0, 300.0]))
+    nos_b = OptimizedShift(np.array([101.0, 201.0, 301.0]))
+    cc = CartesianCoordinates(world_xyz, numerical_optimization_shift=nos_a)
+    cc.numerical_optimization_shift = nos_b
+    assert cc._shift_applied_by is nos_b
+    copied = cc.copy()
+    assert copied._shift_applied_by is cc._shift_applied_by
+    assert copied._shift_applied_by is nos_b
+
+
+def test_copy_shift_applied_by_routes_through_helper_with_update_dict():
+    """Plan 06-04 D-15 / DEBT-02 — caller-supplied update dict still routes through _set_shift_applied_by."""
+    world_xyz = np.array([[100.0, 200.0, 300.0], [100.1, 200.1, 300.1]], dtype=np.float64)
+    nos = OptimizedShift(np.array([100.0, 200.0, 300.0]))
+    cc = CartesianCoordinates(world_xyz, numerical_optimization_shift=nos)
+    socs = np.array([-1.0, 4.0, 2.5])
+    copied = cc.copy(update={"socs_origin": socs})
+    assert copied._shift_applied_by is cc._shift_applied_by
+    assert copied._shift_applied_by is nos
+    assert np.all(copied.socs_origin == socs)

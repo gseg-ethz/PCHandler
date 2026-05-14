@@ -655,10 +655,24 @@ class CartesianCoordinates(Abstract3dCoordinates):
         if link_to_same_NOS and "numerical_optimization_shift" not in update:
             update["numerical_optimization_shift"] = self.numerical_optimization_shift
 
-        update["_shift_applied_by"] = self._shift_applied_by  # TODO: Rework structure!
         update["id"] = None
+        # Route ``_shift_applied_by`` through ``update`` so :meth:`model_dump`
+        # excludes it from the deepcopy step inside :class:`BaseArray`.copy()
+        # — the deepcopy would otherwise mint a fresh OptimizedShift instance
+        # and break the Case-4 ``prev is nos`` no-op contract, causing
+        # ``update_shift([0,0,0])`` to fabricate new arrays for ``arr`` and
+        # ``socs_origin`` (latent identity loss observed in
+        # ``test_copy_update``). The init pops the kwarg at
+        # :meth:`__init__` line ~271 and routes the write through the
+        # sanctioned :meth:`_set_shift_applied_by` helper (D-12).
+        update["_shift_applied_by"] = self._shift_applied_by
 
-        return super().copy(array=array, deep=deep, update=update, **kwargs)
+        copied: Self = super().copy(array=array, deep=deep, update=update, **kwargs)
+        # Belt-and-suspenders: re-assert the routing through the sanctioned
+        # D-12 helper post-construction. Functionally redundant with the
+        # init-time pop above, but makes the write path explicit in copy().
+        copied._set_shift_applied_by(self._shift_applied_by)
+        return copied
 
     @classmethod
     def merge(cls: Type[Self], *cart_coords: Self, **kwargs) -> Self:
