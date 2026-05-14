@@ -1,8 +1,11 @@
 import numpy as np
+import pytest
 
-from pchandler import PointCloudData
-from pchandler.filters import CartesianOutlierFilter, SphericalOutlierFilter
-from pchandler.geometry.coordinates import rhv2xyz
+pytest.importorskip("open3d")  # noqa: E402  # gate open3d-using tests
+
+from pchandler import PointCloudData  # noqa: E402
+from pchandler.filters import CartesianOutlierFilter, SphericalOutlierFilter  # noqa: E402
+from pchandler.geometry.coordinates import rhv2xyz  # noqa: E402
 
 
 class TestSphericalOutlierFilter:

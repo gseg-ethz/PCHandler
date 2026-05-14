@@ -1,8 +1,10 @@
 import copy
 
 import numpy as np
-import open3d as o3d
 import pytest
+
+pytest.importorskip("open3d")  # noqa: E402  # gate downstream eager open3d import
+import open3d as o3d  # noqa: E402
 from numpydantic.exceptions import DtypeError
 from pydantic import ValidationError
 
