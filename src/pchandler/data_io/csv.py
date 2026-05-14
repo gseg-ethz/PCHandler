@@ -155,7 +155,7 @@ class CsvHandler(AbstractIOHandler):
 
         # Define load config parameters
 
-        if tuple([k for k in field_names.keys()]) == XYZ_NAMES.char:
+        if tuple(field_names) == XYZ_NAMES.char:
             dt = generate_ascii_load_dtype([k.lower() for k in field_names.values()])
         else:
             dt = generate_ascii_load_dtype(["x", "y", "z"] + list(field_names.values()))
@@ -184,7 +184,7 @@ class CsvHandler(AbstractIOHandler):
         data = np.loadtxt(**load_config)
         pcd = PointCloudData(cls.extract_xyz(data, data.size), **pcd_kw)
 
-        if not tuple([k for k in field_names.keys()]) == XYZ_NAMES.char:
+        if not tuple(field_names) == XYZ_NAMES.char:
             cls.extract_scalar_fields(pcd, data, data.size, field_names)
 
         return pcd
