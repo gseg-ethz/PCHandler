@@ -128,6 +128,39 @@ class TestPolygonFilter:
 
 
 def test_invalid_offset_mode(box_filter):
+    """Folded in05 / Phase 6 D-20 — ``@validate_variables`` on .mask now raises ``ValidationError``.
+
+    Prior to Plan 06-04, ``BoxFilter.mask`` was undecorated and the
+    ``else`` branch in ``_get_offset`` raised a plain ``ValueError``.
+    With ``@validate_variables`` on ``.mask``, pydantic's ``validate_call``
+    catches the ``Literal["local", "global"]`` mismatch BEFORE entering
+    the method body. ``ValueError`` is a parent of ``ValidationError``,
+    so the existing assertion still holds but the underlying error type
+    has narrowed.
+    """
     pcd = PointCloudData(np.ones((10, 3)))
-    with pytest.raises(ValueError):
+    with pytest.raises(ValidationError):
         box_filter.mask(pcd, mode="invalid")  # type: ignore
+
+
+@pytest.mark.parametrize(
+    "filter_cls, filter_args",
+    (
+        (BoxFilter, (-np.ones(3), np.ones(3))),
+        (SphereFilter, (np.array([0.5, 0.5, 0.5]), 1.3)),
+        (PolygonFilter, (box(-0.31, -0.31, 1.3, 1.3), "xy")),
+    ),
+)
+def test_mask_mode_validation_rejects_invalid_string(filter_cls, filter_args):
+    """Folded in05 / Phase 6 D-20 — Box/Sphere/PolygonFilter.mask rejects ``mode='invalid'``.
+
+    Parametrised over the three Cartesian filters that share the
+    ``mode: Literal["local", "global"]`` keyword. Each constructs a
+    minimal valid filter and asserts ``ValidationError`` on
+    ``mode='invalid'`` — the contract installed by the new
+    ``@validate_variables`` decoration on ``.mask``.
+    """
+    instance = filter_cls(*filter_args)
+    pcd = PointCloudData(np.ones((10, 3)))
+    with pytest.raises(ValidationError):
+        instance.mask(pcd, mode="invalid")  # type: ignore[arg-type]

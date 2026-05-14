@@ -88,6 +88,7 @@ class BoxFilter(PointCloudFilter):
         """
         return self.maximum - self.minimum
 
+    @validate_variables
     def mask(self, pcd: PointCloudData, mode: Literal["local", "global"] = "local") -> Vector_Bool_T:
         """Create a boolean mask for points within a 3D bounding box.
 
@@ -126,6 +127,7 @@ class SphereFilter(PointCloudFilter):
         self.sphere_center = sphere_center
         self.radius = radius
 
+    @validate_variables
     def mask(self, pcd: PointCloudData, mode: Literal["local", "global"] = "local") -> Vector_Bool_T:
         """Create a boolean mask for points within the sphere.
 
@@ -165,6 +167,7 @@ class PolygonFilter(PointCloudFilter):
         self.plane = plane
 
     # DECISION should the Polygon Filter match the GPU variant?
+    @validate_variables
     def mask(self, pcd: PointCloudData, mode: Literal["local", "global"] = "local") -> Vector_Bool_T:
         """Create a boolean mask from the points inside the projected polygon.
 
