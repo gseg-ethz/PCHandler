@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING, Annotated
 
 import numpy as np
 from GSEGUtils.base_types import Vector_Bool_T
+from GSEGUtils.constants import validate_variables
 from pydantic import Field, PositiveInt
 
 from pchandler import PointCloudData
@@ -43,6 +44,7 @@ logger = logging.getLogger(__name__.split(".")[0])
 class BaseOutlierFilter(PointCloudFilter):
     """Base class for filters that remove statistical outliers via Open3D."""
 
+    @validate_variables
     def __init__(self, std_ratio: Annotated[float, Field(gt=0, le=1)] = 0.95, number_of_neighbours: PositiveInt = 13):
         """Build a statistical-outlier-removal filter.
 
