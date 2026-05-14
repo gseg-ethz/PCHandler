@@ -15,17 +15,26 @@ N = 100000
 
 @pytest.fixture(scope="function", autouse=True)
 def pcd_all():
-    xyz = np.random.rand(N, 3)
-    rgb = np.random.randint(0, 256, (N, 3), dtype=np.uint8)
-    normals = np.random.rand(N, 3)
-    intensity = np.random.randint(0, 1000, (N,), dtype=np.uint16)
+    """Seeded synthetic PCD with rgb / normals / intensity (D-08 / TEST-05).
+
+    ``np.random.default_rng(0)`` matches the project deterministic-by-default
+    convention (Phase 4 D-23). Required for ``test_mask`` and the rest of
+    the AngleBinDownsample suite (50-iteration determinism per RESEARCH §D-08).
+    """
+    rng = np.random.default_rng(0)
+    xyz = rng.random((N, 3))
+    rgb = rng.integers(0, 256, (N, 3), dtype=np.uint8)
+    normals = rng.random((N, 3))
+    intensity = rng.integers(0, 1000, (N,), dtype=np.uint16)
     pcd = PointCloudData(xyz, rgb=rgb, normals=normals, intensity=intensity)
     return pcd
 
 
 @pytest.fixture(scope="function", autouse=True)
 def pcd_only_coords():
-    return PointCloudData(np.random.rand(100, 3))
+    """Seeded coord-only PCD (D-08 / TEST-05)."""
+    rng = np.random.default_rng(0)
+    return PointCloudData(rng.random((100, 3)))
 
 
 @pytest.fixture(scope="function")
@@ -160,7 +169,6 @@ class TestAngleBinDownsample:
             angle_bin_downsample.sample(pcd_all)
 
     def test_mask(self, angle_bin_downsample, pcd_all):
-        # TODO fix test to avoid stochastic impacts affecting pass/fail
         for name in ("linear", "constant"):
             angle_bin_downsample.weighting_method = name
             pcd = angle_bin_downsample.sample(pcd_all)
