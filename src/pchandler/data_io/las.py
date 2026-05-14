@@ -115,7 +115,7 @@ class LasHandler(AbstractIOHandler):
         add_prefix: bool = True,
         prefix: str = "scalar_",
         revert_sf_types: bool = False,
-        scales: Vector_3_T = np.array([0.0001, 0.0001, 0.0001]),  # noqa: B008  # numpy literal default; safe & idiomatic for LAS XYZ scale triple.
+        scales: Optional[Vector_3_T] = None,
         **config,
     ) -> None:
         """Save the point cloud data to a LAS/LAZ file.
@@ -135,14 +135,17 @@ class LasHandler(AbstractIOHandler):
             Prefix to strip from scalar field names if `remove_prefix` is True.
         revert_sf_types: bool, default=False
             Flag to revert scalar field values to their original types or not
-        scales : Vector_3_T, default=[0.0001, 0.0001, 0.0001]
-            Scaling factors for (x,y,z). Relates to data precision and reducing memory footprint in file
+        scales : Vector_3_T | None, default=None
+            Scaling factors for (x,y,z). Relates to data precision and reducing memory footprint in file.
+            Defaults to ``[0.0001, 0.0001, 0.0001]`` when ``None``.
         config : dict[str, Any]
 
         Returns
         -------
         None
         """
+        if scales is None:
+            scales = np.array([0.0001, 0.0001, 0.0001])
         logger.info(f"Attempting to write to LAS/LAZ file: {path}")
         if pcd.numerical_optimization_shift is None:
             offsets: Vector_3_T = np.zeros(3)
