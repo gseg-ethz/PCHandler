@@ -454,10 +454,14 @@ def test_fovtree_getitem_unknown_segment_raises(fov_):
 
 
 class TestFoVTreeGetitem:
-    """Regression tests pinning Phase 3 CR-02 FoVTree.__getitem__ behaviour (API-03 / SC-3).
+    """Regression tests pinning FoVTree.__getitem__ behaviour (API-03 / SC-3).
 
-    The implementation at fov.py:1050-1091 is unchanged; these tests ensure a future
-    refactor cannot silently break the 3-char fixed-stride descent logic.
+    Identifiers emitted by ``build_from_tiles`` are ``_``-separated between
+    tree levels and ``<r>-<c>`` within a single level. The parser in
+    ``__getitem__`` partitions on the first ``_`` to descend one level at a
+    time, so arbitrary r/c widths (incl. multi-digit indices) resolve
+    correctly. Quick task 260514-noz added the multi-digit regression after
+    the original Phase 3 CR-02 4x4 grid failed to exercise the wide-grid path.
     """
 
     @pytest.fixture(scope="function")
@@ -468,7 +472,7 @@ class TestFoVTreeGetitem:
         (> min_children=4), forcing a recursive quad-split at the root.
         Each quadrant has 4 children (<= min_children=4), hitting the flat-tile
         branch. The resulting tree has depth 2 with leaf identifiers of the
-        form "<root-child-id><leaf-id>" e.g. "0-00-0".
+        form "<root-child-id>_<leaf-id>" e.g. "0-0_0-0".
         """
         tiles = fov_.tile(FoV(left=0.0, right=0.25, top=0.0, bottom=0.25))
         result = FoVTree.build_from_tiles(tiles, min_children=4)
@@ -476,11 +480,11 @@ class TestFoVTreeGetitem:
         return result
 
     def test_getitem_full_identifier(self, tree: FoVTree) -> None:
-        """tree["0-00-0"] resolves to the leaf node with identifier "0-00-0"."""
+        """tree["0-0_0-0"] resolves to the leaf node with identifier "0-0_0-0"."""
         # "0-0" picks the first-level recursive quadrant; "0-0" picks its
-        # flat-tile child -> full path is the 6-char concatenation "0-00-0".
-        resolved = tree["0-00-0"]
-        assert resolved.identifier == "0-00-0"
+        # flat-tile child -> the full path is "_"-joined: "0-0_0-0".
+        resolved = tree["0-0_0-0"]
+        assert resolved.identifier == "0-0_0-0"
 
     def test_getitem_root(self, tree: FoVTree) -> None:
         """tree["root"] returns the tree itself (back-compat shortcut)."""
@@ -490,6 +494,42 @@ class TestFoVTreeGetitem:
         """tree["nonexistent"] raises KeyError with a contextual message."""
         with pytest.raises(KeyError, match="No child"):
             _ = tree["nonexistent"]
+
+    def test_getitem_multi_digit_tile_grid(self, fov_: FoV) -> None:
+        """Wide grids (r or c >= 10) resolve correctly through __getitem__.
+
+        Regression for the multi-digit identifier bug (quick task 260514-noz):
+        a 12x12 flat-tile grid produces identifiers like "10-3", "11-11".
+        Under the old 3-char fixed-stride parser, "11-3" was split as
+        head="11-" / rest="3" and raised a misleading KeyError. Under the
+        new "_"-aware parser, partition on "_" yields head="11-3" / rest="",
+        which resolves directly to the matching child.
+        """
+        # 1/12 ≈ 0.08333 target tile over the 1x1 fov_ -> 12x12 = 144 tiles.
+        # min_children=200 forces the flat-tile branch directly at the root,
+        # so child identifiers are exactly "<r>-<c>" with r, c in [0, 11].
+        step = 1.0 / 12
+        tiles = fov_.tile(FoV(left=0.0, right=step, top=0.0, bottom=step))
+        tree = FoVTree.build_from_tiles(tiles, min_children=200)
+        assert tree is not None
+
+        # Sanity: we are exercising the wide-grid path -> at least one child
+        # identifier has a multi-digit segment.
+        assert any(any(int(p) >= 10 for p in cid.split("-")) for cid in tree.children), (
+            f"expected multi-digit child id; got {sorted(tree.children)}"
+        )
+
+        # Multi-digit lookup must succeed (this raised KeyError pre-fix).
+        resolved = tree["11-3"]
+        assert resolved.identifier == "11-3"
+
+        # Adjacent single-digit lookup must also succeed.
+        resolved_low = tree["3-3"]
+        assert resolved_low.identifier == "3-3"
+
+        # Unknown multi-digit segment still raises a contextual KeyError.
+        with pytest.raises(KeyError, match="No child '12-0' under"):
+            _ = tree["12-0"]
 
 
 def _fov_are_equal(fov1: FoV, fov2: FoV):
