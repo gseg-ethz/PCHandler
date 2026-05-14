@@ -501,10 +501,12 @@ class PointCloudData(CartesianCoordinates):
 
         return pcd_o3d
 
+    @classmethod
     @overload
-    def from_o3d(self, pcd_o3d: o3d.geometry.PointCloud) -> PointCloudData: ...
+    def from_o3d(cls, pcd_o3d: o3d.geometry.PointCloud) -> PointCloudData: ...
+    @classmethod
     @overload
-    def from_o3d(self, pcd_o3d: o3d.t.geometry.PointCloud) -> PointCloudData: ...
+    def from_o3d(cls, pcd_o3d: o3d.t.geometry.PointCloud) -> PointCloudData: ...
 
     @classmethod
     def from_o3d(cls, pcd_o3d: o3d.geometry.PointCloud | o3d.t.geometry.PointCloud) -> PointCloudData:
