@@ -832,6 +832,12 @@ class OptimizedShift:
                 old_u,
                 u,
             )
+            logger.debug(
+                "shift collision detail: existing shift vector=%s, incoming=%s, magnitude diff=%.6f",
+                existing._shift,
+                shift_vec,
+                float(np.linalg.norm(existing._shift - shift_vec)),
+            )
         return OptimizedShift._construct_with_uuid(u, shift_vec)
 
     def reattach_member(self, coordinate_set: CartesianCoordinates) -> None:

@@ -822,7 +822,7 @@ class TestReconstructCrossProcess:
         ``pchandler`` INFO record "UUID collision with divergent vector" must
         fire on the destination side.
         """
-        caplog.set_level(logging.INFO, logger="pchandler")
+        caplog.set_level(logging.DEBUG, logger="pchandler")
 
         SingletonMeta._instances.pop(OptimizedShiftManager, None)
         known_uuid = uuid.uuid4()
@@ -859,6 +859,11 @@ class TestReconstructCrossProcess:
         ), (
             "Expected INFO log 'UUID collision with divergent vector' on branch 3 of "
             f"_reconstruct; got records: {[(r.levelname, r.message) for r in caplog.records]}"
+        )
+        # DEBUG log fired (folded in10 / Phase 6 D-23 — landed by Plan 06-04 Task 7).
+        assert any("shift collision detail" in r.message and r.levelname == "DEBUG" for r in caplog.records), (
+            "Expected DEBUG log 'shift collision detail' on branch 3 of "
+            f"_reconstruct (folded in10); got records: {[(r.levelname, r.message) for r in caplog.records]}"
         )
 
 
