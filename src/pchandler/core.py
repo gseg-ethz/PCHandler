@@ -387,7 +387,7 @@ class PointCloudData(CartesianCoordinates):
     def merge(
         cls,
         *pcds: Self,
-        **kwargs: dict[str, Any],
+        **kwargs: Unpack[PointCloudDataKW],
     ) -> Self:
         """Merge a set of point clouds together.
 
@@ -400,8 +400,10 @@ class PointCloudData(CartesianCoordinates):
         ----------
         *pcds : PointCloudData
             Point clouds to merge in order.
-        **kwargs : dict[str, Any]
-            Additional keyword arguments forwarded to the base ``merge`` implementation.
+        **kwargs : Unpack[PointCloudDataKW]
+            Additional keyword arguments forwarded to the base ``merge``
+            implementation — see :class:`PointCloudDataKW` for the full
+            enumeration.
 
         Returns
         -------

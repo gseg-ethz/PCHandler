@@ -39,17 +39,23 @@ from typing import (
     Mapping,
     Optional,
     Sequence,
-    TypedDict,
     Unpack,
     cast,
 )
 
 import numpy as np
 import numpy.typing as npt
-from GSEGUtils.base_types import Array_Nx3_T, DtypeDict, Vector_3_T
+from GSEGUtils.base_types import Array_Nx3_T, DtypeDict
 from numpy._typing._dtype_like import _DTypeDict
 
 from pchandler import PointCloudData
+
+# DEBT-07 (Phase 6 / D-12): :class:`PointCloudDataKW` is re-exported here for
+# the existing ``from pchandler.data_io.core import PointCloudDataKW`` import
+# sites (``ply.py``, ``csv.py``, ``las.py``, ``e57.py``). Single source of
+# truth lives in :mod:`pchandler.base_types` and is a structural superset of
+# :class:`pchandler.geometry.coordinates.CartesianKwFull`.
+from pchandler.base_types import PointCloudDataKW
 from pchandler.constants import (
     COMMON_FIELD_NAMES,
     INTENSITY_NAMES,
@@ -60,7 +66,6 @@ from pchandler.constants import (
     _NameConstantsSingle,
     _NameConstantsTriplet,
 )
-from pchandler.geometry import OptimizedShift
 from pchandler.scalar_fields import (
     SF_T,
     NormalFields,
@@ -70,25 +75,17 @@ from pchandler.scalar_fields import (
 )
 from pchandler.scalar_fields.scalar_fields import DtypeState
 
+__all__ = [
+    "AbstractIOHandler",
+    "PointCloudDataKW",
+    "SUPPORTED_TYPES",
+    "find_point_cloud_in_directory",
+]
+
 logger = logging.getLogger(__name__.split(".")[0])
 
 BaseDataT = Mapping[str, npt.NDArray[Any]] | npt.NDArray[Any]
 SUPPORTED_TYPES = (".ply", ".las", ".laz", ".txt", ".csv", ".pts", ".e57")
-
-
-class PointCloudDataKW(TypedDict, total=False):
-    """Keyword-arguments accepted when constructing a :class:`PointCloudData` via an I/O handler.
-
-    Attributes
-    ----------
-    socs_origin : Vector_3_T | None
-        Scan original coordinate-system origin (used for conversion to spherical coordinates).
-    numerical_optimization_shift : OptimizedShift | None
-        Optional pre-existing numerical-precision shift to attach to the loaded cloud.
-    """
-
-    socs_origin: Optional[Vector_3_T]
-    numerical_optimization_shift: Optional[OptimizedShift]
 
 
 def find_point_cloud_in_directory(

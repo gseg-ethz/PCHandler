@@ -803,3 +803,59 @@ def test_pcd_reconstruct_round_trip_validates_scalar_fields_positive(rgb_, norma
     assert set(revived.scalar_fields.keys()) == set(pcd.scalar_fields.keys())
     # scalar_fields' parent weakref is rebound on _reconstruct.
     assert revived.scalar_fields.parent is revived
+
+
+# ---------------------------------------------------------------------------
+# DEBT-07 / D-12 — typed-kwargs regression (Phase 6 Plan 06-03 Task 3)
+# ---------------------------------------------------------------------------
+
+
+def test_typed_kwargs_xyz_only():
+    """DEBT-07: ``PointCloudData(xyz)`` keeps working after the Unpack migration."""
+    xyz = np.zeros((10, 3))
+    pcd = PointCloudData(xyz)
+    assert pcd.xyz.shape == (10, 3)
+    assert isinstance(pcd, PointCloudData)
+
+
+def test_typed_kwargs_with_rgb():
+    """DEBT-07: ``PointCloudData(xyz, rgb=...)`` — the most common kwarg path."""
+    xyz = np.zeros((10, 3))
+    rgb = np.full((10, 3), 128, dtype=np.uint8)
+    pcd = PointCloudData(xyz, rgb=rgb)
+    assert pcd.scalar_fields.rgb is not None
+    assert pcd.scalar_fields.rgb.arr.shape == (10, 3)
+
+
+def test_typed_kwargs_strict_mypy_catches_typo(tmp_path):
+    """DEBT-07 / SEC-02 retroactive: mypy strict catches a kwargs typo.
+
+    Spawns a subprocess mypy run against a fixture that misspells
+    ``scalar_fields=`` as ``scalar_field=``. Without :class:`PointCloudDataKW`
+    being a closed TypedDict, the typo would silently land. With it, mypy
+    must surface ``[typeddict-unknown-key]`` (or ``[arg-type]`` depending on
+    the mypy version) on the bad keyword.
+    """
+    import subprocess
+    import sys
+
+    fixture = tmp_path / "_typeddict_typo_fixture.py"
+    fixture.write_text(
+        "import numpy as np\n"
+        "from pchandler import PointCloudData\n"
+        "PointCloudData(np.zeros((3, 3)), scalar_field=None)  # typo: should be scalar_fields=\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-m", "mypy", "--strict", str(fixture)],
+        capture_output=True,
+        text=True,
+    )
+    # Expect non-zero exit (mypy found at least one error) AND the surfaced
+    # error code is one of the TypedDict-related codes mypy emits for an
+    # unknown ``Unpack[TypedDict]`` key.
+    assert result.returncode != 0, f"mypy did not catch the typo. stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    error_codes = ("typeddict-unknown-key", "typeddict-item", "arg-type", "call-arg")
+    assert any(code in result.stdout for code in error_codes), (
+        f"mypy did not surface a typeddict/arg-type error. "
+        f"Expected one of {error_codes}.\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    )
