@@ -596,7 +596,6 @@ class OptimizedShift:
         """
         if coordinate_set in self:
             return
-        # TODO: Think how to check already shifted coordinates
 
         unshifted_bbox = coordinate_set.unshifted_bbox
 
@@ -657,7 +656,6 @@ class OptimizedShift:
         bool
             ``True`` if a feasible shift can absorb the points.
         """
-        # TODO: Check usage [can points be shifted and unshifted]
         try:
             _ = self._compute_new_shift(unshifted_pts)
             return True
@@ -674,7 +672,6 @@ class OptimizedShift:
             ``self._shift`` is subtracted internally to produce a local
             ``Shifted`` array before the feasibility check.
         """
-        # TODO: Check usage [can points be shifted and unshifted]
         shifted = np.subtract(unshifted_pts, self._shift)
         # Cast: subtracting self._shift puts the points in this shift's
         # local frame; _is_shift_needed semantically operates on Unshifted

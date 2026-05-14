@@ -51,7 +51,6 @@ class LasHandler(AbstractIOHandler):
 
     FORMATS = [".las", ".laz"]
 
-    # TODO check how socs_origin is being passed to PointCloudData. Should support to stop optimal shift be shared?
     @classmethod
     def load(
         cls,  # type: ignore[override]

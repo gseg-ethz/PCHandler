@@ -172,7 +172,6 @@ def get_outline_polygon(  # noqa: C901  # Plane-axis + alpha-shape branching; re
     return als
 
 
-# TODO could change this to a frozen basemodel with validation
 class MinMaxPoints(NamedTuple):
     """Countains the minimum and maximum points of a set of coordinates to represent it's bounding box.
 
