@@ -453,6 +453,45 @@ def test_fovtree_getitem_unknown_segment_raises(fov_):
         _ = tree["9-9"]
 
 
+class TestFoVTreeGetitem:
+    """Regression tests pinning Phase 3 CR-02 FoVTree.__getitem__ behaviour (API-03 / SC-3).
+
+    The implementation at fov.py:1050-1091 is unchanged; these tests ensure a future
+    refactor cannot silently break the 3-char fixed-stride descent logic.
+    """
+
+    @pytest.fixture(scope="function")
+    def tree(self, fov_: FoV) -> FoVTree:
+        """Depth-2 FoVTree built from a 4x4 grid.
+
+        A 0.25x0.25 target tile over the 1x1 fov_ produces 16 children
+        (> min_children=4), forcing a recursive quad-split at the root.
+        Each quadrant has 4 children (<= min_children=4), hitting the flat-tile
+        branch. The resulting tree has depth 2 with leaf identifiers of the
+        form "<root-child-id><leaf-id>" e.g. "0-00-0".
+        """
+        tiles = fov_.tile(FoV(left=0.0, right=0.25, top=0.0, bottom=0.25))
+        result = FoVTree.build_from_tiles(tiles, min_children=4)
+        assert result is not None
+        return result
+
+    def test_getitem_full_identifier(self, tree: FoVTree) -> None:
+        """tree["0-00-0"] resolves to the leaf node with identifier "0-00-0"."""
+        # "0-0" picks the first-level recursive quadrant; "0-0" picks its
+        # flat-tile child -> full path is the 6-char concatenation "0-00-0".
+        resolved = tree["0-00-0"]
+        assert resolved.identifier == "0-00-0"
+
+    def test_getitem_root(self, tree: FoVTree) -> None:
+        """tree["root"] returns the tree itself (back-compat shortcut)."""
+        assert tree["root"] is tree
+
+    def test_getitem_invalid(self, tree: FoVTree) -> None:
+        """tree["nonexistent"] raises KeyError with a contextual message."""
+        with pytest.raises(KeyError, match="No child"):
+            _ = tree["nonexistent"]
+
+
 def _fov_are_equal(fov1: FoV, fov2: FoV):
     array_1 = np.array([fov1.left, fov1.right, fov1.top, fov1.bottom])
     array_2 = np.array([fov2.left, fov2.right, fov2.top, fov2.bottom])
