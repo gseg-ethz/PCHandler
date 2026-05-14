@@ -25,21 +25,20 @@ from __future__ import annotations
 
 import copy
 import logging
-from typing import TYPE_CHECKING, Any, Literal, Optional, Self, Sequence, cast, overload
+from typing import TYPE_CHECKING, Any, Literal, Optional, Self, Unpack, cast, overload
 
 import numpy as np
 from GSEGUtils.base_types import (
     Array_Nx3_Float_T,
-    Array_Nx3_T,
     Array_Nx3_Uint8_T,
     ArrayT,
     IndexLike,
-    Vector_3_Float_T,
     VectorT,
 )
 from pydantic import ConfigDict, Field, TypeAdapter, field_serializer, field_validator
 
 from pchandler._optional import ensure_open3d_available, ensure_py4dgeo_available
+from pchandler.base_types import PointCloudDataKW
 from pchandler.geometry.coordinates import CartesianCoordinates
 from pchandler.scalar_fields import (
     SF_T,
@@ -47,7 +46,6 @@ from pchandler.scalar_fields import (
     RGBFields,
     ScalarField,
     ScalarFieldManager,
-    ScalarFieldTriplet,
 )
 
 # WR-01 (Phase 3 code review) / SEC-02 extension: ``scalar_fields`` is a
@@ -80,52 +78,40 @@ class PointCloudData(CartesianCoordinates):
     #: Contains and manages all the scalar fields associated with the point cloud coordinates
     scalar_fields: ScalarFieldManager = Field(default_factory=ScalarFieldManager)
 
-    # TODO decide on the kwargs and unpacking approach
     def __init__(
         self,
         /,
-        xyz=None,
-        *,
-        rgb: RGBFields | Array_Nx3_Float_T | Array_Nx3_Uint8_T | None = None,
-        normals: NormalFields | Array_Nx3_Float_T | None = None,
-        intensity: ScalarField | VectorT | None = None,
-        reflectance: ScalarField | VectorT | None = None,
-        scalar_fields: (
-            ScalarFieldManager | dict[str, ScalarField | ScalarFieldTriplet | Array_Nx3_T | VectorT | Sequence] | None
-        ) = None,
-        socs_origin: Vector_3_Float_T | None = None,
-        **kwargs: Any,
-    ):
+        xyz: Array_Nx3_Float_T | None = None,
+        **kwargs: Unpack[PointCloudDataKW],
+    ) -> None:
         """Construct a :class:`PointCloudData` from XYZ coordinates plus optional per-point scalar fields.
 
         Parameters
         ----------
         xyz : |Array_Nx3_Float_T|
             Input coordinates.
-        rgb : :class:`RGBFields` | |Array_Nx3_Float_T| | |Array_Nx3_Uint8_T| | None
-            Optional RGB colour per point.
-        normals : |NormalFields| | |Array_Nx3_Float_T| | None
-            Normal vectors corresponding to each point (normalised to unit vectors).
-        intensity : :class:`ScalarField` | |VectorT| | None
-            Optional intensity scalar field.
-        reflectance : :class:`ScalarField` | |VectorT| | None
-            Optional reflectance scalar field.
-        scalar_fields : ScalarFieldManager | dict[str, ScalarField | Array_Nx3_T | VectorT | Sequence] | None
-            Additional custom scalar fields. ``dict`` values may also be
-            :class:`RGBFields`, :class:`NormalFields`, or
-            :class:`ScalarFieldTriplet` instances.
-        socs_origin : |Vector_3_Float_T|
-            Scan original coordinate system (SOCS). Reference point for
-            conversion to spherical coordinates.
-        **kwargs : Any
-            Additional keyword arguments forwarded to
-            :class:`CartesianCoordinates`.
-        """
-        kwargs = {} | kwargs
-        kwargs["scalar_fields"] = scalar_fields
-        kwargs["socs_origin"] = socs_origin
+        **kwargs : Unpack[PointCloudDataKW]
+            Optional keyword arguments — see :class:`PointCloudDataKW` for the
+            full enumeration. Notably:
 
-        super().__init__(xyz=xyz, **kwargs)  # type: ignore[call-overload]
+            * ``rgb`` — RGB colour per point.
+            * ``normals`` — unit normal vectors per point.
+            * ``intensity`` — intensity scalar field.
+            * ``reflectance`` — reflectance scalar field.
+            * ``scalar_fields`` — additional custom scalar fields.
+            * ``socs_origin`` — scan original coordinate-system origin.
+            * Plus every kwarg accepted by :class:`CartesianCoordinates`
+              (``numerical_optimization_shift``, ``project_transformation``,
+              ``unshifted_bbox``, ``_shift_applied_by``).
+        """
+        # Pop the scalar-field-flavoured kwargs that PointCloudData owns directly;
+        # everything else is forwarded to :class:`CartesianCoordinates`.
+        rgb = kwargs.pop("rgb", None)
+        normals = kwargs.pop("normals", None)
+        intensity = kwargs.pop("intensity", None)
+        reflectance = kwargs.pop("reflectance", None)
+
+        super().__init__(xyz=xyz, **kwargs)
 
         self.scalar_fields.parent = self
         self.scalar_fields.validate_lengths()
@@ -396,25 +382,6 @@ class PointCloudData(CartesianCoordinates):
         self.scalar_fields.reduce(mask)
         if "spher" in self.__dict__:
             self.__dict__["spher"] = self.__dict__["spher"][mask]
-
-    def extract(self, mask: IndexLike) -> Self:
-        """Extract a subset of points from the point cloud, removing them from ``self``.
-
-        The object ``self`` that ``extract`` is called on is reduced by this point set, and the
-        extracted points are returned as a new object.
-
-        Parameters
-        ----------
-        mask : IndexLike
-            A vector-like index object that corresponds to the number of points in the point cloud.
-
-        Returns
-        -------
-        Self
-            A new instance carrying the extracted points (and their scalar fields).
-        """
-        extracted = super().extract(mask)
-        return extracted
 
     @classmethod
     def merge(
