@@ -700,7 +700,6 @@ class BaseTestCartesianCoordinates:
         assert np.all(merged[[4, 5]] == -5)
 
     def test_merge_multiple_different_nos(self):
-        # TODO see comment on merge method
         a = self.cls([[2, 2, 2], [2, 2, 2]], numerical_optimization_shift=OptimizedShift(np.array([1, 1, 1])))
         b = self.cls([[8, 8, 8], [8, 8, 8]], numerical_optimization_shift=OptimizedShift(np.array([8, 8, 8])))
         c = self.cls(
@@ -762,6 +761,120 @@ class BaseTestCartesianCoordinates:
     def test_merge_invalid_empty(self):
         with pytest.raises(ValueError):
             self.cls.merge()
+
+    def test_merge_mixed_nos_branch_1_first_nos_fits(self, caplog):
+        """TEST-03 / D-06 branch 1: first NOS absorbs all bboxes → identity link.
+
+        ``cart_coords[0].numerical_optimization_shift.check_addibility`` is
+        the gate; if it passes for the combined bbox, the merged PCD points
+        at the first instance's NOS (object identity, not just equality).
+        See src/pchandler/geometry/coordinates.py:688-692 (Phase 6 SC #3).
+        """
+        caplog.set_level(logging.INFO, logger="pchandler")
+        # Three small clusters tightly co-located so any of the three NOS
+        # instances can absorb the joint bbox.
+        a = self.cls(
+            np.array([[1.0, 1.0, 1.0], [1.1, 1.1, 1.1]], dtype=np.float64),
+            numerical_optimization_shift=OptimizedShift(np.array([1.0, 1.0, 1.0])),
+        )
+        b = self.cls(
+            np.array([[1.05, 1.05, 1.05], [1.15, 1.15, 1.15]], dtype=np.float64),
+            numerical_optimization_shift=OptimizedShift(np.array([1.1, 1.1, 1.1])),
+        )
+        c = self.cls(
+            np.array([[0.95, 0.95, 0.95], [1.05, 1.05, 1.05]], dtype=np.float64),
+            numerical_optimization_shift=OptimizedShift(np.array([1.05, 1.05, 1.05])),
+        )
+
+        merged = self.cls.merge(a, b, c)
+
+        assert merged.numerical_optimization_shift is a.numerical_optimization_shift
+        assert any("Linking" in r.message for r in caplog.records), (
+            f"Expected INFO log 'Linking to numerical optimization shift of first instance.' on branch 1; "
+            f"got {[(r.levelname, r.message) for r in caplog.records]}"
+        )
+
+    def test_merge_mixed_nos_branch_2_fresh_shift(self, caplog):
+        """TEST-03 / D-06 branch 2: first NOS fails → fresh OptimizedShift minted.
+
+        When the first instance's NOS cannot absorb the joint bbox BUT a
+        new ``OptimizedShift()`` would fit, the merge takes branch 2 of the
+        three-branch state machine: merged.NOS is a fresh instance.
+        See src/pchandler/geometry/coordinates.py:694-696 (Phase 6 SC #3).
+
+        The first NOS is constructed with ``minimum_decimal_places=6``
+        (Phase 5 D-18 per-instance precision setter), giving it a tight
+        maximum_number_representable of 10. The joint bbox range is ~5000,
+        which the manager-default precision (max_representable=10000) can
+        absorb but the tight first-instance cannot.
+        """
+        caplog.set_level(logging.INFO, logger="pchandler")
+        a = self.cls(
+            np.array([[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]], dtype=np.float64),
+            numerical_optimization_shift=OptimizedShift(
+                shift_vec=np.array([0.5, 0.5, 0.5]),
+                minimum_decimal_places=6,
+            ),
+        )
+        b = self.cls(
+            np.array([[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]], dtype=np.float64) + 5000.0,
+            numerical_optimization_shift=OptimizedShift(np.array([5000.5, 5000.5, 5000.5])),
+        )
+        c = self.cls(
+            np.array([[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]], dtype=np.float64) + 2500.0,
+            numerical_optimization_shift=OptimizedShift(np.array([2500.5, 2500.5, 2500.5])),
+        )
+
+        merged = self.cls.merge(a, b, c)
+
+        assert merged.numerical_optimization_shift is not None
+        assert merged.numerical_optimization_shift is not a.numerical_optimization_shift
+        assert isinstance(merged.numerical_optimization_shift, OptimizedShift)
+        assert any("Creating new numerical optimization shift instance" in r.message for r in caplog.records), (
+            f"Expected INFO log 'Creating new numerical optimization shift instance.' on branch 2; "
+            f"got {[(r.levelname, r.message) for r in caplog.records]}"
+        )
+
+    def test_merge_mixed_nos_branch_3_none_fits(self, caplog):
+        """TEST-03 / D-06 branch 3: no NOS fits → merged.NOS is None.
+
+        When neither the first instance's NOS nor a fresh OptimizedShift can
+        absorb the joint bbox, the merge takes branch 3: merged.NOS is None.
+        See src/pchandler/geometry/coordinates.py:698-700 (Phase 6 SC #3).
+        Mirrors the existing test_merge_incompatible_nos pattern.
+        """
+        caplog.set_level(logging.INFO, logger="pchandler")
+        # Massively-divergent clusters; the joint bbox spans an unrepresentable
+        # range so no OptimizedShift precision floor can absorb it.
+        a = self.cls(np.array([[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]], dtype=np.float64))
+        b = self.cls(np.array([[1e10, 1e10, 1e10], [1e10 + 1, 1e10 + 1, 1e10 + 1]], dtype=np.float64))
+        c = self.cls(np.array([[-1e10, -1e10, -1e10], [-1e10 + 1, -1e10 + 1, -1e10 + 1]], dtype=np.float64))
+
+        merged = self.cls.merge(a, b, c)
+
+        assert merged.numerical_optimization_shift is None
+        assert any("Unable to create" in r.message for r in caplog.records), (
+            f"Expected INFO log 'Unable to create new numerical optimization shift instance applicable to all points.' "
+            f"on branch 3; got {[(r.levelname, r.message) for r in caplog.records]}"
+        )
+
+    def test_deepcopy_nos_preserves_vector_identity(self, pcd_shifted):
+        """TEST-03 / D-C1 (Phase 6 SC #3): deepcopy(pcd) yields a fresh NOS with the same vector.
+
+        Companion to ``test_deepcopy``: pins the contract that
+        ``copy.deepcopy(pcd_shifted)`` produces a NOS that is NOT identical
+        to the source NOS instance, but DOES carry the same shift vector
+        and produces byte-identical xyz arrays. This is the third branch
+        of the deepcopy contract — fresh instance + preserved value — that
+        the prior TODO at line :914 flagged for rework.
+        """
+        deep = copy.deepcopy(pcd_shifted)
+        assert deep.numerical_optimization_shift is not pcd_shifted.numerical_optimization_shift
+        assert np.array_equal(
+            deep.numerical_optimization_shift._shift,
+            pcd_shifted.numerical_optimization_shift._shift,
+        )
+        assert np.array_equal(deep.arr, pcd_shifted.arr)
 
     @staticmethod
     def test_numerically_optimized(cart_obj):
@@ -911,7 +1024,6 @@ class BaseTestCartesianCoordinates:
         assert id(pcd_shifted.numerical_optimization_shift) == id(pcd_copy.numerical_optimization_shift)
         assert np.allclose(pcd_copy.xyz, pcd_shifted.xyz)
 
-        # TODO: Rework the deepcopy of NOS
         pcd_copy = pcd_shifted.copy(deep=True, link_to_same_NOS=False)
         assert id(pcd_shifted.numerical_optimization_shift) != id(pcd_copy.numerical_optimization_shift)
         assert np.allclose(pcd_copy.xyz, pcd_shifted.xyz)
