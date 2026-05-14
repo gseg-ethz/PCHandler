@@ -692,6 +692,12 @@ class FoV(BaseModel):
         -------
         list[list[FoV]]
         """
+        if self.crosses_pi:
+            raise NotImplementedError(
+                "FoV.tile() does not support wrapping FoVs (left > right, i.e. crosses_pi=True). "
+                "Split the FoV at the wrap-around boundary before tiling."
+            )
+
         if expand_to_integer_multiple:
             width_int = int(np.ceil(self.width() / target_extent.width()))
             height_int = int(np.ceil(self.height() / target_extent.height()))
