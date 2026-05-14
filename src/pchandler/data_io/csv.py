@@ -64,7 +64,6 @@ class AsciiInfo(NamedTuple):
     num_points: int | None
 
 
-# TODO write tests for the pcd_kwargs in each of the load functions
 class CsvHandler(AbstractIOHandler):
     """Handle TXT- and CSV-like file input/output for point clouds.
 
@@ -116,10 +115,40 @@ class CsvHandler(AbstractIOHandler):
         Returns
         -------
         PointCloudData
+
+        Notes
+        -----
+        **Strict-by-name contract:** When the file has a parsed header (``file_info.fields``
+        non-empty), every name in the ``scalar_fields=[...]`` list MUST appear in the header.
+        Any missing name causes a ``ValueError`` that lists the unknown names and the available
+        header fields.  This is a deliberate fail-loud policy — silent positional mis-mapping
+        (the previous behaviour) is no longer possible when a header is present.
+
+        **Positional-fallback condition:** When no header can be parsed (``file_info.fields ==
+        []``, e.g. raw ``.xyz`` files without a header line, or files where
+        ``column_names_row`` is out of range), the loader falls back to positional column
+        mapping: columns 0/1/2 → XYZ, columns 3..3+N → requested scalar fields in their
+        declared order.
+
+        **pcd_kwargs pass-through:** Additional keyword arguments (``**pcd_kw``) are forwarded
+        directly to the :class:`~pchandler.PointCloudData` constructor.  This includes, for
+        example, ``numerical_optimization_shift`` and ``socs_origin``.
         """
         # Get general file structure information
         file_info = sniff_file(path := Path(path), comment=comment, field_names_row_index=column_names_row)
         num_points_line = True if file_info.num_points else False
+
+        # Strict-by-name guard: when a header is present, every requested scalar field name
+        # must appear in it.  Raise before normalisation so the message quotes the user-visible
+        # names rather than cleaned/prefixed variants.
+        if scalar_fields is not None and file_info.fields:
+            missing = [name for name in scalar_fields if name not in file_info.fields]
+            if missing:
+                raise ValueError(
+                    f"CsvHandler.load: requested scalar fields not in header: {missing}. "
+                    f"Available: {file_info.fields}. "
+                    f"Pass an explicit `column_names_row` if the header lives outside line {column_names_row}."
+                )
 
         # Validate the fields to be output
         field_names = cls._validate_field_selection(scalar_fields, file_info.fields, remove_prefix, prefix)
@@ -139,15 +168,17 @@ class CsvHandler(AbstractIOHandler):
             "usecols": None,
         }
 
-        # Todo: Rethink this logic
-        # When a number of scalar_fields match, assumes all fields are in the same order
-        if len(field_names) + 3 <= file_info.num_fields:
-            if not file_info.fields:
-                load_config["usecols"] = list(range(len(field_names) + 3))
-            else:
-                load_config["usecols"] = [0, 1, 2] + [file_info.fields.index(name) for name in field_names.values()]
-        elif len(field_names) == 3:
+        if not file_info.fields:
+            # No header parsed — positional fallback: first 3 cols are XYZ, remaining map to
+            # scalar_fields by order.
+            load_config["usecols"] = list(range(3 + len(field_names)))
+        elif tuple(field_names.keys()) == XYZ_NAMES.char:
+            # XYZ-only request (either no scalar_fields requested or file has only XYZ columns).
             load_config["usecols"] = [0, 1, 2]
+        else:
+            # Header parsed — strict-by-name: every requested scalar field MUST appear in
+            # file_info.fields (already validated by the strict-by-name guard above).
+            load_config["usecols"] = [0, 1, 2] + [file_info.fields.index(name) for name in field_names.values()]
 
         # Load all data
         data = np.loadtxt(**load_config)
