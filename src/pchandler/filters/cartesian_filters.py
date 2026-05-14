@@ -106,9 +106,6 @@ class BoxFilter(PointCloudFilter):
         min_corner = self.minimum - offset
         max_corner = self.maximum - offset
 
-        min_corner[self.extents == 0] = -np.inf
-        max_corner[self.extents == 0] = np.inf
-
         return np.all((pcd.xyz >= min_corner) & (pcd.xyz <= max_corner), axis=1)
 
 
