@@ -205,8 +205,8 @@ class E57Handler(AbstractIOHandler):
         Generator[PointCloudData, None, None]
         """
         logger.debug(f"Loading multiple scans from E57 file: {path}")
-        e57 = pye57.E57(str(path), mode="r")
-        number_of_scans = e57.scan_count
+        with pye57.E57(str(path), mode="r") as e57:
+            number_of_scans = e57.scan_count
 
         for i in range(number_of_scans):
             kwargs["pcd_index"] = i
