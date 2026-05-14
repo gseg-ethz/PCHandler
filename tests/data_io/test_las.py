@@ -82,18 +82,19 @@ class TestLasHandler(BaseLoadSave):
         n = 10
         xyz = rng.random((n, 3)).astype(np.float32)
         pcd = PointCloudData(xyz, numerical_optimization_shift=None)
-        pcd.scalar_fields["classification"] = np.arange(n, dtype=np.uint8)
+        # Use a custom field name that does not clash with standard LAS point-format fields.
+        pcd.scalar_fields["custom_label"] = np.arange(n, dtype=np.uint8)
 
         out = tmp_path / "test.las"
         LasHandler.save(pcd, out, add_prefix=True, prefix="scalar_")
 
         # On-disk extra-dim must be prefixed
         extra_dim_names = list(laspy.read(str(out)).point_format.extra_dimension_names)
-        assert "scalar_classification" in extra_dim_names
+        assert "scalar_custom_label" in extra_dim_names
 
-        # Reload: remove_prefix=True (default) must strip the prefix so key is "classification"
+        # Reload: remove_prefix=True (default) must strip the prefix so key is "custom_label"
         reloaded = LasHandler.load(out, remove_prefix=True)
-        assert "classification" in reloaded.scalar_fields
+        assert "custom_label" in reloaded.scalar_fields
 
     def test_save_no_prefix(self, tmp_path):
         """API-02 T02: save with add_prefix=False writes bare extra-dim without prefix."""
@@ -101,21 +102,22 @@ class TestLasHandler(BaseLoadSave):
         n = 10
         xyz = rng.random((n, 3)).astype(np.float32)
         pcd = PointCloudData(xyz, numerical_optimization_shift=None)
-        pcd.scalar_fields["classification"] = np.arange(n, dtype=np.uint8)
+        # Use a custom field name that does not clash with standard LAS point-format fields.
+        pcd.scalar_fields["custom_label"] = np.arange(n, dtype=np.uint8)
 
         out = tmp_path / "test.las"
         LasHandler.save(pcd, out, add_prefix=False)
 
         # On-disk extra-dim must NOT be prefixed
         extra_dim_names = list(laspy.read(str(out)).point_format.extra_dimension_names)
-        assert "classification" in extra_dim_names
-        assert "scalar_classification" not in extra_dim_names
+        assert "custom_label" in extra_dim_names
+        assert "scalar_custom_label" not in extra_dim_names
 
-        # Reload with remove_prefix=False: key must appear as "classification"
+        # Reload with remove_prefix=False: key must appear as "custom_label"
         reloaded = LasHandler.load(out, remove_prefix=False)
-        assert "classification" in reloaded.scalar_fields
+        assert "custom_label" in reloaded.scalar_fields
         np.testing.assert_array_equal(
-            np.asarray(reloaded.scalar_fields["classification"]),
+            np.asarray(reloaded.scalar_fields["custom_label"]),
             np.arange(n, dtype=np.uint8),
         )
 
@@ -128,24 +130,24 @@ class TestLasHandler(BaseLoadSave):
         xyz = rng.random((n, 3)).astype(np.float32)
         pcd = PointCloudData(xyz, numerical_optimization_shift=None)
 
-        # Establish uint8 as origin dtype
-        pcd.scalar_fields["classification"] = np.arange(n, dtype=np.uint8)
-        origin = pcd.scalar_fields["classification"].origin_dtype
+        # Establish uint8 as origin dtype (custom name to avoid LAS standard field conflicts).
+        pcd.scalar_fields["custom_label"] = np.arange(n, dtype=np.uint8)
+        origin = pcd.scalar_fields["custom_label"].origin_dtype
 
         # Now reassign as float32 but preserve origin dtype (simulates mid-pipeline cast)
-        pcd.scalar_fields["classification"] = ScalarField(
-            np.arange(n, dtype=np.float32), name="classification", origin_dtype=origin
+        pcd.scalar_fields["custom_label"] = ScalarField(
+            np.arange(n, dtype=np.float32), name="custom_label", origin_dtype=origin
         )
-        assert pcd.scalar_fields["classification"].dtype == np.float32
-        assert pcd.scalar_fields["classification"].origin_dtype.dtype == np.uint8
+        assert pcd.scalar_fields["custom_label"].dtype == np.float32
+        assert pcd.scalar_fields["custom_label"].origin_dtype.dtype == np.uint8
 
         out = tmp_path / "test.las"
         LasHandler.save(pcd, out, add_prefix=False, revert_sf_types=True)
 
         # On-disk dtype must be uint8 (reverted to origin)
         saved = laspy.read(str(out))
-        assert "classification" in saved.point_format.extra_dimension_names
-        assert saved.point_format["classification"].dtype == np.dtype("uint8")
+        assert "custom_label" in saved.point_format.extra_dimension_names
+        assert saved.point_format["custom_label"].dtype == np.dtype("uint8")
 
     def test_save_no_revert(self, tmp_path):
         """API-02 T04: save with revert_sf_types=False keeps current in-memory dtype."""
@@ -156,11 +158,12 @@ class TestLasHandler(BaseLoadSave):
         xyz = rng.random((n, 3)).astype(np.float32)
         pcd = PointCloudData(xyz, numerical_optimization_shift=None)
 
-        # Establish uint8 as origin dtype then cast to float32 in-memory
-        pcd.scalar_fields["classification"] = np.arange(n, dtype=np.uint8)
-        origin = pcd.scalar_fields["classification"].origin_dtype
-        pcd.scalar_fields["classification"] = ScalarField(
-            np.arange(n, dtype=np.float32), name="classification", origin_dtype=origin
+        # Establish uint8 as origin dtype then cast to float32 in-memory.
+        # Custom name to avoid LAS standard field conflicts.
+        pcd.scalar_fields["custom_label"] = np.arange(n, dtype=np.uint8)
+        origin = pcd.scalar_fields["custom_label"].origin_dtype
+        pcd.scalar_fields["custom_label"] = ScalarField(
+            np.arange(n, dtype=np.float32), name="custom_label", origin_dtype=origin
         )
 
         out = tmp_path / "test.las"
@@ -168,8 +171,8 @@ class TestLasHandler(BaseLoadSave):
 
         # On-disk dtype must be float32 (current in-memory dtype preserved)
         saved = laspy.read(str(out))
-        assert "classification" in saved.point_format.extra_dimension_names
-        assert saved.point_format["classification"].dtype == np.dtype("float32")
+        assert "custom_label" in saved.point_format.extra_dimension_names
+        assert saved.point_format["custom_label"].dtype == np.dtype("float32")
 
     def test_save_long_name_raises(self, tmp_path):
         """API-02 T05: extra-dim name > 31 chars raises ValueError before any disk write."""

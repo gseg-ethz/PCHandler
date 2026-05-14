@@ -194,15 +194,34 @@ class LasHandler(AbstractIOHandler):
             if name in scalar_fields:
                 scalar_fields.remove(name)
 
-        # TODO the add prefix and revert_sf are not yet supported here
-        # Remaining fields including normals as these are extra dimensions
-        for field in scalar_fields:
-            value = np.asarray(pcd.scalar_fields[field])
-
-            if not hasattr(las, field):
-                las.add_extra_dim(laspy.ExtraBytesParams(field, value.dtype))
-
-            setattr(las, field, value)
+        # Remaining fields including normals as extra dimensions.
+        # Use the shared helper so add_prefix and revert_sf_types are honoured identically
+        # to PLY/CSV save (CONTEXT D-08 / PATTERNS.md S-3).
+        residual_scalar_fields: list[str] = scalar_fields
+        if residual_scalar_fields:
+            structured_array = cls._generate_structured_array(
+                pcd, residual_scalar_fields, add_prefix, prefix, revert_sf_types
+            )
+            # _generate_structured_array always includes XYZ columns — skip them here
+            # since LAS handles XYZ via las.xyz above.
+            xyz_col_set = set(XYZ_NAMES.char)
+            for col_name in structured_array.dtype.names:
+                if col_name in xyz_col_set:
+                    continue
+                # 31-char guard: LAS 1.4 spec restricts extra-dim names to 32 bytes
+                # including null terminator → max 31 ASCII chars (RESEARCH §"Pitfall 2").
+                if len(col_name) > 31:
+                    raise ValueError(
+                        f"LasHandler.save: extra-dim name {col_name!r} exceeds laspy's 31-char limit "
+                        f"(LAS 1.4 spec: 32-byte field, null-terminated). "
+                        f"Consider add_prefix=False or a shorter scalar field name."
+                    )
+                column = structured_array[col_name]
+                # Only register the column as an extra dim if it is not already a
+                # standard LAS point-format dimension (e.g. scan_angle_rank, gps_time).
+                if not hasattr(las, col_name):
+                    las.add_extra_dim(laspy.ExtraBytesParams(col_name, column.dtype))
+                setattr(las, col_name, column)
 
         las.write(str(path))
 
