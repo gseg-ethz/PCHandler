@@ -201,6 +201,15 @@ class FoVTreePointCloudSplitter(PointCloudSplitter):
         -------
         dict[str, PointCloudData]
             Map of FoV identifier to split point cloud.
+
+        Notes
+        -----
+        The ``_direct_split`` method returns ALL FoVs in the tree (including
+        non-leaf nodes); ``_iterative_split`` returns leaf FoVs only. On the
+        shared-key intersection (i.e., the leaf FoVs that appear in both),
+        per-FoV ``xyz`` arrays are byte-equal within float32 tolerance.
+        See ``tests/geometry/test_splitter.py::test_split`` for the TEST-02
+        cross-method invariant (Phase 6 D-05).
         """
         fov_list: list[tuple[str, FoV]] = fov_tree.to_list()
 
@@ -251,6 +260,15 @@ class FoVTreePointCloudSplitter(PointCloudSplitter):
         -------
         dict[str, PointCloudData]
             A dictionary of split point clouds.
+
+        Notes
+        -----
+        The ``_iterative_split`` method returns leaf FoVs only; ``_direct_split``
+        returns ALL FoVs (including non-leaf nodes). On the shared-key
+        intersection (the leaf FoVs present in both outputs), per-FoV ``xyz``
+        arrays are byte-equal within float32 tolerance. See
+        ``tests/geometry/test_splitter.py::test_split`` for the TEST-02
+        cross-method invariant (Phase 6 D-05).
         """
         results = {}
         tasks = [(pcd, fov_tree)]

@@ -41,11 +41,19 @@ def _build_n_fov_tree(n_fovs: int) -> FoVTree:
 
 @pytest.fixture(scope="function", autouse=True)
 def pcd_() -> PointCloudData:
+    """Seeded synthetic PCD for the splitter test suite (D-08 / TEST-05).
+
+    ``np.random.default_rng(0)`` matches the project deterministic-by-default
+    convention (Phase 4 D-23). Required by ``test_split``'s TEST-02 contract
+    (Phase 6 D-05): direct/iterative shared-key equality is only reproducible
+    on a fixed seed.
+    """
+    rng = np.random.default_rng(0)
     return PointCloudData(
-        np.random.rand(100, 3) * 100,
-        intensity=np.random.randint(-200, 200, (100,), dtype=np.int16),
-        rgb=np.random.randint(0, 256, (100, 3), dtype=np.uint8),
-        normals=np.random.rand(100, 3),
+        rng.random((100, 3)) * 100,
+        intensity=rng.integers(-200, 200, (100,), dtype=np.int16),
+        rgb=rng.integers(0, 256, (100, 3), dtype=np.uint8),
+        normals=rng.random((100, 3)),
     )
 
 
@@ -95,27 +103,72 @@ class TestFoVTreePointCloudSplitter:
             FoVTreePointCloudSplitter(new_tree, method="Not_valid")
 
     def test_split(self, pcd_, new_tree):
-        # TODO this is throwing warnings
+        """TEST-02 / D-05 / SC #2: direct-vs-iterative cross-method invariant.
+
+        ``_iterative_split`` returns leaf FoVs only; ``_direct_split`` returns
+        ALL FoVs (including non-leaves). The two key-sets are intentionally
+        different (researcher repro: 200 entries direct vs 48 iterative on the
+        seeded fixture). The contract under test is the SHARED-KEY INTERSECTION:
+        on every FoV present in both outputs, per-point arrays must byte-match
+        within float32 tolerance. See ``_direct_split`` / ``_iterative_split``
+        Notes blocks in ``src/pchandler/geometry/splitter.py`` for the pinned
+        contract.
+
+        Both ``iterative.split`` and ``direct.split`` mutate their input PCD
+        (iterative via cascading ``FoVFilter.extract``; direct via the trailing
+        ``pcd.reduce(zeros)``); each split therefore runs on a fresh
+        ``pcd_.copy()``.
+        """
         pcd_original = pcd_.copy()
         iterative_splitter = FoVTreePointCloudSplitter(new_tree, method="iterative")
         direct_splitter = FoVTreePointCloudSplitter(new_tree, method="direct", n_jobs=1)
 
-        splits_1 = iterative_splitter.split(pcd_)
-        merged_pcd = PointCloudData.merge(*[v for v in splits_1.values()])
-        merged_pcd = PointCloudData.merge(pcd_, merged_pcd)
+        # Both splits mutate pcd_; give each a fresh copy.
+        pcd_iter_input = pcd_.copy()
+        pcd_direct_input = pcd_.copy()
+        splits_iter = iterative_splitter.split(pcd_iter_input)
+        merged_pcd = PointCloudData.merge(*[v for v in splits_iter.values()])
+        merged_pcd = PointCloudData.merge(pcd_iter_input, merged_pcd)
 
         assert len(pcd_original) == len(merged_pcd)
         assert np.allclose(pcd_original.unshifted_bbox, merged_pcd.unshifted_bbox)
 
-        splits_2 = direct_splitter.split(pcd_)
+        splits_direct = direct_splitter.split(pcd_direct_input)
 
-        # TODO add tests supporting the direct splitter
-        with pytest.raises(ValueError):
-            for k, v in splits_1.items():
-                assert np.allclose(v.xyz, splits_2[k].xyz)
-                assert np.allclose(v.rgb, splits_2[k].rgb)
-                assert np.allclose(v.intensity, splits_2[k].intensity)
-                assert np.allclose(v.normals, splits_2[k].normals)
+        # TEST-02 contract: direct/iterative may produce divergent key sets
+        # (iterative returns leaves only; direct returns all FoVs including
+        # non-leaves). On the shared-key intersection, per-point arrays MUST
+        # byte-match within float32 tolerance.
+        shared_keys = set(splits_iter) & set(splits_direct)
+        assert len(shared_keys) > 0, (
+            f"No shared keys between iterative {list(splits_iter)[:5]}... "
+            f"and direct {list(splits_direct)[:5]}... — contract regression"
+        )
+        for k in shared_keys:
+            np.testing.assert_allclose(
+                splits_iter[k].xyz,
+                splits_direct[k].xyz,
+                atol=1e-6,
+                err_msg=f"xyz divergence at shared key {k!r}",
+            )
+            np.testing.assert_allclose(
+                splits_iter[k].rgb,
+                splits_direct[k].rgb,
+                atol=1e-6,
+                err_msg=f"rgb divergence at shared key {k!r}",
+            )
+            np.testing.assert_allclose(
+                splits_iter[k].intensity,
+                splits_direct[k].intensity,
+                atol=1e-6,
+                err_msg=f"intensity divergence at shared key {k!r}",
+            )
+            np.testing.assert_allclose(
+                splits_iter[k].normals,
+                splits_direct[k].normals,
+                atol=1e-6,
+                err_msg=f"normals divergence at shared key {k!r}",
+            )
 
     def test_invalid_split_mode(self, pcd_, new_tree):
         pcd_original = pcd_.copy()
