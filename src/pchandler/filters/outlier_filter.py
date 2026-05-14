@@ -21,16 +21,21 @@
 
 """Statistical outlier removal filters."""
 
+from __future__ import annotations
+
 import logging
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import numpy as np
-import open3d as o3d
 from GSEGUtils.base_types import Vector_Bool_T
 from pydantic import Field, PositiveInt
 
 from pchandler import PointCloudData
+from pchandler._optional import ensure_open3d_available
 from pchandler.filters import PointCloudFilter
+
+if TYPE_CHECKING:
+    import open3d as o3d
 
 logger = logging.getLogger(__name__.split(".")[0])
 
@@ -51,6 +56,7 @@ class BaseOutlierFilter(PointCloudFilter):
         number_of_neighbours : int, default=13
             Number of nearest neighbors used to estimate local statistics.
         """
+        ensure_open3d_available()
         self.std_ratio = std_ratio
         self.number_of_neighbours = number_of_neighbours
 
@@ -89,8 +95,11 @@ class SphericalOutlierFilter(BaseOutlierFilter):
         Vector_Bool_T
             Boolean mask, ``True`` for inliers.
         """
-        sp_pcd = o3d.geometry.PointCloud()
-        sp_pcd.points = o3d.utility.Vector3dVector(
+        ensure_open3d_available()
+        import open3d as _o3d  # noqa: PLC0415
+
+        sp_pcd = _o3d.geometry.PointCloud()
+        sp_pcd.points = _o3d.utility.Vector3dVector(
             np.hstack((pcd.spher[:, [1, 2]], np.zeros((len(pcd), 1), dtype=np.float32)))
         )
         return super().mask(sp_pcd)

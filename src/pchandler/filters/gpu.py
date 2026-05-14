@@ -24,19 +24,13 @@
 import copy
 import gc
 import logging
-from typing import Optional
-
-_HAS_GPU: bool = False
-_GPU_IMPORT_ERROR: Optional[Exception] = None
 
 try:
     import cudf
     import cuspatial
     import geopandas as gpd
-except (ImportError, RuntimeError) as e:
-    _GPU_IMPORT_ERROR = e
-else:
-    _HAS_GPU = True
+except (ImportError, RuntimeError):
+    pass  # GPU availability is tracked in pchandler._optional; class methods guard via ensure_available()
 
 # Imports placed below the GPU availability probe so that ImportError on optional
 # RAPIDS deps is detected before the rest of the module is parsed.
@@ -45,41 +39,12 @@ from GSEGUtils.constants import validate_variables  # noqa: E402
 from shapely.geometry import Polygon  # noqa: E402
 
 from pchandler import PointCloudData  # noqa: E402
+from pchandler._optional import ensure_gpu_available as ensure_available  # noqa: F401
+from pchandler._optional import is_gpu_available as is_available  # noqa: F401
 from pchandler.filters.cartesian_filters import PlaneStrings  # noqa: E402
 from pchandler.filters.core import PointCloudFilter, ValidatedPolygonT  # noqa: E402
 
 logger = logging.getLogger(__name__.split(".")[0])
-
-
-def is_available() -> bool:
-    """Check whether GPU support (cudf + cuspatial + geopandas) is importable.
-
-    Returns
-    -------
-    bool
-        ``True`` if the GPU dependencies imported cleanly, ``False`` otherwise.
-    """
-    return _HAS_GPU
-
-
-def ensure_available():
-    """Raise ``ImportError`` if GPU support is not available.
-
-    Raises
-    ------
-    ImportError
-        If GPU support is unavailable; chained from the original
-        :class:`ImportError` or :class:`RuntimeError` when one was captured.
-    """
-    if not _HAS_GPU:
-        msg = (
-            "GPU support is not available. "
-            "Install with `pip install pchandler[cuda11]` or `pip install pchandler[cuda12]`."
-        )
-        if _GPU_IMPORT_ERROR is not None:
-            raise ImportError(msg) from _GPU_IMPORT_ERROR
-        else:
-            raise ImportError(msg)
 
 
 class PolygonFilterGPU(PointCloudFilter):

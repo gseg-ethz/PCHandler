@@ -38,6 +38,7 @@ from GSEGUtils.base_types import (
 )
 from pydantic import ConfigDict, Field, TypeAdapter, field_serializer, field_validator
 
+from pchandler._optional import ensure_open3d_available, ensure_py4dgeo_available
 from pchandler.geometry.coordinates import CartesianCoordinates
 from pchandler.scalar_fields import (
     SF_T,
@@ -460,10 +461,8 @@ class PointCloudData(CartesianCoordinates):
         ModuleNotFoundError
             If ``open3d`` is not installed.
         """
-        try:
-            import open3d as _o3d
-        except ModuleNotFoundError as e:
-            raise ModuleNotFoundError("Open3d is not installed.") from e
+        ensure_open3d_available()
+        import open3d as _o3d  # noqa: PLC0415
 
         if self.numerical_optimization_shift is not None:
             pcd = self.copy(
@@ -523,10 +522,8 @@ class PointCloudData(CartesianCoordinates):
         TypeError
             If ``pcd_o3d`` is neither an ``o3d.geometry.PointCloud`` nor an ``o3d.t.geometry.PointCloud``.
         """
-        try:
-            import open3d as _o3d
-        except ModuleNotFoundError as e:
-            raise ModuleNotFoundError("Open3d is not installed.") from e
+        ensure_open3d_available()
+        import open3d as _o3d  # noqa: PLC0415
 
         if isinstance(pcd_o3d, _o3d.t.geometry.PointCloud):
             pcd = PointCloudData(pcd_o3d.point.positions.numpy())
@@ -566,10 +563,8 @@ class PointCloudData(CartesianCoordinates):
         ModuleNotFoundError
             If ``py4dgeo`` is not installed.
         """
-        try:
-            from py4dgeo import Epoch as _Epoch
-        except ModuleNotFoundError as e:
-            raise ModuleNotFoundError("py4dgeo is not installed. Install it to use PointCloudData.to_py4dgeo().") from e
+        ensure_py4dgeo_available()
+        from py4dgeo import Epoch as _Epoch  # noqa: PLC0415
 
         # BUG-07 (D-15): mirror to_o3d's un-shift pattern so py4dgeo receives
         # float64 world-frame coordinates rather than shifted float32.
@@ -614,12 +609,7 @@ class PointCloudData(CartesianCoordinates):
         ModuleNotFoundError
             If ``py4dgeo`` is not installed.
         """
-        try:
-            from py4dgeo import Epoch as _Epoch  # noqa: F401  # Availability probe; _Epoch is not used directly here.
-        except ModuleNotFoundError as e:
-            raise ModuleNotFoundError(
-                "py4dgeo is not installed. Install it to use PointCloudData.from_py4dgeo()."
-            ) from e
+        ensure_py4dgeo_available()
 
         sfs = {}
         for name in epoch.additional_dimensions.dtype.names:
