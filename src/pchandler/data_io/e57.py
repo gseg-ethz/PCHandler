@@ -246,8 +246,8 @@ class E57Handler(AbstractIOHandler):
 
             if len(unsupported_fields) > 0:
                 logger.warning(
-                    f"Fields discovered in file but are not supported by pye57 and will not be loaded: "
-                    f"{('\n' + field for field in unsupported_fields)}"
+                    "Fields discovered in file but are not supported by pye57 and will not be loaded:\n    %s",
+                    "\n    ".join(unsupported_fields),
                 )
 
             data = e57.read_scan(
