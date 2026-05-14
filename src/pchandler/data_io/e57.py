@@ -108,13 +108,6 @@ class E57Handler(AbstractIOHandler):
         the provided parameters.
         """
         path = Path(path)
-        kwargs = {
-            "retain_rgb": retain_rgb,
-            "retain_intensity": retain_intensity,
-            "pcd_index": pcd_index,
-            "ignore_missing_fields": ignore_missing_fields,
-            "read_transform": read_transform,
-        }
 
         logger.info(f"Loading E57 file: {path}")
 
@@ -126,12 +119,26 @@ class E57Handler(AbstractIOHandler):
 
         if point_cloud_index is None:
             logger.debug(f"Loading {number_of_scans} scans from E57 file.")
-            return cls._load_all_e57_scans(path, **kwargs, **pcd_kw)
+            return cls._load_all_e57_scans(
+                path,
+                retain_rgb=retain_rgb,
+                retain_intensity=retain_intensity,
+                read_transform=read_transform,
+                ignore_missing_fields=ignore_missing_fields,
+                **pcd_kw,
+            )
 
         elif 0 <= point_cloud_index < number_of_scans:
             logger.debug(f"Loading scan index {point_cloud_index} from E57 file.")
-            kwargs["pcd_index"] = point_cloud_index
-            return cls._load_single_e57(path, **kwargs, **pcd_kw)
+            return cls._load_single_e57(
+                path,
+                retain_rgb=retain_rgb,
+                retain_intensity=retain_intensity,
+                pcd_index=point_cloud_index,
+                read_transform=read_transform,
+                ignore_missing_fields=ignore_missing_fields,
+                **pcd_kw,
+            )
 
         else:
             raise ValueError(f"Input point cloud index passed is outside of the range [0, num_scans). Got {pcd_index}")
@@ -190,27 +197,55 @@ class E57Handler(AbstractIOHandler):
                     e57, single_pcd, embed_shift_in_transform=embed_shift_in_transform, strict=strict, **config
                 )
 
-    # TODO implement tests on file with multiple scans
     @classmethod
-    def _load_all_e57_scans(cls, path, **kwargs) -> Generator[PointCloudData, None, None]:
+    def _load_all_e57_scans(
+        cls,
+        path: str | Path,
+        /,
+        retain_rgb: bool = True,
+        retain_intensity: bool = True,
+        read_transform: bool = True,
+        ignore_missing_fields: bool = True,
+        **pcd_kw: Unpack[PointCloudDataKW],
+    ) -> Generator[PointCloudData, None, None]:
         """Load all E57 scans from a file.
 
         Parameters
         ----------
-        path : str
-        **kwargs : dict
+        path : str or Path
+            Path to the E57 file.
+        retain_rgb : bool, default=True
+            Flag if RGB values should be loaded (if exists).
+        retain_intensity : bool, default=True
+            Flag if intensity values should be loaded (if exists).
+        read_transform : bool, default=True
+            Indicates if the transformation information should be read.
+        ignore_missing_fields : bool, default=True
+            If true, no errors are raised if fields are missing from the
+            point cloud.
+        **pcd_kw : Unpack[PointCloudDataKW]
+            Additional :class:`PointCloudData` constructor keyword arguments
+            forwarded to each yielded scan (folded in09 / Phase 6 D-24).
 
         Yields
         ------
-        Generator[PointCloudData, None, None]
+        PointCloudData
+            One :class:`PointCloudData` per scan in the file.
         """
         logger.debug(f"Loading multiple scans from E57 file: {path}")
         with pye57.E57(str(path), mode="r") as e57:
             number_of_scans = e57.scan_count
 
         for i in range(number_of_scans):
-            kwargs["pcd_index"] = i
-            yield cls._load_single_e57(path, **kwargs)
+            yield cls._load_single_e57(
+                path,
+                retain_rgb=retain_rgb,
+                retain_intensity=retain_intensity,
+                pcd_index=i,
+                read_transform=read_transform,
+                ignore_missing_fields=ignore_missing_fields,
+                **pcd_kw,
+            )
 
     @classmethod
     def _load_single_e57(
