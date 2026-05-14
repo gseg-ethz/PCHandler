@@ -127,8 +127,6 @@ class PointCloudSplitter(ABC):
 class FoVTreePointCloudSplitter(PointCloudSplitter):
     """Split a point cloud into smaller subsets based on a field-of-view (FoV) tree."""
 
-    # Todo: Check how validate_variables interacts with initializers...got weird errors
-    # DISCUSS: Still relevant?
     @validate_variables
     def __init__(
         self,
@@ -165,6 +163,7 @@ class FoVTreePointCloudSplitter(PointCloudSplitter):
         self.method: FoVSplitMethodT = method
         self.prefer: PreferT = prefer
 
+    @validate_variables
     def split(self, pcd: PointCloudData) -> dict[str, PointCloudData]:
         """Split the point cloud based on the FoVTree.
 
@@ -328,6 +327,7 @@ class FoVTreePointCloudSplitter(PointCloudSplitter):
         return dict(), child_tasks
 
 
+@validate_variables
 def split_pc_with_fov_tree(
     pcd: PointCloudData,
     fov_tree: FoVTree,

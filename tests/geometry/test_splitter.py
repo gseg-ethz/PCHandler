@@ -179,6 +179,24 @@ class TestFoVTreePointCloudSplitter:
         with pytest.raises(ValueError):
             check_number_jobs(0)
 
+    def test_split_validate_variables_negative_path(self, new_tree):
+        """DEBT-08 / Phase 6 D-17 — split() raises ValidationError on bad pcd type.
+
+        Re-applied ``@validate_variables`` decorator at splitter.py:~168 catches
+        the type mismatch BEFORE entry into the body. Verifies the runtime
+        gate; live-reproduction in RESEARCH §D-17 (2026-05-14) confirmed the
+        historical "weird errors" TODO no longer reproduces under current
+        Pydantic 2.11 + numpydantic 1.6.
+        """
+        splitter = FoVTreePointCloudSplitter(new_tree)
+        with pytest.raises(ValidationError):
+            splitter.split("not a pcd")  # type: ignore[arg-type]
+
+    def test_split_pc_with_fov_tree_validate_variables_negative_path(self, new_tree):
+        """DEBT-08 / Phase 6 D-17 — free-function variant raises ValidationError on bad pcd."""
+        with pytest.raises(ValidationError):
+            split_pc_with_fov_tree("not a pcd", new_tree)  # type: ignore[arg-type]
+
     # --- PERF-03 D-29 #1-#4 equivalence + #5 auto-dispatch threshold -----
 
     @pytest.mark.parametrize("prefer", ["serial", "processes", "auto"])
