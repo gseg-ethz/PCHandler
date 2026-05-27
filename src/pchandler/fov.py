@@ -75,7 +75,7 @@ import logging
 import math
 from typing import cast, Optional, Iterable
 
-if sys.version[0] == 3 and sys.version_info[1] >= 11:
+if sys.version_info >= (3, 11):
     from typing import Self
 else:
     from typing_extensions import Self

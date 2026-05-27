@@ -4,7 +4,7 @@ from dataclasses import dataclass, field, InitVar, KW_ONLY
 from collections.abc import MutableMapping
 import logging
 from typing import Iterator, Optional, Iterable
-if sys.version[0] == 3 and sys.version_info[1] >= 11:
+if sys.version_info >= (3, 11):
     from typing import Self
 else:
     from typing_extensions import Self

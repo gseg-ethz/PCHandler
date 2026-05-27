@@ -9,7 +9,7 @@ from functools import cached_property
 import gc
 import logging
 from typing import Optional, Dict, Iterable
-if sys.version[0] == 3 and sys.version_info[1] >= 11:
+if sys.version_info >= (3, 11):
     from typing import Self
 else:
     from typing_extensions import Self
