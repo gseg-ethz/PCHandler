@@ -79,7 +79,6 @@ import numpy as np
 import laspy
 from plyfile import PlyElement, PlyData
 import pye57
-from yaml import warnings
 
 from .geometry.core import PointCloudData
 from .geometry.scalar_fields import ScalarField, ScalarFieldManager
