@@ -70,7 +70,7 @@ The PROJECT.md hard constraint — "no breaking public import paths" — is uphe
 The block below is the executor-time audit verifier for Plan 07-01 (D-07 Step 3). It Tier-1 AST-walks the six pchandler public-surface `.pyi` files and asserts every top-level (non-dotted) symbol in `affected_symbols` resolves; it Tier-2 runtime-imports `pchandler.geometry` and asserts the BC-PCH-011 setter-removal invariant. Exits 0 on success.
 
 ```python
-"""Inline executor-time verifier for pchandler MIGRATION-v1.0.md (D-07 Step 3).
+r"""Inline executor-time verifier for pchandler MIGRATION-v1.0.md (D-07 Step 3).
 
 Walks the six public-surface .pyi files at refactor/gsd HEAD and asserts that
 every top-level (non-dotted) symbol named in any BC-PCH-NNN affected_symbols
