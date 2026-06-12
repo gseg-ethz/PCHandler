@@ -383,6 +383,18 @@
 * issue templates ([fb7cc4c](https://github.com/gseg-ethz/PCHandler/commit/fb7cc4cfb13ea9a9e5bbfd14a86df9ebd81b16d8))
 * trigger workflow on push to refactor/gsd (in addition to main) ([fc3a323](https://github.com/gseg-ethz/PCHandler/commit/fc3a3233f5b2e817c3973ede5d922ab3f55ab7a8))
 
+
+### 📝 Release Notes / Documentation Errata
+
+* **RTD version-label override:** `docs/source/conf.py` shipped with `version = "1.0.1"` at the
+  v2.0.0 release tag because `release-please-config.json:26` had `extra-files: ["docs/conf.py"]`
+  pointing at a non-existent path (the live docs source lives at `docs/source/conf.py`). The
+  release-please bot therefore did not stamp the file, leaving the previous `1.0.1` value in
+  place. The Read the Docs build for v2.0.0 displays "1.0.1" in the version selector despite
+  the release artifact being v2.0.0. The RTD admin UI version-label was hand-overridden to
+  `2.0.0` on `<DATE — fill post-RTD-override>`. The config bug is fixed in commit
+  `<REL-03 SHA — fill post-merge>`; future releases will stamp correctly.
+
 ## [0.9.2](https://github.com/gseg-ethz/PCHandler/compare/v0.9.1...v0.9.2) (2025-04-15)
 
 
