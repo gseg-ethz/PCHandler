@@ -23,7 +23,7 @@
         { "type": "build",    "section": "🔨 Build System" },
         { "type": "ci",       "section": "🤖 Continuous Integration" }
       ],
-      "extra-files": ["docs/conf.py"]
+      "extra-files": ["docs/source/conf.py"]
     }
   }
 }
