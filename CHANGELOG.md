@@ -392,7 +392,11 @@
   release-please bot therefore did not stamp the file, leaving the previous `1.0.1` value in
   place. The Read the Docs build for v2.0.0 displays "1.0.1" in the version selector despite
   the release artifact being v2.0.0. The RTD admin UI version-label was hand-overridden to
-  `2.0.0` on `<DATE — fill post-RTD-override>`. The config bug is fixed in commit
+  `2.0.0` on 2026-06-12 (UTC). Side-effect note: the override triggered a v2.0.0 docs
+  re-build on RTD that failed for an unrelated reason (the previous v2.0.0 build remains
+  the latest successful one and is what visitors see). Investigation of the failed re-build
+  is a Phase 9 follow-up; the displayed version selector label still updates from the
+  active prior build regardless. The config bug is fixed in commit
   [`6f1b069`](https://github.com/gseg-ethz/PCHandler/commit/6f1b069b802d7ddba51b7a06da0794555e90a382);
   future releases will stamp correctly.
 
