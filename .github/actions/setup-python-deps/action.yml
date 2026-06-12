@@ -13,8 +13,11 @@ inputs:
   gsegutils-deploy-key:
     description: >
       SSH private key for cloning the private GSEGUtils repo via git+ssh.
-      Caller passes ${{ secrets.GSEGUTILS_DEPLOY_KEY }}; GitHub auto-masks
-      secret references.
+      Caller-side passes the secrets.GSEGUTILS_DEPLOY_KEY repo secret;
+      GitHub auto-masks secret references. (Plain text here intentional:
+      action.yml `description:` fields are template-evaluated, so wrapping
+      the example in ${ ... } would fail validation with "Unrecognized
+      named-value: 'secrets'".)
     required: true
 
 runs:
