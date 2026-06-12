@@ -1,8 +1,13 @@
 # Actions
-src/pchandler/_version.py
+src/**/_version.py
 
 # BAK files
 **/*.bak
+
+# Old files
+_old/
+_scrap/
+_future/
 
 # Created by .ignore support plugin (hsz.mobi)
 ### Python template
@@ -188,4 +193,8 @@ fabric.properties
 .idea/caches/build_file_checksums.ser
 
 # idea folder, uncomment if you don't need it
-# .idea
+.idea/
+/temp/
+
+.vscode/
+.editorconfig

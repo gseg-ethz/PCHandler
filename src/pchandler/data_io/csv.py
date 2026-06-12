@@ -1,0 +1,462 @@
+# pchandler – Toolbox for point-cloud handling, processing and analysis
+#
+# Copyright (c) 2022–2026 ETH Zurich
+# Department of Civil, Environmental and Geomatic Engineering (D-BAUG)
+# Institute of Geodesy and Photogrammetry
+# Geosensors and Engineering Geodesy
+#
+# Authors:
+#   Nicholas Meyer
+#   Jon Allemand
+#
+# SPDX-License-Identifier: BSD-3-Clause
+
+# pchandler - Toolbox for point-cloud handling, processing and analysis
+#
+# Copyright (c) 2025, Nicholas Meyer, Geosensors and Engineering Geodesy,
+# Institute of Geodesy and Photogrammetry, ETH Zurich, Switzerland
+# SPDX-License-Identifier: BSD-3-Clause
+#
+# Author: Nicholas Meyer (meyernic@ethz.ch)
+
+"""CSV / ASCII file-format handler class."""
+
+import logging
+from pathlib import Path
+from typing import Any, Iterable, NamedTuple, Optional, Unpack
+
+import numpy as np
+import numpy.typing as npt
+
+from pchandler import PointCloudData
+from pchandler.constants import RGB_NAMES, XYZ_NAMES
+from pchandler.data_io.core import AbstractIOHandler, PointCloudDataKW
+
+__all__ = ["CsvHandler"]
+
+logger = logging.getLogger(__name__.split(".")[0])
+
+
+class AsciiInfo(NamedTuple):
+    """Summary of what the class does.
+
+    Represents information related to an ASCII file, including its header,
+    delimiter, fields, and other properties.
+
+    Parameters
+    ----------
+    header : list[str]
+        Contains header information of the ASCII file.
+    delimiter : str
+        Specifies the delimiter used in the ASCII file.
+    fields : list[str]
+        Names of the fields in the ASCII file.
+    num_fields : int
+        Number of fields described in the file.
+    num_points : int | None
+        Number of data points in the file or None if unspecified.
+    """
+
+    header: list[str]
+    delimiter: str
+    fields: list[str]
+    num_fields: int
+    num_points: int | None
+
+
+class CsvHandler(AbstractIOHandler):
+    """Handle TXT- and CSV-like file input/output for point clouds.
+
+    Supported file extensions:
+
+    * ``.txt``
+    * ``.csv``
+    * ``.xyz``
+    * ``.asc``
+    * ``.ascii``
+    * ``.pts``
+    """
+
+    FORMATS = [".txt", ".csv", ".xyz", ".asc", ".ascii", ".pts"]
+
+    @classmethod
+    def load(
+        cls,  # type: ignore[override]
+        /,
+        path: str | Path,
+        scalar_fields: Optional[list[str]] = None,
+        remove_prefix: bool = True,
+        prefix: str = "scalar_",
+        column_names_row: int = -1,
+        comment: str = "//",
+        delimiter: Optional[str] = None,
+        **pcd_kw: Unpack[PointCloudDataKW],
+    ) -> PointCloudData:
+        """Load a point cloud from a CSV-like file.
+
+        Parameters
+        ----------
+        path : str or Path
+        scalar_fields : list of str, default=None
+            List of specific scalar fields to extract from the PLY file.
+            Setting `None` will retrieve all scalar fields. Setting to `[]` will ignore scalar fields in the file.
+        remove_prefix : bool, default=True
+            Flag to remove prefixes on scalar field names.
+        prefix : str, default="scalar_"
+            Prefix to strip from scalar field names if `remove_prefix` is True.
+        column_names_row : int, default=-1
+            Header row index where column names are defined. Default is -1 for the last line of the header.
+        comment : str, default = "//"
+            Character used for comments or header in the file
+        delimiter : str, default=None
+            Delimiting character(s) type. If None is set, the file will be sniffed and attempt to automatically it.
+        config : dict
+
+        Returns
+        -------
+        PointCloudData
+
+        Notes
+        -----
+        **Strict-by-name contract:** When the file has a parsed header (``file_info.fields``
+        non-empty), every name in the ``scalar_fields=[...]`` list MUST appear in the header.
+        Any missing name causes a ``ValueError`` that lists the unknown names and the available
+        header fields.  This is a deliberate fail-loud policy — silent positional mis-mapping
+        (the previous behaviour) is no longer possible when a header is present.
+
+        **Positional-fallback condition:** When no header can be parsed (``file_info.fields ==
+        []``, e.g. raw ``.xyz`` files without a header line, or files where
+        ``column_names_row`` is out of range), the loader falls back to positional column
+        mapping: columns 0/1/2 → XYZ, columns 3..3+N → requested scalar fields in their
+        declared order.
+
+        **pcd_kwargs pass-through:** Additional keyword arguments (``**pcd_kw``) are forwarded
+        directly to the :class:`~pchandler.PointCloudData` constructor.  This includes, for
+        example, ``numerical_optimization_shift`` and ``socs_origin``.
+        """
+        # Get general file structure information
+        file_info = sniff_file(path := Path(path), comment=comment, field_names_row_index=column_names_row)
+        num_points_line = True if file_info.num_points else False
+
+        # Strict-by-name guard: when a header is present, every requested scalar field name
+        # must appear in it.  Raise before normalisation so the message quotes the user-visible
+        # names rather than cleaned/prefixed variants.
+        if scalar_fields is not None and file_info.fields:
+            missing = [name for name in scalar_fields if name not in file_info.fields]
+            if missing:
+                raise ValueError(
+                    f"CsvHandler.load: requested scalar fields not in header: {missing}. "
+                    f"Available: {file_info.fields}. "
+                    f"Pass an explicit `column_names_row` if the header lives outside line {column_names_row}."
+                )
+
+        # Validate the fields to be output
+        field_names = cls._validate_field_selection(scalar_fields, file_info.fields, remove_prefix, prefix)
+
+        # Define load config parameters
+
+        if tuple(field_names) == XYZ_NAMES.char:
+            dt = generate_ascii_load_dtype([k.lower() for k in field_names.values()])
+        else:
+            dt = generate_ascii_load_dtype(["x", "y", "z"] + list(field_names.values()))
+
+        load_config: dict[str, Any] = {
+            "fname": path,
+            "skiprows": len(file_info.header) + num_points_line,
+            "delimiter": delimiter or file_info.delimiter,
+            "dtype": dt,
+            "usecols": None,
+        }
+
+        if not file_info.fields:
+            # No header parsed — positional fallback: first 3 cols are XYZ, remaining map to
+            # scalar_fields by order.
+            load_config["usecols"] = list(range(3 + len(field_names)))
+        elif tuple(field_names.keys()) == XYZ_NAMES.char:
+            # XYZ-only request (either no scalar_fields requested or file has only XYZ columns).
+            load_config["usecols"] = [0, 1, 2]
+        else:
+            # Header parsed — strict-by-name: every requested scalar field MUST appear in
+            # file_info.fields (already validated by the strict-by-name guard above).
+            load_config["usecols"] = [0, 1, 2] + [file_info.fields.index(name) for name in field_names.values()]
+
+        # Load all data
+        data = np.loadtxt(**load_config)
+        pcd = PointCloudData(cls.extract_xyz(data, data.size), **pcd_kw)
+
+        if not tuple(field_names) == XYZ_NAMES.char:
+            cls.extract_scalar_fields(pcd, data, data.size, field_names)
+
+        return pcd
+
+    @classmethod
+    def save(
+        cls,  # type: ignore[override]
+        /,
+        pcd: PointCloudData,
+        path: str | Path,
+        scalar_fields: Optional[list[str]] = None,
+        add_prefix: bool = True,
+        prefix: str = "scalar_",
+        revert_sf_types: bool = False,
+        delimiter: str = ",",
+        **config: dict[str, Any],
+    ) -> None:
+        """Save a point cloud to a text-delimited file (CSV / TXT / similar).
+
+        Parameters
+        ----------
+        pcd : PointCloudData
+            Point cloud object
+        path : str or Path
+            File path
+        scalar_fields: list[str], default=None
+            List of specific scalar fields to extract from the PLY file.
+            Setting `None` will retrieve all scalar fields. Setting to `[]` will ignore scalar fields in the file.
+        add_prefix: bool, default=False
+            Flag to add prefixes on scalar field names
+        prefix: str, default="scalar_"
+            Prefix to strip from scalar field names if `remove_prefix` is True.
+        revert_sf_types: bool, default=False
+            Flag to revert scalar field values to their original types or not
+        delimiter: str, default=","
+            Delimiter to separate fields in the file.
+        config : dict of str, Any
+        """
+        array = cls._generate_structured_array(pcd, scalar_fields, add_prefix, prefix, revert_sf_types)
+
+        header = f"// {delimiter.join(list(array.dtype.names or ''))}"
+        fmt_map = {
+            "f": "%.6f",
+            "u": "%u",
+            "i": "%d",
+        }
+        fmt = delimiter.join([fmt_map.get(field[1][1], "%s") for field in array.dtype.descr])  # use %s as fallback
+
+        np.savetxt(path, array, fmt=fmt, delimiter=delimiter, header=header, comments="")
+        logger.info(f"CSV file saved successfully: {path}")
+
+
+def sniff_file(
+    file: Path,
+    delimiters: tuple[str, ...] = (" ", ";", "\t", ","),
+    field_names_row_index: int = -1,
+    lines_to_check: int = 10,
+    minimum_columns: int = 3,
+    comment: str = "//",
+) -> AsciiInfo:
+    r"""Read part of the file and determine some information about its structure.
+
+    Parameters
+    ----------
+    file : Path
+        File path.
+    delimiters : tuple[str, ...], default=(" ", ";", "\t", ",")
+        Possible delimiters to search for.
+    field_names_row_index : int, default=-1
+        Index number for the row in the header that contains field names. Defaults to the last row (-1).
+    lines_to_check : int, default=10
+        Number of lines to analyse for detecting the delimiter and number of columns.
+    minimum_columns : int, default=3
+        Minimum number of columns required for a file to be valid (X, Y, Z).
+    comment : str, default="//"
+        String indicating line comments.
+
+    Returns
+    -------
+    AsciiInfo
+        Detected header, delimiter, field names, number of fields, and number of points in the file.
+    """
+    # Read the header information defined by the comment section of the Ascii File and check if
+    # a number of points is on the first line
+    header, num_points = _get_header(file, comment)
+    delimiter, number_fields = _delimiter_sniffer(file, delimiters, lines_to_check, minimum_columns, comment)
+
+    if not header:
+        return AsciiInfo([], delimiter, [], number_fields, num_points)
+
+    # Get the field names based on the defined row_index. Default is the last line of the header (-1)
+    line: str = header[field_names_row_index].removeprefix(comment)
+
+    # Test both the delimiter defined and white space as to the joining character between field name header info
+    for i in (" ", delimiter):
+        field_names = line.split(i)
+        if len(field_names) == number_fields:
+            return AsciiInfo(header, delimiter, field_names, number_fields, num_points)
+
+    # Log warning if no field names found
+    logger.info(f"Header row number '{field_names_row_index}' does not contain column_names in the line : {line=}")
+    return AsciiInfo(header, delimiter, [], number_fields, num_points)
+
+
+def _get_field_counts(
+    file: Path, character: str, lines_to_check: int = 10, minimum_columns: int = 3, comment: str = "//"
+) -> int:
+    """Determine the number of fields (including XYZ coordinates) in a file.
+
+    Parameters
+    ----------
+    file : Path
+        File path.
+    character : str
+        Delimiter character.
+    lines_to_check : int, default=10
+        Number of post-header lines to sample.
+    minimum_columns : int, default=3
+        Minimum required column count (anything smaller returns 0).
+    comment : str, default="//"
+        String indicating line comments in the file header.
+
+    Returns
+    -------
+    int
+        Number of fields per line if consistent across the sampled lines,
+        else ``0`` (signalling that ``character`` is not a valid delimiter).
+    """
+    header, number_points = _get_header(file, comment)
+    skip_lines = len(header)
+
+    if number_points is not None:
+        skip_lines += 1
+
+    field_counts = set()
+
+    with open(file, "r") as f:
+        for _ in range(skip_lines):
+            f.readline()
+
+        for _ in range(lines_to_check):
+            line = f.readline()
+
+            if not line:
+                break
+
+            line = line.rstrip("\n\r")
+
+            # Case for empty line
+            if not line.strip():
+                continue
+
+            if character not in line:
+                return 0
+
+            fields = line.split(character)
+            field_counts.add(len(fields))
+
+        # Ensure the number of fields per line are consistent
+        if not field_counts:
+            return 0
+        if len(field_counts) > 1:
+            return 0
+
+        # Check all lines have the same number of columns
+        num_fields = field_counts.pop()
+        if num_fields < minimum_columns:
+            return 0
+
+        return num_fields
+
+
+def _delimiter_sniffer(
+    file: Path,
+    delimiters: str | Iterable[str] = (" ", ";", "\t", ","),
+    lines_to_check: int = 10,
+    minimum_columns: int = 3,
+    comment: str = "//",
+) -> tuple[str, int]:
+    r"""Automatically try to determine the delimiter in a file.
+
+    Parameters
+    ----------
+    file : Path
+        File path.
+    delimiters : str | Iterable[str], default=(" ", ";", "\t", ",")
+        Candidate delimiters to test in order.
+    lines_to_check : int, default=10
+        Number of post-header lines to sample.
+    minimum_columns : int, default=3
+        Minimum required column count.
+    comment : str, default="//"
+        String indicating line comments in the file header.
+
+    Returns
+    -------
+    tuple[str, int]
+        The detected delimiter and the number of fields found in the file.
+
+    Raises
+    ------
+    ValueError
+        If none of the candidate delimiters yield a consistent column count.
+    """
+    for delimiter in delimiters:
+        number_fields = _get_field_counts(file, delimiter, lines_to_check, minimum_columns, comment)
+        if number_fields:
+            return delimiter, number_fields
+
+    raise ValueError(f"No valid delimiter was not found in selection: {repr(delimiters)}")
+
+
+def _get_header(file: Path, comment: str = "//") -> tuple[list[str], int | None]:
+    """Extract the header and an optional point-count line from a file.
+
+    Only returns a point count if it is represented as a standalone integer
+    on the first line after the header/comments section.
+
+    Parameters
+    ----------
+    file : Path
+        File path.
+    comment : str, default="//"
+        String indicating line comments in the file header.
+
+    Returns
+    -------
+    tuple[list[str], int | None]
+        The list of header lines (without comment markers) and the optional
+        leading-integer point count.
+    """
+    with open(file, "r") as f:
+        header = []
+        while True:
+            line = f.readline()
+
+            if not line.startswith(comment):
+                line = line.strip("\n\r").strip()
+                number_points = int(line) if line.isdigit() else None
+                break
+
+            header.append(line.removeprefix(comment).strip("\n\r").strip())
+
+    return header, number_points
+
+
+def generate_ascii_load_dtype(column_names: list[str]) -> npt.DTypeLike:
+    """Generate a dtype object for loading ASCII data based on column names.
+
+    XYZ columns are typed ``float64``; RGB triplet columns are typed ``uint8``;
+    all other columns default to ``float32``.
+
+    Parameters
+    ----------
+    column_names : list[str]
+        Column names from the file header (X/Y/Z first, then scalar fields).
+
+    Returns
+    -------
+    numpy.typing.DTypeLike
+        A dtype object suitable for creating a structured array.
+    """
+    names: list[str] = []
+    formats: list[npt.DTypeLike] = []
+    for name in column_names:
+        if name in XYZ_NAMES.char:
+            names.append(name.lower())
+            formats.append(np.float64)
+        else:
+            names.append(name)
+            if name in RGB_NAMES.char or name in RGB_NAMES.words:
+                formats.append(np.uint8)
+            else:
+                formats.append(np.float32)
+    return np.dtype({"names": names, "formats": formats})

@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, refactor/gsd]
+
+jobs:
+  lint:
+    name: Lint (pre-commit)
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # On PRs, check out the head branch so pushes work
+          ref: ${{ github.event_name == 'pull_request' && github.head_ref || '' }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run pre-commit on PRs
+        if: github.event_name == 'pull_request'
+        uses: pre-commit/action@v3.0.1
+        with:
+          extra_args: --all-files
+
+      - name: Run pre-commit on push
+        if: github.event_name == 'push'
+        uses: pre-commit/action@v3.0.1
+        with:
+          extra_args: --all-files
+
+  tests:
+    name: Tests (pytest)
+    needs: [lint]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
+
+      # pyproject.toml pins GSEGUtils via git+ssh:// (DEP-01). CI runners have
+      # no GitHub SSH key by default and GSEGUtils is private (Private :: Do
+      # Not Upload). Load the GSEGUTILS_DEPLOY_KEY repo secret into the SSH
+      # agent so `pip install .[dev]` can clone the SHA-pinned GSEGUtils. The
+      # public half of this keypair is registered as a read-only deploy key on
+      # the GSEGUtils repository. See .planning/phases/01-cross-repo-foundation/
+      # 01-VERIFICATION.md for the auth setup audit trail.
+      - name: Set up SSH agent for private GSEGUtils dep
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.GSEGUTILS_DEPLOY_KEY }}
+
+      - name: Install dev deps
+        run: pip install .[dev]
+
+      - name: Pyright (informational)
+        id: pyright
+        continue-on-error: true
+        uses: jakebailey/pyright-action@v3
+        with:
+          annotate: warnings
+          # NOTE: leave the `warnings` input UNSET — setting it to `true` would
+          # ESCALATE warnings to exit 1 (Pitfall 2 in 01-RESEARCH.md). The
+          # warn-only semantics come from the step-level continue-on-error flag.
+          working-directory: .
+
+      - name: Upload pyright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pyright-report-${{ github.run_id }}
+          path: .pyright-report.json
+          if-no-files-found: ignore
+
+      - name: Run tests
+        run: pytest -m "not benchmark" --cov=pchandler --cov-report=xml
+
+      - name: Upload coverage to Codecov
+        if: success()
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}

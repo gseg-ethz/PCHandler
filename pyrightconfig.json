@@ -1,0 +1,13 @@
+{
+  "pythonVersion": "3.12",
+  "stubPath": "./stubs",
+
+  "include": ["src/pchandler", "tests"],
+  "exclude": [".venv", ".tox", "build", "dist", "**/__pycache__"],
+
+  "typeCheckingMode": "strict",
+  "reportMissingImports": "error",
+  "reportMissingModuleSource": "warning",
+  "reportUnusedImport": "warning",
+  "reportMissingTypeStubs": "warning"
+}

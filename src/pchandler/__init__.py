@@ -1,133 +1,92 @@
+# pchandler – Toolbox for point-cloud handling, processing and analysis
+#
+# Copyright (c) 2022–2026 ETH Zurich
+# Department of Civil, Environmental and Geomatic Engineering (D-BAUG)
+# Institute of Geodesy and Photogrammetry
+# Geosensors and Engineering Geodesy
+#
+# Authors:
+#   Nicholas Meyer
+#   Jon Allemand
+#
+# SPDX-License-Identifier: BSD-3-Clause
+
+# pchandler - Toolbox for point-cloud handling, processing and analysis
+#
+# Copyright (c) 2025, Nicholas Meyer, Geosensors and Engineering Geodesy,
+# Institute of Geodesy and Photogrammetry, ETH Zurich, Switzerland
+# SPDX-License-Identifier: BSD-3-Clause
+#
+# Author: Nicholas Meyer (meyernic@ethz.ch)
+
 """
-``pchandler``
+PCHandler contains various modules to make handling and analysing Point Cloud data easy.
 
-The ``pchandler`` module provides a comprehensive set of tools for handling, manipulating, and analyzing
-3D point cloud data. Its components are modularly designed, covering geometry processing, field-of-view
-(FoV) management, data input/output, and utility functions. The package is optimized for flexibility,
-efficiency, and extensibility, supporting both CPU and GPU acceleration for scalable workflows.
+Key modules include:
 
-Components:
------------
-1. ``pchandler.geometry``:
-   - Core functionality for managing 3D point cloud data.
-   - Provides the `PointCloudData` class for handling coordinates, colors, normals, and scalar fields.
-   - Includes methods for filtering, sampling, range operations, voxel downsampling, and integration with Open3D.
-   - Supports spherical coordinate transformations and FoV-based operations for spatial analysis.
-
-   Example Usage:
-
-.. code-block:: python
-
-    from pchandler.geometry import PointCloudData
-    import numpy as np
-
-    # Create a point cloud from random data
-    points = np.random.rand(1000, 3)
-    pcd = PointCloudData(points)
-
-    # Filter points within a specific range
-    pcd.filter_range(low=0.2, high=0.8)
-    print(f"Filtered point count: {pcd.nbPoints}")
-
-
-2. ``pchandler.fov``:
-   - Utilities for managing angular regions in 3D space.
-   - Includes the FoV class for defining and manipulating fields of view, supporting conversions between angular units.
-   - The FoVTree class allows hierarchical organization of FoVs for spatial partitioning.
-
-   Example Usage:
-
-.. code-block:: python
-
-    from pchandler.fov import FoV
-    # Define a field of view
-    fov = FoV(horizontal_min=0, horizontal_max=90, elevation_min=-30, elevation_max=30, unit="deg")
-
-    # Split the FoV into quadrants
-    quadrants = fov.quadrants()
-    print("FoV quadrants:", quadrants)
-
-3. ``pchandler.data_io``:
-   - Provides utilities for reading and writing point cloud data in various formats, including PLY, LAS/LAZ, and CSV.
-   - Includes support for managing colors, normals, and scalar fields during import/export.
-
-   Example Usage:
-
-.. code-block:: python
-
-    from pchandler.data_io import load_ply, save_ply
-    from pathlib import Path
-
-    # Load a PLY file
-    pcd = load_ply(Path("example.ply"))
-
-    # Save the point cloud to another file
-    save_ply(Path("output.ply"), pcd)
-
-4. ``pchandler.util``:
-   - Provides utility functions for common operations, such as angle unit conversions.
-   - Includes the AngleUnit enum and a robust convert_angles function.
-
-   Example Usage:
-
-.. code-block:: python
-
-    from pchandler.util import convert_angles, AngleUnit
-    import numpy as np
-
-    # Convert angles from degrees to radians
-    degrees = np.array([0, 45, 90, 180])
-    radians = convert_angles(degrees, source_unit=AngleUnit.DEGREE, target_unit=AngleUnit.RAD)
-    print("Radians:", radians)
-
-Key Features:
--------------
-1. **Point Cloud Geometry**:
-   - Manage and manipulate point cloud data with attributes like coordinates, colors, normals, and scalar fields.
-   - Support for operations such as filtering, voxel downsampling, and outlier removal.
-
-2. **Field-of-View (FoV) Management**:
-   - Define and manipulate rectangular angular regions (FoVs) in 3D space.
-   - Hierarchical FoV trees for spatial partitioning and efficient data processing.
-   - Functions for splitting, merging, tiling, and converting between angular units.
-
-3. **Data I/O**:
-   - Read and write various point cloud file formats, including PLY, LAS/LAZ, and ASCII.
-   - Efficient handling of large datasets with GPU acceleration (when supported).
-
-4. **Utilities**:
-   - Convert between angle units (radians, degrees, gons).
-   - Provide numerical constants and helper functions to facilitate computations.
-
-Dependencies:
--------------
-- **Core Libraries**:
-  - ``numpy``: For numerical computations and array manipulation.
-  - ``geopandas``, `shapely`: For geometry processing and spatial operations.
-  - ``alphashape``: For generating alpha shapes to compute point cloud outlines.
-
-- **Optional GPU Support**:
-  - ``cudf``, ``cuspatial``, ``cuml``: For accelerated processing of point cloud data.
-  - Requires a CUDA-enabled GPU for GPU-based functionalities.
-
-- **Point Cloud I/O**:
-  - ``plyfile``: For reading/writing PLY files.
-  - ``laspy``: For handling LAS/LAZ file formats.
-
-- **Other Utilities**:
-  - ``joblib``: For parallel processing.
-  - ``open3d``: For interfacing with the Open3D library for visualization and advanced operations.
-
-This modular design ensures that `pchandler` is both extensible and scalable, making it suitable for a wide range of
-applications in 3D data analysis, GIS, and computer vision.
+:core: Base PointCloudData class with built-in validation, scalar field management and optimal shift handling.
+:geometry: Key functionality and classes based around geometry including coordinate, angle and FoV classes
+:filters: Classes for easy filtering or segmenting a point cloud
+:data_io: Various handlers for the loading and saving of point cloud data
 """
 
+from __future__ import annotations
+
+import importlib
+from typing import TYPE_CHECKING
 
 __author__ = "Nicholas Meyer"
 __email__ = "meyernic@ethz.ch"
-# __version__ = "0.6.8"
 
-from . import data_io, fov, geometry, util
-from ._version import version as __version__
+__all__ = [
+    "data_io",
+    "geometry",
+    "filters",
+    "scalar_fields",
+    "base_types",
+    "constants",
+    "__author__",
+    "__email__",
+]
 
-__all__ = ["data_io", "fov", "geometry", "util", "__version__"]
+_lazy_map = {
+    "PointCloudData": "core",
+    "load_file": "data_io",
+    "__version__": "_version",
+    "version": "_version",
+    "__version_tuple__": "_version",
+    "version_tuple": "_version",
+}
+
+__all__ = __all__ + list(_lazy_map)
+
+if TYPE_CHECKING:
+    from . import base_types as base_types
+    from . import constants as constants
+    from . import data_io as data_io
+    from . import filters as filters
+    from . import geometry as geometry
+    from . import scalar_fields as scalar_fields
+    from ._version import __version__ as __version__
+    from ._version import __version_tuple__ as __version_tuple__
+    from ._version import version as version
+    from ._version import version_tuple as version_tuple
+    from .core import PointCloudData as PointCloudData
+
+
+def __getattr__(name: str):
+    if name in _lazy_map:
+        module = importlib.import_module(f"{__name__}.{_lazy_map[name]}")
+        val = getattr(module, name)
+    else:
+        try:
+            val = importlib.import_module(f"{__name__}.{name}")
+        except ModuleNotFoundError:
+            raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from None
+    globals()[name] = val
+    return val
+
+
+def __dir__():
+    # so tab-completion / introspection shows the lazy names
+    return sorted(set(__all__) | set(globals().keys()))

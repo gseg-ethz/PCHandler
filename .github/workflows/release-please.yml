@@ -1,28 +1,47 @@
+name: release-please
 on:
-  push:
+  workflow_run:
+    workflows:
+      - CI
+    types: [completed]
     branches:
       - main
-name: release-please
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
 jobs:
   release-please:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
       - uses: googleapis/release-please-action@v4
         id: release
         with:
-          token: ${{ secrets.NIME_RELEASE_PLEASE_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
-      - uses: actions/checkout@v4
-      - name: tag major and minor versions
-        if: ${{ steps.release.outputs.release_created }}
+
+      - name: Tag major and minor versions
+        if: ${{ steps.release.outputs.release_created == 'true' }}
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git remote add gh-token "https://${{ secrets.NIME_RELEASE_PLEASE_TOKEN }}@github.com/googleapis/release-please-action.git"
+
+          # Clean up old tags if they exist
           git tag -d v${{ steps.release.outputs.major }} || true
           git tag -d v${{ steps.release.outputs.major }}.${{ steps.release.outputs.minor }} || true
-          git push origin :v${{ steps.release.outputs.major }} || true
-          git push origin :v${{ steps.release.outputs.major }}.${{ steps.release.outputs.minor }} || true
+          git push origin :refs/tags/v${{ steps.release.outputs.major }} || true
+          git push origin :refs/tags/v${{ steps.release.outputs.major }}.${{ steps.release.outputs.minor }} || true
+
+          # Create and push new tags
           git tag -a v${{ steps.release.outputs.major }} -m "Release v${{ steps.release.outputs.major }}"
           git tag -a v${{ steps.release.outputs.major }}.${{ steps.release.outputs.minor }} -m "Release v${{ steps.release.outputs.major }}.${{ steps.release.outputs.minor }}"
           git push origin v${{ steps.release.outputs.major }}
