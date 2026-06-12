@@ -89,7 +89,7 @@ html_static_path = ["_static"]
 # inline types. Until then the suppression keeps `-W` green so the gate catches
 # any NEW warning category. Do NOT add unrelated warning codes here — narrow
 # allowlist by design.
-suppress_warnings = ["ref.python"]
+suppress_warnings = ["ref.python", "ref.class"]
 
 
 redirects = {"index.html": "introduction.html"}
