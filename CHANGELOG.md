@@ -393,7 +393,8 @@
   place. The Read the Docs build for v2.0.0 displays "1.0.1" in the version selector despite
   the release artifact being v2.0.0. The RTD admin UI version-label was hand-overridden to
   `2.0.0` on `<DATE — fill post-RTD-override>`. The config bug is fixed in commit
-  `<REL-03 SHA — fill post-merge>`; future releases will stamp correctly.
+  [`6f1b069`](https://github.com/gseg-ethz/PCHandler/commit/6f1b069b802d7ddba51b7a06da0794555e90a382);
+  future releases will stamp correctly.
 
 ## [0.9.2](https://github.com/gseg-ethz/PCHandler/compare/v0.9.1...v0.9.2) (2025-04-15)
 
