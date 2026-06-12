@@ -39,7 +39,8 @@ def pcd_only_coords():
 
 @pytest.fixture(scope="function")
 def random_downsample_filter():
-    return RandomDownsampleFilter(0.5)
+    # TEST-07: explicit seed for determinism; mirrors pcd_all's seeded convention (Phase 4 D-23).
+    return RandomDownsampleFilter(0.5, seed=42)
 
 
 @pytest.fixture(scope="function")
@@ -64,7 +65,8 @@ class TestRandomDownSampleFilter:
             RandomDownsampleFilter(size)
 
     def test_mask(self, random_downsample_filter, pcd_all):
-        expected_size = int(np.round(0.5 * len(pcd_all)))
+        # N is even (100000), so np.round and np.ceil agree on 0.5 * N; deterministic under seed=42.
+        expected_size = int(np.ceil(0.5 * len(pcd_all)))
         mask = random_downsample_filter.mask(pcd_all)
 
         assert mask.shape == (pcd_all.shape[0],)
@@ -72,6 +74,26 @@ class TestRandomDownSampleFilter:
         assert isinstance(mask, np.ndarray)
 
         assert np.sum(mask) == expected_size
+
+    def test_mask_does_not_mutate_global_rng_state(self, pcd_all):
+        """TEST-07 regression: mask() must not advance the global numpy RNG state.
+
+        The pre-fix shape called ``np.random.choice`` which mutated the legacy
+        global generator; downstream stochastic tests then became order-dependent
+        (the original ``TestAngleBinDownsample::test_mask`` flake). The fix routes
+        through a per-instance ``default_rng`` so this snapshot is byte-stable.
+        """
+        before = np.random.get_state(legacy=True)
+        RandomDownsampleFilter(0.5).mask(pcd_all)
+        RandomDownsampleFilter(0.5, seed=1234).mask(pcd_all)
+        after = np.random.get_state(legacy=True)
+
+        # State tuple shape: ('MT19937', uint32[624], pos, has_gauss, cached_gauss).
+        assert before[0] == after[0]
+        assert np.array_equal(before[1], after[1])
+        assert before[2] == after[2]
+        assert before[3] == after[3]
+        assert before[4] == after[4]
 
 
 class TestVoxelDownsampleFilter:
@@ -182,5 +204,3 @@ class TestAngleBinDownsample:
             assert len(pcd) < len(pcd_all)
             assert len(np.unique(pcd.hz)) == len(pcd.hz)
             assert len(np.unique(pcd.v)) == len(pcd.v)
-
-    # TODO better tests on verifying the algorithms
