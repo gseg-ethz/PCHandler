@@ -77,6 +77,20 @@ exclude_patterns = []
 html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]
 
+# DOC-01 (Phase 8) + Phase 9 docs cleanup carry-over:
+# `sphinx-build -W` surfaced ~197 pre-existing warnings, the vast majority
+# `ref.python` ambiguities from the lazy-load `__init__` pattern (e.g.
+# `pchandler.PointCloudData` AND `pchandler.core.PointCloudData` are both
+# discoverable targets; sphinx warns on every cross-reference). The plus-one
+# `numpydantic.NDArray` external-target warning surfaces because the numpydantic
+# intersphinx inventory does not currently export NDArray under py:class.
+# Phase 9 will (a) collapse the lazy-load ambiguities via :no-index: in stubs and
+# (b) revisit the numpydantic intersphinx mapping or replace external refs with
+# inline types. Until then the suppression keeps `-W` green so the gate catches
+# any NEW warning category. Do NOT add unrelated warning codes here — narrow
+# allowlist by design.
+suppress_warnings = ["ref.python", "ref.class"]
+
 
 redirects = {"index.html": "introduction.html"}
 

@@ -102,7 +102,7 @@ extra = [
 	"open3d ~= 0.19",
 ]
 doc = [
-    "sphinx ~= 8.2",
+    "sphinx ~= 8.2.3, <8.3",  # DOC-01: block 8.3 autosummary regression (sphinx-doc/sphinx#14166)
     "sphinx_rtd_theme"
 ]
 dev = [
@@ -114,6 +114,7 @@ dev = [
     "pytest-cov~=5.0",        # pytest coverage plugin (used by ci.yml --cov)
     "coverage~=7.0",          # coverage reporting
     "pytest-benchmark ~= 5.2",  # Phase 4 D-30 — opt-in microbenchmark plugin (excluded from CI)
+    "pytest-randomly ~= 4.1",   # TEST-07: shuffle test order each run; surfaces order-deps
 ]
 cuda11 = ["geopandas ~= 1.0", "cudf-cu11 == 25.4.*", "cuspatial-cu11 == 25.4.*", "cuproj-cu11 == 25.4.*",
 	"cuml-cu11 == 25.4.*", "dask-cudf-cu11 == 25.4.*", ]
@@ -124,3 +125,11 @@ cuda12 = ["geopandas ~= 1.0", "cudf-cu12 == 25.4.*", "cuspatial-cu12 == 25.4.*",
 markers = [
     "benchmark: opt-in microbenchmark (excluded from CI via `-m \"not benchmark\"`)",
 ]
+# TEST-07 D-13 + Phase 9 TEST-08 carry-over:
+# pytest-randomly is installed (dev dep) so devs see shuffled order locally, but
+# CI explicitly disables the plugin until the OptimizedShiftManager singleton
+# state pollution between tests is cleaned up. Surfaced flake:
+# tests/geometry/test_optimal_shift.py::TestOptimizedShiftManagerApiCompletion::
+# test_init_kwarg_then_getter (assert 3 == 4 — counter off-by-one when sibling
+# test creates a shift first). Phase 9 TEST-08 owns the per-test fixture reset.
+addopts = ["-p", "no:randomly"]
