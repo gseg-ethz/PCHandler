@@ -34,7 +34,16 @@ from .spherical_coordinate_filters import (
     RangeFilter
 )
 
-from . import gpu
+# GPU filters (PolygonFilterGPU/SphericalPolygonFilterGPU) require RAPIDS
+# (cudf/cuspatial), which are absent on CPU-only machines and not pip-installable
+# into isolated venvs. Import lazily so `import pchandler.geometry` — and
+# PointCloudData + all CPU filters — works without a GPU. The GPU module stays
+# importable as `pchandler.geometry.filters.gpu` wherever cudf IS present.
+# (CPU-01 surgical fix.)
+try:
+    from . import gpu
+except ImportError:  # cudf/cuspatial unavailable — CPU-only environment
+    gpu = None  # type: ignore[assignment]
 
 __all__ = ["PointCloudFilter","BoxFilter","SphereFilter","PolygonFilter", "RandomDownsampleFilter", "VoxelDownsample",
            "SphericalOutlierFilter", "CartesianOutlierFilter", "ScalarFieldFilter", "ScalarFieldPercentileFilter",
