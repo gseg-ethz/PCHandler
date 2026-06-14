@@ -125,11 +125,3 @@ cuda12 = ["geopandas ~= 1.0", "cudf-cu12 == 25.4.*", "cuspatial-cu12 == 25.4.*",
 markers = [
     "benchmark: opt-in microbenchmark (excluded from CI via `-m \"not benchmark\"`)",
 ]
-# TEST-07 D-13 + Phase 9 TEST-08 carry-over:
-# pytest-randomly is installed (dev dep) so devs see shuffled order locally, but
-# CI explicitly disables the plugin until the OptimizedShiftManager singleton
-# state pollution between tests is cleaned up. Surfaced flake:
-# tests/geometry/test_optimal_shift.py::TestOptimizedShiftManagerApiCompletion::
-# test_init_kwarg_then_getter (assert 3 == 4 — counter off-by-one when sibling
-# test creates a shift first). Phase 9 TEST-08 owns the per-test fixture reset.
-addopts = ["-p", "no:randomly"]
