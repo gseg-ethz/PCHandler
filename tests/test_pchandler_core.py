@@ -26,33 +26,34 @@ from tests.geometry.test_coordinates import (
 )
 
 N = 100
-_small_xyz = np.random.rand(N, 3)
-_large_xyz = np.random.rand(1_000_000, 3)
+_small_xyz = np.random.default_rng(0).random((N, 3))
+_large_xyz = np.random.default_rng(1).random((1_000_000, 3))
 
 
-def random_coordinates(scale: float, offset: float) -> np.ndarray:
-    xyz_base = np.random.randn(N, 3)
+def random_coordinates(scale: float, offset: float, seed: int = 2) -> np.ndarray:
+    rng = np.random.default_rng(seed)
+    xyz_base = rng.standard_normal((N, 3))
     return xyz_base * scale + offset
 
 
 @pytest.fixture(scope="function", autouse=True)
 def xyz_() -> np.ndarray:
-    return random_coordinates(10, 0)
+    return random_coordinates(10, 0, seed=2)
 
 
 @pytest.fixture(scope="function", autouse=True)
 def xyz_local_() -> np.typing.NDArray:
-    return random_coordinates(1, 0)
+    return random_coordinates(1, 0, seed=3)
 
 
 @pytest.fixture(scope="function", autouse=True)
 def xyz_global_() -> np.typing.NDArray:
-    return random_coordinates(1, 100_000)
+    return random_coordinates(1, 100_000, seed=4)
 
 
 @pytest.fixture(scope="function", autouse=True)
 def xyz_huge_() -> np.typing.NDArray:
-    return random_coordinates(100_000, 0)
+    return random_coordinates(100_000, 0, seed=5)
 
 
 @pytest.fixture(scope="function")
@@ -77,33 +78,39 @@ def large_xyz():
 
 @pytest.fixture(scope="function", autouse=True)
 def normals_() -> np.ndarray:
-    vals = np.random.rand(N, 3).astype(np.float32)
+    rng = np.random.default_rng(6)
+    vals = rng.random((N, 3)).astype(np.float32)
     return vals / np.linalg.norm(vals, axis=1).reshape(-1, 1)
 
 
 @pytest.fixture(scope="function", autouse=True)
 def intensity_() -> np.ndarray:
-    return np.random.rand(N).astype(np.float32)
+    rng = np.random.default_rng(7)
+    return rng.random(N).astype(np.float32)
 
 
 @pytest.fixture(scope="function", autouse=True)
 def reflectance_() -> np.ndarray:
-    return np.random.rand(N).astype(np.float32)
+    rng = np.random.default_rng(8)
+    return rng.random(N).astype(np.float32)
 
 
 @pytest.fixture(scope="function", autouse=True)
 def scalar_field() -> ScalarField:
-    return ScalarField(np.random.rand(N), name="test")
+    rng = np.random.default_rng(9)
+    return ScalarField(rng.random(N), name="test")
 
 
 @pytest.fixture(scope="function", autouse=True)
 def rgb_():
-    return np.random.randint(0, 255, (N, 3), dtype=np.uint8)
+    rng = np.random.default_rng(10)
+    return rng.integers(0, 255, (N, 3), dtype=np.uint8)
 
 
 @pytest.fixture(scope="function", autouse=True)
 def sfs_():
-    array = np.random.rand(N)
+    rng = np.random.default_rng(11)
+    array = rng.random(N)
     return {"test": array}
 
 
@@ -120,23 +127,27 @@ def nos_mini_() -> OptimizedShift:
 @pytest.fixture(scope="function")
 def pcd(rgb_, normals_, intensity_, reflectance_) -> PointCloudData:
     return PointCloudData(
-        xyz=random_coordinates(1, 0), rgb=rgb_, normals=normals_, intensity=intensity_, reflectance=reflectance_
+        xyz=random_coordinates(1, 0, seed=12),
+        rgb=rgb_,
+        normals=normals_,
+        intensity=intensity_,
+        reflectance=reflectance_,
     )
 
 
 @pytest.fixture(scope="function")
 def pcd2(rgb_, normals_, intensity_) -> PointCloudData:
-    return PointCloudData(xyz=random_coordinates(1, 0), rgb=rgb_, normals=normals_, intensity=intensity_)
+    return PointCloudData(xyz=random_coordinates(1, 0, seed=13), rgb=rgb_, normals=normals_, intensity=intensity_)
 
 
 @pytest.fixture(scope="function")
 def pcd3(rgb_, normals_, reflectance_) -> PointCloudData:
-    return PointCloudData(xyz=random_coordinates(1, 0), rgb=rgb_, normals=normals_, reflectance=reflectance_)
+    return PointCloudData(xyz=random_coordinates(1, 0, seed=14), rgb=rgb_, normals=normals_, reflectance=reflectance_)
 
 
 @pytest.fixture(scope="function")
 def pcd_shifted(rgb_, normals_, reflectance_, nos_) -> PointCloudData:
-    xyz = random_coordinates(1, 0)
+    xyz = random_coordinates(1, 0, seed=15)
     xyz += nos_.value
     return PointCloudData(
         xyz=xyz,
@@ -149,9 +160,10 @@ def pcd_shifted(rgb_, normals_, reflectance_, nos_) -> PointCloudData:
 
 @pytest.fixture(scope="function")
 def pcd_o3d():
-    xyz = np.random.rand(10, 3)
+    rng = np.random.default_rng(16)
+    xyz = rng.random((10, 3))
     rgb = np.ones((10, 3))
-    normals = np.random.rand(10, 3)
+    normals = rng.random((10, 3))
     normals /= np.linalg.norm(normals, axis=1)[:, None]
 
     pcd = o3d.geometry.PointCloud()
@@ -164,10 +176,11 @@ def pcd_o3d():
 
 @pytest.fixture(scope="function")
 def pcd_o3d_tensor():
-    xyz = (np.random.rand(10, 3) - 0.5) * 50 + 20
+    rng = np.random.default_rng(17)
+    xyz = (rng.random((10, 3)) - 0.5) * 50 + 20
     rgb = np.ones((10, 3)).astype(np.float32)
-    intensity = np.random.rand(10) * 255
-    normals = np.random.rand(10, 3)
+    intensity = rng.random(10) * 255
+    normals = rng.random((10, 3))
     normals /= np.linalg.norm(normals, axis=1)[:, None]
 
     pcd = o3d.t.geometry.PointCloud()
@@ -254,7 +267,8 @@ class BaseTestPointCloudData:
         assert np.all(pcd.scalar_fields["test"] == sfs_["test"])
         assert isinstance(pcd.scalar_fields["test"], ScalarField)
 
-        test_array = np.random.rand(N)
+        rng = np.random.default_rng(18)
+        test_array = rng.random(N)
         pcd = self.cls(xyz_, scalar_fields={"test": ScalarField(test_array, name="test2")})
         assert "test" in pcd.scalar_fields
         assert np.all(pcd.scalar_fields["test"] == test_array)
@@ -268,17 +282,17 @@ class BaseTestPointCloudData:
 
         # Too many columns
         with pytest.raises(ValidationError):
-            data = np.random.rand(N, 4).astype(np.float32)
+            data = np.random.default_rng(19).random((N, 4)).astype(np.float32)
             self.cls(data, rgb=rgb_, normals=normals_, scalar_fields=sfs_)
 
         # Too many dimensions
         with pytest.raises(ValidationError):
-            data = np.random.rand(N, 4, 3).astype(np.float32)
+            data = np.random.default_rng(20).random((N, 4, 3)).astype(np.float32)
             self.cls(data, rgb=rgb_, normals=normals_, scalar_fields=sfs_)
 
         # Too few dimensions
         with pytest.raises(ValidationError):
-            data = np.random.rand(N, 2).astype(np.float32)
+            data = np.random.default_rng(21).random((N, 2)).astype(np.float32)
             self.cls(data, rgb=rgb_, normals=normals_, scalar_fields=sfs_)
 
     @pytest.mark.parametrize(
@@ -324,7 +338,7 @@ class BaseTestPointCloudData:
             pcd[0] = 123
 
         with pytest.raises(Exception):
-            pcd["rgb"] = RGBFields(np.random.randint(0, 256, (len(pcd), 3), dtype=np.uint8))
+            pcd["rgb"] = RGBFields(np.random.default_rng(22).integers(0, 256, (len(pcd), 3), dtype=np.uint8))
 
     def test_num_points(self, pcd):
         assert len(pcd) == pcd.nbPoints == N
@@ -351,7 +365,8 @@ class BaseTestPointCloudData:
             assert pcd.reflectance.dtype == np.float32
 
         def test_rgb_setter(self, pcd):
-            new_data = np.random.randint(0, 255, (N, 3), dtype=np.uint8)
+            rng = np.random.default_rng(23)
+            new_data = rng.integers(0, 255, (N, 3), dtype=np.uint8)
             pcd.rgb = new_data
             assert isinstance(pcd.rgb, RGBFields)
             assert pcd.rgb.shape[1] == 3
@@ -359,7 +374,8 @@ class BaseTestPointCloudData:
             assert np.all(pcd.rgb == new_data)
 
         def test_normals_setter(self, pcd):
-            new_data = np.random.rand(N, 3).astype(np.float32)
+            rng = np.random.default_rng(24)
+            new_data = rng.random((N, 3)).astype(np.float32)
             pcd.normals = new_data
             assert isinstance(pcd.normals, NormalFields)
             assert pcd.normals.shape[1] == 3
@@ -367,7 +383,8 @@ class BaseTestPointCloudData:
             assert np.all(pcd.normals == new_data / np.linalg.norm(new_data, axis=1).reshape(-1, 1))
 
         def test_intensity_setter(self, pcd):
-            new_data = np.random.rand(N).astype(np.float32)
+            rng = np.random.default_rng(25)
+            new_data = rng.random(N).astype(np.float32)
             pcd.intensity = new_data
             assert isinstance(pcd.intensity, ScalarField)
             assert pcd.intensity.ndim == 1
@@ -375,7 +392,8 @@ class BaseTestPointCloudData:
             assert np.allclose(pcd.intensity.get_original_data(), new_data, atol=1 / 2**16)
 
         def test_reflectance_setter(self, pcd):
-            new_data = np.random.rand(N)
+            rng = np.random.default_rng(26)
+            new_data = rng.random(N)
             pcd.reflectance = new_data.astype(np.float32)
             assert isinstance(pcd.reflectance, ScalarField)
             assert pcd.reflectance.ndim == 1
@@ -443,7 +461,7 @@ class BaseTestPointCloudData:
                 assert type(e.value) in (TypeError, IndexError, ValueError)
 
             def test_invalid_float_array(self, pcd):
-                bad_mask = np.random.rand(len(pcd))
+                bad_mask = np.random.default_rng(27).random(len(pcd))
                 with pytest.raises(DtypeError):
                     pcd.create_mask(bad_mask)  # type: ignore
 

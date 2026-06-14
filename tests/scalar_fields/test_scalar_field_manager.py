@@ -20,37 +20,44 @@ N = 40
 
 @pytest.fixture(scope="function", autouse=True)
 def rgb_field() -> RGBFields:
-    return RGBFields(np.random.randint(0, 255, (N, 3), dtype=np.uint8))
+    rng = np.random.default_rng(0)
+    return RGBFields(rng.integers(0, 255, (N, 3), dtype=np.uint8))
 
 
 @pytest.fixture(scope="function", autouse=True)
 def normals_field() -> NormalFields:
-    return NormalFields(np.random.rand(N, 3).astype(np.float32))
+    rng = np.random.default_rng(1)
+    return NormalFields(rng.random((N, 3)).astype(np.float32))
 
 
 @pytest.fixture(scope="function", autouse=True)
 def intensity_field() -> ScalarField:
-    return ScalarField(np.random.rand(N), name="intensity")
+    rng = np.random.default_rng(2)
+    return ScalarField(rng.random(N), name="intensity")
 
 
 @pytest.fixture(scope="function", autouse=True)
 def reflectance_field() -> ScalarField:
-    return ScalarField(np.random.rand(N), name="reflectance")
+    rng = np.random.default_rng(3)
+    return ScalarField(rng.random(N), name="reflectance")
 
 
 @pytest.fixture(scope="function", autouse=True)
 def scalar_field() -> ScalarField:
-    return ScalarField(np.random.rand(N), name="test")
+    rng = np.random.default_rng(4)
+    return ScalarField(rng.random(N), name="test")
 
 
 @pytest.fixture(scope="function", autouse=True)
 def invalid_size() -> ScalarField:
-    return ScalarField(np.random.rand(N + 10), name="test")
+    rng = np.random.default_rng(5)
+    return ScalarField(rng.random(N + 10), name="test")
 
 
 @pytest.fixture(scope="function", autouse=True)
 def pcd() -> PointCloudData:
-    return PointCloudData(np.random.rand(N, 3))
+    rng = np.random.default_rng(6)
+    return PointCloudData(rng.random((N, 3)))
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -152,7 +159,8 @@ class TestSfmInitialisation:
         assert id(sfm["test"]) == id(sfm2["test"])
 
     def test_fields_with_ndarray(self):
-        rand_vals = np.random.rand(100)
+        rng = np.random.default_rng(7)
+        rand_vals = rng.random(100)
         sfs = {"nums": rand_vals}
         sfm = ScalarFieldManager(fields=sfs)
 
@@ -174,7 +182,7 @@ class TestSfmInitialisation:
             (True, {}),
             ("asdasd", {}),
             (None, {"abc": True}),
-            (None, np.random.rand(100)),
+            (None, np.random.default_rng(8).random(100)),
         ),
     )
     def test_invalid(self, parent, fields):
@@ -314,7 +322,8 @@ class TestGeneralProperties:
 
     def test_num_points(self, empty_sfm, base_sfm, no_parent_sfm):
         assert no_parent_sfm.num_points == -1
-        this_pcd = PointCloudData(np.random.rand(100, 3), scalar_field={"abc": np.random.rand(100)})
+        rng = np.random.default_rng(9)
+        this_pcd = PointCloudData(rng.random((100, 3)), scalar_field={"abc": rng.random(100)})
         sfm = copy.deepcopy(this_pcd.scalar_fields)
         del this_pcd
         gc.collect()
@@ -328,7 +337,8 @@ class TestSpecialNamedProperties:
         assert base_sfm.rgb.dtype == np.uint8
 
     def test_rgb_setter(self, empty_sfm):
-        array = np.random.randint(0, 255, (N, 3), dtype=np.uint8)
+        rng = np.random.default_rng(10)
+        array = rng.integers(0, 255, (N, 3), dtype=np.uint8)
         empty_sfm.rgb = array
         assert hasattr(empty_sfm, "rgb")
         assert np.all(empty_sfm.rgb == array)
@@ -340,7 +350,8 @@ class TestSpecialNamedProperties:
         assert base_sfm.normals.dtype == np.float32
 
     def test_normals_setter(self, empty_sfm):
-        array = np.random.rand(N, 3).astype(np.float32)
+        rng = np.random.default_rng(11)
+        array = rng.random((N, 3)).astype(np.float32)
         array = array / np.linalg.norm(array, axis=1).reshape(-1, 1)
         empty_sfm.normals = array
         assert hasattr(empty_sfm, "normals")
@@ -353,7 +364,8 @@ class TestSpecialNamedProperties:
         assert base_sfm.intensity.dtype == np.float64
 
     def test_intensity_setter(self, empty_sfm):
-        array = np.random.rand(N)
+        rng = np.random.default_rng(12)
+        array = rng.random(N)
         empty_sfm.intensity = array
         assert hasattr(empty_sfm, "intensity")
         assert np.allclose(empty_sfm.intensity, array)
@@ -365,7 +377,8 @@ class TestSpecialNamedProperties:
         assert base_sfm.reflectance.dtype == np.float64
 
     def test_reflectance_setter(self, empty_sfm):
-        array = np.random.rand(N)
+        rng = np.random.default_rng(13)
+        array = rng.random(N)
         empty_sfm.reflectance = array
 
         assert hasattr(empty_sfm, "reflectance")
@@ -438,7 +451,8 @@ class TestExtraFieldMethods:
         assert np.all(base_sfm["newfield"] == data)
 
     def test_create_field(self, base_sfm):
-        data = np.random.rand(N)
+        rng = np.random.default_rng(14)
+        data = rng.random(N)
         base_sfm.create_field("new_field", data)
 
         assert "new_field" in base_sfm
@@ -454,16 +468,17 @@ class TestExtraFieldMethods:
 
 class TestNamedFieldHandlers:
     def test_rgb_handlers(self, base_sfm, empty_sfm):
-        r = ScalarField(np.random.randint(0, 255, N, dtype=np.uint8), name="r")
-        red = ScalarField(np.random.randint(0, 255, N, dtype=np.uint8), name="red")
-        green = ScalarField(np.random.randint(0, 255, N, dtype=np.uint8), name="green")
-        g = ScalarField(np.random.randint(0, 255, N, dtype=np.uint8), name="g")
-        blue = ScalarField(np.random.randint(0, 255, N, dtype=np.uint8), name="blue")
-        b = ScalarField(np.random.randint(0, 255, N, dtype=np.uint8), name="b")
-        color = RGBFields(np.random.randint(0, 255, (N, 3), dtype=np.uint8), name="color")
-        colour = RGBFields(np.random.randint(0, 255, (N, 3), dtype=np.uint8), name="colour")
-        colors = RGBFields(np.random.randint(0, 255, (N, 3), dtype=np.uint8), name="colors")
-        colours = RGBFields(np.random.randint(0, 255, (N, 3), dtype=np.uint8), name="colours")
+        rng = np.random.default_rng(15)
+        r = ScalarField(rng.integers(0, 255, N, dtype=np.uint8), name="r")
+        red = ScalarField(rng.integers(0, 255, N, dtype=np.uint8), name="red")
+        green = ScalarField(rng.integers(0, 255, N, dtype=np.uint8), name="green")
+        g = ScalarField(rng.integers(0, 255, N, dtype=np.uint8), name="g")
+        blue = ScalarField(rng.integers(0, 255, N, dtype=np.uint8), name="blue")
+        b = ScalarField(rng.integers(0, 255, N, dtype=np.uint8), name="b")
+        color = RGBFields(rng.integers(0, 255, (N, 3), dtype=np.uint8), name="color")
+        colour = RGBFields(rng.integers(0, 255, (N, 3), dtype=np.uint8), name="colour")
+        colors = RGBFields(rng.integers(0, 255, (N, 3), dtype=np.uint8), name="colors")
+        colours = RGBFields(rng.integers(0, 255, (N, 3), dtype=np.uint8), name="colours")
         float_vec_target = np.linspace(0, 255, N, endpoint=True).astype(np.float32)
         rf = ScalarField(float_vec_target / 255, name="rf")
         gf = ScalarField(float_vec_target / 255, name="gf")
@@ -510,11 +525,12 @@ class TestNamedFieldHandlers:
             base_sfm._set_rgb("invalid", colour)
 
     def test_normal_handlers(self, base_sfm, empty_sfm):
-        nx = ScalarField(np.random.rand(N).astype(np.float32), name="nx")
-        ny = ScalarField(np.random.rand(N).astype(np.float32), name="ny")
-        nz = ScalarField(np.random.rand(N).astype(np.float32), name="nz")
-        nxnynz = NormalFields(np.random.rand(N, 3).astype(np.float32), name="nxnynz")
-        normal = NormalFields(np.random.rand(N, 3).astype(np.float32), name="normal")
+        rng = np.random.default_rng(16)
+        nx = ScalarField(rng.random(N).astype(np.float32), name="nx")
+        ny = ScalarField(rng.random(N).astype(np.float32), name="ny")
+        nz = ScalarField(rng.random(N).astype(np.float32), name="nz")
+        nxnynz = NormalFields(rng.random((N, 3)).astype(np.float32), name="nxnynz")
+        normal = NormalFields(rng.random((N, 3)).astype(np.float32), name="normal")
 
         order = ("nx", "ny", "nz")
 
@@ -595,7 +611,8 @@ class TestRgbOriginDtypePropagation:
         N = 10
         from pchandler.scalar_fields.scalar_fields import DtypeState
 
-        pcd = PointCloudData(np.random.rand(N, 3))
+        rng = np.random.default_rng(17)
+        pcd = PointCloudData(rng.random((N, 3)))
         origin_dtype = DtypeState(dtype=np.dtype("uint16"), lower=0, upper=2**16 - 1)
         red_field = ScalarField(np.full(N, 100, dtype=np.uint8), name="red", origin_dtype=origin_dtype)
 
@@ -617,7 +634,8 @@ class TestRgbOriginDtypePropagation:
         from pchandler.scalar_fields.scalar_fields import DtypeState
 
         N = 10
-        pcd = PointCloudData(np.random.rand(N, 3))
+        rng = np.random.default_rng(18)
+        pcd = PointCloudData(rng.random((N, 3)))
         origin_dtype = DtypeState(dtype=np.dtype("uint16"), lower=0, upper=2**16 - 1)
         red_field = ScalarField(np.full(N, 100, dtype=np.uint8), name="red", origin_dtype=origin_dtype)
         pcd.scalar_fields["red"] = red_field
