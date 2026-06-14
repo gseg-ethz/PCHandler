@@ -83,7 +83,6 @@ convention = "numpy"
     "E711", "E712",
     "B007", "B017", "B028", "B905",
     "F841",
-    "NPY002",  # TEMP — removed in 09-07's final task once 09-05/06/07 migrations land. See 09-04-PLAN.md must_haves.truths.
 ]
 "docs/source/conf.py" = ["D100", "D103"]
 
