@@ -92,10 +92,14 @@ def coords_unshiftable2(scale_large, offset_large) -> np.ndarray:
 
 @pytest.fixture(autouse=True)
 def clear_instantiated_osm():
-    yield
-    # Teardown: remove this singleton from the shared SingletonMeta registry.
+    # Bracket: clean BEFORE yield (so a sibling test that mutated the singleton
+    # in a prior run can't leak state into this test) AND after yield (keeps
+    # the original teardown behaviour). Phase 9 D-12 F1.
     # Assigning to OptimizedShiftManager._instances would create a shadow attribute on
     # the subclass instead of clearing the metaclass-level dict (CR-01, post-COUPLE-01).
+    SingletonMeta._instances.pop(OptimizedShiftManager, None)
+    assert OptimizedShiftManager not in SingletonMeta._instances
+    yield
     SingletonMeta._instances.pop(OptimizedShiftManager, None)
     assert OptimizedShiftManager not in SingletonMeta._instances
 
