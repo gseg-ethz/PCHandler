@@ -12,7 +12,8 @@ from pchandler.geometry.spherical import Angle, FoV, FoVTree
 
 @pytest.fixture(scope="function", autouse=True)
 def pcd():
-    return PointCloudData(np.random.rand(10000, 3))
+    rng = np.random.default_rng(0)
+    return PointCloudData(rng.random((10000, 3)))
 
 
 @pytest.fixture(scope="function")
@@ -212,12 +213,12 @@ class TestFov:
 
     def test_extend_to_ratio(self):
         n = 10_000
-        np.random.seed(42)
-        top_samples = np.random.uniform(low=0.0, high=np.pi / 2, size=n)
-        bottom_samples = np.random.uniform(low=np.pi / 2, high=np.pi, size=n)
-        left_samples = np.random.uniform(low=-np.pi, high=0, size=n)
-        right_samples = np.random.uniform(low=0, high=np.pi, size=n)
-        ratios = np.random.randint(low=1, high=10, size=n) / np.random.randint(low=1, high=10, size=n)
+        rng = np.random.default_rng(1)
+        top_samples = rng.uniform(low=0.0, high=np.pi / 2, size=n)
+        bottom_samples = rng.uniform(low=np.pi / 2, high=np.pi, size=n)
+        left_samples = rng.uniform(low=-np.pi, high=0, size=n)
+        right_samples = rng.uniform(low=0, high=np.pi, size=n)
+        ratios = rng.integers(low=1, high=10, size=n) / rng.integers(low=1, high=10, size=n)
         angle_samples = zip(left_samples, right_samples, top_samples, bottom_samples, ratios)
 
         for angles in angle_samples:
