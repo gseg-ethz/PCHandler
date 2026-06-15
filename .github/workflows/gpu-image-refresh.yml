@@ -72,7 +72,9 @@ jobs:
         shell: bash
         run: |
           # NEW_DIGEST is in the form `sha256:<hex>`; strip the `sha256:` prefix for the sed.
-          sed -i -E "s|(image: ghcr\.io/gseg-ethz/pchandler-gpu-runner@sha256:)[a-f0-9]+|\1${NEW_DIGEST#sha256:}|g" .github/workflows/ci.yml
+          # Matches the pinned ref regardless of prefix (the digest lives in the gpu-tests job's
+          # `GPU_IMAGE:` env, not a `container.image:` field — see ci.yml, 09-02 podman-run design).
+          sed -i -E "s|(pchandler-gpu-runner@sha256:)[a-f0-9]+|\1${NEW_DIGEST#sha256:}|g" .github/workflows/ci.yml
       - uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1  # v8.1.1
         with:
           commit-message: "ci(gpu-runner): bump image digest to ${{ needs.build-push.outputs.digest }}"
