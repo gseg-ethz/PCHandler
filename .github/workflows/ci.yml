@@ -96,35 +96,49 @@ jobs:
       github.event_name == 'push' ||
       github.event_name == 'workflow_dispatch'
     runs-on: [self-hosted, linux, x64, gpu, cuda12, pchandler-cuda12]
-    container:
-      # Digest placeholder — populated by gpu-image-refresh.yml on first workflow_dispatch run + monthly cron.
-      # Until the first run lands a real digest, this job will not pass and is gated by the `if:` clause.
-      # See .planning/phases/09-self-hosted-docker-gpu-runner/09-WAVE-0-RUNNER-MANIFEST.md §"Image build" for the live digest record.
-      image: ghcr.io/gseg-ethz/pchandler-gpu-runner@sha256:3b554e9c21be7ff93c2305e98187dd2979247a881613715a6c2394d9fb7f11bd
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-      # --user 0: gseg-pc105 (rootless Podman) has no /etc/subuid range for the runner user, so the
-      # RAPIDS image's non-root 'rapids' (UID 1001) user cannot be mapped (crun: cannot setresuid to 1001).
-      # Container-root maps to the unprivileged host user under rootless Podman (no real escalation) and
-      # keeps _work files host-owned. See 09-WAVE-0-RUNNER-MANIFEST.md §"Runner container plumbing".
-      options: "--user 0 --device nvidia.com/gpu=all"   # LOAD-BEARING — RESEARCH Pitfall 1; --device = GPU passthrough (D-03a Podman CDI); --user 0 = rootless-no-subuid (2026-06-15).
+    permissions:
+      contents: read
+      packages: read        # pull the private GHCR image via podman login
+    env:
+      # First real image, digest-pinned (immutable), built by gpu-image-refresh.yml.
+      # NOT a `container:` block: GitHub's container: jobs hardcode `-v /var/run/docker.sock`,
+      # which a rootless-Podman host has no way to provide (root-owned /var/run). We launch the
+      # image ourselves with `podman run` (09-02 commissioning 2026-06-15 — CONTEXT D-02 container
+      # mechanism amended from GitHub-native container: to explicit podman run).
+      GPU_IMAGE: ghcr.io/gseg-ethz/pchandler-gpu-runner@sha256:3b554e9c21be7ff93c2305e98187dd2979247a881613715a6c2394d9fb7f11bd
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5.0.1
-      - uses: ./.github/actions/setup-python-deps
+      - name: Load GSEGUtils deploy key into ssh-agent (mounted into the container for the git+ssh dep)
+        uses: webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555  # v0.10.0
         with:
-          gsegutils-deploy-key: ${{ secrets.GSEGUTILS_DEPLOY_KEY }}
-      - name: Install pchandler editable (tests the checked-out commit; GPU libs come from the image base)
+          ssh-private-key: ${{ secrets.GSEGUTILS_DEPLOY_KEY }}
+      - name: GHCR login (podman)
         shell: bash
-        # .[dev] only — the RAPIDS base provides the conda GPU stack (cudf/cuspatial/geopandas);
-        # the [cuda12] PyPI wheels would duplicate/conflict with it. setuptools-scm versions this
-        # via git (present in the image) against the checked-out .git.
-        run: pip install -e .[dev]
-      - name: Sanity — nvidia-smi inside container
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Run GPU tests in the RAPIDS container (podman)
         shell: bash
-        run: nvidia-smi
-      - name: Run GPU tests
-        run: pytest tests/filters/test_gpu.py -v --cov=pchandler.filters.gpu --cov-report=xml:coverage-gpu.xml
+        # --user 0: rootless Podman has no /etc/subuid range, so the image's non-root 'rapids'
+        #   (UID 1001) user can't be mapped — container-root maps to the unprivileged host user.
+        # --device nvidia.com/gpu=all: CDI GPU passthrough (D-03a).
+        # Source bind-mounted at /work; coverage written there so the host codecov step sees it.
+        # SSH agent socket mounted so the in-container `pip install -e .[dev]` clones GSEGUtils
+        #   (git+ssh); accept-new avoids needing a known_hosts mount. The base provides the conda
+        #   GPU stack (cudf/cuspatial/geopandas); `.[dev]` only — [cuda12] PyPI wheels would conflict.
+        run: |
+          podman run --rm \
+            --user 0 \
+            --device nvidia.com/gpu=all \
+            -v "$PWD":/work -w /work \
+            -v "$SSH_AUTH_SOCK":/ssh-agent -e SSH_AUTH_SOCK=/ssh-agent \
+            -e GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new" \
+            "$GPU_IMAGE" \
+            bash -lc '
+              set -euo pipefail
+              git config --global --add safe.directory /work
+              nvidia-smi
+              pip install -e .[dev]
+              pytest tests/filters/test_gpu.py -v --cov=pchandler.filters.gpu --cov-report=xml:/work/coverage-gpu.xml
+            '
       - name: Upload GPU coverage
         if: success()
         uses: codecov/codecov-action@8cad3ba95e5920c42f44492e54bc9639cba47959  # v6.0.2
