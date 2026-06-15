@@ -104,7 +104,11 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
-      options: "--device nvidia.com/gpu=all"   # LOAD-BEARING — RESEARCH Pitfall 1; without this, no GPU passthrough into the container (D-03a Podman CDI).
+      # --user 0: gseg-pc105 (rootless Podman) has no /etc/subuid range for the runner user, so the
+      # RAPIDS image's non-root 'rapids' (UID 1001) user cannot be mapped (crun: cannot setresuid to 1001).
+      # Container-root maps to the unprivileged host user under rootless Podman (no real escalation) and
+      # keeps _work files host-owned. See 09-WAVE-0-RUNNER-MANIFEST.md §"Runner container plumbing".
+      options: "--user 0 --device nvidia.com/gpu=all"   # LOAD-BEARING — RESEARCH Pitfall 1; --device = GPU passthrough (D-03a Podman CDI); --user 0 = rootless-no-subuid (2026-06-15).
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5.0.1
       - uses: ./.github/actions/setup-python-deps
