@@ -100,7 +100,7 @@ jobs:
       # Digest placeholder — populated by gpu-image-refresh.yml on first workflow_dispatch run + monthly cron.
       # Until the first run lands a real digest, this job will not pass and is gated by the `if:` clause.
       # See .planning/phases/09-self-hosted-docker-gpu-runner/09-WAVE-0-RUNNER-MANIFEST.md §"Image build" for the live digest record.
-      image: ghcr.io/gseg-ethz/pchandler-gpu-runner@sha256:0000000000000000000000000000000000000000000000000000000000000000
+      image: ghcr.io/gseg-ethz/pchandler-gpu-runner@sha256:3b554e9c21be7ff93c2305e98187dd2979247a881613715a6c2394d9fb7f11bd
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
