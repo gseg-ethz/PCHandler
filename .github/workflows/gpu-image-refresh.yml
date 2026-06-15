@@ -1,0 +1,78 @@
+name: GPU Runner Image Refresh
+
+on:
+  schedule:
+    - cron: '0 8 1 * *'   # D-04: 08:00 UTC, 1st of month
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Force rebuild even if upstream RAPIDS digest unchanged"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write       # digest write-back commit/PR to ci.yml
+  packages: write       # GHCR push
+  pull-requests: write  # peter-evans/create-pull-request below
+  # NOTE: id-token: write is intentionally ABSENT — cosign-keyless deferred per RESEARCH Open Q 6 (SP-B)
+
+jobs:
+  build-push:
+    name: Build + push pchandler-gpu-runner
+    runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5.0.1
+      - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4.1.0
+      - uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee  # v4.2.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push image
+        id: build
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7.2.0
+        with:
+          context: .
+          file: .github/docker/gpu-runner.Dockerfile
+          push: true
+          tags: |
+            ghcr.io/gseg-ethz/pchandler-gpu-runner:cuda12-25.04
+            ghcr.io/gseg-ethz/pchandler-gpu-runner:cuda12-latest
+          cache-from: type=registry,ref=ghcr.io/gseg-ethz/pchandler-gpu-runner:buildcache
+          cache-to: type=registry,ref=ghcr.io/gseg-ethz/pchandler-gpu-runner:buildcache,mode=max
+      - name: Prune old image layers
+        shell: bash
+        run: docker image prune -f
+        # D-04 rotation policy: keep last 3 monthly digests + current via post-build prune.
+
+  write-back-digest:
+    name: Write digest back into ci.yml
+    needs: [build-push]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5.0.1
+        with:
+          ref: develop/gsd
+      - name: Update digest in ci.yml
+        env:
+          NEW_DIGEST: ${{ needs.build-push.outputs.digest }}
+        shell: bash
+        run: |
+          # NEW_DIGEST is in the form `sha256:<hex>`; strip the `sha256:` prefix for the sed.
+          sed -i -E "s|(image: ghcr\.io/gseg-ethz/pchandler-gpu-runner@sha256:)[a-f0-9]+|\1${NEW_DIGEST#sha256:}|g" .github/workflows/ci.yml
+      - uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1  # v8.1.1
+        with:
+          commit-message: "ci(gpu-runner): bump image digest to ${{ needs.build-push.outputs.digest }}"
+          title: "ci(gpu-runner): monthly digest refresh"
+          body: |
+            Automated monthly refresh of the pchandler-gpu-runner image (Phase 9 D-04).
+            New digest: `${{ needs.build-push.outputs.digest }}`
+
+            NOTE: This PR will NOT auto-merge until Phase 10 branch protection adds a `ci/gpu-runner-digest-*` bypass for github-actions[bot]. Reviewer should sanity-check the digest matches `ghcr.io/gseg-ethz/pchandler-gpu-runner:cuda12-25.04` and merge.
+          branch: ci/gpu-runner-digest-${{ github.run_id }}
+          base: develop/gsd
