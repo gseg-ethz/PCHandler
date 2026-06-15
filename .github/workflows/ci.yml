@@ -124,6 +124,9 @@ jobs:
         # SSH agent socket mounted so the in-container `pip install -e .[dev]` clones GSEGUtils
         #   (git+ssh); accept-new avoids needing a known_hosts mount. The base provides the conda
         #   GPU stack (cudf/cuspatial/geopandas); `.[dev]` only — [cuda12] PyPI wheels would conflict.
+        # NUMBA_CUDA_USE_NVIDIA_BINDING=1: numba.cuda's legacy ctypes driver wrapper segfaults at
+        #   as_cuda_array on the host's CUDA 13.2 driver (cuspatial.point_in_polygon -> numba_cuda);
+        #   the official cuda-python bindings fix it. Verified on gseg-pc105 2026-06-15 (09-02).
         run: |
           podman run --rm \
             --user 0 \
@@ -131,6 +134,7 @@ jobs:
             -v "$PWD":/work -w /work \
             -v "$SSH_AUTH_SOCK":/ssh-agent -e SSH_AUTH_SOCK=/ssh-agent \
             -e GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new" \
+            -e NUMBA_CUDA_USE_NVIDIA_BINDING=1 \
             "$GPU_IMAGE" \
             bash -lc '
               set -euo pipefail
