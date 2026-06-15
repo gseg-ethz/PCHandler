@@ -114,9 +114,12 @@ jobs:
       - uses: ./.github/actions/setup-python-deps
         with:
           gsegutils-deploy-key: ${{ secrets.GSEGUTILS_DEPLOY_KEY }}
-      - name: Re-install pchandler editable (pick up source changes since image build)
+      - name: Install pchandler editable (tests the checked-out commit; GPU libs come from the image base)
         shell: bash
-        run: pip install -e .[cuda12,dev]
+        # .[dev] only — the RAPIDS base provides the conda GPU stack (cudf/cuspatial/geopandas);
+        # the [cuda12] PyPI wheels would duplicate/conflict with it. setuptools-scm versions this
+        # via git (present in the image) against the checked-out .git.
+        run: pip install -e .[dev]
       - name: Sanity — nvidia-smi inside container
         shell: bash
         run: nvidia-smi
