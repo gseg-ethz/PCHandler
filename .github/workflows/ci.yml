@@ -68,10 +68,60 @@ jobs:
           if-no-files-found: ignore
 
       - name: Run tests
-        run: pytest -m "not benchmark" --cov=pchandler --cov-report=xml
+        run: pytest -m "not benchmark" --cov=pchandler --cov-report=xml:coverage-unit.xml
+
+      - name: Check for unseeded default_rng() (TEST-08 D-08)
+        shell: bash
+        run: |
+          # NPY002 covers np.random.{rand,choice,randint,...} but NOT default_rng() without a seed argument.
+          # This grep is the TEST-08 exit criterion (see CONTRIBUTING.md / Phase 9 D-08).
+          if grep -rnE 'default_rng\(\s*\)' tests/ 2>/dev/null; then
+            echo "::error::Unseeded default_rng() detected in tests/ — every default_rng must take an explicit seed (TEST-08, see CONTRIBUTING.md)"
+            exit 1
+          fi
+          echo "TEST-08 OK: zero unseeded default_rng() calls in tests/"
 
       - name: Upload coverage to Codecov
         if: success()
         uses: codecov/codecov-action@8cad3ba95e5920c42f44492e54bc9639cba47959  # v6.0.2
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage-unit.xml
+          flags: unit
+
+  gpu-tests:
+    name: Tests (pytest, GPU)
+    needs: [lint]
+    if: |
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, linux, x64, gpu, cuda12, pchandler-cuda12]
+    container:
+      # Digest placeholder — populated by gpu-image-refresh.yml on first workflow_dispatch run + monthly cron.
+      # Until the first run lands a real digest, this job will not pass and is gated by the `if:` clause.
+      # See .planning/phases/09-self-hosted-docker-gpu-runner/09-WAVE-0-RUNNER-MANIFEST.md §"Image build" for the live digest record.
+      image: ghcr.io/gseg-ethz/pchandler-gpu-runner@sha256:0000000000000000000000000000000000000000000000000000000000000000
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: "--device nvidia.com/gpu=all"   # LOAD-BEARING — RESEARCH Pitfall 1; without this, no GPU passthrough into the container (D-03a Podman CDI).
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5.0.1
+      - uses: ./.github/actions/setup-python-deps
+        with:
+          gsegutils-deploy-key: ${{ secrets.GSEGUTILS_DEPLOY_KEY }}
+      - name: Re-install pchandler editable (pick up source changes since image build)
+        shell: bash
+        run: pip install -e .[cuda12,dev]
+      - name: Sanity — nvidia-smi inside container
+        shell: bash
+        run: nvidia-smi
+      - name: Run GPU tests
+        run: pytest tests/filters/test_gpu.py -v --cov=pchandler.filters.gpu --cov-report=xml:coverage-gpu.xml
+      - name: Upload GPU coverage
+        if: success()
+        uses: codecov/codecov-action@8cad3ba95e5920c42f44492e54bc9639cba47959  # v6.0.2
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage-gpu.xml
+          flags: gpu
