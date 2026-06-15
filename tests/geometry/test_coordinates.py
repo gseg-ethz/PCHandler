@@ -42,12 +42,13 @@ _known_xyz = np.array(
 )
 
 N = 100
-_small_xyz = np.random.rand(N, 3)
-_large_xyz = np.random.rand(1_000_000, 3)
+_small_xyz = np.random.default_rng(0).random((N, 3))
+_large_xyz = np.random.default_rng(1).random((1_000_000, 3))
 
 
-def random_coordinates(scale: float, offset: float) -> np.ndarray:
-    xyz_base = np.random.randn(N, 3)
+def random_coordinates(scale: float, offset: float, seed: int = 2) -> np.ndarray:
+    rng = np.random.default_rng(seed)
+    xyz_base = rng.standard_normal((N, 3))
     return xyz_base * scale + offset
 
 
@@ -78,7 +79,8 @@ def cart_obj(large_xyz) -> CartesianCoordinates:
 
 @pytest.fixture(scope="function", autouse=True)
 def sfs_():
-    array = np.random.rand(N)
+    rng = np.random.default_rng(3)
+    array = rng.random(N)
     return {"test": array}
 
 
@@ -186,11 +188,13 @@ class TestAbstract3dCoord:
         assert "xyz" in str(e.value)
 
     def test_matmul(self, cart_obj):
+        rng = np.random.default_rng(4)
         with pytest.raises(NotImplementedError):
-            cart_obj @ np.random.rand(3, 3)
+            cart_obj @ rng.random((3, 3))
 
     def test_rmatmul(self, cart_obj):
-        rand_3x3 = np.random.rand(3, 3)
+        rng = np.random.default_rng(5)
+        rand_3x3 = rng.random((3, 3))
         rand_4x4 = np.eye(4)
         rand_4x4[:3, :3] = rand_3x3.copy()
         rand_4x4[:3, 3] = 1
@@ -224,8 +228,9 @@ class TestAbstract3dCoord:
         assert np.allclose(e - 1, c)
 
     def test_imatmul(self, cart_obj):
+        rng = np.random.default_rng(6)
         with pytest.raises(NotImplementedError):
-            cart_obj @= np.random.rand(3, 3)
+            cart_obj @= rng.random((3, 3))
 
 
 # TODO implement base class for tests
@@ -295,7 +300,7 @@ class BaseTestCartesianCoordinates:
         assert np.all(np.array(xyz.unshifted_bbox) == np.array(old))
 
         # Update the coordinates, check it hasn't changed
-        xyz.arr = np.random.rand(10, 3) * 40 - 10  # New coordinates
+        xyz.arr = np.random.default_rng(7).random((10, 3)) * 40 - 10  # New coordinates
         xyz.compute_unshifted_bbox()  # No change
         assert np.all(np.array(xyz.unshifted_bbox) == np.array(old))
 
@@ -931,7 +936,8 @@ class BaseTestCartesianCoordinates:
         assert np.all(cart_obj._hz_v == cart_obj.spher[:, 1:])
 
     def test_spher_w_nos_and_socs_combined(self):
-        coords = np.random.rand(100, 3) + 100_000
+        rng = np.random.default_rng(8)
+        coords = rng.random((100, 3)) + 100_000
         pcd0 = self.cls(coords, numerical_optimization_shift=None)
         pcd1 = self.cls(coords)
         pcd2 = self.cls(coords, numerical_optimization_shift=OptimizedShift([200, 200, 200]))
@@ -996,7 +1002,8 @@ class BaseTestCartesianCoordinates:
 
     @staticmethod
     def test_homogeneous_matrix_multiplication(cart_obj):
-        rand_4x4 = np.random.rand(4, 4)
+        rng = np.random.default_rng(9)
+        rand_4x4 = rng.random((4, 4))
         # Will not work with numpy arrays due to the left matrix multiplication approach
         with pytest.raises(ValueError):
             rand_4x4 @ cart_obj

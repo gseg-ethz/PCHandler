@@ -99,16 +99,25 @@ def _probe_py4dgeo() -> bool:
 
 
 def _probe_gpu() -> bool:
-    """Import cudf/cuspatial/geopandas exactly once and memoise the result."""
+    """Import cudf/cuspatial/geopandas AND execute a smoke kernel; memoise.
+
+    cudf 25.4 imports cleanly on no-GPU hosts (emits ``UserWarning: No NVIDIA GPU detected``).
+    The ``numba_cuda.cudadrv.devices._DeviceList.__getitem__`` bare-``IndexError`` fires
+    only at first kernel call, so the smoke probe surfaces it before ``.mask()``.
+
+    Implements D-06: widened except tuple catches every documented failure mode of
+    ``cudf.DataFrame({"x": [1]})`` on no-GPU hosts.
+    """
     global _HAS_GPU, _GPU_ERROR
     if _HAS_GPU is None:
         try:
-            import cudf  # noqa: F401
+            import cudf
             import cuspatial  # noqa: F401
             import geopandas  # noqa: F401
 
+            cudf.DataFrame({"x": [1]})  # Smoke probe — D-06 (surfaces numba_cuda IndexError before .mask())
             _HAS_GPU = True
-        except (ImportError, RuntimeError) as e:
+        except (ImportError, RuntimeError, IndexError, Exception) as e:  # noqa: BLE001
             _GPU_ERROR = e
             _HAS_GPU = False
     return bool(_HAS_GPU)

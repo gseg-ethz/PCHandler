@@ -83,10 +83,10 @@ class TestRandomDownSampleFilter:
         (the original ``TestAngleBinDownsample::test_mask`` flake). The fix routes
         through a per-instance ``default_rng`` so this snapshot is byte-stable.
         """
-        before = np.random.get_state(legacy=True)
+        before = np.random.get_state(legacy=True)  # noqa: NPY002 — intentional: verifying global MT19937 state is unchanged
         RandomDownsampleFilter(0.5).mask(pcd_all)
         RandomDownsampleFilter(0.5, seed=1234).mask(pcd_all)
-        after = np.random.get_state(legacy=True)
+        after = np.random.get_state(legacy=True)  # noqa: NPY002 — intentional: verifying global MT19937 state is unchanged
 
         # State tuple shape: ('MT19937', uint32[624], pos, has_gauss, cached_gauss).
         assert before[0] == after[0]

@@ -21,12 +21,14 @@ N = 100
 
 @pytest.fixture(scope="function")
 def nx3_uint8():
-    return RGBFields(np.random.randint(0, 256, (N, 3), dtype=np.uint8))
+    rng = np.random.default_rng(0)
+    return RGBFields(rng.integers(0, 256, (N, 3), dtype=np.uint8))
 
 
 @pytest.fixture(scope="function")
 def normals_float32():
-    vals = np.random.rand(N, 3).astype(np.float32)
+    rng = np.random.default_rng(1)
+    vals = rng.random((N, 3)).astype(np.float32)
     vals = vals / np.linalg.norm(vals, axis=1).reshape(-1, 1)
     return vals
 
@@ -132,7 +134,8 @@ class TestScalarFieldClass:
         assert type(e.value) in (ValueError, TypeError, ValidationError)
 
     def test_get_original_data(self):
-        a = np.random.randint(-1000, 1000, 2000, dtype=np.int16)
+        rng = np.random.default_rng(2)
+        a = rng.integers(-1000, 1000, 2000, dtype=np.int16)
         b = normalize_self(a)
         b = linear_map_dtype(b, np.uint8)
         field = ScalarField(b, name="converted", origin_dtype=DtypeState(a.dtype, a.min(), a.max()))
@@ -142,7 +145,7 @@ class TestScalarFieldClass:
         atol = np.ceil((a.max() - a.min()) / 2**8)
         assert np.allclose(a, c, atol=atol)
 
-        d = np.random.randint(0, 233, 2000, dtype=np.uint8)
+        d = rng.integers(0, 233, 2000, dtype=np.uint8)
         dtype_state = DtypeState.generate(d)
         sf = ScalarField(d, name="converted", origin_dtype=dtype_state)
         e = sf.get_original_data()
@@ -152,7 +155,8 @@ class TestScalarFieldClass:
 
 class TestTypeDefinedScalarFields:
     def test_normalised_int16(self):
-        array = np.random.randint(-(2**14), 2**13, N, dtype=np.int16)
+        rng = np.random.default_rng(3)
+        array = rng.integers(-(2**14), 2**13, N, dtype=np.int16)
         b = NormalisedInt16ScalarField(array, name="temp")
         assert isinstance(b, NormalisedInt16ScalarField)
         assert np.all(b == array)
@@ -162,26 +166,30 @@ class TestTypeDefinedScalarFields:
         assert as_uint8.dtype == np.uint8
 
     def test_bool_valid(self):
-        array = np.random.randint(0, 1, N, dtype=np.bool_)
+        rng = np.random.default_rng(4)
+        array = rng.integers(0, 1, N, dtype=np.bool_)
         b = ScalarFieldBoolean(array, name="temp")
         assert isinstance(b, ScalarFieldBoolean)
         assert np.all(b == array)
 
     def test_bool_invalid(self):
-        array = np.random.randint(-128, 127, N, dtype=np.int8)
+        rng = np.random.default_rng(5)
+        array = rng.integers(-128, 127, N, dtype=np.int8)
         with pytest.raises(Exception) as e:
             ScalarFieldBoolean(array)
         assert type(e.value) in (ValidationError, ValueError, TypeError)
 
     def test_scalar_uint8(self):
-        array = np.random.randint(0, 255, N, dtype=np.uint8)
+        rng = np.random.default_rng(6)
+        array = rng.integers(0, 255, N, dtype=np.uint8)
         b = ScalarFieldUint8(array, name="temp")
         assert isinstance(b, ScalarFieldUint8)
         assert np.all(b == array)
         assert b.dtype == np.uint8
 
     def test_scalar_float32(self):
-        array = np.random.rand(N).astype(np.float32)
+        rng = np.random.default_rng(7)
+        array = rng.random(N).astype(np.float32)
         b = ScalarFieldFloat32(array, name="temp")
         assert isinstance(b, ScalarFieldFloat32)
         assert np.all(b == array)
@@ -190,7 +198,8 @@ class TestTypeDefinedScalarFields:
 
 class TestRgbField:
     def test_positional_init(self):
-        data = np.random.randint(0, 255, (N, 3), dtype=np.uint8)
+        rng = np.random.default_rng(8)
+        data = rng.integers(0, 255, (N, 3), dtype=np.uint8)
         a = RGBFields(data)
 
         assert a.name == RGB_NAMES.base
@@ -201,7 +210,8 @@ class TestRgbField:
         assert a.name != "not_rgb"
 
     def test_keyword_init(self):
-        data = np.random.randint(0, 255, (N, 3), dtype=np.uint8)
+        rng = np.random.default_rng(9)
+        data = rng.integers(0, 255, (N, 3), dtype=np.uint8)
         a = RGBFields(arr=data)
 
         assert a.name == RGB_NAMES.base
@@ -212,7 +222,8 @@ class TestRgbField:
         assert a.name != "not_rgb"
 
     def test_invalid_shapes(self):
-        data = np.random.randint(0, 255, N, dtype=np.uint8)
+        rng = np.random.default_rng(10)
+        data = rng.integers(0, 255, N, dtype=np.uint8)
         with pytest.raises(ValidationError):
             RGBFields(data)
 
@@ -224,7 +235,8 @@ class TestRgbField:
         assert type(e.value) in (ValidationError, TypeError)
 
     def test_properties(self):
-        data = np.random.randint(0, 255, (N, 3), dtype=np.uint8)
+        rng = np.random.default_rng(11)
+        data = rng.integers(0, 255, (N, 3), dtype=np.uint8)
         a = RGBFields(data)
 
         assert np.all(a.r == data[:, 0])
@@ -232,7 +244,8 @@ class TestRgbField:
         assert np.all(a.b == data[:, 2])
 
     def test_initialise_field_class_method(self):
-        data: np.ndarray = np.random.randint(0, 255, (N, 3), dtype=np.uint8)
+        rng = np.random.default_rng(12)
+        data: np.ndarray = rng.integers(0, 255, (N, 3), dtype=np.uint8)
         rgb1 = RGBFields.initialize(data.shape[0])
         assert np.all(rgb1 == np.zeros_like(data))
         assert np.uint8 == rgb1.dtype
@@ -250,10 +263,10 @@ class TestRgbField:
             # explicit `source_range=(0.0, 1.0)` kwarg makes [-1, 1] / [0, 255] / [-128, 127]
             # float inputs clip-and-saturate (D-12) rather than auto-rescale by min/max.
             # Integer inputs still round-trip via the D-15 iinfo bypass.
-            np.random.rand(10000, 3),
-            np.random.randint(-(2**7), 2**7, (10000, 3), dtype=np.int8),
-            np.random.randint(0, 2**16, (10000, 3), dtype=np.uint16),
-            np.random.randint(0, 2**8, (10000, 3), dtype=np.uint8),
+            np.random.default_rng(13).random((10000, 3)),
+            np.random.default_rng(14).integers(-(2**7), 2**7, (10000, 3), dtype=np.int8),
+            np.random.default_rng(15).integers(0, 2**16, (10000, 3), dtype=np.uint16),
+            np.random.default_rng(16).integers(0, 2**8, (10000, 3), dtype=np.uint8),
         ),
     )
     def test_normalized(self, arr):
@@ -319,12 +332,14 @@ class TestNormalsField:
         assert a.name != "not_normals"
 
     def test_invalid_shapes(self):
-        data = np.random.rand(N).astype(np.float32)
+        rng = np.random.default_rng(17)
+        data = rng.random(N).astype(np.float32)
         with pytest.raises(ValidationError):
             NormalFields(data)
 
     def test_invalid_dtypes(self):
-        data = np.random.randint(0, 2, (N, 3), dtype=np.bool_)
+        rng = np.random.default_rng(18)
+        data = rng.integers(0, 2, (N, 3), dtype=np.bool_)
         with pytest.raises(Exception) as e:
             NormalFields(data)
 
@@ -338,7 +353,8 @@ class TestNormalsField:
         assert np.all(a.nz == normals_float32[:, 2])
 
     def test_initialise_field_class_method(self):
-        data = np.random.rand(N, 3).astype(np.float32)
+        rng = np.random.default_rng(19)
+        data = rng.random((N, 3)).astype(np.float32)
         data /= np.linalg.norm(data, axis=1).reshape(-1, 1)
         check_data = np.zeros_like(data)
         check_data[:, 2] = 1
@@ -357,7 +373,7 @@ class TestSegmentationField:
         a = np.arange(10, dtype=np.uint8)
         a2 = np.arange(10, dtype=np.uint8)
         a3 = np.arange(1000097, dtype=np.uint8)
-        a4 = np.random.randint(0, 10, (10, 1), dtype=np.uint8)
+        a4 = np.random.default_rng(20).integers(0, 10, (10, 1), dtype=np.uint8)
         b = SegmentationMap(arr=a, name="Segmentation")
         b2 = SegmentationMap(arr=a2, name="Segmentation")
         b3 = SegmentationMap(arr=a3, name="Segmentation")
@@ -372,8 +388,9 @@ class TestSegmentationField:
         assert b4.shape == (10,)
 
     def test_invalid_shapes(self):
-        a = np.random.randint(0, 100, (N, 3), dtype=np.uint8)
-        b = np.random.randint(0, 100, (N, 5), dtype=np.uint8)
+        rng = np.random.default_rng(21)
+        a = rng.integers(0, 100, (N, 3), dtype=np.uint8)
+        b = rng.integers(0, 100, (N, 5), dtype=np.uint8)
 
         with pytest.raises(ValueError):
             SegmentationMap(arr=a, name="Segmentation")
@@ -383,9 +400,9 @@ class TestSegmentationField:
     @pytest.mark.parametrize(
         "array",
         (
-            np.random.randint(0, 2**14, N, dtype=np.int16),
-            np.random.randint(0, 100, N, dtype=np.uint32),
-            np.random.rand(N).astype(np.float32),
+            np.random.default_rng(22).integers(0, 2**14, N, dtype=np.int16),
+            np.random.default_rng(23).integers(0, 100, N, dtype=np.uint32),
+            np.random.default_rng(24).random(N).astype(np.float32),
             np.ones((N, 5), dtype=np.bool_),
         ),
     )
@@ -478,7 +495,8 @@ def test_invalid_linear_map_dtype():
 
 
 def test_normalise_self_valid():
-    array = np.random.randint(13, 144, 1000, np.uint8)
+    rng = np.random.default_rng(25)
+    array = rng.integers(13, 144, 1000, dtype=np.uint8)
     normalised = normalize_self(array)
 
     assert not np.allclose(array, normalised)
@@ -487,7 +505,8 @@ def test_normalise_self_valid():
 
 
 def test_normalise_self_invalid():
-    array = np.random.rand(1000) * 244 - 50
+    rng = np.random.default_rng(26)
+    array = rng.random(1000) * 244 - 50
 
     normalised = normalize_self(array)
     assert not np.allclose(array, normalised)

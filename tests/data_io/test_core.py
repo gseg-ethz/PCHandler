@@ -30,7 +30,8 @@ N = 100
 
 @pytest.fixture(scope="function")
 def valid_normals():
-    vals = np.random.rand(N, 3).astype(np.float32)
+    rng = np.random.default_rng(0)
+    vals = rng.random((N, 3)).astype(np.float32)
     vals = vals / np.linalg.norm(vals, axis=1).reshape(-1, 1)
     return vals
 
@@ -151,7 +152,8 @@ class TestAbstractIOMethods:
 
     def test_extract_xyz(self, struct_array):
         # Extraction of the xyz from a struct array
-        xyz = np.random.rand(100, 3).astype(np.float32)
+        rng = np.random.default_rng(1)
+        xyz = rng.random((100, 3)).astype(np.float32)
         struct_array["x"] = xyz[:, 0]
         struct_array["y"] = xyz[:, 1]
         struct_array["z"] = xyz[:, 2]
@@ -162,9 +164,10 @@ class TestAbstractIOMethods:
         assert np.all(xyz_ == xyz)
 
     def test_extract_scalar_fields(self, struct_array, valid_normals):
-        pcd = PointCloudData(np.random.rand(N, 3).astype(np.float32))
-        rgb = np.random.randint(0, 255, (N, 3), dtype=np.uint8)
-        intensity = np.random.randint(0, 255, N, dtype=np.uint8)
+        rng = np.random.default_rng(2)
+        pcd = PointCloudData(rng.random((N, 3)).astype(np.float32))
+        rgb = rng.integers(0, 255, (N, 3), dtype=np.uint8)
+        intensity = rng.integers(0, 255, N, dtype=np.uint8)
 
         header_fields = ["x", "y", "z", "r", "g", "b", "nx", "ny", "nz", "intensity", "sf1"]
         final_fields = AbstractIOHandler._validate_field_selection(None, header_fields, True, "scalar_")
@@ -189,10 +192,10 @@ class TestAbstractIOMethods:
         assert np.all(pcd.scalar_fields["sf1"] == intensity.astype(np.float64))
 
     def test_extract_scalar_triplets(self, struct_array):
-
-        normals = np.random.rand(N, 3).astype(np.float32)
+        rng = np.random.default_rng(3)
+        normals = rng.random((N, 3)).astype(np.float32)
         normals /= np.linalg.norm(normals, axis=1).reshape(-1, 1)
-        intensity = np.random.randint(0, 255, N, dtype=np.uint8)
+        intensity = rng.integers(0, 255, N, dtype=np.uint8)
         struct_array["nx"] = normals[:, 0]
         struct_array["ny"] = normals[:, 1]
         struct_array["nz"] = normals[:, 2]
@@ -255,29 +258,31 @@ class TestAbstractIOMethods:
 
         expected_vals = (expected_optimised, expected_not_optimised)
 
-        pcd1 = PointCloudData(np.random.rand(N, 3))
-        pcd2 = PointCloudData(np.random.rand(N, 3), numerical_optimization_shift=None)
+        rng = np.random.default_rng(4)
+        pcd1 = PointCloudData(rng.random((N, 3)))
+        pcd2 = PointCloudData(rng.random((N, 3)), numerical_optimization_shift=None)
         for i, pcd in enumerate([pcd1, pcd2]):
-            pcd.rgb = np.random.randint(0, 255, (N, 3), dtype=np.uint8)
-            pcd.normals = np.random.rand(N, 3).astype(np.float32)
-            pcd.intensity = np.random.randint(0, 255, N, dtype=np.uint8)
-            pcd.scalar_fields.create_field("sf1", np.random.rand(N).astype(np.float64))
+            pcd.rgb = rng.integers(0, 255, (N, 3), dtype=np.uint8)
+            pcd.normals = rng.random((N, 3)).astype(np.float32)
+            pcd.intensity = rng.integers(0, 255, N, dtype=np.uint8)
+            pcd.scalar_fields.create_field("sf1", rng.random(N).astype(np.float64))
 
             pcd_dt = AbstractIOHandler._generate_struct_dtype(pcd, sfs, False)
 
             assert pcd_dt == expected_vals[i]
 
     def test_generate_struct_array(self):
+        rng = np.random.default_rng(5)
         for i in range(2):
             if i == 0:
-                pcd = PointCloudData(np.random.rand(N, 3))
+                pcd = PointCloudData(rng.random((N, 3)))
             else:
-                pcd = PointCloudData(np.random.rand(N, 3), numerical_optimization_shift=None)
+                pcd = PointCloudData(rng.random((N, 3)), numerical_optimization_shift=None)
 
-            pcd.rgb = np.random.randint(0, 255, (N, 3), dtype=np.uint8)
-            pcd.normals = np.random.rand(N, 3).astype(np.float32)
-            pcd.intensity = np.random.randint(0, 255, N, dtype=np.uint8)
-            pcd.scalar_fields.create_field("sf1", np.random.rand(N).astype(np.float64))
+            pcd.rgb = rng.integers(0, 255, (N, 3), dtype=np.uint8)
+            pcd.normals = rng.random((N, 3)).astype(np.float32)
+            pcd.intensity = rng.integers(0, 255, N, dtype=np.uint8)
+            pcd.scalar_fields.create_field("sf1", rng.random(N).astype(np.float64))
 
             struct_arr = AbstractIOHandler._generate_structured_array(
                 pcd, scalar_fields=None, add_prefix=True, prefix="dummy_", revert_sf_types=False
@@ -364,7 +369,8 @@ class TestAbstractIOMethods:
 
     def test_get_sf_dtype(self):
         # Get the original or current scalar_field dtype
-        rgb = RGBFields(np.random.rand(100, 3).astype(np.float32))
+        rng = np.random.default_rng(6)
+        rgb = RGBFields(rng.random((100, 3)).astype(np.float32))
         assert _get_sf_dtype(rgb, False) == np.uint8
         assert _get_sf_dtype(rgb, True) == np.float32
 

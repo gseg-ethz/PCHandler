@@ -83,17 +83,20 @@ class TestMinMaxPoints:
 
 class TestGetOutlinePolygon:
     def test_xy_plane(self):
-        a = PointCloudData((np.random.rand(10000, 3) * 8) + np.array([-3, -1, 2]))
+        rng = np.random.default_rng(0)
+        a = PointCloudData((rng.random((10000, 3)) * 8) + np.array([-3, -1, 2]))
         outline = get_outline_polygon(a, "xy")
         assert np.allclose(np.array(outline.bounds), [-3, -1, 5, 7], atol=1e-1)
 
     def test_xz_plane(self):
-        a = PointCloudData((np.random.rand(10000, 3) * 8) + np.array([-3, -1, 2]))
+        rng = np.random.default_rng(1)
+        a = PointCloudData((rng.random((10000, 3)) * 8) + np.array([-3, -1, 2]))
         outline = get_outline_polygon(a, "xz")
         assert np.allclose(np.array(outline.bounds), [-3, 2, 5, 10], atol=1e-1)
 
     def test_yz_plane(self):
-        a = PointCloudData((np.random.rand(10000, 3) * 8) + np.array([-3, -1, 2]))
+        rng = np.random.default_rng(2)
+        a = PointCloudData((rng.random((10000, 3)) * 8) + np.array([-3, -1, 2]))
         outline = get_outline_polygon(a, "yz")
         assert np.allclose(np.array(outline.bounds), [-1, 2, 7, 10], atol=1e-1)
 

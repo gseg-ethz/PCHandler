@@ -1,0 +1,14 @@
+# Source: CONTEXT.md D-05 — dual-flag (unit + gpu) coverage with independent trend lines for GPU-03.
+# carryforward: true on gpu prevents trend collapse to "no data" on commits where the GPU runner is
+# offline or the workflow path-filter excludes GPU tests. Without it, the gpu line would flicker on
+# every CPU-only push.
+flags:
+  unit:
+    paths:
+      - src/pchandler/
+      - src/GSEGUtils/
+    carryforward: false
+  gpu:
+    paths:
+      - src/pchandler/filters/gpu.py
+    carryforward: true

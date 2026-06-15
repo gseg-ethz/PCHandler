@@ -10,7 +10,8 @@ from pchandler.geometry.spherical import FoV
 
 @pytest.fixture(scope="function")
 def pcd():
-    return PointCloudData(np.random.rand(100000, 3) * 10)
+    rng = np.random.default_rng(0)
+    return PointCloudData(rng.random((100000, 3)) * 10)
 
 
 class TestRangeFilter:
