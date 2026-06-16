@@ -73,7 +73,7 @@ class LasHandler(AbstractIOHandler):
             Setting `None` will retrieve all scalar fields. Setting to `[]` will ignore scalar fields in the file.
         remove_prefix : bool, default=True
             Flag to remove prefixes on scalar field names.
-        prefix : str, default="scalar\\_"
+        prefix : str, default="scalar\_"
             Prefix to strip from scalar field names if `remove_prefix` is True.
         force_no_numerical_shift : bool, default=False
             Flag determining if the optimal shifts should be overridden and original coordinates used
@@ -130,7 +130,7 @@ class LasHandler(AbstractIOHandler):
             Setting `None` will retrieve all scalar fields. Setting to `[]` will ignore scalar fields in the file.
         add_prefix: bool, default=False
             Flag to add prefixes on scalar field names
-        prefix: str, default="scalar\\_"
+        prefix: str, default="scalar\_"
             Prefix to strip from scalar field names if `remove_prefix` is True.
         revert_sf_types: bool, default=False
             Flag to revert scalar field values to their original types or not

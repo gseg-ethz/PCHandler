@@ -102,7 +102,7 @@ class CsvHandler(AbstractIOHandler):
             Setting `None` will retrieve all scalar fields. Setting to `[]` will ignore scalar fields in the file.
         remove_prefix : bool, default=True
             Flag to remove prefixes on scalar field names.
-        prefix : str, default="scalar\\_"
+        prefix : str, default="scalar\_"
             Prefix to strip from scalar field names if `remove_prefix` is True.
         column_names_row : int, default=-1
             Header row index where column names are defined. Default is -1 for the last line of the header.
@@ -215,7 +215,7 @@ class CsvHandler(AbstractIOHandler):
             Setting `None` will retrieve all scalar fields. Setting to `[]` will ignore scalar fields in the file.
         add_prefix: bool, default=False
             Flag to add prefixes on scalar field names
-        prefix: str, default="scalar\\_"
+        prefix: str, default="scalar\_"
             Prefix to strip from scalar field names if `remove_prefix` is True.
         revert_sf_types: bool, default=False
             Flag to revert scalar field values to their original types or not

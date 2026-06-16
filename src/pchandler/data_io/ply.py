@@ -68,7 +68,7 @@ class PlyHandler(AbstractIOHandler):
             ``None`` retrieves all scalar fields; ``[]`` ignores scalar fields.
         remove_prefix : bool, default=True
             If ``True``, strip ``prefix`` from scalar-field names.
-        prefix : str, default="scalar\\_"
+        prefix : str, default="scalar\_"
             Prefix to strip from scalar-field names if ``remove_prefix`` is ``True``.
         **pcd_kw : Unpack[PointCloudDataKW]
             Additional keyword arguments forwarded to :class:`PointCloudData`.
@@ -119,7 +119,7 @@ class PlyHandler(AbstractIOHandler):
             the cloud; ``[]`` writes XYZ only.
         add_prefix : bool, default=False
             If ``True``, prepend ``prefix`` to scalar-field column names.
-        prefix : str, default="scalar\\_"
+        prefix : str, default="scalar\_"
             Prefix to prepend when ``add_prefix`` is ``True``.
         revert_sf_types : bool, default=False
             If ``True``, restore each scalar field's original on-disk dtype.
