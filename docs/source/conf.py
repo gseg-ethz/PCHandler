@@ -1,6 +1,12 @@
 import os
 import sys
 
+# Phase 09.1 Plan 01 residual warnings: 566
+# (after numpydantic fix, structural RST fixes, and py4dgeo nitpick_ignore_regex;
+# toc.not_included + PointCloudData/load_file duplicate-object warnings resolved.
+# The remaining 566 are nitpicky-mode ref.class/ref.meth/ref.obj/ref.data surfaced
+# cross-ref issues; Plan 09.1-03 will address them via autodoc_type_aliases +
+# role-matching + nitpick_ignore_regex expansion)
 # from docs.conf import autosummary_generate
 
 sys.path.insert(0, os.path.abspath("../../src"))
@@ -87,10 +93,14 @@ html_static_path = ["_static"]
 suppress_warnings = ["ref.python"]
 
 # Phase 09.1 baseline: nitpicky mode so new self-inflicted broken refs fail the build.
-# nitpick_ignore_regex entries will be filled by Plan 09.1-03 after autodoc_type_aliases
-# build-iterate confirms which external-dep type refs are genuinely unresolvable.
+# Known-unresolvable external optional-dep types added immediately; remaining entries
+# will be filled by Plan 09.1-03 after autodoc_type_aliases build-iterate.
 nitpicky = True
-nitpick_ignore_regex: list[tuple[str, str]] = []
+nitpick_ignore_regex: list[tuple[str, str]] = [
+    # py4dgeo has no public RTD inventory; Epoch is an optional dep used in docstrings + rst_epilog
+    (r"py:.*", r"py4dgeo\..*"),
+    (r"py:class", r"Epoch"),
+]
 
 
 redirects = {"index.html": "introduction.html"}
