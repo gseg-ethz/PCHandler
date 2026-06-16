@@ -29,7 +29,6 @@ extensions = [
     "sphinx.ext.intersphinx",
 ]
 
-# TODO fix the GSEGUtils once it's implemented to ReadTheDocs
 # Intersphinx Config
 intersphinx_mapping = {
     "open3d": ("https://www.open3d.org/docs/release/", None),
@@ -77,19 +76,21 @@ exclude_patterns = []
 html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]
 
-# DOC-01 (Phase 8) + Phase 9 docs cleanup carry-over:
-# `sphinx-build -W` surfaced ~197 pre-existing warnings, the vast majority
-# `ref.python` ambiguities from the lazy-load `__init__` pattern (e.g.
-# `pchandler.PointCloudData` AND `pchandler.core.PointCloudData` are both
-# discoverable targets; sphinx warns on every cross-reference). The plus-one
-# `numpydantic.NDArray` external-target warning surfaces because the numpydantic
-# intersphinx inventory does not currently export NDArray under py:class.
-# Phase 9 will (a) collapse the lazy-load ambiguities via :no-index: in stubs and
-# (b) revisit the numpydantic intersphinx mapping or replace external refs with
-# inline types. Until then the suppression keeps `-W` green so the gate catches
-# any NEW warning category. Do NOT add unrelated warning codes here — narrow
-# allowlist by design.
-suppress_warnings = ["ref.python", "ref.class"]
+# DOC-01 (Phase 8 carry-over) + Phase 09.1 structural cleanup:
+# `ref.python` suppresses ambiguous cross-reference warnings that arise from the
+# lazy-load `__init__` pattern (e.g. `pchandler.PointCloudData` and
+# `pchandler.core.PointCloudData` are both discoverable targets). This entry will
+# be dropped once Plan 09.1-03 (autodoc_type_aliases + intersphinx role matching)
+# confirms which refs still need to be in nitpick_ignore_regex.
+# NOTE: `ref.class` was never a real Sphinx warning code (only `ref.python` exists
+# for the Python domain) — it was a no-op and has been removed (D-03, Phase 09.1).
+suppress_warnings = ["ref.python"]
+
+# Phase 09.1 baseline: nitpicky mode so new self-inflicted broken refs fail the build.
+# nitpick_ignore_regex entries will be filled by Plan 09.1-03 after autodoc_type_aliases
+# build-iterate confirms which external-dep type refs are genuinely unresolvable.
+nitpicky = True
+nitpick_ignore_regex: list[tuple[str, str]] = []
 
 
 redirects = {"index.html": "introduction.html"}
@@ -100,7 +101,7 @@ def setup(app):
 
 
 rst_epilog = """
-.. |NDArray| replace:: :external+numpydantic:py:class:`NDArray <numpydantic.NDArray>`
+.. |NDArray| replace:: :external+numpydantic:py:class:`NDArray <numpydantic.ndarray.NDArray>`
 .. |o3d.geometry.PointCloud| replace:: :class:`~open3d.geometry.PointCloud`
 .. |o3d.t.geometry.PointCloud| replace:: :class:`o3d.t.geometry.PointCloud <open3d.t.geometry.PointCloud>`
 .. |Epoch| replace:: :class:`py4dgeo.Epoch <py4dgeo.Epoch>`
