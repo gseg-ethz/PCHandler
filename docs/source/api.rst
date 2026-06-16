@@ -14,5 +14,5 @@ API
 
 .. automodule:: pchandler
    :members:
-   :exclude-members: model_config, model_post_init, _abc_impl, _reconstruct
+   :exclude-members: model_config, model_post_init, _abc_impl, _reconstruct, PointCloudData, load_file
    :show-inheritance:
