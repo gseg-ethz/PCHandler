@@ -2,6 +2,7 @@ pchandler.data\_io.core
 =======================
 
 .. automodule:: pchandler.data_io.core
+   :exclude-members: PointCloudDataKW
 
 
    .. rubric:: Functions
