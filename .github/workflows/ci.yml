@@ -117,6 +117,30 @@ jobs:
       - name: GHCR login (podman)
         shell: bash
         run: echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Pre-flight GPU health check
+        shell: bash
+        # Fail fast with a readable message if the runner GPU / CDI injection is in a bad state,
+        # instead of an opaque SIGSEGV deep in the test run. Diagnosed 2026-06-18 (debug session
+        # gpu-cuspatial-segfault): the historical SC2 segfault was non-reproducible across ~1149 runs
+        # and is best explained by a transient host-driver vs CDI-injected-libcuda mismatch during a
+        # run that straddled a driver bump / CDI regeneration. This guard turns a recurrence into a
+        # clear error naming the fix (regenerate the CDI spec).
+        run: |
+          HOST_DRV=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1 | tr -d '[:space:]')
+          echo "host driver: $HOST_DRV"
+          podman run --rm --user 0 --device nvidia.com/gpu=all \
+            -e NUMBA_CUDA_USE_NVIDIA_BINDING=1 -e HOST_DRV="$HOST_DRV" \
+            "$GPU_IMAGE" \
+            bash -lc '
+              set -euo pipefail
+              CON_DRV=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1 | tr -d "[:space:]")
+              echo "container driver: $CON_DRV"
+              if [ "$CON_DRV" != "$HOST_DRV" ]; then
+                echo "::error::GPU driver mismatch host=$HOST_DRV container=$CON_DRV — stale CDI injection. Fix on the runner: sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml"
+                exit 1
+              fi
+              python -c "import cudf, cuspatial, geopandas as gpd; from shapely.geometry import Polygon; pg = cuspatial.GeoSeries(gpd.GeoSeries([Polygon([[0,0],[10,0],[10,5],[0,5]])])); pts = cuspatial.GeoSeries.from_points_xy(cudf.DataFrame({\"x\": [1.0, 9.0], \"y\": [1.0, 9.0]}).interleave_columns()); assert cuspatial.point_in_polygon(pts, pg)[0].to_numpy().tolist() == [True, False]; print(\"cuspatial smoke OK\")"
+            '
       - name: Run GPU tests in the RAPIDS container (podman)
         shell: bash
         # --user 0: rootless Podman has no /etc/subuid range, so the image's non-root 'rapids'
@@ -129,6 +153,10 @@ jobs:
         # NUMBA_CUDA_USE_NVIDIA_BINDING=1: numba.cuda's legacy ctypes driver wrapper segfaults at
         #   as_cuda_array on the host's CUDA 13.2 driver (cuspatial.point_in_polygon -> numba_cuda);
         #   the official cuda-python bindings fix it. Verified on gseg-pc105 2026-06-15 (09-02).
+        # Retry-on-139: the SC2 segfault was diagnosed non-reproducible (debug session
+        #   gpu-cuspatial-segfault, 2026-06-18) — a transient GPU/driver-injection fault. We retry the
+        #   test step ONLY on exit 139 (SIGSEGV), up to MAX_ATTEMPTS. Real test failures exit 1, not
+        #   139, so this cannot mask a genuine regression.
         run: |
           podman run --rm \
             --user 0 \
@@ -143,7 +171,21 @@ jobs:
               git config --global --add safe.directory /work
               nvidia-smi
               pip install -e .[dev]
-              pytest tests/filters/test_gpu.py -v --cov=pchandler.filters.gpu --cov-report=xml:/work/coverage-gpu.xml
+              MAX_ATTEMPTS=2
+              attempt=1
+              while :; do
+                set +e
+                pytest tests/filters/test_gpu.py -v --cov=pchandler.filters.gpu --cov-report=xml:/work/coverage-gpu.xml
+                ec=$?
+                set -e
+                [ $ec -eq 0 ] && break
+                if [ $ec -eq 139 ] && [ $attempt -lt $MAX_ATTEMPTS ]; then
+                  echo "::warning::gpu-tests exit 139 (transient GPU SIGSEGV) on attempt $attempt/$MAX_ATTEMPTS — retrying. Diagnosed non-reproducible 2026-06-18 (debug session gpu-cuspatial-segfault)."
+                  attempt=$((attempt + 1))
+                  continue
+                fi
+                exit $ec
+              done
             '
       - name: Upload GPU coverage
         if: success()
