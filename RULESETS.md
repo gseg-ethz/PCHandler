@@ -2,7 +2,7 @@
 
 **Repository:** gseg-ethz/PCHandler
 **Protected branches:** `main`, `develop/gsd`
-**Configured:** 2026-06-16 (snapshot authored; applied via GitHub UI per Plan 10-03)
+**Configured:** TBD — configured in Phase 11 (PCHandler goes public; rulesets unavailable on free-plan private repos)
 **Ruleset snapshots:** `.github/rulesets/main.json`, `.github/rulesets/develop.json`
 
 ---
@@ -67,22 +67,29 @@ updated in lockstep with the job rename.**
 |--------|---------------|
 | `main` | `Lint (pre-commit)` |
 | `main` | `Tests (pytest)` |
-| `main` | `Tests (pytest, GPU)` |
 | `develop/gsd` | `Lint (pre-commit)` |
 | `develop/gsd` | `Tests (pytest)` |
 
-**Why GPU is required on `main` only (CONTEXT D-09/D-10):**
+**GPU check sentinel decision — option (b): `Tests (pytest, GPU)` REMOVED from required checks.**
 
-`Tests (pytest, GPU)` runs on the self-hosted runner (`[self-hosted, linux, x64, gpu, cuda12,
-pchandler-cuda12]`). A required check that never reports (e.g., when the runner is offline)
-would block the PR indefinitely. Gating everyday `develop/gsd` PRs on a single self-hosted
-runner is too fragile. GPU gates only the release boundary (`main`), where release-please's
-`workflow_run` trigger on the "CI" workflow fires. Self-hosted runners must also not execute
-untrusted fork code, so GPU stays off the fork-PR-blocking path.
+PCHandler's `gpu-tests` job has `if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'`.
+GitHub **skips** the job on `pull_request` events and **treats skipped as passing** for required
+status checks [VERIFIED: emmer.dev + GitHub community forum]. This means including
+`Tests (pytest, GPU)` as a required check on `protect-main` would silently allow every PR to
+merge without the GPU suite running — the check appears as "skipped (passing)" rather than
+"blocked."
+
+Option (b) was chosen (lowest friction for a solo-maintained repo with an unreliable
+self-hosted runner): remove `Tests (pytest, GPU)` from required PR checks entirely.
+GPU enforcement happens **post-merge on push to `main`** — the push to `main` itself must pass
+rulesets (which require a PR), and the GPU job runs on that push. A broken GPU merge is caught
+on the post-merge CI run, before any release-please tag is created.
+
+This decision is recorded in 11-CONTEXT.md (Phase 11 GPU sentinel decision, option b).
 
 **`strict_required_status_checks_policy` is OFF (CONTEXT D-11):** The "require branches to be
 up to date before merging" enforcement is disabled. On low-traffic repos its benefit is
-marginal and it would re-fire the full GPU suite on every base-branch update.
+marginal.
 
 ---
 
@@ -100,7 +107,7 @@ Both rulesets (`main` and `develop/gsd`) include:
 
 ## Deferred
 
-The following items are explicitly deferred per CONTEXT D-15:
+The following items are explicitly deferred per 10-CONTEXT.md D-15:
 
 - **Rules-as-code automation:** A `workflow_dispatch` bootstrap workflow that applies the
   committed JSON via `gh api PUT /repos/.../rulesets`, an admin-capable apply token (reuse
@@ -119,8 +126,8 @@ The following items are explicitly deferred per CONTEXT D-15:
 
 ## Verification
 
-After the rulesets are applied via the GitHub UI (Plan 10-03), confirm that the live state
-matches this committed snapshot:
+After PCHandler goes public and the rulesets are applied via the GitHub UI (Plan 11-07),
+confirm that the live state matches this committed snapshot:
 
 ```bash
 gh api /repos/gseg-ethz/PCHandler/rulesets
@@ -138,3 +145,7 @@ gh api /repos/gseg-ethz/PCHandler/rulesets/{id}
 Cross-check `bypass_actors`, `conditions.ref_name.include`, and the
 `required_status_checks.required_status_checks` array against the values in
 `.github/rulesets/main.json` and `.github/rulesets/develop.json`.
+
+**UI gotcha (documented in 10-03-SUMMARY D-2):** Enter bare branch names (`main`, `develop/gsd`)
+in the "Include by pattern" field — GitHub prepends `refs/heads/` automatically. Typing the
+full `refs/heads/main` produces `refs/heads/refs/heads/main` (non-matching, silently wrong).

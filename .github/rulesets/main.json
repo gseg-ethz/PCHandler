@@ -32,10 +32,6 @@
           {
             "context": "Tests (pytest)",
             "integration_id": null
-          },
-          {
-            "context": "Tests (pytest, GPU)",
-            "integration_id": null
           }
         ]
       }
