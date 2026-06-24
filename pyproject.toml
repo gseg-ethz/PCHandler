@@ -89,7 +89,7 @@ convention = "numpy"
 
 [project.urls]
 homepage = "https://gseg.igp.ethz.ch/"
-documentation = "https://gsegutils.readthedocs.io/en/latest/"
+documentation = "https://pchandler.readthedocs.io/en/latest/"
 repository = "https://github.com/gseg-ethz/PCHandler.git"
 Issues = "https://github.com/gseg-ethz/PCHandler/issues"
 Changelog = "https://github.com/gseg-ethz/PCHandler/blob/main/CHANGELOG.md"
