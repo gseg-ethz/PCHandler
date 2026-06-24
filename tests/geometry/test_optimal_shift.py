@@ -39,8 +39,9 @@ def _child_unpickle_and_assert(blob: bytes, queue) -> None:
     queue.put(world.tolist())
 
 
-def random_coordinates(scale: float, offset: float) -> np.ndarray:
-    xyz_base = np.random.randn(100, 3).astype(np.float32)
+def random_coordinates(scale: float, offset: float, seed: int = 0) -> np.ndarray:
+    rng = np.random.default_rng(seed)
+    xyz_base = rng.standard_normal((100, 3)).astype(np.float32)
     return (xyz_base * np.float32(scale) + np.float32(offset)).astype(np.float64)
 
 
@@ -92,10 +93,14 @@ def coords_unshiftable2(scale_large, offset_large) -> np.ndarray:
 
 @pytest.fixture(autouse=True)
 def clear_instantiated_osm():
-    yield
-    # Teardown: remove this singleton from the shared SingletonMeta registry.
+    # Bracket: clean BEFORE yield (so a sibling test that mutated the singleton
+    # in a prior run can't leak state into this test) AND after yield (keeps
+    # the original teardown behaviour). Phase 9 D-12 F1.
     # Assigning to OptimizedShiftManager._instances would create a shadow attribute on
     # the subclass instead of clearing the metaclass-level dict (CR-01, post-COUPLE-01).
+    SingletonMeta._instances.pop(OptimizedShiftManager, None)
+    assert OptimizedShiftManager not in SingletonMeta._instances
+    yield
     SingletonMeta._instances.pop(OptimizedShiftManager, None)
     assert OptimizedShiftManager not in SingletonMeta._instances
 
@@ -129,7 +134,8 @@ class TestOptimizedShift:
         assert opt_shift in OptimizedShiftManager().all_shifts
 
     def test_new_value_assignment(self, opt_shift):
-        xyz = np.random.rand(100, 3)
+        rng = np.random.default_rng(1)
+        xyz = rng.random((100, 3))
         pcd = PointCloudData(xyz, numerical_optimization_shift=opt_shift)
         initial_value = opt_shift.value
         initial_uuid = opt_shift.uuid
@@ -142,7 +148,8 @@ class TestOptimizedShift:
         assert np.allclose(pcd.xyz, xyz - new_value)
 
     def test_invalid_value_assignment(self, opt_shift):
-        xyz = np.random.rand(100, 3)
+        rng = np.random.default_rng(2)
+        xyz = rng.random((100, 3))
         pcd = PointCloudData(xyz, numerical_optimization_shift=opt_shift)
         initial_value = opt_shift.value
         initial_uuid = opt_shift.uuid
@@ -153,18 +160,20 @@ class TestOptimizedShift:
             opt_shift.value = new_value
 
     def test___contains__(self, opt_shift):
-        pcd = PointCloudData(np.random.rand(100, 3), numerical_optimization_shift=opt_shift)
+        rng = np.random.default_rng(3)
+        pcd = PointCloudData(rng.random((100, 3)), numerical_optimization_shift=opt_shift)
         assert len(opt_shift._member_coordinate_sets) == 1
         assert pcd in opt_shift
 
-        pcd2 = PointCloudData(np.random.rand(100, 3) + 1000, numerical_optimization_shift=opt_shift)
+        pcd2 = PointCloudData(rng.random((100, 3)) + 1000, numerical_optimization_shift=opt_shift)
         assert len(opt_shift._member_coordinate_sets) == 2
         assert pcd2 in opt_shift
 
     def test___len__(self, opt_shift):
+        rng = np.random.default_rng(4)
         pcds = []
         for i in range(17):
-            xyz = PointCloudData(np.random.rand(100, 3), numerical_optimization_shift=opt_shift)
+            xyz = PointCloudData(rng.random((100, 3)), numerical_optimization_shift=opt_shift)
             pcds.append(xyz)
 
         assert len(opt_shift) == 17
@@ -174,14 +183,16 @@ class TestOptimizedShift:
         assert id(opt_shift) != hash(opt_shift)
 
     def test___eq__(self, opt_shift):
-        xyz = PointCloudData(np.random.rand(100, 3), numerical_optimization_shift=opt_shift)
+        rng = np.random.default_rng(5)
+        xyz = PointCloudData(rng.random((100, 3)), numerical_optimization_shift=opt_shift)
         func, state = xyz.__reduce__()
         obj = PointCloudData.model_construct(**state[0])
         assert id(obj) != id(xyz)
         assert opt_shift.__eq__(obj.numerical_optimization_shift)
 
     def test___reduce__(self, opt_shift):
-        xyz = PointCloudData(np.random.rand(100, 3), numerical_optimization_shift=opt_shift)
+        rng = np.random.default_rng(6)
+        xyz = PointCloudData(rng.random((100, 3)), numerical_optimization_shift=opt_shift)
         func, state = xyz.__reduce__()
         assert func == type(xyz)._reconstruct
         dumped = xyz.model_dump()
@@ -371,7 +382,8 @@ class TestOptimizedShift:
         assert np.allclose(reconstructed_shift.value, old_value)
 
     def test_reconstruct_pcd_after_shift_moved(self, opt_shift):
-        xyz = np.random.rand(100, 3)
+        rng = np.random.default_rng(7)
+        xyz = rng.random((100, 3))
         pcd = PointCloudData(xyz, numerical_optimization_shift=opt_shift)
         initial_value = opt_shift.value
         initial_uuid = opt_shift.uuid
@@ -410,7 +422,8 @@ class TestMinMaxPoints:
         assert np.allclose(min_max.maximum, high)
 
     def test_from_points_method(self):
-        array = np.random.rand(100, 3)
+        rng = np.random.default_rng(8)
+        array = rng.random((100, 3))
         min_max = MinMaxPoints.from_minmax_points(array)
 
         assert isinstance(min_max, MinMaxPoints)
@@ -529,7 +542,8 @@ class TestOptimizedShiftManager:
 
 
 def test_pcd_optimized_shift_general(osm):
-    xyz = np.random.rand(100, 3)
+    rng = np.random.default_rng(9)
+    xyz = rng.random((100, 3))
 
     # add, no change
     pcd = PointCloudData(xyz, numerical_optimization_shift=OptimizedShift(np.array([-5000, 0, 0])))
@@ -540,7 +554,7 @@ def test_pcd_optimized_shift_general(osm):
     assert len(pcd.numerical_optimization_shift) == 1
 
     # Add and change
-    xyz2 = np.random.rand(100, 3) + np.array([6000, -1000, 2000])
+    xyz2 = rng.random((100, 3)) + np.array([6000, -1000, 2000])
     pcd2 = PointCloudData(xyz2, numerical_optimization_shift=pcd.numerical_optimization_shift)
     shift_2 = pcd2.numerical_optimization_shift.value.copy()
 
@@ -550,7 +564,7 @@ def test_pcd_optimized_shift_general(osm):
     assert np.any(shift_1 != shift_2)
 
     # Not feasible, add new group
-    xyz2 = np.random.rand(100, 3) + [100000, 2000, 400]
+    xyz2 = rng.random((100, 3)) + [100000, 2000, 400]
     pcd3 = PointCloudData(xyz2, numerical_optimization_shift=pcd.numerical_optimization_shift)
     shift_3 = pcd3.numerical_optimization_shift.value.copy()
 

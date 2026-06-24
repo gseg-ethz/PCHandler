@@ -26,7 +26,8 @@ class TestLasHandler(BaseLoadSave):
 
     def test_save_no_optimal_shift(self):
         # Test for coverage
-        pcd = PointCloudData(np.round(np.random.rand(100, 3) * 1000, decimals=3), numerical_optimization_shift=None)
+        rng = np.random.default_rng(0)
+        pcd = PointCloudData(np.round(rng.random((100, 3)) * 1000, decimals=3), numerical_optimization_shift=None)
 
         las_file = tempfile.NamedTemporaryFile(suffix=".las", delete_on_close=False)
         with las_file as fp:
@@ -46,8 +47,9 @@ class TestLasHandler(BaseLoadSave):
         )
 
     def test_intensity_normalisation(self):
-        i = np.random.rand(100)
-        pcd = PointCloudData(np.random.rand(100, 3), intensity=i.copy())
+        rng = np.random.default_rng(1)
+        i = rng.random(100)
+        pcd = PointCloudData(rng.random((100, 3)), intensity=i.copy())
 
         las_file = tempfile.NamedTemporaryFile(suffix=".las", delete_on_close=False)
         with las_file as fp:

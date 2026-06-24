@@ -10,14 +10,15 @@ from pchandler.geometry.coordinates import rhv2xyz  # noqa: E402
 
 class TestSphericalOutlierFilter:
     def test_spherical_outlier_filter(self):
-        r = np.random.rand(100_000) * 10 + 20
+        rng = np.random.default_rng(0)
+        r = rng.random(100_000) * 10 + 20
         h = np.linspace(-0.1, 1.5, 100_000)
         v = np.linspace(0.1, 0.3, 100_000)
 
         num_outliers = 100
-        r_out = np.random.rand(num_outliers) * 200 + 34
-        h_out = np.random.rand(num_outliers) * 1.1 - 1.8
-        v_out = np.random.rand(num_outliers) + 1.3
+        r_out = rng.random(num_outliers) * 200 + 34
+        h_out = rng.random(num_outliers) * 1.1 - 1.8
+        v_out = rng.random(num_outliers) + 1.3
         rhv = np.stack([r, h, v], axis=1)
         rhv_out = np.stack([r_out, h_out, v_out], axis=1)
         main_cluster = rhv2xyz(rhv)
@@ -38,10 +39,11 @@ class TestSphericalOutlierFilter:
 
 class TestCartesianOutlierFilter:
     def test_cartesian_outlier_filter(self):
-        main_cluster = np.random.rand(100000, 3) * 10
+        rng = np.random.default_rng(1)
+        main_cluster = rng.random((100000, 3)) * 10
         num_outliers = 100  # Number of outliers
-        outliers_low = np.random.uniform(low=-100, high=-50, size=(int(num_outliers / 2), 3))
-        outliers_high = np.random.uniform(low=50, high=100, size=(int(num_outliers / 2), 3))
+        outliers_low = rng.uniform(low=-100, high=-50, size=(int(num_outliers / 2), 3))
+        outliers_high = rng.uniform(low=50, high=100, size=(int(num_outliers / 2), 3))
         outliers = np.vstack((outliers_low, outliers_high))
         points_with_outliers = np.vstack((main_cluster, outliers))
 

@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main, refactor/gsd]
+    branches: [main, develop/gsd]
 
 jobs:
   lint:
@@ -16,64 +16,37 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5.0.1
         with:
           # On PRs, check out the head branch so pushes work
           ref: ${{ github.event_name == 'pull_request' && github.head_ref || '' }}
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - uses: ./.github/actions/setup-python-deps
         with:
-          python-version: "3.12"
+          gsegutils-deploy-key: ${{ secrets.GSEGUTILS_DEPLOY_KEY }}
 
-      - name: Run pre-commit on PRs
-        if: github.event_name == 'pull_request'
-        uses: pre-commit/action@v3.0.1
-        with:
-          extra_args: --all-files
+      - name: Run pre-commit
+        shell: bash
+        run: |
+          python -m pip install pre-commit
+          pre-commit run --all-files
 
-      - name: Run pre-commit on push
-        if: github.event_name == 'push'
-        uses: pre-commit/action@v3.0.1
-        with:
-          extra_args: --all-files
+      - name: Check publish gate (PYPI-01)
+        shell: bash
+        run: python .github/scripts/check_publish_gate.py
 
   tests:
     name: Tests (pytest)
     needs: [lint]
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.12"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5.0.1
 
-      - uses: actions/setup-python@v5
+      - uses: ./.github/actions/setup-python-deps
         with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: pip-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
-
-      # pyproject.toml pins GSEGUtils via git+ssh:// (DEP-01). CI runners have
-      # no GitHub SSH key by default and GSEGUtils is private (Private :: Do
-      # Not Upload). Load the GSEGUTILS_DEPLOY_KEY repo secret into the SSH
-      # agent so `pip install .[dev]` can clone the SHA-pinned GSEGUtils. The
-      # public half of this keypair is registered as a read-only deploy key on
-      # the GSEGUtils repository. See .planning/phases/01-cross-repo-foundation/
-      # 01-VERIFICATION.md for the auth setup audit trail.
-      - name: Set up SSH agent for private GSEGUtils dep
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.GSEGUTILS_DEPLOY_KEY }}
-
-      - name: Install dev deps
-        run: pip install .[dev]
+          gsegutils-deploy-key: ${{ secrets.GSEGUTILS_DEPLOY_KEY }}
 
       - name: Pyright (informational)
         id: pyright
@@ -88,17 +61,140 @@ jobs:
 
       - name: Upload pyright report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: pyright-report-${{ github.run_id }}
           path: .pyright-report.json
           if-no-files-found: ignore
 
       - name: Run tests
-        run: pytest -m "not benchmark" --cov=pchandler --cov-report=xml
+        run: pytest -m "not benchmark" --cov=pchandler --cov-report=xml:coverage-unit.xml
+
+      - name: Check for unseeded default_rng() (TEST-08 D-08)
+        shell: bash
+        run: |
+          # NPY002 covers np.random.{rand,choice,randint,...} but NOT default_rng() without a seed argument.
+          # This grep is the TEST-08 exit criterion (see CONTRIBUTING.md / Phase 9 D-08).
+          if grep -rnE 'default_rng\(\s*\)' tests/ 2>/dev/null; then
+            echo "::error::Unseeded default_rng() detected in tests/ — every default_rng must take an explicit seed (TEST-08, see CONTRIBUTING.md)"
+            exit 1
+          fi
+          echo "TEST-08 OK: zero unseeded default_rng() calls in tests/"
+
+      - name: Build docs (warnings as errors)
+        working-directory: .
+        run: |
+          pip install .[doc]
+          sphinx-build -W --keep-going -b html docs/source docs/_build/html
 
       - name: Upload coverage to Codecov
         if: success()
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@8cad3ba95e5920c42f44492e54bc9639cba47959  # v6.0.2
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage-unit.xml
+          flags: unit
+
+  gpu-tests:
+    name: Tests (pytest, GPU)
+    needs: [lint]
+    if: |
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, linux, x64, gpu, cuda12, pchandler-cuda12]
+    permissions:
+      contents: read
+      packages: read        # pull the private GHCR image via podman login
+    env:
+      # First real image, digest-pinned (immutable), built by gpu-image-refresh.yml.
+      # NOT a `container:` block: GitHub's container: jobs hardcode `-v /var/run/docker.sock`,
+      # which a rootless-Podman host has no way to provide (root-owned /var/run). We launch the
+      # image ourselves with `podman run` (09-02 commissioning 2026-06-15 — CONTEXT D-02 container
+      # mechanism amended from GitHub-native container: to explicit podman run).
+      GPU_IMAGE: ghcr.io/gseg-ethz/pchandler-gpu-runner@sha256:3b554e9c21be7ff93c2305e98187dd2979247a881613715a6c2394d9fb7f11bd
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5.0.1
+      - name: Load GSEGUtils deploy key into ssh-agent (mounted into the container for the git+ssh dep)
+        uses: webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555  # v0.10.0
+        with:
+          ssh-private-key: ${{ secrets.GSEGUTILS_DEPLOY_KEY }}
+      - name: GHCR login (podman)
+        shell: bash
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Pre-flight GPU health check
+        shell: bash
+        # Fail fast with a readable message if the runner GPU / CDI injection is in a bad state,
+        # instead of an opaque SIGSEGV deep in the test run. Diagnosed 2026-06-18 (debug session
+        # gpu-cuspatial-segfault): the historical SC2 segfault was non-reproducible across ~1149 runs
+        # and is best explained by a transient host-driver vs CDI-injected-libcuda mismatch during a
+        # run that straddled a driver bump / CDI regeneration. This guard turns a recurrence into a
+        # clear error naming the fix (regenerate the CDI spec).
+        run: |
+          HOST_DRV=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1 | tr -d '[:space:]')
+          echo "host driver: $HOST_DRV"
+          podman run --rm --user 0 --device nvidia.com/gpu=all \
+            -e NUMBA_CUDA_USE_NVIDIA_BINDING=1 -e HOST_DRV="$HOST_DRV" \
+            "$GPU_IMAGE" \
+            bash -lc '
+              set -euo pipefail
+              CON_DRV=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1 | tr -d "[:space:]")
+              echo "container driver: $CON_DRV"
+              if [ "$CON_DRV" != "$HOST_DRV" ]; then
+                echo "::error::GPU driver mismatch host=$HOST_DRV container=$CON_DRV — stale CDI injection. Fix on the runner: sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml"
+                exit 1
+              fi
+              python -c "import cudf, cuspatial, geopandas as gpd; from shapely.geometry import Polygon; pg = cuspatial.GeoSeries(gpd.GeoSeries([Polygon([[0,0],[10,0],[10,5],[0,5]])])); pts = cuspatial.GeoSeries.from_points_xy(cudf.DataFrame({\"x\": [1.0, 9.0], \"y\": [1.0, 9.0]}).interleave_columns()); assert cuspatial.point_in_polygon(pts, pg)[0].to_numpy().tolist() == [True, False]; print(\"cuspatial smoke OK\")"
+            '
+      - name: Run GPU tests in the RAPIDS container (podman)
+        shell: bash
+        # --user 0: rootless Podman has no /etc/subuid range, so the image's non-root 'rapids'
+        #   (UID 1001) user can't be mapped — container-root maps to the unprivileged host user.
+        # --device nvidia.com/gpu=all: CDI GPU passthrough (D-03a).
+        # Source bind-mounted at /work; coverage written there so the host codecov step sees it.
+        # SSH agent socket mounted so the in-container `pip install -e .[dev]` clones GSEGUtils
+        #   (git+ssh); accept-new avoids needing a known_hosts mount. The base provides the conda
+        #   GPU stack (cudf/cuspatial/geopandas); `.[dev]` only — [cuda12] PyPI wheels would conflict.
+        # NUMBA_CUDA_USE_NVIDIA_BINDING=1: numba.cuda's legacy ctypes driver wrapper segfaults at
+        #   as_cuda_array on the host's CUDA 13.2 driver (cuspatial.point_in_polygon -> numba_cuda);
+        #   the official cuda-python bindings fix it. Verified on gseg-pc105 2026-06-15 (09-02).
+        # Retry-on-139: the SC2 segfault was diagnosed non-reproducible (debug session
+        #   gpu-cuspatial-segfault, 2026-06-18) — a transient GPU/driver-injection fault. We retry the
+        #   test step ONLY on exit 139 (SIGSEGV), up to MAX_ATTEMPTS. Real test failures exit 1, not
+        #   139, so this cannot mask a genuine regression.
+        run: |
+          podman run --rm \
+            --user 0 \
+            --device nvidia.com/gpu=all \
+            -v "$PWD":/work -w /work \
+            -v "$SSH_AUTH_SOCK":/ssh-agent -e SSH_AUTH_SOCK=/ssh-agent \
+            -e GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new" \
+            -e NUMBA_CUDA_USE_NVIDIA_BINDING=1 \
+            "$GPU_IMAGE" \
+            bash -lc '
+              set -euo pipefail
+              git config --global --add safe.directory /work
+              nvidia-smi
+              pip install -e .[dev]
+              MAX_ATTEMPTS=2
+              attempt=1
+              while :; do
+                set +e
+                pytest tests/filters/test_gpu.py -v --cov=pchandler.filters.gpu --cov-report=xml:/work/coverage-gpu.xml
+                ec=$?
+                set -e
+                [ $ec -eq 0 ] && break
+                if [ $ec -eq 139 ] && [ $attempt -lt $MAX_ATTEMPTS ]; then
+                  echo "::warning::gpu-tests exit 139 (transient GPU SIGSEGV) on attempt $attempt/$MAX_ATTEMPTS — retrying. Diagnosed non-reproducible 2026-06-18 (debug session gpu-cuspatial-segfault)."
+                  attempt=$((attempt + 1))
+                  continue
+                fi
+                exit $ec
+              done
+            '
+      - name: Upload GPU coverage
+        if: success()
+        uses: codecov/codecov-action@8cad3ba95e5920c42f44492e54bc9639cba47959  # v6.0.2
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage-gpu.xml
+          flags: gpu

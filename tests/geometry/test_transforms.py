@@ -67,7 +67,8 @@ def test_transform_matrix_multiplication(identity_transform, random_transform):
     assert result_self.shape == random_transform.shape
     # Verify it is valid or transpose expected data
 
-    np_data = np.random.rand(4, 100)
+    rng = np.random.default_rng(0)
+    np_data = rng.random((4, 100))
     result = random_transform @ np_data
     assert result.shape == (4, 100)
 

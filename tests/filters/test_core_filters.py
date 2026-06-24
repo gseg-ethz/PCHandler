@@ -10,17 +10,19 @@ from pchandler.filters import GenericFieldFilter, PointCloudFilter
 
 @pytest.fixture(scope="function", autouse=True)
 def pcd_all():
-    xyz = np.random.rand(100, 3)
-    rgb = np.random.randint(0, 256, (100, 3), dtype=np.uint8)
-    normals = np.random.rand(100, 3)
-    intensity = np.random.randint(0, 1000, (100,), dtype=np.uint16)
+    rng = np.random.default_rng(0)
+    xyz = rng.random((100, 3))
+    rgb = rng.integers(0, 256, (100, 3), dtype=np.uint8)
+    normals = rng.random((100, 3))
+    intensity = rng.integers(0, 1000, (100,), dtype=np.uint16)
     pcd = PointCloudData(xyz, rgb=rgb, normals=normals, intensity=intensity)
     return pcd
 
 
 @pytest.fixture(scope="function", autouse=True)
 def pcd_only_coords():
-    return PointCloudData(np.random.rand(100, 3))
+    rng = np.random.default_rng(1)
+    return PointCloudData(rng.random((100, 3)))
 
 
 class TestAbstractPointCloudFilter:

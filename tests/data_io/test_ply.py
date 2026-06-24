@@ -34,11 +34,12 @@ class TestPlyBinaryHandler(BaseLoadSave):
 
 
 def test_binary_vs_ascii_write(tmp_path):
-    xyz = np.random.rand(100, 3)
-    intensity = np.random.rand(100)
-    rgb = np.random.randint(0, 256, (100, 3), dtype=np.uint8)
-    normals = np.random.rand(100, 3).astype(np.float32)
-    sf1 = np.random.rand(100)
+    rng = np.random.default_rng(0)
+    xyz = rng.random((100, 3))
+    intensity = rng.random(100)
+    rgb = rng.integers(0, 256, (100, 3), dtype=np.uint8)
+    normals = rng.random((100, 3)).astype(np.float32)
+    sf1 = rng.random(100)
     pcd = PointCloudData(
         xyz=xyz,
         intensity=intensity,

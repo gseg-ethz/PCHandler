@@ -26,7 +26,7 @@ dependencies = [
 	"joblib ~= 1.5",
 	"laspy[lazrs,laszip] ~= 2.6",
 	"numpy >= 2.0, < 2.4",
-	"numpydantic ~= 1.6",
+	"numpydantic ~= 1.10",
 	"plyfile ~= 1.1",
 	"pydantic ~= 2.11",
 	"pye57 ~= 0.4",
@@ -46,7 +46,7 @@ include-package-data = true
 pchandler = ["py.typed", "**/*.pyi"]
 
 [tool.setuptools.dynamic]
-readme = {file = ["README.md"]}
+readme = {file = ["README.md"], content-type = "text/markdown"}
 
 [tool.setuptools_scm]
 write_to = "src/pchandler/_version.py"
@@ -60,7 +60,7 @@ line-length = 120
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "B", "I", "C90", "D"]
+select = ["E", "F", "W", "B", "I", "C90", "D", "NPY"]
 ignore = ["E203"]
 
 [tool.ruff.lint.pydocstyle]
@@ -89,7 +89,7 @@ convention = "numpy"
 
 [project.urls]
 homepage = "https://gseg.igp.ethz.ch/"
-documentation = "https://gsegutils.readthedocs.io/en/latest/"
+documentation = "https://pchandler.readthedocs.io/en/stable/"
 repository = "https://github.com/gseg-ethz/PCHandler.git"
 Issues = "https://github.com/gseg-ethz/PCHandler/issues"
 Changelog = "https://github.com/gseg-ethz/PCHandler/blob/main/CHANGELOG.md"
@@ -102,7 +102,7 @@ extra = [
 	"open3d ~= 0.19",
 ]
 doc = [
-    "sphinx ~= 8.2",
+    "sphinx ~= 8.2.3, <8.3",  # DOC-01: block 8.3 autosummary regression (sphinx-doc/sphinx#14166)
     "sphinx_rtd_theme"
 ]
 dev = [
@@ -114,6 +114,7 @@ dev = [
     "pytest-cov~=5.0",        # pytest coverage plugin (used by ci.yml --cov)
     "coverage~=7.0",          # coverage reporting
     "pytest-benchmark ~= 5.2",  # Phase 4 D-30 — opt-in microbenchmark plugin (excluded from CI)
+    "pytest-randomly ~= 4.1",   # TEST-07: shuffle test order each run; surfaces order-deps
 ]
 cuda11 = ["geopandas ~= 1.0", "cudf-cu11 == 25.4.*", "cuspatial-cu11 == 25.4.*", "cuproj-cu11 == 25.4.*",
 	"cuml-cu11 == 25.4.*", "dask-cudf-cu11 == 25.4.*", ]

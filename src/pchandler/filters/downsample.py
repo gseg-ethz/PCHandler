@@ -124,15 +124,24 @@ class RandomDownsampleFilter(PointCloudFilter):
     """Downsample a point cloud by uniformly random sampling a fixed ratio of points."""
 
     @validate_variables
-    def __init__(self, size: Annotated[PositiveFloat, Field(lt=1)]):
+    def __init__(
+        self,
+        size: Annotated[PositiveFloat, Field(lt=1)],
+        seed: int | None = None,
+    ):
         """Downsample the point cloud by randomly sampling a fixed ratio of points.
 
         Parameters
         ----------
         size : PositiveFloat
             Fraction of points to keep, in the open interval ``(0.0, 1.0)``.
+        seed : int | None, optional
+            Optional seed for the per-instance random generator. ``None`` (default)
+            preserves the prior nondeterministic behaviour for no-arg callers without
+            mutating the global numpy RNG state (TEST-07, Phase 8 D-11).
         """
         self.size = size
+        self._rng_seed = seed
 
     def mask(self, pcd: PointCloudData) -> Vector_Bool_T:
         """Create a mask based on a uniformly random sample of points.
@@ -147,7 +156,11 @@ class RandomDownsampleFilter(PointCloudFilter):
         Vector_Bool_T
             Boolean mask, ``True`` for sampled points.
         """
-        indices = np.sort(np.random.choice(len(pcd), size=int(np.ceil(self.size * len(pcd))), replace=False))
+        # TEST-07: per-instance RNG (Phase 4 D-23 pattern from geometry/util.py:130);
+        # no global state pollution. seed=None yields a fresh nondeterministic generator
+        # but does not consume from the global numpy RNG (Phase 8 D-11).
+        rng = np.random.default_rng(self._rng_seed)
+        indices = np.sort(rng.choice(len(pcd), size=int(np.ceil(self.size * len(pcd))), replace=False))
         mask = np.zeros(len(pcd), dtype=np.bool_)
         mask[indices] = True
         return mask

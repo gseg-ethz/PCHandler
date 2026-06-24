@@ -3,17 +3,26 @@ import pytest
 from shapely.geometry import Polygon
 
 from pchandler import PointCloudData
+from pchandler._optional import is_gpu_available
 from pchandler.filters import PolygonFilterGPU, SphericalPolygonFilterGPU
 from pchandler.geometry.coordinates import rhv2xyz
+
+# D-06: skip cleanly if the smoke probe says no GPU at runtime, even when cudf is importable.
+pytestmark = pytest.mark.skipif(
+    not is_gpu_available(),
+    reason="GPU support not available (cudf+cuspatial+geopandas importable AND smoke kernel passes).",
+)
 
 
 @pytest.fixture(scope="function", autouse=True)
 def sphere_pcd_():
+    # D-10 — was unseeded uniform calls; now seeded default_rng per TEST-05 pattern (test_downsample.py:17-29)
+    rng = np.random.default_rng(0)
     rhv = np.column_stack(
         (
-            np.random.uniform(low=5, high=10, size=100),
-            np.random.uniform(low=np.pi / 2, high=2 * np.pi / 3, size=100),
-            np.random.uniform(low=0, high=np.pi / 2, size=100),
+            rng.uniform(low=5, high=10, size=100),
+            rng.uniform(low=np.pi / 2, high=2 * np.pi / 3, size=100),
+            rng.uniform(low=0, high=np.pi / 2, size=100),
         )
     )
     rhv = np.vstack(
@@ -33,11 +42,13 @@ def sphere_polygon_():
 
 @pytest.fixture(scope="function", autouse=True)
 def xyz_pcd_():
+    # D-10 — was unseeded uniform calls; now seeded default_rng(1) per TEST-05 pattern
+    rng = np.random.default_rng(1)
     xyz = np.column_stack(
         (
-            np.random.uniform(low=0.1, high=9.9, size=100),
-            np.random.uniform(low=0.1, high=4.9, size=100),
-            np.random.uniform(low=0, high=100, size=100),
+            rng.uniform(low=0.1, high=9.9, size=100),
+            rng.uniform(low=0.1, high=4.9, size=100),
+            rng.uniform(low=0, high=100, size=100),
         )
     )
     xyz = np.vstack(

@@ -7,12 +7,13 @@ from pchandler.filters import ScalarFieldFilter, ScalarFieldPercentileFilter
 
 @pytest.fixture(scope="function")
 def pcd():
+    rng = np.random.default_rng(0)
     return PointCloudData(
-        np.random.rand(10, 3) * 100,
+        rng.random((10, 3)) * 100,
         intensity=np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], dtype=np.int16),
         reflectance=np.array([0.5, 0.2, 0.7, 0.1, 0.3, 0.4, 0.5, 0.8, 9.2, 1.0]),
-        rgb=np.random.randint(0, 256, (10, 3), dtype=np.uint8),
-        normals=np.random.rand(10, 3),
+        rgb=rng.integers(0, 256, (10, 3), dtype=np.uint8),
+        normals=rng.random((10, 3)),
     )
 
 
