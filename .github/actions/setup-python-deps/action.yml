@@ -1,24 +1,12 @@
 name: Setup Python + deps (pchandler)
 description: >
-  Set up Python 3.12, restore pip cache, load GSEGUtils deploy key into
-  ssh-agent, and install pchandler[dev]. The caller MUST run
-  `actions/checkout` BEFORE invoking this composite — GitHub needs the
-  repo on the runner filesystem to find this action.yml. Asymmetric
-  variant: includes the deploy-key SSH step that GSEGUtils's composite
-  omits — pchandler consumes GSEGUtils via git+ssh, GSEGUtils has no
-  cross-repo dep. See Phase 8 CONTEXT.md Claude's Discretion §Composite
+  Set up Python 3.12, restore pip cache, and install pchandler[dev]. The
+  caller MUST run `actions/checkout` BEFORE invoking this composite —
+  GitHub needs the repo on the runner filesystem to find this action.yml.
+  GSEGUtils is now a standard PyPI dependency (no git+ssh / deploy key),
+  so this composite is symmetric with the GSEGUtils one. See Phase 11-06
+  (D-10 dep swap) and Phase 8 CONTEXT.md Claude's Discretion §Composite
   action scope.
-
-inputs:
-  gsegutils-deploy-key:
-    description: >
-      SSH private key for cloning the private GSEGUtils repo via git+ssh.
-      Caller-side passes the secrets.GSEGUTILS_DEPLOY_KEY repo secret;
-      GitHub auto-masks secret references. (Plain text here intentional:
-      action.yml `description:` fields are template-evaluated, so wrapping
-      the example in ${ ... } would fail validation with "Unrecognized
-      named-value: 'secrets'".)
-    required: true
 
 runs:
   using: composite
@@ -31,10 +19,6 @@ runs:
       with:
         path: ~/.cache/pip
         key: pip-${{ runner.os }}-3.12-${{ hashFiles('pyproject.toml') }}
-
-    - uses: webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555  # v0.10.0
-      with:
-        ssh-private-key: ${{ inputs.gsegutils-deploy-key }}
 
     - shell: bash
       run: pip install .[dev]

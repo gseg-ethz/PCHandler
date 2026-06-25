@@ -31,8 +31,6 @@ jobs:
           fetch-depth: 0
 
       - uses: ./.github/actions/setup-python-deps
-        with:
-          gsegutils-deploy-key: ${{ secrets.GSEGUTILS_DEPLOY_KEY }}
 
       - name: Exercise upload-artifact (no-op smoke)
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
