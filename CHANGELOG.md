@@ -1,5 +1,89 @@
 # Changelog
 
+## [2.1.0](https://github.com/gseg-ethz/PCHandler/compare/v2.0.0...v2.1.0) (2026-06-25)
+
+
+### ✨ Features
+
+* **09-01:** add pytestmark.skipif + seed migration to test_gpu.py (D-06, D-10) ([11ae357](https://github.com/gseg-ethz/PCHandler/commit/11ae357e844546355e6fd6ec499d91b577ce16c7))
+* **09-01:** extend _probe_gpu with cudf smoke kernel (D-06) ([07e939e](https://github.com/gseg-ethz/PCHandler/commit/07e939e00e903a31c6ba66160a8232f6ab62c230))
+* **09-05:** migrate data_io/ tests to seeded default_rng (Task 2) ([9bcc6f1](https://github.com/gseg-ethz/PCHandler/commit/9bcc6f1d1db2c3b674d67e083adc179b328adf64))
+* **09-05:** migrate scalar_fields/ + test_pchandler_core.py to seeded default_rng (Task 1) ([86f3718](https://github.com/gseg-ethz/PCHandler/commit/86f37182c00f73257657bc6e3356da84ed155d3c))
+* **09-06:** migrate filters tests off legacy np.random.* (Task 2) ([7ab80e6](https://github.com/gseg-ethz/PCHandler/commit/7ab80e6a6133ebf5395810614ce24ce0494340b8))
+* **09-06:** migrate geometry tests off legacy np.random.* (Task 1) ([d2d0e8a](https://github.com/gseg-ethz/PCHandler/commit/d2d0e8a3695dbb6cf44e96574a9a55caa5c79b5e))
+* **09-07:** remove temp NPY002 per-file-ignore from pchandler pyproject.toml ([e6c0feb](https://github.com/gseg-ethz/PCHandler/commit/e6c0febdd830c4fe29f5fb6dc6e6fef08087a869))
+* **11-01:** add check_publish_gate.py CI publish-step enforcement script ([d38e901](https://github.com/gseg-ethz/PCHandler/commit/d38e901a3e376ee248d3b9fa54e93e3f0c2391fa))
+* **11-01:** wire check_publish_gate.py step into Lint (pre-commit) job ([2dce9c4](https://github.com/gseg-ethz/PCHandler/commit/2dce9c49a0ed07149796d5638108872108b7990b))
+* **11-02:** add publish-pypi.yml — OIDC trusted publisher workflow ([38b4808](https://github.com/gseg-ethz/PCHandler/commit/38b4808c666a2769c6ece829f4bcc06f47ba998b))
+* **11-02:** add publish-testpypi.yml — TestPyPI dry-run workflow ([e3f7151](https://github.com/gseg-ethz/PCHandler/commit/e3f71512e9f95a2b7e66f4be8f9e01bdb7aabf84))
+
+
+### 🐛 Bug Fixes
+
+* **09-02:** GPU runner base cuda12.8 + --user 0 for rootless Podman ([9b2fac4](https://github.com/gseg-ethz/PCHandler/commit/9b2fac46b2ed52929610f5cc042775a4517320cb))
+* **09-02:** NUMBA_CUDA_USE_NVIDIA_BINDING=1 to fix numba.cuda segfault on CUDA 13.2 driver ([7f15f42](https://github.com/gseg-ethz/PCHandler/commit/7f15f429fafffbbe0a1ef6b4ad89c2d11d2498bb))
+* **09-02:** redesign GPU image to slim warm-base + job-time fresh install ([0486ed2](https://github.com/gseg-ethz/PCHandler/commit/0486ed2947d5439c2059c34180263859da0d8f6e))
+* **09-02:** run gpu-tests via podman run instead of GitHub container: job ([00ad772](https://github.com/gseg-ethz/PCHandler/commit/00ad772b7067de45dbd6ca29f98bab73cba53de3))
+* **09.1-03:** correct over-escaped backslash in scalar_ docstring defaults ([c85f7a0](https://github.com/gseg-ethz/PCHandler/commit/c85f7a0374148cf1958822e16f68209b8af15c6a))
+* **11-04:** set readme content-type to text/markdown for valid PyPI metadata ([6d2696c](https://github.com/gseg-ethz/PCHandler/commit/6d2696c30e95be449eabe1e0dd8c9f0edb1fc776))
+
+
+### 📚 Documentation
+
+* **08-03:** fill &lt;REL-03 SHA&gt; placeholder with merge SHA 6f1b069 (PR [#28](https://github.com/gseg-ethz/PCHandler/issues/28)) ([63fa3d6](https://github.com/gseg-ethz/PCHandler/commit/63fa3d60d6d4eaf31973dbfab64838c33b3bd14e))
+* **08-03:** fill RTD override date (2026-06-12) + flag failed re-build for Phase 9 ([f38b3f0](https://github.com/gseg-ethz/PCHandler/commit/f38b3f0027b38ea3f9e425e089197c6e7c994c5f))
+* **08-04:** extend sphinx suppress_warnings to include ref.class (numpydantic.NDArray) ([8a4e4f6](https://github.com/gseg-ethz/PCHandler/commit/8a4e4f665bf4f3b1bc00b962d9166bcd6cece196))
+* **08-04:** suppress ref.python warnings + add --keep-going (DOC-01 minimum-viable) ([021f57e](https://github.com/gseg-ethz/PCHandler/commit/021f57eb7d3ef764d2337dd7300ed71b906a3ad5))
+* **09-04:** add CONTRIBUTING.md with seed discipline policy (TEST-08) ([d62819c](https://github.com/gseg-ethz/PCHandler/commit/d62819c56fe8e8f123939f9b47c4320dc1e1dc9d))
+* **09.1-01:** fix duplicate-object + orphan-doc structural warnings in RST ([dbb7093](https://github.com/gseg-ethz/PCHandler/commit/dbb7093aacc19f3433c43afba4e1472d43d08a46))
+* **09.1-01:** fix numpydantic NDArray target, drop ref.class, enable nitpicky ([4771242](https://github.com/gseg-ethz/PCHandler/commit/47712421d6820e107c98e54027635b9a5e30ca66))
+* **09.1-01:** record residual warning count; add py4dgeo nitpick_ignore_regex entries ([d7a067d](https://github.com/gseg-ethz/PCHandler/commit/d7a067dda1956189310966d568663e58d39e8d8a))
+* **09.1-03:** add autodoc_type_aliases + nitpick_ignore_regex; pchandler exits 0 under -W ([589c1da](https://github.com/gseg-ethz/PCHandler/commit/589c1da57c532c6b5232741a659364be721e814b))
+* **09.1:** Sphinx -W warnings cleanup + CI docs gate ([7b0d68d](https://github.com/gseg-ethz/PCHandler/commit/7b0d68d5a9c4ffc3b47e08f7c94d62b0d9479575))
+* **10-01:** add RULESETS.md documenting branch ruleset rationale for PCHandler ([9628fba](https://github.com/gseg-ethz/PCHandler/commit/9628fbaa4874c7e633d57110964081b93680f39a))
+* **11-02:** add RELEASE.md + replace README Publication Policy with Verifying Releases ([b1712a3](https://github.com/gseg-ethz/PCHandler/commit/b1712a3e50053246a4c7dd2f7449d18fae79ba36))
+* ignore numpydantic 1.10 NDArray autodoc refs under -W gate ([2df2281](https://github.com/gseg-ethz/PCHandler/commit/2df2281c0b0600f291c534c97f31d07d639782d8))
+* point documentation URL at pchandler RTD (was gsegutils) ([64f0b7c](https://github.com/gseg-ethz/PCHandler/commit/64f0b7cdd4d29381be0cc4f08517068c471dbc67))
+* use /en/stable/ for documentation URL (match GSEGUtils convention) ([f73079f](https://github.com/gseg-ethz/PCHandler/commit/f73079f67c45f300ff5e0cc0ac333360cd533639))
+
+
+### 🧹 Miscellaneous Chores
+
+* **09-03:** re-enable pytest-randomly in CI (drop addopts no:randomly) ([c435a33](https://github.com/gseg-ethz/PCHandler/commit/c435a339caec1c4882bc2a4342ddacede1e93e4f))
+* **09-04:** enable ruff NPY rule family + temporary tests/ NPY002 ignore ([0a50a23](https://github.com/gseg-ethz/PCHandler/commit/0a50a236d7afeffa1782ec656bf21d58e7ba3f17))
+* **10-01:** add branch ruleset JSON snapshots for PCHandler ([b11b877](https://github.com/gseg-ethz/PCHandler/commit/b11b87750db152e37f132a332eedced05bf9d067))
+* **11-01:** GPU sentinel fix (main.json) + update RULESETS.md ([fd60326](https://github.com/gseg-ethz/PCHandler/commit/fd6032680235dc49486c62d910f69f011a6f6faa))
+* **11-06:** swap GSEGUtils git+ssh -&gt; PyPI pin; drop all ssh residuals (D-10) ([#41](https://github.com/gseg-ethz/PCHandler/issues/41)) ([#42](https://github.com/gseg-ethz/PCHandler/issues/42)) ([ff5a18f](https://github.com/gseg-ethz/PCHandler/commit/ff5a18fbf3af389b1e3725603bde67d499da0784))
+* **deps:** adopt numpydantic ~= 1.10 ([3b43f2f](https://github.com/gseg-ethz/PCHandler/commit/3b43f2fc48b58b40ff525a984ef7e9bf4f359cd4))
+
+
+### ✅ Tests
+
+* **08-04:** disable pytest-randomly in pchandler CI too (D-13 carry-over) ([06237dc](https://github.com/gseg-ethz/PCHandler/commit/06237dc99ae33cffe28e1ad0728db97e01df956f))
+* **08-04:** RandomDownsampleFilter seed discipline + Sphinx pin + -W gate (TEST-07/DOC-01) ([1fe5410](https://github.com/gseg-ethz/PCHandler/commit/1fe5410b6b40ca4909c0fe2c5a1eea665c23e5c4))
+* **09-03:** bracket clear_instantiated_osm fixture BEFORE+AFTER yield ([4a63c41](https://github.com/gseg-ethz/PCHandler/commit/4a63c41cd8ed0f9dab677f22fa18b13c29e5ab0c))
+
+
+### 🤖 Continuous Integration
+
+* **08-01:** bump upload-artifact to v7.0.1 (v5 was Node 20) ([2a2cde4](https://github.com/gseg-ethz/PCHandler/commit/2a2cde430e489659033554f6e334d819335c9cad))
+* **08-01:** de-template action.yml description — secrets.* is not in scope there ([89ecb1b](https://github.com/gseg-ethz/PCHandler/commit/89ecb1b30260eac16b4e9c24f1df83250684fffe))
+* **08-01:** move actions/checkout out of composite — GH local-action bootstrap fix ([390a589](https://github.com/gseg-ethz/PCHandler/commit/390a589c1d35a92730b32a0dda9f08b6e1fbae93))
+* **08-01:** Node 24 cutover — SHA pins + composite action + direct pre-commit (CI-05/06/08) ([582bbda](https://github.com/gseg-ethz/PCHandler/commit/582bbda789f0a91f3b87f117a20cf5af0f191dba))
+* **08-02:** add weekly Actions deprecation canary workflow (CI-09) ([38ed5f9](https://github.com/gseg-ethz/PCHandler/commit/38ed5f99b75ad039bece993a0f5bac9b8c4fed65))
+* **08-03:** rewire release-please.yml to App-token auth (REL-04 D-10 actual) ([fb7d9c0](https://github.com/gseg-ethz/PCHandler/commit/fb7d9c075408fa6f3ec8457f31805c1cf6a825c0))
+* **08-04:** defer sphinx-build -W gate to Phase 9 (DOC-01 partial close) ([515d44b](https://github.com/gseg-ethz/PCHandler/commit/515d44b72d7ab385665a2792d34b1e97ba636b5b))
+* **09-02:** add dual-flag codecov.yml for GPU-03 (unit + gpu independent trends) ([f42b3f8](https://github.com/gseg-ethz/PCHandler/commit/f42b3f8e7b9d4814642ae0390a9d143def64600c))
+* **09-02:** add GPU runner Dockerfile (RAPIDS 25.04 + CUDA 12.5 + Python 3.12) ([671d935](https://github.com/gseg-ethz/PCHandler/commit/671d93531af68ab68fe123f03a50cbd63d66a07c))
+* **09-02:** add gpu-image-refresh.yml (monthly GHCR build + digest write-back) ([6c0e9ca](https://github.com/gseg-ethz/PCHandler/commit/6c0e9cac3eddc9948f195fd97d1b62861b5bfc4b))
+* **09-02:** add gpu-tests job + flags:unit + unseeded-rng grep to pchandler ci.yml ([ae90da0](https://github.com/gseg-ethz/PCHandler/commit/ae90da07c667f674a1a9fe242230739470d8e69f))
+* **09-02:** pin gpu-tests image to first real digest (sha256:3b554e9c…) ([0737824](https://github.com/gseg-ethz/PCHandler/commit/0737824cfde865503cb6b2eedac48cb0f353a573))
+* **09.1-05:** add sphinx-build -W docs gate to tests job ([30054b7](https://github.com/gseg-ethz/PCHandler/commit/30054b7a58b1cfc7e6987f7586724f32e00b6f78))
+* **10:** drop vestigial single-entry python matrix on tests job ([ce63b01](https://github.com/gseg-ethz/PCHandler/commit/ce63b016f14f9dc1a49cd9b19c0df2ee54d3aa76))
+* **11-04:** register publish-testpypi.yml on main for TestPyPI dry-run ([#38](https://github.com/gseg-ethz/PCHandler/issues/38)) ([49a5747](https://github.com/gseg-ethz/PCHandler/commit/49a574775d6e289c13ca72356f86adc1c9a307b2))
+* **gpu-tests:** pre-flight GPU health check + retry-on-139 ([3ebb74c](https://github.com/gseg-ethz/PCHandler/commit/3ebb74cc1fa62e847c0a0fc65604a6b8070525b0))
+* **rel-05:** switch CI push trigger to [main, develop/gsd] ([#25](https://github.com/gseg-ethz/PCHandler/issues/25)) ([8ebc735](https://github.com/gseg-ethz/PCHandler/commit/8ebc735c91f3b77b9dba91210dfe4f252e648991))
+
 ## [2.0.0](https://github.com/gseg-ethz/PCHandler/compare/v1.0.1...v2.0.0) (2026-06-12)
 
 
