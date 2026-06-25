@@ -17,8 +17,6 @@ jobs:
           fetch-tags: true
 
       - uses: ./.github/actions/setup-python-deps
-        with:
-          gsegutils-deploy-key: ${{ secrets.GSEGUTILS_DEPLOY_KEY }}
 
       - name: Build wheel and sdist
         run: |
