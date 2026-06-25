@@ -24,8 +24,6 @@ jobs:
           fetch-depth: 0
 
       - uses: ./.github/actions/setup-python-deps
-        with:
-          gsegutils-deploy-key: ${{ secrets.GSEGUTILS_DEPLOY_KEY }}
 
       - name: Run pre-commit
         shell: bash
@@ -45,8 +43,6 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5.0.1
 
       - uses: ./.github/actions/setup-python-deps
-        with:
-          gsegutils-deploy-key: ${{ secrets.GSEGUTILS_DEPLOY_KEY }}
 
       - name: Pyright (informational)
         id: pyright
@@ -114,10 +110,6 @@ jobs:
       GPU_IMAGE: ghcr.io/gseg-ethz/pchandler-gpu-runner@sha256:3b554e9c21be7ff93c2305e98187dd2979247a881613715a6c2394d9fb7f11bd
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5.0.1
-      - name: Load GSEGUtils deploy key into ssh-agent (mounted into the container for the git+ssh dep)
-        uses: webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555  # v0.10.0
-        with:
-          ssh-private-key: ${{ secrets.GSEGUTILS_DEPLOY_KEY }}
       - name: GHCR login (podman)
         shell: bash
         run: echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u "${{ github.actor }}" --password-stdin
@@ -151,9 +143,9 @@ jobs:
         #   (UID 1001) user can't be mapped — container-root maps to the unprivileged host user.
         # --device nvidia.com/gpu=all: CDI GPU passthrough (D-03a).
         # Source bind-mounted at /work; coverage written there so the host codecov step sees it.
-        # SSH agent socket mounted so the in-container `pip install -e .[dev]` clones GSEGUtils
-        #   (git+ssh); accept-new avoids needing a known_hosts mount. The base provides the conda
-        #   GPU stack (cudf/cuspatial/geopandas); `.[dev]` only — [cuda12] PyPI wheels would conflict.
+        # GSEGUtils now installs from PyPI (D-10 dep swap, Phase 11-06) — no git+ssh / SSH agent
+        #   needed in the container. The base provides the conda GPU stack (cudf/cuspatial/
+        #   geopandas); `.[dev]` only — [cuda12] PyPI wheels would conflict.
         # NUMBA_CUDA_USE_NVIDIA_BINDING=1: numba.cuda's legacy ctypes driver wrapper segfaults at
         #   as_cuda_array on the host's CUDA 13.2 driver (cuspatial.point_in_polygon -> numba_cuda);
         #   the official cuda-python bindings fix it. Verified on gseg-pc105 2026-06-15 (09-02).
@@ -166,8 +158,6 @@ jobs:
             --user 0 \
             --device nvidia.com/gpu=all \
             -v "$PWD":/work -w /work \
-            -v "$SSH_AUTH_SOCK":/ssh-agent -e SSH_AUTH_SOCK=/ssh-agent \
-            -e GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new" \
             -e NUMBA_CUDA_USE_NVIDIA_BINDING=1 \
             "$GPU_IMAGE" \
             bash -lc '
