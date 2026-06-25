@@ -11,7 +11,11 @@ build:
     python: "3.12"
   jobs:
     post_build:
-      - mv $READTHEDOCS_OUTPUT/html/LICENSE $READTHEDOCS_OUTPUT/html/LICENSE.txt
+      # Copy the repo-root LICENSE into the HTML output as LICENSE.txt so the
+      # license badge in introduction.rst (:target: ./LICENSE.txt) resolves.
+      # Was `mv html/LICENSE ...` which failed (Sphinx never copies LICENSE into
+      # the output — no html_extra_path), breaking every RTD build at post_build.
+      - cp LICENSE $READTHEDOCS_OUTPUT/html/LICENSE.txt
 
 sphinx:
   configuration: docs/source/conf.py
