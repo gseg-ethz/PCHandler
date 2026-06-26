@@ -165,7 +165,7 @@ Optional GPU Acceleration
 Download a wheel from a release and verify its Sigstore provenance attestation:
 
 ```bash
-gh attestation verify pchandler-2.0.1-py3-none-any.whl --repo gseg-ethz/PCHandler
+gh attestation verify pchandler-2.1.0-py3-none-any.whl --repo gseg-ethz/PCHandler
 ```
 
 See [RELEASE.md](RELEASE.md) for claim fields, rollback procedure, and environment details.
