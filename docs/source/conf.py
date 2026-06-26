@@ -24,8 +24,8 @@ copyright = "2024, Nicholas Meyer"
 author = "Nicholas Meyer"
 
 # Automatic version updates via release-please
-version = "2.1.0"  # x-release-please-version
-release = "2.1.0"  # x-release-please-version
+version = "2.1.1"  # x-release-please-version
+release = "2.1.1"  # x-release-please-version
 
 
 extensions = [
