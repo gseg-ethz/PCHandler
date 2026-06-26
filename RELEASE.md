@@ -1,7 +1,7 @@
 # Release Process — PCHandler
 
 **Repository:** gseg-ethz/PCHandler
-**First published:** TBD (fill in after first production publish)
+**First published:** 2.1.0 on 2026-06-25
 **Publish workflow:** `.github/workflows/publish-pypi.yml`
 
 ---
