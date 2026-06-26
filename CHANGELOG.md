@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.1.1](https://github.com/gseg-ethz/PCHandler/compare/v2.1.0...v2.1.1) (2026-06-26)
+
+
+### 🐛 Bug Fixes
+
+* **docs:** promote RTD LICENSE post_build fix to main (DOC-02) ([#44](https://github.com/gseg-ethz/PCHandler/issues/44)) ([84897bf](https://github.com/gseg-ethz/PCHandler/commit/84897bf4c0c5b87cb7d5c37257dc40fd4b284ba0))
+
+
+### 📚 Documentation
+
+* promote v1.1 closeout doc fixes to main (2.1.0 release info) ([#47](https://github.com/gseg-ethz/PCHandler/issues/47)) ([ffd5237](https://github.com/gseg-ethz/PCHandler/commit/ffd5237374b81b4c2141ac8de96cb835eb54be46))
+
 ## [2.1.0](https://github.com/gseg-ethz/PCHandler/compare/v2.0.0...v2.1.0) (2026-06-25)
 
 
