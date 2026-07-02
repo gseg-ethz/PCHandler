@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pchandler"
-description = "Short description of PointCloudHandler (pchandler)"
+description = "A Python library for handling point cloud data, including reading, writing, and processing various point cloud formats."
 requires-python = ">=3.10"
 keywords = ["LiDAR", "Pointclouds"]
-license = {text = "Proprietary"}
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
 authors = [
-	{name = "Nicholas Meyer"},
-	{email = "meyernic@ethz.ch"},
+	{name = "Nicholas Meyer", email = "meyernic@ethz.ch"},
 ]
 dynamic = [
 	"version",
@@ -20,8 +20,6 @@ classifiers = [
 	"Programming Language :: Python :: 3"
 ]
 dependencies = [
-#	"pchandler[cuda12] ~= 1.0",
-#	"pc2img ~= 0.8",
 	"numpy ~= 1.24",
 	"plyfile ~= 0.7",
 	"laspy[lazrs,laszip] ~= 2.4",
@@ -44,14 +42,10 @@ version_scheme = "post-release"
 
 [project.urls]
 homepage = "https://gseg.igp.ethz.ch/"
-documentation = "https://google.com"
 repository = "https://github.com/gseg-ethz/PCHandler.git"
 Issues = "https://github.com/gseg-ethz/PCHandler/issues"
 Changelog = "https://github.com/gseg-ethz/PCHandler/blob/main/CHANGELOG.md"
 
-
-#[project.scripts]
-#DeSpAn = "DeSpAn.cli:main"
 
 [project.optional-dependencies]
 doc = ["sphinx ~= 5.1", "sphinx_rtd_theme"]
