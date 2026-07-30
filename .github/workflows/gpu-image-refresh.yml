@@ -1,8 +1,58 @@
 name: GPU Runner Image Refresh
 
+# QUARANTINED 2026-07-30 (Phase 13 plan 13-08 Task 1). The scheduled trigger is
+# DISABLED; the manual `workflow_dispatch` below is the only remaining trigger.
+#
+# THE FAILURE. The monthly scheduled run of 2026-07-01 (run 28513581287) built and
+# pushed the image successfully, then failed in `write-back-digest` at the
+# `peter-evans/create-pull-request` step on a server-side push rejection. From
+# that run's log, path elided so the retarget grep in plan 13-08 Task 3 stays
+# reachable — the unelided quote is in `13-08-SUMMARY.md`:
+#
+#     ! [remote rejected] ci/gpu-runner-digest-28513581287 -> … (refusing to allow
+#       a GitHub App to create or update workflow `.github/workflows/…` without
+#       `workflows` permission)
+#
+# WHY QUARANTINED RATHER THAN FIXED — the cause is not this file's logic.
+# `GITHUB_TOKEN` is an installation token for the `github-actions` App, and GitHub
+# refuses ANY App push touching `.github/workflows/**` unless the App holds the
+# `workflows: write` permission. That permission has NO key in a workflow's
+# `permissions:` block, so no edit here can grant it: it is the same structural
+# class as `administration`, which is why `ruleset-apply.yml` mints a separate App
+# token instead of asking for a scope. Relocating the digest into `gpu.yml`
+# (plan 13-08 Task 3) does NOT help — the rejection is about the path prefix, not
+# the filename. Already recorded as a v1.1 known limitation in
+# `.planning/MILESTONES.md`: "digest write-back needs a workflows-scoped token
+# (first digest pinned manually)".
+#
+# WHAT WOULD RE-ENABLE IT. Either path below, both larger than Phase 13 carries.
+# Restore the `schedule:` block preserved verbatim under `on:` when one lands.
+#   (a) Give the write-back step a credential permitted to touch workflow files —
+#       a GitHub App installation token with `contents: write` + `workflows: write`,
+#       or a classic PAT with the `workflow` scope, stored as a repository secret
+#       and handed to `create-pull-request` via `token:`. The existing
+#       `gseg-ruleset-admin` App is NOT it: its permissions are exactly
+#       `{administration: write, metadata: read}`, and widening an
+#       administration-scoped App to write workflow files is a decision, not a fix.
+#   (b) Stop pinning the digest inside a workflow file at all — write it to a
+#       versioned non-workflow artifact the GPU job reads at job start
+#       (`.github/digests/gpu-runner.txt`; option (b) of 09-RESEARCH.md's
+#       digest-pin section). Needs no new credential, but changes how the GPU job
+#       resolves its image.
+#
+# WHY IT MATTERS NOW. From plan 13-08 Task 3 the GPU job's check-run name becomes
+# a REQUIRED context on the protected branch, so anything red in this area reads
+# as a lab problem. The pin is a digest, not a moving tag, so a paused refresh is
+# a staleness cost rather than a breakage — but a quarantine nobody wrote down is
+# indistinguishable from neglect, which is what this block exists to prevent.
+
 on:
-  schedule:
-    - cron: '0 8 1 * *'   # D-04: 08:00 UTC, 1st of month
+  # QUARANTINED — see the header block. Restore this verbatim when (a) or (b) lands.
+  # The 08:00-on-the-1st slot stays RESERVED for it, and the CI workflow's own cron
+  # comment still names this slot as taken for exactly that reason.
+  #
+  # schedule:
+  #   - cron: '0 8 1 * *'   # D-04: 08:00 UTC, 1st of month
   workflow_dispatch:
     inputs:
       force:
@@ -11,7 +61,7 @@ on:
         default: false
 
 permissions:
-  contents: write       # digest write-back commit/PR to ci.yml
+  contents: write       # digest write-back commit/PR to gpu.yml
   packages: write       # GHCR push
   pull-requests: write  # peter-evans/create-pull-request below
   # NOTE: id-token: write is intentionally ABSENT — cosign-keyless deferred per RESEARCH Open Q 6 (SP-B)
@@ -56,7 +106,7 @@ jobs:
         # D-04 rotation policy: keep last 3 monthly digests + current via post-build prune.
 
   write-back-digest:
-    name: Write digest back into ci.yml
+    name: Write digest back into gpu.yml
     needs: [build-push]
     runs-on: ubuntu-latest
     permissions:
@@ -66,15 +116,36 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5.0.1
         with:
           ref: develop/gsd
-      - name: Update digest in ci.yml
+      - name: Update digest in gpu.yml
         env:
           NEW_DIGEST: ${{ needs.build-push.outputs.digest }}
         shell: bash
         run: |
+          # The rewrite target moved out of the CI workflow and into its own file at
+          # plan 13-08, when the GPU job was relocated. Five anchors in THIS file named
+          # the old path (this step's name, the job name above, the workflow-level
+          # `contents: write` comment, the comment below and the sed target); all five
+          # were retargeted in that same commit, because the sed below matches BY PATH.
+          TARGET=.github/workflows/gpu.yml
+
           # NEW_DIGEST is in the form `sha256:<hex>`; strip the `sha256:` prefix for the sed.
           # Matches the pinned ref regardless of prefix (the digest lives in the gpu-tests job's
-          # `GPU_IMAGE:` env, not a `container.image:` field — see ci.yml, 09-02 podman-run design).
-          sed -i -E "s|(pchandler-gpu-runner@sha256:)[a-f0-9]+|\1${NEW_DIGEST#sha256:}|g" .github/workflows/ci.yml
+          # `GPU_IMAGE:` env, not a `container.image:` field — see gpu.yml, 09-02 podman-run design).
+          if [ -z "${NEW_DIGEST}" ]; then
+            echo "::error::build-push produced an empty digest output — nothing to write back. Refusing to rewrite ${TARGET} with an empty pin."
+            exit 1
+          fi
+          sed -i -E "s|(pchandler-gpu-runner@sha256:)[a-f0-9]+|\1${NEW_DIGEST#sha256:}|g" "$TARGET"
+
+          # ASSERT THE REWRITE MATCHED. `sed -i` exits 0 on ZERO matches, so a stale
+          # target path — or a change to how the pin is written — produces an empty diff
+          # and `create-pull-request` then no-ops: a green run that refreshed nothing.
+          # Grep the written digest back out and turn that silence into a named failure.
+          if ! grep -qF "pchandler-gpu-runner@${NEW_DIGEST}" "$TARGET"; then
+            echo "::error::digest rewrite matched nothing in ${TARGET} — the pinned digest ${NEW_DIGEST} is absent after the sed. Either the rewrite target moved again (retarget every anchor in this file) or the pin's spelling changed. A zero-match sed exits 0, which is why this assertion exists."
+            exit 1
+          fi
+          echo "digest rewrite OK: ${TARGET} now pins ${NEW_DIGEST}"
       - uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1  # v8.1.1
         with:
           commit-message: "ci(gpu-runner): bump image digest to ${{ needs.build-push.outputs.digest }}"
