@@ -61,7 +61,7 @@ on:
         default: false
 
 permissions:
-  contents: write       # digest write-back commit/PR to ci.yml
+  contents: write       # digest write-back commit/PR to gpu.yml
   packages: write       # GHCR push
   pull-requests: write  # peter-evans/create-pull-request below
   # NOTE: id-token: write is intentionally ABSENT — cosign-keyless deferred per RESEARCH Open Q 6 (SP-B)
@@ -106,7 +106,7 @@ jobs:
         # D-04 rotation policy: keep last 3 monthly digests + current via post-build prune.
 
   write-back-digest:
-    name: Write digest back into ci.yml
+    name: Write digest back into gpu.yml
     needs: [build-push]
     runs-on: ubuntu-latest
     permissions:
@@ -116,15 +116,36 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5.0.1
         with:
           ref: develop/gsd
-      - name: Update digest in ci.yml
+      - name: Update digest in gpu.yml
         env:
           NEW_DIGEST: ${{ needs.build-push.outputs.digest }}
         shell: bash
         run: |
+          # The rewrite target moved out of the CI workflow and into its own file at
+          # plan 13-08, when the GPU job was relocated. Five anchors in THIS file named
+          # the old path (this step's name, the job name above, the workflow-level
+          # `contents: write` comment, the comment below and the sed target); all five
+          # were retargeted in that same commit, because the sed below matches BY PATH.
+          TARGET=.github/workflows/gpu.yml
+
           # NEW_DIGEST is in the form `sha256:<hex>`; strip the `sha256:` prefix for the sed.
           # Matches the pinned ref regardless of prefix (the digest lives in the gpu-tests job's
-          # `GPU_IMAGE:` env, not a `container.image:` field — see ci.yml, 09-02 podman-run design).
-          sed -i -E "s|(pchandler-gpu-runner@sha256:)[a-f0-9]+|\1${NEW_DIGEST#sha256:}|g" .github/workflows/ci.yml
+          # `GPU_IMAGE:` env, not a `container.image:` field — see gpu.yml, 09-02 podman-run design).
+          if [ -z "${NEW_DIGEST}" ]; then
+            echo "::error::build-push produced an empty digest output — nothing to write back. Refusing to rewrite ${TARGET} with an empty pin."
+            exit 1
+          fi
+          sed -i -E "s|(pchandler-gpu-runner@sha256:)[a-f0-9]+|\1${NEW_DIGEST#sha256:}|g" "$TARGET"
+
+          # ASSERT THE REWRITE MATCHED. `sed -i` exits 0 on ZERO matches, so a stale
+          # target path — or a change to how the pin is written — produces an empty diff
+          # and `create-pull-request` then no-ops: a green run that refreshed nothing.
+          # Grep the written digest back out and turn that silence into a named failure.
+          if ! grep -qF "pchandler-gpu-runner@${NEW_DIGEST}" "$TARGET"; then
+            echo "::error::digest rewrite matched nothing in ${TARGET} — the pinned digest ${NEW_DIGEST} is absent after the sed. Either the rewrite target moved again (retarget every anchor in this file) or the pin's spelling changed. A zero-match sed exits 0, which is why this assertion exists."
+            exit 1
+          fi
+          echo "digest rewrite OK: ${TARGET} now pins ${NEW_DIGEST}"
       - uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1  # v8.1.1
         with:
           commit-message: "ci(gpu-runner): bump image digest to ${{ needs.build-push.outputs.digest }}"
