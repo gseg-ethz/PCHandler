@@ -1,9 +1,52 @@
 name: CI
 
+# Continuous integration (CI-10, CI-14, CI-16): produces the three named
+# required status checks — the lint gate, the test suite and the
+# warnings-as-errors docs build — on every pull request, on every push to the
+# integration branch, and nightly against the default branch (CI-13's heartbeat
+# IS this workflow, so there is no duplicated job definition to drift; Phase 13
+# D-08).
+#
+# The three job `name:` values below ARE ruleset required-status-check context
+# strings (`.github/rulesets/main.json`, `.github/rulesets/develop.json`). What
+# MUST stay true, and why:
+#
+#   - NO job here may carry a job-level `if:`, and NO filter key (`paths:`,
+#     `branches:`, ...) may appear under `pull_request:`. GitHub counts a
+#     `skipped` conclusion among the SATISFYING ones and a filtered-out run
+#     never reports at all, so either shape greens the gate having executed
+#     nothing. Conditionality belongs on STEPS. Assertions A1 and A5 in
+#     `.github/scripts/check_ci_config.py` fail the build if either returns.
+#   - NO required-context job may depend on another job (A6, and Phase 12 D-08 /
+#     DESIGN-DECISIONS entry 38): the old `needs: [lint]` edge was a pure
+#     fail-fast gate, never a data dependency, and dropping it removes the
+#     skip-propagation path structurally rather than guarding it.
+#   - RENAMING a job is a four-file coordinated change: the `name:` and BOTH
+#     ruleset payloads move in ONE commit, or the protected branch requires a
+#     context nothing produces and becomes unmergeable BY ANYONE under
+#     `bypass_actors: []` (CI-10, DESIGN-DECISIONS entry 37).
+#   - `push:` deliberately no longer lists the protected branch. The post-merge
+#     duplicate run is retired in favour of
+#     `strict_required_status_checks_policy: true`, and `release-please.yml`
+#     triggers on a push to the protected branch DIRECTLY. Those three changes
+#     ship in ONE commit or the release chain stops SILENTLY, with nothing red
+#     (DESIGN-DECISIONS entry 35 / Phase 12 D-05).
+#   - The lint job holds a READ content scope only (CI-16). Assertion A7 fails
+#     the build the moment a write scope is added back.
+#
+# Recorded 2026-07-30, Phase 13 plan 13-07 — the structural mirror of the shape
+# plan 13-04 landed in GSEGUtils. The scoping parenthetical 13-07 attached to the
+# first bullet (naming `gpu-tests` as the one job here that did carry a job-level
+# `if:`) SELF-DELETED at plan 13-08, which moved that job into
+# `.github/workflows/gpu.yml`: the flat claim is now true of this file, and this
+# header is converged with GSEGUtils's.
+
 on:
   pull_request:
   push:
-    branches: [main, develop/gsd]
+    branches: [develop/gsd]
+  schedule:
+    - cron: '0 5 * * *'   # nightly 05:00 UTC — the one daily slot free in THIS repo's own inventory (canary Mon 08:00, gpu-image-refresh 08:00 on the 1st, scheduled-health daily 06:00)
 
 jobs:
   lint:
@@ -11,17 +54,19 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
 
     steps:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5.0.1
         with:
-          # On PRs, check out the head branch so pushes work
-          ref: ${{ github.event_name == 'pull_request' && github.head_ref || '' }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0
+          # NOTE: the `ref:` and `token:` inputs are intentionally ABSENT
+          # (CI-16). Nothing in this job pushes — it runs pre-commit and three
+          # read-only gate scripts — so the head-branch checkout bought nothing,
+          # and on a fork pull request it resolved to a branch name that does
+          # not exist in this repository. Removing it fixes that latent failure
+          # as a side effect of the least-privilege narrowing.
+          fetch-depth: 0   # setuptools_scm reads tags
 
       - uses: ./.github/actions/setup-python-deps
 
@@ -35,36 +80,13 @@ jobs:
         shell: bash
         run: python .github/scripts/check_publish_gate.py
 
-  tests:
-    name: Tests (pytest)
-    needs: [lint]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5.0.1
+      - name: Check CI config (CI-12)
+        shell: bash
+        run: python .github/scripts/check_ci_config.py
 
-      - uses: ./.github/actions/setup-python-deps
-
-      - name: Pyright (informational)
-        id: pyright
-        continue-on-error: true
-        uses: jakebailey/pyright-action@v3
-        with:
-          annotate: warnings
-          # NOTE: leave the `warnings` input UNSET — setting it to `true` would
-          # ESCALATE warnings to exit 1 (Pitfall 2 in 01-RESEARCH.md). The
-          # warn-only semantics come from the step-level continue-on-error flag.
-          working-directory: .
-
-      - name: Upload pyright report
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
-        with:
-          name: pyright-report-${{ github.run_id }}
-          path: .pyright-report.json
-          if-no-files-found: ignore
-
-      - name: Run tests
-        run: pytest -m "not benchmark" --cov=pchandler --cov-report=xml:coverage-unit.xml
+      - name: Run .github/scripts unit tests (CI-12)
+        shell: bash
+        run: pytest .github/scripts/ -q
 
       - name: Check for unseeded default_rng() (TEST-08 D-08)
         shell: bash
@@ -77,114 +99,86 @@ jobs:
           fi
           echo "TEST-08 OK: zero unseeded default_rng() calls in tests/"
 
-      - name: Build docs (warnings as errors)
-        working-directory: .
-        run: |
-          pip install .[doc]
-          sphinx-build -W --keep-going -b html docs/source docs/_build/html
+  tests:
+    name: Tests (pytest)
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pull-requests: read   # the `classify` step below reads the PR file list (CI-11 D-05/D-07)
+
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5.0.1
+
+      # CI-11's release-artifact fast path. MUST follow the checkout: a local
+      # composite is resolved from the runner filesystem, so it does not exist
+      # until the repository is on disk.
+      #
+      # COST, recorded rather than glossed (Phase 13 D-06): on a
+      # release-artifact-only pull request this REQUIRED context reports success
+      # having executed essentially nothing. That is the same silhouette as the
+      # unconditional status-shim job Phase 12 D-10 rejected, and the
+      # distinction is real but narrow — this skip is conditional on MEASURED
+      # content, it fails safe in five independent ways (see the composite), and
+      # any path outside the three-file allowlist runs everything. The guard is
+      # on STEPS, never on the job, so the conclusion is a genuine `success`
+      # rather than a `skipped` that merely counts as satisfying (A5).
+      - id: classify
+        uses: ./.github/actions/classify-changes
+
+      # D-06 puts the skip at the dependency install rather than at the test
+      # run: the install is the bulk of the wall clock, so skipping only pytest
+      # would buy almost nothing.
+      - if: steps.classify.outputs.release-artifacts-only != 'true'
+        uses: ./.github/actions/setup-python-deps
+
+      - name: Pyright (informational)
+        id: pyright
+        if: steps.classify.outputs.release-artifacts-only != 'true'
+        continue-on-error: true
+        uses: jakebailey/pyright-action@v3
+        with:
+          annotate: warnings
+          # NOTE: leave the `warnings` input UNSET — setting it to `true` would
+          # ESCALATE warnings to exit 1 (Pitfall 2 in 01-RESEARCH.md). The
+          # warn-only semantics come from the step-level continue-on-error flag.
+          working-directory: .
+
+      - name: Upload pyright report
+        if: always() && steps.classify.outputs.release-artifacts-only != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: pyright-report-${{ github.run_id }}
+          path: .pyright-report.json
+          if-no-files-found: ignore
+
+      - name: Run tests
+        if: steps.classify.outputs.release-artifacts-only != 'true'
+        run: pytest -m "not benchmark" --cov=pchandler --cov-report=xml:coverage-unit.xml
 
       - name: Upload coverage to Codecov
-        if: success()
+        if: success() && steps.classify.outputs.release-artifacts-only != 'true'
         uses: codecov/codecov-action@8cad3ba95e5920c42f44492e54bc9639cba47959  # v6.0.2
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage-unit.xml
           flags: unit
 
-  gpu-tests:
-    name: Tests (pytest, GPU)
-    needs: [lint]
-    if: |
-      github.event_name == 'push' ||
-      github.event_name == 'workflow_dispatch'
-    runs-on: [self-hosted, linux, x64, gpu, cuda12, pchandler-cuda12]
-    permissions:
-      contents: read
-      packages: read        # pull the private GHCR image via podman login
-    env:
-      # First real image, digest-pinned (immutable), built by gpu-image-refresh.yml.
-      # NOT a `container:` block: GitHub's container: jobs hardcode `-v /var/run/docker.sock`,
-      # which a rootless-Podman host has no way to provide (root-owned /var/run). We launch the
-      # image ourselves with `podman run` (09-02 commissioning 2026-06-15 — CONTEXT D-02 container
-      # mechanism amended from GitHub-native container: to explicit podman run).
-      GPU_IMAGE: ghcr.io/gseg-ethz/pchandler-gpu-runner@sha256:3b554e9c21be7ff93c2305e98187dd2979247a881613715a6c2394d9fb7f11bd
+  docs:
+    name: Docs (sphinx -W)
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5.0.1
-      - name: GHCR login (podman)
-        shell: bash
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u "${{ github.actor }}" --password-stdin
-      - name: Pre-flight GPU health check
-        shell: bash
-        # Fail fast with a readable message if the runner GPU / CDI injection is in a bad state,
-        # instead of an opaque SIGSEGV deep in the test run. Diagnosed 2026-06-18 (debug session
-        # gpu-cuspatial-segfault): the historical SC2 segfault was non-reproducible across ~1149 runs
-        # and is best explained by a transient host-driver vs CDI-injected-libcuda mismatch during a
-        # run that straddled a driver bump / CDI regeneration. This guard turns a recurrence into a
-        # clear error naming the fix (regenerate the CDI spec).
+
+      # This job builds its OWN environment on purpose. The Sphinx build below
+      # used to be the last-but-one step of `tests`, where `.[dev]` had already
+      # been installed by the shared composite — so extracting it is not a
+      # two-line cut-and-paste. Checkout + composite + the `doc` extra are all
+      # required here.
+      - uses: ./.github/actions/setup-python-deps
+
+      - name: Build docs (warnings as errors)
+        working-directory: .
         run: |
-          HOST_DRV=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1 | tr -d '[:space:]')
-          echo "host driver: $HOST_DRV"
-          podman run --rm --user 0 --device nvidia.com/gpu=all \
-            -e NUMBA_CUDA_USE_NVIDIA_BINDING=1 -e HOST_DRV="$HOST_DRV" \
-            "$GPU_IMAGE" \
-            bash -lc '
-              set -euo pipefail
-              CON_DRV=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1 | tr -d "[:space:]")
-              echo "container driver: $CON_DRV"
-              if [ "$CON_DRV" != "$HOST_DRV" ]; then
-                echo "::error::GPU driver mismatch host=$HOST_DRV container=$CON_DRV — stale CDI injection. Fix on the runner: sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml"
-                exit 1
-              fi
-              python -c "import cudf, cuspatial, geopandas as gpd; from shapely.geometry import Polygon; pg = cuspatial.GeoSeries(gpd.GeoSeries([Polygon([[0,0],[10,0],[10,5],[0,5]])])); pts = cuspatial.GeoSeries.from_points_xy(cudf.DataFrame({\"x\": [1.0, 9.0], \"y\": [1.0, 9.0]}).interleave_columns()); assert cuspatial.point_in_polygon(pts, pg)[0].to_numpy().tolist() == [True, False]; print(\"cuspatial smoke OK\")"
-            '
-      - name: Run GPU tests in the RAPIDS container (podman)
-        shell: bash
-        # --user 0: rootless Podman has no /etc/subuid range, so the image's non-root 'rapids'
-        #   (UID 1001) user can't be mapped — container-root maps to the unprivileged host user.
-        # --device nvidia.com/gpu=all: CDI GPU passthrough (D-03a).
-        # Source bind-mounted at /work; coverage written there so the host codecov step sees it.
-        # GSEGUtils now installs from PyPI (D-10 dep swap, Phase 11-06) — no git+ssh / SSH agent
-        #   needed in the container. The base provides the conda GPU stack (cudf/cuspatial/
-        #   geopandas); `.[dev]` only — [cuda12] PyPI wheels would conflict.
-        # NUMBA_CUDA_USE_NVIDIA_BINDING=1: numba.cuda's legacy ctypes driver wrapper segfaults at
-        #   as_cuda_array on the host's CUDA 13.2 driver (cuspatial.point_in_polygon -> numba_cuda);
-        #   the official cuda-python bindings fix it. Verified on gseg-pc105 2026-06-15 (09-02).
-        # Retry-on-139: the SC2 segfault was diagnosed non-reproducible (debug session
-        #   gpu-cuspatial-segfault, 2026-06-18) — a transient GPU/driver-injection fault. We retry the
-        #   test step ONLY on exit 139 (SIGSEGV), up to MAX_ATTEMPTS. Real test failures exit 1, not
-        #   139, so this cannot mask a genuine regression.
-        run: |
-          podman run --rm \
-            --user 0 \
-            --device nvidia.com/gpu=all \
-            -v "$PWD":/work -w /work \
-            -e NUMBA_CUDA_USE_NVIDIA_BINDING=1 \
-            "$GPU_IMAGE" \
-            bash -lc '
-              set -euo pipefail
-              git config --global --add safe.directory /work
-              nvidia-smi
-              pip install -e .[dev]
-              MAX_ATTEMPTS=2
-              attempt=1
-              while :; do
-                set +e
-                pytest tests/filters/test_gpu.py -v --cov=pchandler.filters.gpu --cov-report=xml:/work/coverage-gpu.xml
-                ec=$?
-                set -e
-                [ $ec -eq 0 ] && break
-                if [ $ec -eq 139 ] && [ $attempt -lt $MAX_ATTEMPTS ]; then
-                  echo "::warning::gpu-tests exit 139 (transient GPU SIGSEGV) on attempt $attempt/$MAX_ATTEMPTS — retrying. Diagnosed non-reproducible 2026-06-18 (debug session gpu-cuspatial-segfault)."
-                  attempt=$((attempt + 1))
-                  continue
-                fi
-                exit $ec
-              done
-            '
-      - name: Upload GPU coverage
-        if: success()
-        uses: codecov/codecov-action@8cad3ba95e5920c42f44492e54bc9639cba47959  # v6.0.2
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage-gpu.xml
-          flags: gpu
+          pip install .[doc]
+          sphinx-build -W --keep-going -b html docs/source docs/_build/html
