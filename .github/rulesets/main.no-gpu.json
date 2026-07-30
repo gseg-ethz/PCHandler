@@ -36,10 +36,6 @@
           {
             "context": "Docs (sphinx -W)",
             "integration_id": null
-          },
-          {
-            "context": "Tests (pytest, GPU)",
-            "integration_id": null
           }
         ]
       }

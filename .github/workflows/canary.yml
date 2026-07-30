@@ -6,11 +6,17 @@ name: Actions Deprecation Canary
 # Permanent counter to forced-cutover classes (the next one is Node 24 →
 # Node 28; this workflow will surface its first warning automatically).
 #
-# Triggers MUST stay restricted to schedule + workflow_dispatch — never
-# `pull_request_target` (fork PRs can exfiltrate secrets; Pitfall #4 in
-# RESEARCH.md). Permissions MUST stay scoped to contents:read + issues:write
-# — never grant the OIDC ID token write permission (canary does not
-# publish; granting it widens the secret surface for no benefit).
+# Triggers MUST stay restricted to schedule + workflow_dispatch — never the
+# base-repo-context sibling of the pull-request trigger, which runs with this
+# repository's secrets against a fork's code (fork PRs can exfiltrate secrets;
+# Pitfall #4 in RESEARCH.md). That prohibition is now enforced repo-wide by
+# assertion A2 in .github/scripts/check_ci_config.py, which is why the literal
+# trigger name is deliberately NOT written here: A2 is a raw-text scan over this
+# directory and would flag its own prohibition note. Do not "helpfully" restore
+# the literal — the enforcing check, and the full threat statement, live in that
+# script. Permissions MUST stay scoped to contents:read + issues:write — never
+# grant the OIDC ID token write permission (canary does not publish; granting it
+# widens the secret surface for no benefit).
 
 on:
   schedule:
