@@ -174,3 +174,5 @@ COMMON_FIELD_NAMES: tuple[_NameConstantsSingle | _NameConstantsTriplet, ...] = (
 COMMON_FIELD_BASES = (field.base for field in COMMON_FIELD_NAMES)
 
 ALL_FIELD_NAMES = set(RGB_NAMES) | set(NORMAL_NAMES) | set(INTENSITY_NAMES) | set(REFLECTANCE_NAMES)
+
+# 13-17 fail-safe probe — an unrecognised path in the changed set. Never merged.
