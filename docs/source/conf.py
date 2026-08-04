@@ -240,3 +240,5 @@ rst_epilog = """
 .. |_SF_| replace:: :attr:`ScalarField <pchandler.scalar_fields.scalar_fields.ScalarField>`
 .. |_SFM_| replace:: :attr:`ScalarFieldManager <pchandler.scalar_fields.ScalarFieldManager>`
 """
+
+# 13-17 fast-path probe — throwaway branch, never merged.
