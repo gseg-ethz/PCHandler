@@ -27,6 +27,18 @@ author = "Nicholas Meyer"
 version = "2.1.0"  # x-release-please-version
 release = "2.1.0"  # x-release-please-version
 
+# --- CI-11 FAST-PATH PROBE — DO NOT MERGE -----------------------------------
+# This pull request touches exactly one path on the classify-changes D-05
+# allowlist (docs/source/conf.py), making it a release-artifact-only change.
+# It exists to observe whether the GPU job's fast path now engages after `gh`
+# was installed on the self-hosted runner gseg-pc105 (workspace spikes 001/002
+# — the composite had been failing open because the binary was absent, so every
+# release PR spent the lab GPU in full).
+# Expected: every guarded step in .github/workflows/gpu.yml (:116 :128 :153
+# :198) reports `skipped` while the job itself reports `success`.
+# Close without merging once the jobs API has been read.
+# ----------------------------------------------------------------------------
+
 
 extensions = [
     "sphinx.ext.autodoc",  # For generating documentation from docstrings
