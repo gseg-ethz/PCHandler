@@ -1,6 +1,7 @@
 """Tests for pchandler._optional capability probes + public re-exports."""
 
 import importlib
+import logging
 import sys
 
 import pytest
@@ -77,3 +78,48 @@ def test_lazy_outlier_import_no_open3d(monkeypatch: pytest.MonkeyPatch) -> None:
     finally:
         monkeypatch.delitem(sys.modules, "open3d", raising=False)
         importlib.reload(_opt)
+
+
+def test_probe_gpu_emits_the_swallowed_reason_on_the_module_logger(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """_probe_gpu() emits the exception it swallows through the ``pchandler`` logger.
+
+    Regression guard for the 2026-08-17 fail-open (spike 004, D-17-06): the GPU
+    probe caught ``ImportError: Numba needs NumPy 2.0 or less. Got NumPy 2.3.``,
+    stored it in ``_GPU_ERROR`` where nothing read it, and the GPU suite then
+    skipped every test and exited 0. The exception was never missing, only
+    unemitted.
+
+    Parameters
+    ----------
+    monkeypatch : pytest.MonkeyPatch
+        Used to defeat the ``_HAS_GPU`` / ``_GPU_ERROR`` memoisation an earlier
+        test in this file already triggers, and to force ``import cudf`` to
+        raise. Both are restored on teardown, so later tests in the same process
+        see the original module state.
+    caplog : pytest.LogCaptureFixture
+        Captures the records emitted on the ``pchandler`` logger.
+    """
+    import pchandler._optional as _opt
+
+    monkeypatch.setattr(_opt, "_HAS_GPU", None)
+    monkeypatch.setattr(_opt, "_GPU_ERROR", None)
+    monkeypatch.setitem(sys.modules, "cudf", None)
+
+    with caplog.at_level(logging.WARNING, logger="pchandler"):
+        result = _opt._probe_gpu()
+
+    assert result is False
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 1, [r.getMessage() for r in caplog.records]
+    message = warnings[0].getMessage()
+    assert "ImportError" in message
+    assert "cudf" in message
+
+    # A memoised outcome must not re-emit: the second call short-circuits.
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger="pchandler"):
+        assert _opt._probe_gpu() is False
+    assert [r for r in caplog.records if r.levelno == logging.WARNING] == []
