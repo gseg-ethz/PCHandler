@@ -178,6 +178,36 @@ jobs:
               git config --global --add safe.directory /work
               nvidia-smi
               pip install -e .[dev]
+              # POST-INSTALL GPU CAPABILITY ASSERT (CI-17, D-17-05). This is a relocation of a
+              # proven pattern, not a new mechanism: the Pre-flight GPU health check step above
+              # asserts the same capability, and on 2026-08-17 it passed. Read the four
+              # timestamps in that run log in order — 12:33:31 cuspatial smoke OK, 12:33:47
+              # uninstalling numpy-2.0.2, 12:33:54 installed numpy-2.3.5, 12:33:57 three
+              # skipped and exit 0. The assertion was never missing; it ran before the step
+              # that invalidated it, and a required context then reported green having executed
+              # nothing. So a second copy has to sit HERE, inside the same container run, after
+              # the dependency step above and before the suite below.
+              # No bypass token and no error tolerance is added here (D-17-04): the only
+              # sanctioned escape for a degraded lab is the committed main.no-gpu.json ruleset
+              # variant, deployed through the ruleset-apply dispatch with a recorded reason.
+              # Assertion A8 in .github/scripts/check_ci_config.py fails the build if this block
+              # is removed, moved before the dependency step, inverted, or neutered.
+              python -c "if 1:
+                  import sys
+                  import pchandler._optional as opt
+                  if not opt.is_gpu_available():
+                      why = repr(opt._GPU_ERROR) if opt._GPU_ERROR is not None else \"the spec-only probe found one of cudf, cuspatial or geopandas absent from this container\"
+                      print(\"::error::GPU capability was lost by this runs own dependency install. pchandler.filters.gpu is inert, so the GPU suite below would skip every test and exit 0 behind a green required context (CI-17, D-17-05). Reason: \" + why)
+                      sys.exit(1)
+                  print(\"post-install GPU capability assert: is_gpu_available() is True\")
+                  "
+              # VRAM as the suite starts. Diagnostic only — it gates nothing and asserts
+              # nothing (DESIGN-DECISIONS 89, ROADMAP two-residuals, deferred to v1.3). The
+              # nvidia-smi earlier in this body runs before the dependency step and is too
+              # early to characterise the state the suite actually meets. The retry loop below
+              # retries exit 139 only, so a co-tenant CUDA OOM exits 1 unretried with no record
+              # of why; this line is that record. Deliberately no threshold and no exit.
+              nvidia-smi --query-gpu=memory.total,memory.used,memory.free --format=csv
               MAX_ATTEMPTS=2
               attempt=1
               while :; do
