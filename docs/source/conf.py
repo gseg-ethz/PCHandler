@@ -1,3 +1,4 @@
+import importlib.metadata
 import os
 import sys
 
@@ -23,9 +24,38 @@ project = "PCHandler"
 copyright = "2024, Nicholas Meyer"
 author = "Nicholas Meyer"
 
-# Automatic version updates via release-please
-version = "2.1.0"  # x-release-please-version
-release = "2.1.0"  # x-release-please-version
+# The documented version is read from the INSTALLED distribution metadata rather
+# than from a literal that the release tooling rewrites in place
+# (DESIGN-DECISIONS entry 87). The extra-release-file declaration is gone from
+# release-please-config.json, so a generated release pull request now touches no
+# documentation input at all — which is what lets every required status check
+# short-circuit on release-artifact-only content, and it retires the
+# version-stamping drift bug class rather than re-checking it.
+#
+# Display consequence, accepted rather than discovered later: on a non-release
+# build there is no released number to show, so this renders whatever
+# setuptools_scm derived for the tree the installed distribution was BUILT from.
+# This repository sets version_scheme = "post-release" and local_scheme =
+# "no-local-version", so the derived string carries no local-version suffix.
+#
+# CORRECTION (review finding CR-01, 2026-08-18): that derivation needs TAGS, and
+# without them it does not fail — it DEGRADES, silently. From a shallow, tagless
+# clone setuptools_scm emits a Python UserWarning and returns the fallback
+# "0.0.post1". Sphinx's -W promotes SPHINX warnings, not Python ones, so such a
+# build renders a wrong version and still reports success. This was not
+# hypothetical: it is exactly what the CI docs job did, because it checked out at
+# actions/checkout's default depth of 1. Reproduced by execution, not inferred.
+# The tags are therefore kept reachable deliberately, and asserted rather than
+# assumed: .github/workflows/ci.yml gives the docs checkout `fetch-depth: 0` and
+# fails the build when the derived version is the fallback.
+#
+# Read the Docs is unmeasured HERE and must not be assumed from the green: this
+# project's `main` is unmoved, so RTD has not yet built a post-unstamp commit
+# (its `latest` still renders the old stamped 2.1.0 from d4ed605). The sibling
+# repository, whose .readthedocs.yaml declares the identical pip/path/doc-extra
+# install, WAS measured on 2026-08-18 and derived correctly there.
+version = importlib.metadata.version("pchandler")
+release = version
 
 
 extensions = [
