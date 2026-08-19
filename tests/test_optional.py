@@ -115,7 +115,13 @@ def test_probe_gpu_emits_the_swallowed_reason_on_the_module_logger(
     warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
     assert len(warnings) == 1, [r.getMessage() for r in caplog.records]
     message = warnings[0].getMessage()
-    assert "ImportError" in message
+    # The message names the CONCRETE exception type, not the family: forcing
+    # ``import cudf`` to fail through ``sys.modules`` raises ModuleNotFoundError,
+    # an ImportError subclass. Assert the concrete name is rendered and that the
+    # captured exception really is of the import family.
+    captured = _opt._GPU_ERROR
+    assert isinstance(captured, ImportError)
+    assert type(captured).__name__ in message
     assert "cudf" in message
 
     # A memoised outcome must not re-emit: the second call short-circuits.
