@@ -12,13 +12,24 @@ name: GPU Tests
 # trigger WITHOUT the environment puts that hardware within reach of any
 # stranger's fork pull request — the exact configuration GitHub's own
 # documentation tells you not to build. The `gpu-lab` environment (created
-# 2026-07-30, id 19002352745) carries required reviewers with administrator
-# bypass DESELECTED and self-review PREVENTED, so a lab run always costs a click
-# from a human who is not the pull request's author. Layer two is independent and
+# 2026-07-30, id 19002352745) carries required reviewers (SchmidL, tomedic,
+# NixtonM) with administrator bypass DESELECTED, so a lab run always costs a
+# click from a NAMED REVIEWER. THE REVIEWER LIST IS THE CONTROL: an outside
+# contributor is not on it, so a fork pull request can never be approved by its
+# own author — which is the property entry 39's threat model actually needs.
+# `prevent_self_review` is DISABLED, deliberately and on the record
+# (DESIGN-DECISIONS entry 44, 2026-07-30, which amends entry 39): against a
+# stranger's fork pull request the flag added nothing over the reviewer list,
+# while habituating the reviewers to click through ~19 self-authored pull
+# requests in 20 — degrading the control against the case it exists for. Do NOT
+# read its absence as a gap; the accepted cost is named in entry 44.
+# `can_admins_bypass: false` and the required-reviewer list are UNCHANGED and are
+# what this block actually rests on. Layer two is independent and
 # repository-level: "Require approval for all external contributors", which stops
 # a fork-originated run starting at all and also covers the hosted-runner jobs
 # the environment does not touch.
-# Cite: Phase 13 D-11, DESIGN-DECISIONS entry 39. Recorded 2026-07-30 (13-08).
+# Cite: Phase 13 D-11, DESIGN-DECISIONS entry 39 as amended by entry 44.
+# Recorded 2026-07-30 (13-08); the two false clauses corrected 2026-08-21 (17-05).
 # =============================================================================
 #
 # What else MUST stay true, and why:
