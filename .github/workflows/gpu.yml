@@ -177,7 +177,15 @@ jobs:
               set -euo pipefail
               git config --global --add safe.directory /work
               nvidia-smi
-              pip install -e .[dev]
+              # The container's numpy is held inside the corridor by
+              # .github/constraints/gpu.txt -- a versioned, diffable, assertable file
+              # rather than an inline pin (D-17-10, D-17-14). This is the ONLY seam
+              # where it is decided: the install just below is `.[dev]`, so neither the
+              # GPU extras' ceiling nor conda's numba constrains this resolve, and pip
+              # does not take already-installed packages into account. Assertion A9 in
+              # .github/scripts/check_ci_config.py fails the build if the `-c` is
+              # dropped or the constraints file goes missing.
+              pip install -c .github/constraints/gpu.txt -e .[dev]
               # POST-INSTALL GPU CAPABILITY ASSERT (CI-17, D-17-05). This is a relocation of a
               # proven pattern, not a new mechanism: the Pre-flight GPU health check step above
               # asserts the same capability, and on 2026-08-17 it passed. Read the four
