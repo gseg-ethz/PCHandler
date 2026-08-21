@@ -119,6 +119,12 @@ CORRIDOR_GPU_YML = GPU_JOB_HEAD + GPU_CONSTRAINED_INSTALL_LINE + GPU_ASSERT_BLOC
 # a test can never accidentally assert against the real pin.
 SYNTHETIC_DIGEST = "a1" * 32
 
+# Declared HERE as a literal rather than read from `cc`, so that these fixtures do
+# not inherit whatever the production constant happens to say. The two are pinned
+# equal by `test_a9_passes_on_the_real_repository`, which is the direction that
+# catches the production constant itself being wrong.
+GPU_IMAGE_REPOSITORY = "ghcr.io/gseg-ethz/pchandler-gpu-runner"
+
 DEFAULT_CONSTRAINTS = "# corridor\nnumpy >= 2.2, < 2.3\n"
 
 
@@ -135,7 +141,10 @@ def pinned_reference(digest: str = SYNTHETIC_DIGEST) -> str:
     str
         The reference, in the shape ``<repository>@sha256:<digest>``.
     """
-    return f"{cc.GPU_IMAGE_REPOSITORY}@sha256:{digest}"
+    return f"{GPU_IMAGE_REPOSITORY}@sha256:{digest}"
+
+
+DEFAULT_DIGEST = pinned_reference() + "\n"
 
 
 def build_corridor_tree(
@@ -143,7 +152,7 @@ def build_corridor_tree(
     gpu_yml: str = CORRIDOR_GPU_YML,
     *,
     constraints: str | None = DEFAULT_CONSTRAINTS,
-    digest: str | None = None,
+    digest: str | None = DEFAULT_DIGEST,
     contexts: tuple[str, ...] = GPU_CONTEXTS,
 ) -> pathlib.Path:
     """Write a synthetic tree carrying the GPU corridor's artefacts.
@@ -157,8 +166,8 @@ def build_corridor_tree(
     constraints
         Text of the constraints file, or ``None`` to omit the file entirely.
     digest
-        Text of the digest artefact, or ``None`` for the default single valid
-        line. Pass the empty string to write an empty file.
+        Text of the digest artefact, or ``None`` to omit the file entirely. Pass
+        the empty string to write an empty file.
     contexts
         Required status-check contexts written into the committed ruleset.
 
@@ -172,11 +181,10 @@ def build_corridor_tree(
         target = tree / cc.GPU_CONSTRAINTS_PATH
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(constraints)
-    body = pinned_reference() + "\n" if digest is None else digest
-    if body is not None:
+    if digest is not None:
         target = tree / cc.GPU_DIGEST_PATH
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(body)
+        target.write_text(digest)
     return tree
 
 
@@ -735,11 +743,16 @@ def test_a9_fails_on_an_absent_empty_multiline_or_malformed_digest(tmp_path: pat
     that matters — T-17-19).
     """
     cases = {
-        "absent": ("", None),
+        "absent": ("missing", None),
         "empty": ("", ""),
         "multiline": ("more than one", pinned_reference() + "\n" + pinned_reference() + "\n"),
-        "tagged": ("full-length", f"{cc.GPU_IMAGE_REPOSITORY}:cuda12-latest\n"),
-        "short": ("full-length", f"{cc.GPU_IMAGE_REPOSITORY}@sha256:a1b2c3\n"),
+        "tagged": ("full-length", f"{GPU_IMAGE_REPOSITORY}:cuda12-latest\n"),
+        "short": ("full-length", f"{GPU_IMAGE_REPOSITORY}@sha256:a1b2c3\n"),
+        # A prefix-valid value with a tampered SUFFIX. This case is why the check
+        # uses `fullmatch` and not `match`: a mutation sweep found `match` survived
+        # every other case here, and a suffix-extended reference is exactly what a
+        # tampering attempt looks like (T-17-18).
+        "suffixed": ("full-length", pinned_reference() + "-tampered\n"),
     }
     for name, (token, body) in cases.items():
         tree = build_corridor_tree(tmp_path / name, digest=body)
@@ -760,8 +773,8 @@ def test_a9_fails_on_an_inlined_digest_but_not_on_a_comment_mentioning_one(
     way.
     """
     inlined = CORRIDOR_GPU_YML.replace(
-        '            podman run --rm "$GPU_IMAGE" bash -lc \'\n',
-        f'            podman run --rm "{pinned_reference()}" bash -lc \'\n',
+        '          podman run --rm "$GPU_IMAGE" bash -lc \'\n',
+        f'          podman run --rm "{pinned_reference()}" bash -lc \'\n',
         1,
     )
     assert inlined != CORRIDOR_GPU_YML, "the inlining fixture did not apply"
@@ -783,6 +796,9 @@ def test_a9_passes_on_the_real_repository() -> None:
     assert cc.check_gpu_corridor_artifacts(REPO_ROOT) == []
     assert (REPO_ROOT / cc.GPU_CONSTRAINTS_PATH).is_file()
     assert (REPO_ROOT / cc.GPU_DIGEST_PATH).is_file()
+    # The fixtures above build their references from a test-side literal on
+    # purpose; this is the assertion that pins the production constant to it.
+    assert cc.GPU_IMAGE_REPOSITORY == GPU_IMAGE_REPOSITORY
 
 
 # --------------------------------------------------------------------------
