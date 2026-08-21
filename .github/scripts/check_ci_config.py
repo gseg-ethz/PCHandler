@@ -8,7 +8,7 @@ Invoked from the Lint (pre-commit) CI job as ``python
 violation, emits each as a GitHub ``::error::`` annotation and exits 1 once;
 exits 0 and prints one trailing OK line when the tree is clean.
 
-Eight assertions, each named by the identifier later plans and the adversarial
+Nine assertions, each named by the identifier later plans and the adversarial
 suite refer to:
 
   A1  No filter key under a pull-request-side trigger on a workflow producing a
@@ -28,6 +28,11 @@ suite refer to:
   A8  The GPU job asserts its own GPU capability AFTER its dependency install
       and BEFORE the suite, in the same step body, with the sense not inverted
       and the failure not neutered.
+  A9  The GPU corridor's two artefacts exist, are wired in, and are the only
+      place the image pin lives: the container install carries ``-c`` pointing
+      at the constraints file, that file yields a requirement, the digest
+      artefact holds exactly one full-length pinned reference, and no concrete
+      digest is inlined back into the GPU job.
 
 **Why A1 inspects the pull-request-side events and NOT push.** A required status
 check comes from the event that produced it. A workflow skipped by a filter never
@@ -78,6 +83,7 @@ import json
 import pathlib
 import re
 import sys
+from collections.abc import Iterator
 from typing import Any
 
 import ruleset_lib
@@ -189,6 +195,45 @@ GPU_CAPABILITY_SENTINEL = "POST-INSTALL GPU CAPABILITY ASSERT"
 # accepted shape; an inverted or rewritten guard fails, because a capability
 # assertion that fires on the healthy state is worse than none at all.
 GPU_CAPABILITY_GUARD_PATTERN = re.compile(r"if\s+not\s+\w+\.is_gpu_available\(\)\s*:")
+
+# A9's subjects. The corridor is three things that only mean anything together,
+# which is why one assertion covers all of them.
+#
+# `GPU_CONSTRAINTS_PATH` is the seam where the container's numpy is actually
+# decided. The container installs `.[dev]` and NEVER `[cuda12]`, so the GPU
+# extras' ceiling never enters that resolve and conda's numba never enters it
+# either -- and pip states outright that it "does not currently take into account
+# all the packages that are installed". Pinning the image alone was MEASURED not
+# to hold (D-17-10; .planning/spikes/004-numpy-floor-vs-gpu-stack/README.md).
+GPU_CONSTRAINTS_PATH = ".github/constraints/gpu.txt"
+
+# `GPU_DIGEST_PATH` sits OUTSIDE `.github/workflows/**` deliberately: that prefix
+# is the one a GitHub App installation token structurally cannot write, which is
+# why `gpu-image-refresh.yml`'s write-back has been rejected since 2026-07-01 and
+# the workflow quarantined since 2026-07-30 (D-17-15, remedy (b); entry 45 for
+# why widening the token is a decision rather than a fix).
+GPU_DIGEST_PATH = ".github/digests/gpu-runner.txt"
+
+GPU_IMAGE_REPOSITORY = "ghcr.io/gseg-ethz/pchandler-gpu-runner"
+
+# The ONLY accepted spelling of the pin: the repository, an `@sha256:` marker and
+# exactly 64 lowercase hex characters, anchored at both ends. A tag-shaped or
+# truncated value is refused rather than resolved, because a moving tag behind a
+# required context is the silent-substitution class this phase closes (T-17-19).
+GPU_PINNED_REFERENCE_PATTERN = re.compile(re.escape(GPU_IMAGE_REPOSITORY) + r"@sha256:[0-9a-f]{64}")
+
+# A concrete digest ANYWHERE in the parsed GPU job means a second source of truth
+# has grown back. Matched against the LOADED document, never the raw file: the
+# parser strips comments by construction, so the header bullet that describes the
+# relocated pin cannot fail the check it describes. Searching raw text here is the
+# recurring trap of this phase -- a search for a removed thing matches the prose
+# documenting its removal.
+GPU_CONCRETE_DIGEST_PATTERN = re.compile(r"@sha256:[0-9a-f]{64}")
+
+# The flag that wires the constraints file into the install. A9 checks that the
+# GPU job's single `pip install` body carries it AND names the constraints path;
+# an unconsumed constraints file is decoration.
+GPU_CONSTRAINTS_FLAG_PATTERN = re.compile(r"-c\s+" + re.escape(GPU_CONSTRAINTS_PATH))
 
 # A7's pending-narrowing register, keyed by required context. An entry suppresses
 # A7 for that one context and MUST state which requirement narrows it and which
@@ -825,6 +870,170 @@ def check_gpu_post_install_capability_assert(root: pathlib.Path) -> list[str]:
     return violations
 
 
+def _string_values(node: Any) -> Iterator[str]:
+    """Yield every string leaf of a parsed YAML node, depth-first.
+
+    Used by A9 to scan the LOADED GPU job rather than the raw file, so that a
+    comment mentioning the digest is invisible by construction.
+    """
+    if isinstance(node, str):
+        yield node
+    elif isinstance(node, dict):
+        for value in node.values():
+            yield from _string_values(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from _string_values(value)
+
+
+def _gpu_constraints_violations(root: pathlib.Path) -> list[str]:
+    """A9's constraints half -- the file exists and yields at least one requirement."""
+    path = root / GPU_CONSTRAINTS_PATH
+    if not path.is_file():
+        return [
+            f"{GPU_CONSTRAINTS_PATH} is missing, yet the GPU job's install points at it with `-c`. "
+            f"pip fails on an unreadable constraints file, so this reddens the GPU context rather "
+            f"than silently widening the corridor -- but the corridor is then undefined, and the "
+            f"container's numpy is decided by whatever resolves (D-17-10)."
+        ]
+    requirements = [
+        line.strip() for line in path.read_text().splitlines() if line.strip() and not line.strip().startswith("#")
+    ]
+    if not requirements:
+        return [
+            f"{GPU_CONSTRAINTS_PATH} carries no requirement line -- only comments or blanks. A "
+            f"constraints file that constrains nothing is decoration: the container installs "
+            f"`.[dev]` and never `[cuda12]`, so nothing else in that resolve holds numpy inside "
+            f"the corridor (D-17-10, D-17-14)."
+        ]
+    return []
+
+
+def _gpu_digest_violations(root: pathlib.Path) -> list[str]:
+    """A9's digest half -- exactly one line, fully matching the pinned-reference pattern."""
+    path = root / GPU_DIGEST_PATH
+    if not path.is_file():
+        return [
+            f"{GPU_DIGEST_PATH} is missing, so the GPU job cannot resolve its image. The job fails "
+            f"closed on this rather than falling back to a moving tag, which means the required "
+            f"context goes red until the pin is restored (D-17-15, T-17-18)."
+        ]
+    lines = [line.strip() for line in path.read_text().splitlines() if line.strip()]
+    if len(lines) != 1:
+        return [
+            f"{GPU_DIGEST_PATH} holds {len(lines)} non-empty lines; it must hold exactly one. "
+            f"`gpu-image-refresh.yml` rewrites this file with `sed` and greps the written digest "
+            f"back out, and both assume a single-line artefact -- more than one line makes the "
+            f"rewrite ambiguous and the read non-deterministic."
+        ]
+    if not GPU_PINNED_REFERENCE_PATTERN.fullmatch(lines[0]):
+        return [
+            f"{GPU_DIGEST_PATH} does not hold a full-length pinned reference. Expected "
+            f"{GPU_IMAGE_REPOSITORY}@sha256: followed by 64 lowercase hex characters; found "
+            f"{lines[0]!r}. A tag-shaped or truncated value would let the image move under a "
+            f"required context -- the silent substitution D-17-15 keeps closed (T-17-19)."
+        ]
+    return []
+
+
+def _gpu_job_corridor_violations(filename: str, job_id: str, job: dict[str, Any]) -> list[str]:
+    """A9's job half -- the install consumes the constraints file and no digest is inlined."""
+    violations: list[str] = []
+    bodies = [
+        step["run"]
+        for step in job.get("steps", [])
+        if isinstance(step, dict) and isinstance(step.get("run"), str) and "pip install" in step["run"]
+    ]
+    if len(bodies) != 1:
+        violations.append(
+            f"{filename}: job `{job_id}` carries `pip install` in {len(bodies)} step bodies; A9 "
+            f"expects exactly one, the container invocation that also runs the suite. Two installs "
+            f"mean two resolves and only one of them is constrained."
+        )
+    elif not GPU_CONSTRAINTS_FLAG_PATTERN.search(bodies[0]):
+        violations.append(
+            f"{filename}: the container install in job `{job_id}` carries no `-c "
+            f"{GPU_CONSTRAINTS_PATH}`. That flag is the ONLY seam where the corridor is enforced: "
+            f"the install is `.[dev]`, never `[cuda12]`, so the GPU extras' ceiling and conda's "
+            f"numba both sit outside this resolve, and pip does not account for already-installed "
+            f"packages. Unconstrained, numpy walks past numba's wall and the suite skips behind a "
+            f"green required context (CI-17, D-17-10)."
+        )
+    inlined = sorted({value for value in _string_values(job) if GPU_CONCRETE_DIGEST_PATTERN.search(value)})
+    if inlined:
+        violations.append(
+            f"{filename}: job `{job_id}` inlines a concrete image digest in {len(inlined)} parsed "
+            f"value(s). The pin lives in {GPU_DIGEST_PATH} and nowhere else -- a second copy here "
+            f"is a second source of truth, and it is the copy `gpu-image-refresh.yml` cannot "
+            f"rewrite, because a GitHub App token cannot write under {WORKFLOWS_DIR} (D-17-15)."
+        )
+    return violations
+
+
+def check_gpu_corridor_artifacts(root: pathlib.Path) -> list[str]:
+    """A9 -- assert the GPU corridor's artefacts exist, are wired in, and are the only pin.
+
+    Three properties that are worthless apart. A constraints file nothing passes
+    to pip constrains nothing. A digest artefact the job does not read pins
+    nothing. And either of them is undone by a concrete digest left inline in the
+    job, which becomes a second source of truth in the one place the refresh
+    workflow's write-back cannot reach.
+
+    **Why the constraints file rather than an image pin.** Measured, not assumed:
+    the container installs ``.[dev]`` and never ``[cuda12]``, so conda's numba and
+    the GPU extras' ceiling are both outside pip's resolve, and pip says so
+    itself -- *"pip's dependency resolver does not currently take into account all
+    the packages that are installed."* On 2026-08-17 that let numpy walk to 2.3.5,
+    numba refused it, and the whole GPU suite skipped behind a green required
+    context (D-17-10; ``.planning/spikes/004-numpy-floor-vs-gpu-stack/README.md``).
+
+    **Why the digest sits outside the workflows directory.** GitHub refuses any
+    GitHub App push touching ``.github/workflows/**`` unless the App holds
+    ``workflows: write`` -- a permission with no key in a workflow's
+    ``permissions:`` block. Relocating the pin unblocks a write-back broken since
+    2026-07-01 with no new credential (D-17-15, remedy (b)).
+
+    **The digest scan reads the PARSED job, never the raw file.** Comments are
+    stripped by the parser, so the header bullet that documents the relocated pin
+    cannot fail the check it describes.
+
+    **Vacuous where no GPU context is required, by design** -- same branch as A8,
+    for the same reason: this file is byte-identical across both repositories
+    (D-04) and the sibling has no GPU stack, so a copy there is a no-op rather
+    than a demand for artefacts it has no reason to carry.
+
+    Parameters
+    ----------
+    root
+        Repository root to inspect.
+
+    Returns
+    -------
+    list of str
+        One entry per violation; empty when the context is not required, or when
+        the corridor is present, wired in and singly sourced.
+    """
+    if GPU_CONTEXT not in committed_required_contexts(root):
+        return []
+
+    violations: list[str] = [*_gpu_constraints_violations(root), *_gpu_digest_violations(root)]
+    found = False
+    for path, document in load_workflows(root):
+        for job_id, job in _declared_jobs(document).items():
+            if _job_display_name(job_id, job) != GPU_CONTEXT:
+                continue
+            found = True
+            violations.extend(_gpu_job_corridor_violations(path.name, job_id, job))
+
+    if not found:
+        violations.append(
+            f"No job under {WORKFLOWS_DIR} declares the name {GPU_CONTEXT!r}, yet it is a required "
+            f"status-check context — nothing produces it, so the corridor this assertion checks has "
+            f"no job to be wired into."
+        )
+    return violations
+
+
 def _write_scopes(permissions: Any) -> list[str] | None:
     """Return the permission keys granted at write, or None when no block is declared."""
     if permissions is None:
@@ -867,6 +1076,7 @@ def run_all(
         *check_conditional_dependencies(root),
         *check_lint_least_privilege(root, pending),
         *check_gpu_post_install_capability_assert(root),
+        *check_gpu_corridor_artifacts(root),
     ]
     return violations, len(load_workflows(root))
 
@@ -890,4 +1100,4 @@ if __name__ == "__main__":
         for finding in findings:
             print(f"::error::{finding}")
         sys.exit(1)
-    print(f"check_ci_config: OK — assertions A1 through A8 clean across {inspected_count} workflow(s)")
+    print(f"check_ci_config: OK — assertions A1 through A9 clean across {inspected_count} workflow(s)")
