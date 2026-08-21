@@ -8,7 +8,7 @@ Invoked from the Lint (pre-commit) CI job as ``python
 violation, emits each as a GitHub ``::error::`` annotation and exits 1 once;
 exits 0 and prints one trailing OK line when the tree is clean.
 
-Seven assertions, each named by the identifier later plans and the adversarial
+Eight assertions, each named by the identifier later plans and the adversarial
 suite refer to:
 
   A1  No filter key under a pull-request-side trigger on a workflow producing a
@@ -25,6 +25,9 @@ suite refer to:
       condition.
   A6  No such job depends on a job that itself carries a job-level condition.
   A7  The lint job declares a permissions block granting no write scope.
+  A8  The GPU job asserts its own GPU capability AFTER its dependency install
+      and BEFORE the suite, in the same step body, with the sense not inverted
+      and the failure not neutered.
 
 **Why A1 inspects the pull-request-side events and NOT push.** A required status
 check comes from the event that produced it. A workflow skipped by a filter never
@@ -169,6 +172,23 @@ CI_WORKFLOW_FILENAME = "ci.yml"
 CI_WORKFLOW_NAME = "CI"
 
 LINT_CONTEXT = "Lint (pre-commit)"
+
+# A8's subject. `GPU_CONTEXT` is the check-run name `gpu.yml` declares AND the
+# required-status-check context string `main.json` requires; A8 keys off exactly
+# that pair, the way A5 and A7 do. `main.no-gpu.json` -- the audited lab-outage
+# override (CI-15, D-17-04) -- deliberately does NOT require it, which is why A8
+# is written to be vacuous when no committed payload requires the context at all.
+GPU_CONTEXT = "Tests (pytest, GPU)"
+
+# The token the capability block in `gpu.yml` carries so A8 can locate it by
+# character index rather than by guessing at shell structure. Editing the token
+# in either file without the other is what the paired real-tree test catches.
+GPU_CAPABILITY_SENTINEL = "POST-INSTALL GPU CAPABILITY ASSERT"
+
+# The guard whose SENSE A8 pins. `if not <alias>.is_gpu_available():` is the only
+# accepted shape; an inverted or rewritten guard fails, because a capability
+# assertion that fires on the healthy state is worse than none at all.
+GPU_CAPABILITY_GUARD_PATTERN = re.compile(r"if\s+not\s+\w+\.is_gpu_available\(\)\s*:")
 
 # A7's pending-narrowing register, keyed by required context. An entry suppresses
 # A7 for that one context and MUST state which requirement narrows it and which
@@ -656,6 +676,155 @@ def check_lint_least_privilege(
     return violations
 
 
+def _gpu_capability_steps(job: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return the job's run-steps whose body carries the A8 sentinel."""
+    steps = job.get("steps")
+    if not isinstance(steps, list):
+        return []
+    return [
+        step
+        for step in steps
+        if isinstance(step, dict) and isinstance(step.get("run"), str) and GPU_CAPABILITY_SENTINEL in step["run"]
+    ]
+
+
+def _gpu_capability_step_violations(filename: str, job_id: str, step: dict[str, Any]) -> list[str]:
+    """Check the sense, the teeth and above all the POSITION of one capability step.
+
+    Split out of :func:`check_gpu_post_install_capability_assert` so each half stays
+    under the complexity ceiling; the contract is entirely A8's, and every message
+    names the file, the job, the requirement and what breaks when it is not held.
+    """
+    body = step["run"]
+    violations: list[str] = []
+
+    if "continue-on-error" in step:
+        violations.append(
+            f"{filename}: the capability step in job `{job_id}` declares `continue-on-error`, which "
+            f"turns a failed capability assertion back into a green required context — the exact "
+            f"fail-open D-17-05 exists to close. The only sanctioned escape for a degraded lab is "
+            f"the committed `main.no-gpu.json` ruleset variant (D-17-04)."
+        )
+    if "|| true" in body:
+        violations.append(
+            f"{filename}: the capability step in job `{job_id}` contains `|| true`, which swallows "
+            f"the non-zero exit the assertion exists to produce (D-17-04)."
+        )
+    if not GPU_CAPABILITY_GUARD_PATTERN.search(body):
+        violations.append(
+            f"{filename}: the capability step in job `{job_id}` does not match "
+            f"{GPU_CAPABILITY_GUARD_PATTERN.pattern!r}. An absent or inverted guard either never "
+            f"fires or fires on the healthy state; neither asserts the capability."
+        )
+    if "sys.exit(1)" not in body:
+        violations.append(
+            f"{filename}: the capability step in job `{job_id}` never calls `sys.exit(1)`, so a lost "
+            f"GPU capability prints and continues instead of reddening the required context."
+        )
+
+    sentinel_at = body.index(GPU_CAPABILITY_SENTINEL)
+    if "pip install" not in body:
+        violations.append(
+            f"{filename}: the capability step in job `{job_id}` runs no `pip install`. The assertion "
+            f"is meaningless unless it FOLLOWS the install in the same container invocation — an "
+            f"install in an earlier step is exactly the 2026-08-17 ordering that let a broken stack "
+            f"through (D-17-05)."
+        )
+    elif sentinel_at < body.rindex("pip install"):
+        violations.append(
+            f"{filename}: {GPU_CAPABILITY_SENTINEL!r} in job `{job_id}` appears BEFORE the last "
+            f"`pip install` in the same body. That is the pre-2026-08-17 ordering: the capability is "
+            f"certified, then the install invalidates it, then the suite skips everything and exits "
+            f"0 (CI-17, D-17-05)."
+        )
+
+    suite_at = body.find("pytest ")
+    if suite_at == -1:
+        violations.append(
+            f"{filename}: the capability step in job `{job_id}` invokes no suite, so the assertion "
+            f"gates nothing. It must sit in the same body as the run it protects."
+        )
+    elif sentinel_at > suite_at:
+        violations.append(
+            f"{filename}: {GPU_CAPABILITY_SENTINEL!r} in job `{job_id}` appears AFTER the suite "
+            f"invocation. An assertion downstream of the run it is meant to gate cannot stop that "
+            f"run from reporting success (CI-17, D-17-05)."
+        )
+    return violations
+
+
+def check_gpu_post_install_capability_assert(root: pathlib.Path) -> list[str]:
+    """A8 -- assert the GPU job checks its capability after its own install and before the suite.
+
+    On 2026-08-17 the ``Tests (pytest, GPU)`` context reported ``success`` having
+    executed nothing. The run log tells the whole story in four timestamps:
+    ``12:33:31`` the pre-flight health check passed against the container's
+    pristine numpy 2.0.2; ``12:33:47`` the job's own dependency install began
+    uninstalling that numpy; ``12:33:54`` it finished with numpy 2.3.5, which
+    ``numba`` refuses; ``12:33:57`` all three GPU tests skipped and pytest exited
+    0. ``tests/filters/test_gpu.py`` carries a module-level ``skipif`` on
+    ``is_gpu_available()``, so an inert GPU stack is indistinguishable from a
+    passing suite. The assertion was never missing -- it simply ran before the
+    step that invalidated it, and that ordering IS the defect (CI-17, D-17-05).
+
+    A8 therefore checks position, not merely presence: the sentinel must sit
+    after the LAST ``pip install`` and before the suite invocation, in the SAME
+    step body, so that it runs inside the same container as both.
+
+    **Vacuous where no GPU context is required, by design.** This file is
+    byte-identical across both repositories (D-04), and the sibling repository's
+    committed rulesets require no GPU context. A8 returns cleanly there rather
+    than demanding a job that repository has no reason to declare. The same
+    branch makes A8 inert under the audited ``main.no-gpu.json`` lab-outage
+    override, which is the only sanctioned escape D-17-04 recognises.
+
+    Parameters
+    ----------
+    root
+        Repository root to inspect.
+
+    Returns
+    -------
+    list of str
+        One entry per violation; empty when the context is not required, or when
+        the capability assertion is present, correctly ordered and un-neutered.
+    """
+    if GPU_CONTEXT not in committed_required_contexts(root):
+        return []
+
+    violations: list[str] = []
+    found = False
+    for path, document in load_workflows(root):
+        for job_id, job in _declared_jobs(document).items():
+            if _job_display_name(job_id, job) != GPU_CONTEXT:
+                continue
+            found = True
+            carrying = _gpu_capability_steps(job)
+            if not carrying:
+                violations.append(
+                    f"{path.name}: job `{job_id}` produces required context {GPU_CONTEXT!r} but no "
+                    f"step carries {GPU_CAPABILITY_SENTINEL!r}. Without it a dependency install that "
+                    f"breaks the GPU stack is followed by an all-skipped suite that exits 0, and the "
+                    f"required context reports success having run nothing (CI-17, D-17-05)."
+                )
+            elif len(carrying) > 1:
+                violations.append(
+                    f"{path.name}: job `{job_id}` carries {GPU_CAPABILITY_SENTINEL!r} in "
+                    f"{len(carrying)} steps. A8 decides ordering by character index within ONE body; "
+                    f"two copies make that index ambiguous. Keep exactly one, in the step that also "
+                    f"runs the install and the suite."
+                )
+            else:
+                violations.extend(_gpu_capability_step_violations(path.name, job_id, carrying[0]))
+
+    if not found:
+        violations.append(
+            f"No job under {WORKFLOWS_DIR} declares the name {GPU_CONTEXT!r}, yet it is a required "
+            f"status-check context — nothing produces it, so the gate can never be satisfied."
+        )
+    return violations
+
+
 def _write_scopes(permissions: Any) -> list[str] | None:
     """Return the permission keys granted at write, or None when no block is declared."""
     if permissions is None:
@@ -697,6 +866,7 @@ def run_all(
         *check_job_level_conditions(root),
         *check_conditional_dependencies(root),
         *check_lint_least_privilege(root, pending),
+        *check_gpu_post_install_capability_assert(root),
     ]
     return violations, len(load_workflows(root))
 
@@ -720,4 +890,4 @@ if __name__ == "__main__":
         for finding in findings:
             print(f"::error::{finding}")
         sys.exit(1)
-    print(f"check_ci_config: OK — assertions A1 through A7 clean across {inspected_count} workflow(s)")
+    print(f"check_ci_config: OK — assertions A1 through A8 clean across {inspected_count} workflow(s)")

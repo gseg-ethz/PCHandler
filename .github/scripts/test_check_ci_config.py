@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # .github/scripts/test_check_ci_config.py
 # Source: Phase 13 plan 13-03 Task 2 — unit tests pinning CI-12 assertions A1 through A7
-"""Unit tests for the CI-12 self-test's seven assertions.
+# A8 added by Phase 17 plan 17-02 (CI-17, D-17-05, D-17-08 clause 1)
+"""Unit tests for the CI-12 self-test's eight assertions.
 
 Every assertion helper takes a root path, so each test writes a synthetic tree of
 workflow, ruleset, composite-action and release-please files into a ``tmp_path``
@@ -62,6 +63,48 @@ jobs:
     steps:
       - run: echo test
 """
+
+# A minimal GPU workflow in the shape A8 inspects: ONE step body that installs,
+# asserts the capability, and then runs the suite. The three moving parts are kept
+# separate so a test can reorder or drop exactly one of them, which is the whole
+# point of A8 — presence is not the property, POSITION is.
+GPU_JOB_HEAD = """\
+name: GPU Tests
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  gpu-tests:
+    name: Tests (pytest, GPU)
+    runs-on: [self-hosted, gpu]
+    steps:
+      - name: Run GPU tests in the RAPIDS container (podman)
+        run: |
+          podman run --rm "$GPU_IMAGE" bash -lc '
+            set -euo pipefail
+"""
+
+GPU_INSTALL_LINE = "            pip install -e .[dev]\n"
+
+GPU_ASSERT_BLOCK = (
+    "            # POST-INSTALL GPU CAPABILITY ASSERT (CI-17, D-17-05)\n"
+    '            python -c "if 1:\n'
+    "                import sys\n"
+    "                import pchandler._optional as opt\n"
+    "                if not opt.is_gpu_available():\n"
+    "                    sys.exit(1)\n"
+    '                "\n'
+)
+
+GPU_SUITE_LINE = "            pytest tests/filters/test_gpu.py -v\n"
+
+GPU_JOB_TAIL = "          '\n"
+
+CLEAN_GPU_YML = GPU_JOB_HEAD + GPU_INSTALL_LINE + GPU_ASSERT_BLOCK + GPU_SUITE_LINE + GPU_JOB_TAIL
+
+GPU_CONTEXTS = DEFAULT_CONTEXTS + ("Tests (pytest, GPU)",)
 
 
 def build_tree(
@@ -128,6 +171,24 @@ def build_tree(
         json.dumps({"packages": {".": {"changelog-path": changelog_path, "extra-files": list(extra_files)}}})
     )
     return root
+
+
+def build_gpu_tree(root: pathlib.Path, gpu_yml: str) -> pathlib.Path:
+    """Write a synthetic tree whose committed ruleset requires the GPU context.
+
+    Parameters
+    ----------
+    root
+        Directory to populate; normally a ``tmp_path`` fixture.
+    gpu_yml
+        Text of the synthetic ``gpu.yml``.
+
+    Returns
+    -------
+    pathlib.Path
+        The populated root, for chaining.
+    """
+    return build_tree(root, {"ci.yml": CLEAN_CI_YML, "gpu.yml": gpu_yml}, contexts=GPU_CONTEXTS)
 
 
 def with_trigger(trigger_block: str) -> str:
@@ -473,6 +534,70 @@ def test_a7_pending_register_suppresses_a_scheduled_narrowing_and_names_its_remo
     for context, reason in cc.A7_PENDING_NARROWINGS.items():
         assert "CI-16" in reason, context
         assert "13-04" in reason and "13-07" in reason, context
+
+
+# --------------------------------------------------------------------------
+# A8 — the GPU job's post-install capability assertion
+# --------------------------------------------------------------------------
+
+
+def test_a8_passes_on_the_real_gpu_yml() -> None:
+    """The shipped `gpu.yml` asserts its capability after its own install and before the suite."""
+    assert cc.check_gpu_post_install_capability_assert(REPO_ROOT) == []
+
+
+def test_a8_fails_when_the_capability_assert_is_absent(tmp_path: pathlib.Path) -> None:
+    """Reproduce the 2026-08-17 pre-state: install, then suite, with nothing in between."""
+    without = GPU_JOB_HEAD + GPU_INSTALL_LINE + GPU_SUITE_LINE + GPU_JOB_TAIL
+    violations = cc.check_gpu_post_install_capability_assert(build_gpu_tree(tmp_path, without))
+    assert len(violations) == 1, violations
+    assert cc.GPU_CAPABILITY_SENTINEL in violations[0]
+
+
+def test_a8_fails_when_the_assert_precedes_the_install(tmp_path: pathlib.Path) -> None:
+    """Position is the property: an assertion the install then invalidates witnesses nothing."""
+    reordered = GPU_JOB_HEAD + GPU_ASSERT_BLOCK + GPU_INSTALL_LINE + GPU_SUITE_LINE + GPU_JOB_TAIL
+    violations = cc.check_gpu_post_install_capability_assert(build_gpu_tree(tmp_path, reordered))
+    assert len(violations) == 1, violations
+    assert "BEFORE the" in violations[0]
+
+
+def test_a8_fails_when_the_capability_guard_is_inverted(tmp_path: pathlib.Path) -> None:
+    """A guard that fires on the healthy state is worse than no guard at all."""
+    inverted = CLEAN_GPU_YML.replace("if not opt.is_gpu_available():", "if opt.is_gpu_available():", 1)
+    violations = cc.check_gpu_post_install_capability_assert(build_gpu_tree(tmp_path, inverted))
+    assert len(violations) == 1, violations
+    assert "inverted" in violations[0]
+
+
+def test_a8_fails_when_the_capability_step_is_neutered_by_continue_on_error(tmp_path: pathlib.Path) -> None:
+    """`continue-on-error` turns a failed assertion back into a green required context."""
+    neutered = CLEAN_GPU_YML.replace(
+        "      - name: Run GPU tests in the RAPIDS container (podman)\n",
+        "      - name: Run GPU tests in the RAPIDS container (podman)\n        continue-on-error: true\n",
+        1,
+    )
+    violations = cc.check_gpu_post_install_capability_assert(build_gpu_tree(tmp_path, neutered))
+    assert len(violations) == 1, violations
+    assert "continue-on-error" in violations[0]
+
+
+def test_a8_is_vacuous_when_no_committed_ruleset_requires_the_gpu_context(tmp_path: pathlib.Path) -> None:
+    """A8 is inert where no committed payload requires the GPU context, and says so in both directions.
+
+    `check_ci_config.py` is byte-identical across both repositories (D-04) and the
+    sibling requires no GPU context, so a copy of this assertion is a no-op there.
+    The same branch makes A8 inert under the audited `main.no-gpu.json` lab-outage
+    override (D-17-04). Pinned in BOTH directions: the identical tree with the
+    context required does report that nothing produces it.
+    """
+    without_gpu = build_tree(tmp_path / "sibling", {"ci.yml": CLEAN_CI_YML}, contexts=DEFAULT_CONTEXTS)
+    assert cc.check_gpu_post_install_capability_assert(without_gpu) == []
+
+    with_gpu = build_tree(tmp_path / "requiring", {"ci.yml": CLEAN_CI_YML}, contexts=GPU_CONTEXTS)
+    violations = cc.check_gpu_post_install_capability_assert(with_gpu)
+    assert len(violations) == 1, violations
+    assert "nothing produces it" in violations[0]
 
 
 # --------------------------------------------------------------------------
