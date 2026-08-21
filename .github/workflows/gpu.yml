@@ -12,13 +12,24 @@ name: GPU Tests
 # trigger WITHOUT the environment puts that hardware within reach of any
 # stranger's fork pull request — the exact configuration GitHub's own
 # documentation tells you not to build. The `gpu-lab` environment (created
-# 2026-07-30, id 19002352745) carries required reviewers with administrator
-# bypass DESELECTED and self-review PREVENTED, so a lab run always costs a click
-# from a human who is not the pull request's author. Layer two is independent and
+# 2026-07-30, id 19002352745) carries required reviewers (SchmidL, tomedic,
+# NixtonM) with administrator bypass DESELECTED, so a lab run always costs a
+# click from a NAMED REVIEWER. THE REVIEWER LIST IS THE CONTROL: an outside
+# contributor is not on it, so a fork pull request can never be approved by its
+# own author — which is the property entry 39's threat model actually needs.
+# `prevent_self_review` is DISABLED, deliberately and on the record
+# (DESIGN-DECISIONS entry 44, 2026-07-30, which amends entry 39): against a
+# stranger's fork pull request the flag added nothing over the reviewer list,
+# while habituating the reviewers to click through ~19 self-authored pull
+# requests in 20 — degrading the control against the case it exists for. Do NOT
+# read its absence as a gap; the accepted cost is named in entry 44.
+# `can_admins_bypass: false` and the required-reviewer list are UNCHANGED and are
+# what this block actually rests on. Layer two is independent and
 # repository-level: "Require approval for all external contributors", which stops
 # a fork-originated run starting at all and also covers the hosted-runner jobs
 # the environment does not touch.
-# Cite: Phase 13 D-11, DESIGN-DECISIONS entry 39. Recorded 2026-07-30 (13-08).
+# Cite: Phase 13 D-11, DESIGN-DECISIONS entry 39 as amended by entry 44.
+# Recorded 2026-07-30 (13-08); the two false clauses corrected 2026-08-21 (17-05).
 # =============================================================================
 #
 # What else MUST stay true, and why:
@@ -45,13 +56,21 @@ name: GPU Tests
 #     file. It runs with THIS repository's secrets against a fork's code, and
 #     this is the workflow with the lab runner attached. Assertion A2 fails the
 #     build on that token anywhere under this directory.
-#   - The image below is DIGEST-pinned, and `gpu-image-refresh.yml` rewrites that
-#     pin into THIS file BY PATH. If this file is ever renamed or moved, retarget
-#     all of that workflow's anchors in the SAME commit: its `sed` exits 0 on
-#     zero matches, so a stale target yields an empty-diff pull request rather
-#     than a red run. (That workflow is itself QUARANTINED as of 2026-07-30 —
-#     see its header; the pin is a digest, not a moving tag, so a paused refresh
-#     is a staleness cost, not a breakage.)
+#   - The image is DIGEST-pinned in `.github/digests/gpu-runner.txt`, NOT in this
+#     file, and `gpu-image-refresh.yml` rewrites THAT artefact BY PATH. The pin
+#     moved out of `.github/workflows/**` at plan 17-05 because a GitHub App
+#     installation token structurally cannot write that prefix, which is what has
+#     kept the write-back broken since 2026-07-01 (D-17-15; DESIGN-DECISIONS
+#     entry 45). The rename hazard transfers with it: if THAT file is ever renamed
+#     or moved, retarget every anchor in the refresh workflow in the SAME commit —
+#     its `sed` exits 0 on zero matches, so a stale target yields an empty-diff
+#     pull request rather than a red run, which is why it greps the written digest
+#     back out. This job resolves the pin at job start and FAILS CLOSED; there is
+#     no fallback to a moving tag under any condition. (That workflow is itself
+#     still QUARANTINED as of 2026-07-30 — see its header; its write-back is now
+#     unblocked by the relocation, but its monthly cron stays off BY DECISION.
+#     The pin is a digest, not a moving tag, so a paused refresh is a staleness
+#     cost, not a breakage.)
 
 on:
   # SAME-COMMIT PAIR with `environment: gpu-lab` below — see the header block.
@@ -81,13 +100,6 @@ jobs:
       contents: read
       packages: read        # pull the private GHCR image via podman login
       pull-requests: read   # the `classify` step below reads the PR file list (CI-11 D-05/D-07)
-    env:
-      # First real image, digest-pinned (immutable), built by gpu-image-refresh.yml.
-      # NOT a `container:` block: GitHub's container: jobs hardcode `-v /var/run/docker.sock`,
-      # which a rootless-Podman host has no way to provide (root-owned /var/run). We launch the
-      # image ourselves with `podman run` (09-02 commissioning 2026-06-15 — CONTEXT D-02 container
-      # mechanism amended from GitHub-native container: to explicit podman run).
-      GPU_IMAGE: ghcr.io/gseg-ethz/pchandler-gpu-runner@sha256:3b554e9c21be7ff93c2305e98187dd2979247a881613715a6c2394d9fb7f11bd
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5.0.1
 
@@ -111,6 +123,56 @@ jobs:
       # resolves the same way.
       - id: classify
         uses: ./.github/actions/classify-changes
+
+      # WHERE THE IMAGE COMES FROM, and why it is a file rather than a pin in this
+      # workflow. Until plan 17-05 the digest sat in a job-level `env:` block here and
+      # `gpu-image-refresh.yml` rewrote it in place. GitHub refuses ANY GitHub App push
+      # touching `.github/workflows/**` unless the App holds `workflows: write` — a
+      # permission with NO key in a workflow's `permissions:` block, so no edit to a
+      # workflow can grant it — and that is why the monthly write-back has been rejected
+      # since 2026-07-01 (run 28513581287). Moving the pin to a versioned artefact
+      # OUTSIDE that prefix unblocks the write-back with no new credential and no new
+      # automation: D-17-15, which is option (b) of the refresh workflow's own header,
+      # and DESIGN-DECISIONS entry 45 for why widening the token is a decision, not a fix.
+      #
+      # STILL NOT a `container:` block — the reason moved here with the pin it explained.
+      # GitHub's `container:` jobs hardcode `-v /var/run/docker.sock`, which a rootless-
+      # Podman host has no way to provide (root-owned /var/run), so we launch the image
+      # ourselves with `podman run` (09-02 commissioning 2026-06-15 — CONTEXT D-02
+      # container mechanism amended from GitHub-native `container:` to explicit
+      # `podman run`). That is why the resolved reference is exported through
+      # `$GITHUB_ENV` for the steps below rather than consumed by a `container.image:`
+      # field GitHub would resolve itself.
+      #
+      # FAILS CLOSED, without exception. A missing, empty, multi-line or malformed pin
+      # exits 1 with a named error. There is NO fallback to a moving tag under ANY
+      # condition: a moving tag behind a required context is precisely the silent-
+      # substitution class this phase exists to close (T-17-18, T-17-19). Assertion A9
+      # in `.github/scripts/check_ci_config.py` fails the build if this shape is broken
+      # or if a concrete digest is inlined back into this job.
+      - name: Resolve the pinned GPU image digest
+        if: steps.classify.outputs.release-artifacts-only != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          PIN_FILE=.github/digests/gpu-runner.txt
+          PIN_REPO=ghcr.io/gseg-ethz/pchandler-gpu-runner
+          if [ ! -f "$PIN_FILE" ]; then
+            echo "::error::${PIN_FILE} is missing, so the GPU runner image is unresolvable. Refusing to fall back to a moving tag — an unpinned image behind a required context is a silent substitution (D-17-15)."
+            exit 1
+          fi
+          PIN_LINES=$(grep -cve '^[[:space:]]*$' "$PIN_FILE" || true)
+          if [ "$PIN_LINES" != "1" ]; then
+            echo "::error::${PIN_FILE} must hold EXACTLY ONE non-empty line; it holds ${PIN_LINES}. gpu-image-refresh.yml rewrites this file with sed and greps the digest back out, and both assume a single-line artefact."
+            exit 1
+          fi
+          PIN=$(grep -ve '^[[:space:]]*$' "$PIN_FILE" | tr -d '[:space:]')
+          if ! printf '%s' "$PIN" | grep -qE "^${PIN_REPO}@sha256:[0-9a-f]{64}\$"; then
+            echo "::error::${PIN_FILE} does not hold a full-length pinned reference. Expected ${PIN_REPO}@sha256: followed by 64 lowercase hex characters; read: '${PIN}'. A short, truncated or tag-shaped value is refused rather than resolved."
+            exit 1
+          fi
+          echo "GPU_IMAGE=${PIN}" >> "$GITHUB_ENV"
+          echo "resolved GPU image from ${PIN_FILE}: ${PIN}"
 
       - name: GHCR login (podman)
         if: steps.classify.outputs.release-artifacts-only != 'true'
@@ -177,7 +239,15 @@ jobs:
               set -euo pipefail
               git config --global --add safe.directory /work
               nvidia-smi
-              pip install -e .[dev]
+              # The container's numpy is held inside the corridor by
+              # .github/constraints/gpu.txt -- a versioned, diffable, assertable file
+              # rather than an inline pin (D-17-10, D-17-14). This is the ONLY seam
+              # where it is decided: the install just below is `.[dev]`, so neither the
+              # GPU extras' ceiling nor conda's numba constrains this resolve, and pip
+              # does not take already-installed packages into account. Assertion A9 in
+              # .github/scripts/check_ci_config.py fails the build if the `-c` is
+              # dropped or the constraints file goes missing.
+              pip install -c .github/constraints/gpu.txt -e .[dev]
               # POST-INSTALL GPU CAPABILITY ASSERT (CI-17, D-17-05). This is a relocation of a
               # proven pattern, not a new mechanism: the Pre-flight GPU health check step above
               # asserts the same capability, and on 2026-08-17 it passed. Read the four

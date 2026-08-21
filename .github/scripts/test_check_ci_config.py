@@ -2,7 +2,8 @@
 # .github/scripts/test_check_ci_config.py
 # Source: Phase 13 plan 13-03 Task 2 — unit tests pinning CI-12 assertions A1 through A7
 # A8 added by Phase 17 plan 17-02 (CI-17, D-17-05, D-17-08 clause 1)
-"""Unit tests for the CI-12 self-test's eight assertions.
+# A9 added by Phase 17 plan 17-05 (CI-17, D-17-10, D-17-15)
+"""Unit tests for the CI-12 self-test's nine assertions.
 
 Every assertion helper takes a root path, so each test writes a synthetic tree of
 workflow, ruleset, composite-action and release-please files into a ``tmp_path``
@@ -105,6 +106,86 @@ GPU_JOB_TAIL = "          '\n"
 CLEAN_GPU_YML = GPU_JOB_HEAD + GPU_INSTALL_LINE + GPU_ASSERT_BLOCK + GPU_SUITE_LINE + GPU_JOB_TAIL
 
 GPU_CONTEXTS = DEFAULT_CONTEXTS + ("Tests (pytest, GPU)",)
+
+# A9's fixtures. The corridor is three artefacts that only mean anything together:
+# a constraints file, an install that consumes it, and a digest artefact the job
+# resolves. Each is varied ONE at a time below, because the whole point of A9 is
+# that a present-but-unwired artefact is decoration.
+GPU_CONSTRAINED_INSTALL_LINE = "            pip install -c .github/constraints/gpu.txt -e .[dev]\n"
+
+CORRIDOR_GPU_YML = GPU_JOB_HEAD + GPU_CONSTRAINED_INSTALL_LINE + GPU_ASSERT_BLOCK + GPU_SUITE_LINE + GPU_JOB_TAIL
+
+# A syntactically valid 64-hex digest that is deliberately NOT the shipped one, so
+# a test can never accidentally assert against the real pin.
+SYNTHETIC_DIGEST = "a1" * 32
+
+# Declared HERE as a literal rather than read from `cc`, so that these fixtures do
+# not inherit whatever the production constant happens to say. The two are pinned
+# equal by `test_a9_passes_on_the_real_repository`, which is the direction that
+# catches the production constant itself being wrong.
+GPU_IMAGE_REPOSITORY = "ghcr.io/gseg-ethz/pchandler-gpu-runner"
+
+DEFAULT_CONSTRAINTS = "# corridor\nnumpy >= 2.2, < 2.3\n"
+
+
+def pinned_reference(digest: str = SYNTHETIC_DIGEST) -> str:
+    """Return a full pinned image reference for the GHCR repository A9 pins.
+
+    Parameters
+    ----------
+    digest
+        Hex digest body, without the ``sha256:`` marker.
+
+    Returns
+    -------
+    str
+        The reference, in the shape ``<repository>@sha256:<digest>``.
+    """
+    return f"{GPU_IMAGE_REPOSITORY}@sha256:{digest}"
+
+
+DEFAULT_DIGEST = pinned_reference() + "\n"
+
+
+def build_corridor_tree(
+    root: pathlib.Path,
+    gpu_yml: str = CORRIDOR_GPU_YML,
+    *,
+    constraints: str | None = DEFAULT_CONSTRAINTS,
+    digest: str | None = DEFAULT_DIGEST,
+    contexts: tuple[str, ...] = GPU_CONTEXTS,
+) -> pathlib.Path:
+    """Write a synthetic tree carrying the GPU corridor's artefacts.
+
+    Parameters
+    ----------
+    root
+        Directory to populate; normally a ``tmp_path`` fixture.
+    gpu_yml
+        Text of the synthetic ``gpu.yml``.
+    constraints
+        Text of the constraints file, or ``None`` to omit the file entirely.
+    digest
+        Text of the digest artefact, or ``None`` to omit the file entirely. Pass
+        the empty string to write an empty file.
+    contexts
+        Required status-check contexts written into the committed ruleset.
+
+    Returns
+    -------
+    pathlib.Path
+        The populated root, for chaining.
+    """
+    tree = build_tree(root, {"ci.yml": CLEAN_CI_YML, "gpu.yml": gpu_yml}, contexts=contexts)
+    if constraints is not None:
+        target = tree / cc.GPU_CONSTRAINTS_PATH
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(constraints)
+    if digest is not None:
+        target = tree / cc.GPU_DIGEST_PATH
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(digest)
+    return tree
 
 
 def build_tree(
@@ -598,6 +679,126 @@ def test_a8_is_vacuous_when_no_committed_ruleset_requires_the_gpu_context(tmp_pa
     violations = cc.check_gpu_post_install_capability_assert(with_gpu)
     assert len(violations) == 1, violations
     assert "nothing produces it" in violations[0]
+
+
+# --------------------------------------------------------------------------
+# A9 — the GPU corridor's artefacts: constrained install, relocated digest
+# --------------------------------------------------------------------------
+
+
+def test_a9_is_vacuous_when_no_committed_ruleset_requires_the_gpu_context(tmp_path: pathlib.Path) -> None:
+    """A9 is inert where no committed payload requires the GPU context, pinned in BOTH directions.
+
+    `check_ci_config.py` is byte-identical across both repositories (D-04) and the
+    sibling has no GPU stack, no constraints file and no digest artefact — so a
+    copy of this assertion must be a no-op there rather than a demand for files
+    that repository has no reason to carry. The same branch makes A9 inert under
+    the audited `main.no-gpu.json` lab-outage override (D-17-04).
+    """
+    sibling = build_tree(tmp_path / "sibling", {"ci.yml": CLEAN_CI_YML}, contexts=DEFAULT_CONTEXTS)
+    assert cc.check_gpu_corridor_artifacts(sibling) == []
+
+    requiring = build_tree(tmp_path / "requiring", {"ci.yml": CLEAN_CI_YML}, contexts=GPU_CONTEXTS)
+    violations = cc.check_gpu_corridor_artifacts(requiring)
+    assert violations, "the identical tree with the context required must NOT be clean"
+    assert any("nothing produces it" in v for v in violations), violations
+
+
+def test_a9_fails_when_the_container_install_is_unconstrained(tmp_path: pathlib.Path) -> None:
+    """The seam is the install, not the file: an unconsumed constraints file constrains nothing.
+
+    This reproduces the 2026-08-17 mechanism exactly. The container installs
+    `.[dev]` and never `[cuda12]`, so neither the GPU extras' ceiling nor conda's
+    numba reaches this resolve, and pip does not account for already-installed
+    packages — numpy walked to 2.3.5 and numba refused it (D-17-10, spike 004).
+    """
+    tree = build_corridor_tree(tmp_path, CLEAN_GPU_YML)
+    violations = cc.check_gpu_corridor_artifacts(tree)
+    assert len(violations) == 1, violations
+    assert cc.GPU_CONSTRAINTS_PATH in violations[0]
+    assert "-c" in violations[0]
+
+
+def test_a9_fails_when_the_constraints_file_is_missing_or_holds_no_requirement(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A wired `-c` pointing at nothing, or at comments only, is a corridor with no wall."""
+    absent = cc.check_gpu_corridor_artifacts(build_corridor_tree(tmp_path / "absent", constraints=None))
+    assert len(absent) == 1, absent
+    assert "missing" in absent[0]
+
+    empty = cc.check_gpu_corridor_artifacts(
+        build_corridor_tree(tmp_path / "commented", constraints="# numpy >= 2.2, < 2.3\n")
+    )
+    assert len(empty) == 1, empty
+    assert "no requirement" in empty[0]
+
+
+def test_a9_fails_on_an_absent_empty_multiline_or_malformed_digest(tmp_path: pathlib.Path) -> None:
+    """The pin must be one full-length digest or the job must not start at all.
+
+    Four shapes, each a real failure mode of the `sed`-driven write-back in
+    `gpu-image-refresh.yml`: no file, a truncated write, an appended second line,
+    and a value that is not a full-length digest (a moving tag being the case
+    that matters — T-17-19).
+    """
+    cases = {
+        "absent": ("missing", None),
+        "empty": ("", ""),
+        "multiline": ("more than one", pinned_reference() + "\n" + pinned_reference() + "\n"),
+        "tagged": ("full-length", f"{GPU_IMAGE_REPOSITORY}:cuda12-latest\n"),
+        "short": ("full-length", f"{GPU_IMAGE_REPOSITORY}@sha256:a1b2c3\n"),
+        # A prefix-valid value with a tampered SUFFIX. This case is why the check
+        # uses `fullmatch` and not `match`: a mutation sweep found `match` survived
+        # every other case here, and a suffix-extended reference is exactly what a
+        # tampering attempt looks like (T-17-18).
+        "suffixed": ("full-length", pinned_reference() + "-tampered\n"),
+    }
+    for name, (token, body) in cases.items():
+        tree = build_corridor_tree(tmp_path / name, digest=body)
+        violations = cc.check_gpu_corridor_artifacts(tree)
+        assert len(violations) == 1, (name, violations)
+        assert cc.GPU_DIGEST_PATH in violations[0], (name, violations)
+        assert token in violations[0], (name, violations)
+
+
+def test_a9_fails_on_an_inlined_digest_but_not_on_a_comment_mentioning_one(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A9 scans the PARSED job, so a header bullet describing the pin cannot fail the check it describes.
+
+    Scanning raw text here would be the recurring trap of this phase: a search for
+    a removed thing matches the prose documenting its removal. The parser strips
+    comments by construction, which is the whole reason the scan is written this
+    way.
+    """
+    inlined = CORRIDOR_GPU_YML.replace(
+        '          podman run --rm "$GPU_IMAGE" bash -lc \'\n',
+        f'          podman run --rm "{pinned_reference()}" bash -lc \'\n',
+        1,
+    )
+    assert inlined != CORRIDOR_GPU_YML, "the inlining fixture did not apply"
+    violations = cc.check_gpu_corridor_artifacts(build_corridor_tree(tmp_path / "inlined", inlined))
+    assert len(violations) == 1, violations
+    assert "inlined" in violations[0] or "inline" in violations[0], violations
+
+    commented = CORRIDOR_GPU_YML.replace(
+        "jobs:\n",
+        f"# the pin lives in a versioned artefact and reads {pinned_reference()}\njobs:\n",
+        1,
+    )
+    assert commented != CORRIDOR_GPU_YML, "the comment fixture did not apply"
+    assert cc.check_gpu_corridor_artifacts(build_corridor_tree(tmp_path / "commented", commented)) == []
+
+
+def test_a9_passes_on_the_real_repository() -> None:
+    """The shipped tree carries the corridor: a constrained install and a relocated, well-formed pin."""
+    assert cc.check_gpu_corridor_artifacts(REPO_ROOT) == []
+    assert (REPO_ROOT / cc.GPU_CONSTRAINTS_PATH).is_file()
+    assert (REPO_ROOT / cc.GPU_DIGEST_PATH).is_file()
+    # The fixtures above build their references from a test-side literal on
+    # purpose; this is the assertion that pins the production constant to it.
+    assert cc.GPU_IMAGE_REPOSITORY == GPU_IMAGE_REPOSITORY
 
 
 # --------------------------------------------------------------------------

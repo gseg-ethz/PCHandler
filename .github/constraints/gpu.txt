@@ -1,0 +1,37 @@
+# pip CONSTRAINTS file for the GPU runner container's own editable install.
+# Consumed as: pip install -c .github/constraints/gpu.txt -e .[dev]
+# (see the "Run GPU tests in the RAPIDS container (podman)" step in
+# .github/workflows/gpu.yml). It constrains NOTHING ELSE: not the hosted-runner
+# CI jobs, not a developer checkout, not the published package metadata.
+#
+# WHY THIS FILE EXISTS AT ALL, rather than an image pin (D-17-10).
+# The container installs `.[dev]` and NEVER `[cuda12]`, because the RAPIDS base
+# already provides the conda GPU stack and the [cuda12] PyPI wheels would
+# conflict with it. So the GPU extras' own ceiling constrains nothing here, and
+# conda's numba constrains nothing either -- pip said so itself in the failing
+# run of 2026-08-17:
+#
+#     ERROR: pip's dependency resolver does not currently take into account all
+#     the packages that are installed.
+#
+# pchandler's core range is what let numpy walk to 2.3.5 inside the container,
+# after which numba refused it, `is_gpu_available()` went False, and the whole
+# GPU suite skipped behind a green required context. Pinning the image alone was
+# MEASURED not to fix that. A constraints file is the only mechanism at this
+# seam. Evidence: .planning/spikes/004-numpy-floor-vs-gpu-stack/README.md.
+#
+# THE CORRIDOR IS ONE MINOR VERSION WIDE, and BOTH of its walls are EXTERNAL and
+# can move without warning (D-17-14):
+#   floor    ">= 2.2"  is GSEGUtils 0.6.0's declared numpy floor.
+#   ceiling  "< 2.3"   is numba 0.61.2's ("numpy<2.3,>=1.24"), which numba
+#                      enforces at import time, not merely at resolve time.
+# The ceiling agrees with the `cuda11`/`cuda12` extras in pyproject.toml by
+# construction; changing one without the other re-opens the gap this closes.
+#
+# 30_GSEGUtils DELIBERATELY CARRIES NO SUCH CEILING (D-17-12). It has no GPU
+# stack and no numba anywhere, so the "< 2.3" wall belongs only where numba is.
+# That asymmetry is a decision, not drift.
+#
+# ADD NOTHING ELSE HERE. numba and cupy are pinned via conda inside the image
+# (D-17-16); pip must not touch them.
+numpy >= 2.2, < 2.3

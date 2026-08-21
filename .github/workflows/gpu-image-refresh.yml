@@ -25,8 +25,10 @@ name: GPU Runner Image Refresh
 # `.planning/MILESTONES.md`: "digest write-back needs a workflows-scoped token
 # (first digest pinned manually)".
 #
-# WHAT WOULD RE-ENABLE IT. Either path below, both larger than Phase 13 carries.
-# Restore the `schedule:` block preserved verbatim under `on:` when one lands.
+# WHAT WOULD RE-ENABLE IT. Either path below. (b) HAS SINCE LANDED — see the
+# status note after the two options; restoring the `schedule:` block preserved
+# verbatim under `on:` is a SEPARATE decision, and it has been taken in the
+# negative for now.
 #   (a) Give the write-back step a credential permitted to touch workflow files —
 #       a GitHub App installation token with `contents: write` + `workflows: write`,
 #       or a classic PAT with the `workflow` scope, stored as a repository secret
@@ -40,6 +42,25 @@ name: GPU Runner Image Refresh
 #       digest-pin section). Needs no new credential, but changes how the GPU job
 #       resolves its image.
 #
+# STATUS 2026-08-21 (Phase 17 plan 17-05): REMEDY (b) HAS LANDED. The digest now
+# lives in `.github/digests/gpu-runner.txt`, OUTSIDE `.github/workflows/**`, and
+# `gpu.yml` resolves it at job start — failing closed on a missing, empty,
+# multi-line or malformed pin, with no fallback to a moving tag. The write-back
+# below targets that artefact, so the server-side push rejection of 2026-07-01
+# (run 28513581287) no longer applies: the path this workflow writes is no longer
+# one a GitHub App installation token is forbidden to touch. No credential was
+# widened, and none needed to be (D-17-15; DESIGN-DECISIONS entry 45 for why
+# widening `gseg-ruleset-admin` would have been a decision rather than a fix).
+#
+# THE `schedule:` BLOCK NEVERTHELESS STAYS COMMENTED OUT, BY DECISION (D-17-15),
+# and its absence below is a CHOICE — do not file it as an oversight. Fixing the
+# mechanism and re-enabling the automation are separate risks: a monthly auto-PR
+# can move the base image out from under a corridor Phase 17 is pinning BY HAND
+# (`.github/constraints/gpu.txt` holds the container's numpy at 2.2.x against
+# numba 0.61.2's ceiling, and `.github/docker/gpu-runner.Dockerfile` pins numba
+# and cupy in the image). Un-commenting the preserved block is a one-line change,
+# reserved for v1.3 once the corridor is no longer hand-held.
+#
 # WHY IT MATTERS NOW. From plan 13-08 Task 3 the GPU job's check-run name becomes
 # a REQUIRED context on the protected branch, so anything red in this area reads
 # as a lab problem. The pin is a digest, not a moving tag, so a paused refresh is
@@ -47,7 +68,9 @@ name: GPU Runner Image Refresh
 # indistinguishable from neglect, which is what this block exists to prevent.
 
 on:
-  # QUARANTINED — see the header block. Restore this verbatim when (a) or (b) lands.
+  # QUARANTINED — see the header block. Remedy (b) landed at plan 17-05, so the
+  # write-back mechanism works again; this cron stays off BY DECISION (D-17-15)
+  # and is restored verbatim in v1.3, not here.
   # The 08:00-on-the-1st slot stays RESERVED for it, and the CI workflow's own cron
   # comment still names this slot as taken for exactly that reason.
   #
@@ -61,7 +84,7 @@ on:
         default: false
 
 permissions:
-  contents: write       # digest write-back commit/PR to gpu.yml
+  contents: write       # digest write-back commit/PR to .github/digests/gpu-runner.txt
   packages: write       # GHCR push
   pull-requests: write  # peter-evans/create-pull-request below
   # NOTE: id-token: write is intentionally ABSENT — cosign-keyless deferred per RESEARCH Open Q 6 (SP-B)
@@ -106,7 +129,7 @@ jobs:
         # D-04 rotation policy: keep last 3 monthly digests + current via post-build prune.
 
   write-back-digest:
-    name: Write digest back into gpu.yml
+    name: Write digest back into the pinned-digest artefact
     needs: [build-push]
     runs-on: ubuntu-latest
     permissions:
@@ -116,21 +139,29 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5.0.1
         with:
           ref: develop/gsd
-      - name: Update digest in gpu.yml
+      - name: Update digest in .github/digests/gpu-runner.txt
         env:
           NEW_DIGEST: ${{ needs.build-push.outputs.digest }}
         shell: bash
         run: |
-          # The rewrite target moved out of the CI workflow and into its own file at
-          # plan 13-08, when the GPU job was relocated. Five anchors in THIS file named
-          # the old path (this step's name, the job name above, the workflow-level
-          # `contents: write` comment, the comment below and the sed target); all five
-          # were retargeted in that same commit, because the sed below matches BY PATH.
-          TARGET=.github/workflows/gpu.yml
+          # The rewrite target has moved twice. Plan 13-08 moved it out of the CI
+          # workflow into `gpu.yml` when the GPU job was relocated; plan 17-05 moved it
+          # OUT OF `.github/workflows/**` altogether, into its own versioned artefact,
+          # because a GitHub App installation token structurally cannot write that
+          # prefix — the rejection that has blocked this job since 2026-07-01
+          # (D-17-15, remedy (b) in the header). Five anchors in THIS file name the
+          # target (this step's name, the job name above, the workflow-level
+          # `contents: write` comment, this comment and the sed target below); all five
+          # are retargeted in the SAME commit each time, because the sed below matches
+          # BY PATH and exits 0 on zero matches.
+          TARGET=.github/digests/gpu-runner.txt
 
           # NEW_DIGEST is in the form `sha256:<hex>`; strip the `sha256:` prefix for the sed.
-          # Matches the pinned ref regardless of prefix (the digest lives in the gpu-tests job's
-          # `GPU_IMAGE:` env, not a `container.image:` field — see gpu.yml, 09-02 podman-run design).
+          # Matches the pinned ref regardless of prefix. Since plan 17-05 the target holds ONE
+          # line and nothing else — the pinned reference itself — which `gpu.yml` reads at job
+          # start and validates against a full-length anchored digest pattern before exporting it
+          # through `$GITHUB_ENV` (there is no `GPU_IMAGE:` env block and no `container.image:`
+          # field to rewrite any more; see gpu.yml, 09-02 podman-run design).
           if [ -z "${NEW_DIGEST}" ]; then
             echo "::error::build-push produced an empty digest output — nothing to write back. Refusing to rewrite ${TARGET} with an empty pin."
             exit 1
