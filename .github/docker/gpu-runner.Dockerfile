@@ -11,11 +11,56 @@
 #   * and it duplicated the gpu-tests job's own editable install of the current source.
 # A CI image should carry the slow, stable stack and let each run test the exact commit fresh.
 #
-# Base: RAPIDS 25.04 / CUDA 12.8 / Python 3.12. (D-03's `:25.04-cuda12.5` does not exist for
-# stable 25.04 — Docker Hub has cuda11.8/12.0/12.8; 12.5 is 25.04a-alpha. Host driver
-# 595.71.05 / CUDA 13.2 supports 12.8.) Provides cudf + cuspatial via conda — the GPU libs
-# pchandler.filters.gpu imports (cudf, cuspatial, geopandas).
-FROM rapidsai/base:25.04-cuda12.8-py3.12
+# ==============================================================================================
+# BASE CHANGE 2026-08-24 (Phase 17, ROUND 4) — metapackage base -> SLIM base, RAPIDS STILL 25.04
+# ==============================================================================================
+# WAS:  FROM rapidsai/base:25.04-cuda12.8-py3.12   (ubuntu 24.04 / CUDA 12.8.0 / py3.12)
+# NOW:  FROM rapidsai/miniforge-cuda:25.08-cuda12.8.0-base-ubuntu24.04-py3.12
+#
+# SAME OS, SAME CUDA, SAME PYTHON, SAME RAPIDS VERSION. Read from the two image configs, not
+# assumed: both carry `org.opencontainers.image.ref.name=ubuntu` / `version=24.04`,
+# `CUDA_VERSION=12.8.0`, `PYTHON_VERSION=3.12` and conda at `/opt/conda` already on PATH. What
+# changes is ONLY the image VARIANT: `rapidsai/base` ships the `rapids=25.4` METAPACKAGE as the
+# environment root spec; `rapidsai/miniforge-cuda` ships conda + CUDA and nothing else. The
+# RAPIDS packages this image needs are installed BY NAME below, still at 25.04.
+#
+# NOTE ON THE TAG: `rapidsai/miniforge-cuda` has NO `25.04-` prefixed tag (queried read-only
+# against the registry tag list: 1280 tags, zero starting `25.04`, oldest versioned prefix is
+# `25.08`). The prefix is that image's own BUILD CYCLE and carries no RAPIDS packages, so it does
+# not set the RAPIDS version — the specs below do. `25.08-` is preferred over the unversioned
+# rolling `cuda12.8.0-base-ubuntu24.04-py3.12` because the rolling tag is re-pushed. Index digest
+# at the time of writing: sha256:75aa2e766ef90c9024f503f0672e9c1dc24122822e01d8777a35782374058dab
+#
+# WHY, in one sentence: three consecutive build failures were all caused by SUBTRACTING from the
+# metapackage and letting the conda solver re-plan the environment. This inverts that — build UP
+# from a base that never had the capping packages, so there is no numba ceiling to fight.
+#
+# The full three-round record, with verbatim solver transcripts, is at
+# `.planning/phases/17-gpu-corridor-and-0-6-0-adoption/17-06-SOLVER-OUTPUT.md`. Condensed:
+#   R1 (run 32493219857) — plain `conda install numba=0.61.2`: LibMambaUnsatisfiableError.
+#       `cuxfilter 25.04` requires `numba >=0.59.1,<0.61.0a0` and is a leaf of `rapids=25.4`.
+#       cudf and cupy were NOT implicated — this was never D-17-17's escalation.
+#   R2 (run 32498609639) — `conda remove rapids cuxfilter dask-cuda`: libmamba RE-SOLVES from the
+#       surviving history specs rather than excising names, and `rapids` is this environment's
+#       ROOT EXPLICIT SPEC, so 350 packages went, cudf/cuspatial/geopandas among them. Caught by
+#       the cascade assertion. It also proved the positive: with the cap lifted, conda resolves
+#       numba 0.61.2 + cupy 13.6.0 natively in 12.35 s, no channel widening — D-17-17 vindicated.
+#   R3 (run 32700116989) — `conda remove --force-remove`: surgical (3 packages, 12 s, the three
+#       GPU imports survived) but it left `cugraph`/`raft-dask` requiring an absent
+#       `dask-cuda 25.04.*`; the next solve repaired that dangling edge by DOWNGRADING 103
+#       packages and re-basing the whole RAPIDS stack 25.04 -> 24.12, where `dask-cuda` declares
+#       `numba >=0.57` with no ceiling. Caught by the DROP CHECK clause added that round — every
+#       other clause passed. A `print` beside a passing assert is the shape of a silent green,
+#       which is why the assertion layer below asserts EVERY version this image must carry.
+#
+# EXPLICIT MAINTAINER OVERRIDE. The standing instruction in `17-06-PLAN.md` was "do not touch the
+# base tag — that is D-17-18's `newer-rapids-base` fallback". That prohibition was written to
+# block a RAPIDS VERSION change. This is not one: RAPIDS stays at 25.04 and only the image
+# variant moves, from metapackage-bearing to slim. The maintainer authorised this specific change
+# with that distinction stated. `newer-rapids-base` is separately DEAD BY MEASUREMENT: the
+# `rapidsai` channel has no `cuspatial` above 25.04.00 at all, so a newer RAPIDS base would ship
+# no matching cuspatial.
+FROM rapidsai/miniforge-cuda:25.08-cuda12.8.0-base-ubuntu24.04-py3.12
 
 USER root
 
@@ -30,126 +75,75 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # ---------------------------------------------------------------------------------------------
-# GPU DEPENDENCY CORRIDOR PIN (Phase 17 — D-17-16, D-17-17; ROADMAP success criterion 3).
+# THE GPU STACK, INSTALLED BY NAME (Phase 17 — D-17-16, D-17-17; ROADMAP success criterion 3).
 #
-# numba is the SOLE blocker for the numpy floor GSEGUtils 0.6.0 requires, and it is a HARD
-# RUNTIME GUARD rather than a declared cap: `numba/__init__.py::_ensure_critical_deps` raises
+# `pchandler.filters.gpu` imports exactly three things: cudf, cuspatial, geopandas
+# (`src/pchandler/filters/gpu.py`). Those, plus the corridor pins, plus what the gpu-tests job
+# itself needs, are the whole of this environment. Nothing else is installed, and in particular
+# `cuxfilter` and `dask-cuda` — the only two packages reachable from `rapids=25.4` that cap numba
+# below 0.61 — are never present to cap anything. That is the entire premise of this layer, and
+# the assertion layer below fails the build if either of them turns up anyway.
+#
+# WHY numba IS PINNED AT ALL. numba is the SOLE blocker for the numpy floor GSEGUtils 0.6.0
+# requires, and it is a HARD RUNTIME GUARD rather than a declared cap:
+# `numba/__init__.py::_ensure_critical_deps` raises
 #     ImportError: Numba needs NumPy 2.0 or less.
 # at `import cudf` — i.e. BEFORE the `cudf.DataFrame({"x": [1]})` smoke probe D-06 was designed
-# around ever runs. The RAPIDS base ships numba 0.60.0, whose ceiling is numpy <= 2.0. So the
-# moment the gpu-tests job installs `.[dev]` under `.github/constraints/gpu.txt`
-# (`numpy >= 2.2, < 2.3`), the container's `is_gpu_available()` returns False, all three GPU
-# tests skip, pytest exits 0 and the required context `Tests (pytest, GPU)` reports green having
-# tested nothing. Pinning numba here is what closes that.
-#
-# numba 0.61.2 declares `numpy<2.3,>=1.24` and is accepted by cudf 25.4 (`numba<0.62`).
+# around ever runs. numba 0.60.0 (what an unpinned solve would take) has a numpy <= 2.0 ceiling,
+# so the moment the gpu-tests job installs `.[dev]` under `.github/constraints/gpu.txt`
+# (`numpy >= 2.2, < 2.3`), `is_gpu_available()` returns False, all three GPU tests skip, pytest
+# exits 0 and the required context `Tests (pytest, GPU)` reports green having tested nothing.
+# numba 0.61.2 declares `numpy<2.3,>=1.24` and is accepted by cudf 25.4 (`numba<0.62.0a0`).
 # 0.62/0.63 are NOT options — cudf 25.4 refuses them. numpy 2.2.6 + numba 0.61.2 + cupy +
 # cudf/cuspatial 25.4 was measured end to end through a real `cuspatial.point_in_polygon` kernel
-# on an RTX 3090 Ti: `.planning/spikes/004-numpy-floor-vs-gpu-stack/README.md`, row 4. That
-# spike installed PIP WHEELS in a venv, and its own § Name the Residual says so — "a venv is not
-# the conda container ... whether conda will produce numba 0.61.2 with cudf 25.4 is untested,
-# and it is the next question". This layer, and the assertion layer below it, are the answer.
+# on an RTX 3090 Ti: `.planning/spikes/004-numpy-floor-vs-gpu-stack/README.md`, row 4.
 #
-# cupy is bounded `>=13.5,<14` because that is what criterion 3 and D-17-17 ask for — NOT the
-# 14.1.1 the spike's resolver happened to pick. cupy 14 is a major bump validated on exactly one
-# kernel, and refusing it as the default is deliberate. If `<14` cannot solve against cudf 25.4
-# that is an escalation (D-17-17), not a range edit.
+# WHY cupy IS BOUNDED `>=13.5,<14`: that is what criterion 3 and D-17-17 ask for — NOT the 14.1.1
+# the spike's pip resolver happened to pick. cupy 14 is a major bump validated on exactly one
+# kernel. R2 measured that `<14` solves natively, at 13.6.0, above the `>= 13.5` floor.
 #
-# Installed through CONDA, from the base image's OWN configured channels, honouring the standing
-# instruction in this file not to mix package managers inside the conda env (D-17-16). Both
-# packages are already present in the RAPIDS base, but "this PINS them, it does not introduce
-# them" is only half true and round 2 measured which half: the base ships numba 0.60.0 (pinned
-# UP to 0.61.2) and cupy 13.4.1 — which is BELOW the `>= 13.5` floor criterion 3 asks for, so the
-# cupy half of this pin always had to MOVE a package, not merely ratify one.
+# WHY THE numpy IN THIS IMAGE IS 2.0.x AND THAT IS CORRECT — read this before "fixing" it.
+# The conda build of `cudf 25.4.0` declares `numpy >=1.23,<2.1` (read from the rapidsai channel's
+# own release metadata for build `cuda12_py312_250409_6bc42063`, the only linux-64/py312/cuda12
+# build there is). The PyPI wheel `cudf-cu12 25.4.0` declares `numpy<3.0a0,>=1.23` — a MATERIAL
+# METADATA DIVERGENCE between the two distribution channels for the same version, and the second
+# such divergence this phase has found (the first was cuml/cuxfilter's numba cap, which exists on
+# conda and differs on PyPI). Consequences, both deliberate:
+#   * conda CANNOT put numpy 2.2.x in this image while cudf 25.04 is installed. Any assertion
+#     demanding `numpy >= 2.2` here is unsatisfiable by construction, not by accident.
+#   * It does not need to. The corridor's numpy arrives AT JOB TIME from
+#     `.github/constraints/gpu.txt` via `pip install -c ... -e .[dev]` (D-17-10, D-17-14, wired in
+#     17-05) — the one seam where numpy is decided. R3 measured the same thing on the old base:
+#     "numpy was never moved by this install." Spike 004 row 4 then measured the lifted state
+#     working end to end on real hardware, so conda's `<2.1` is a conservative packaging bound,
+#     not a runtime wall like numba's.
+# The assertion below therefore pins numpy to exactly `2.0.x` — the band cudf and numba 0.61.2
+# jointly permit — so that a drift in EITHER direction fails the build loudly.
+#
+# WHY `python=3.12` IS PINNED EXPLICITLY: a NEW risk the slim base introduces. `rapidsai/base`
+# carried `python 3.12.*` in its own pinned specs (visible in R1's solver output as
+# "pin on python 3.12.*"); miniforge-cuda does not. Without this spec a solve is free to take a
+# py311 build of cudf and move the interpreter under the whole image.
+#
+# WHY `pip` IS NAMED: the gpu-tests job runs `pip install -c .github/constraints/gpu.txt -e .[dev]`
+# INSIDE this container. On the metapackage base pip arrived with the RAPIDS stack; on a slim base
+# it must be asked for. Its absence would not surface until 17-07, on lab hardware.
+#
+# `cuda-version>=12.0,<=12.8` is RAPIDS' own documented form for a 25.04 / CUDA 12.8 install — a
+# range rather than `=12.8`, which leaves the solver room while keeping the conda-side CUDA at or
+# below the image's own `CUDA_VERSION=12.8.0`.
+#
+# CHANNELS ARE NAMED EXPLICITLY HERE, and that is not a widening. `rapidsai/base` shipped a
+# `.condarc` configuring rapidsai/pytorch/conda-forge/nvidia; miniforge configures conda-forge
+# only, and cudf/cuspatial live on the `rapidsai` channel. `-c rapidsai -c conda-forge -c nvidia`
+# is the channel set RAPIDS documents for its own installs and the same set (minus pytorch, which
+# nothing here needs) the old base configured for itself.
 ENV PATH=/opt/conda/bin:${PATH}
 
-# ---- MEASURED 2026-08-21: the FIRST attempt at the pin below failed, and this layer is why ----
-# Refresh run 32493219857 (job 96805513018) died after 66 s of solving with, verbatim:
-#
-#     LibMambaUnsatisfiableError: Encountered problems while solving:
-#       - package cuxfilter-25.04.00-cuda12_py312_250409_gf64a6f4_0 requires
-#         numba >=0.59.1,<0.61.0a0, but none of the providers can be installed
-#
-# The full 56-line transcript is on the record at
-# `.planning/phases/17-gpu-corridor-and-0-6-0-adoption/17-06-SOLVER-OUTPUT.md`.
-#
-# THE BLOCKER IS NEITHER cudf NOR cupy. cudf 25.04 declares no numba constraint at all on conda,
-# and `cupy>=13.5,<14` appears NOWHERE in the conflict tree — so this is not D-17-17's escalation,
-# the range below is NOT widened, and widening it would not have helped. The blocker is
-# `cuxfilter`, a RAPIDS dashboard / visualisation component that pchandler never imports
-# (`src/pchandler/filters/gpu.py` imports cudf, cuspatial and geopandas, and nothing else). It is
-# in this image only because the base installs the `rapids=25.4` METAPACKAGE, one leaf of which is
-# `cuxfilter 25.04.*`.
-#
-# `dask-cuda 25.04` declares the SAME cap (`numba >=0.59.1,<0.61.0a0`) and is a SECOND leaf of the
-# same metapackage. The solver never named it — LibMamba reports the first conflict it proves — so
-# dropping cuxfilter alone would have bought a second, identical 7-minute failure. Read out of the
-# `rapidsai` channel's own `linux-64/repodata.json`: across every 25.04 build exactly three
-# packages cap numba below 0.61 (`cuxfilter`, `dask-cuda`, `cugraph-service-server`), and only the
-# first two are reachable from `rapids`. `cugraph-dgl` / `cugraph-pyg` declare `numba >=0.57` with
-# no ceiling, and are therefore not blockers.
-#
-# ---- MEASURED 2026-08-21, ROUND 2: a plain `conda remove` of that branch GUTS THE IMAGE ----
-# Refresh run 32498609639 (job 96822856086) ran the drop as a plain `conda remove -y` and conda
-# removed **350 packages**, verbatim from the transaction: cudf 25.4.0, cuspatial 25.04.00,
-# geopandas 1.0.1, libcudf, libcuspatial, rmm, cuml, cuproj, cucim, cuvs, cugraph, raft-dask,
-# pandas, pyarrow, shapely — plus numba 0.60.0, numpy 2.0.2 and cupy 13.4.1. `--prune` was NOT
-# passed and made no difference.
-#
-# The prediction above was right about the DEPENDENCY GRAPH and wrong about the MECHANISM.
-# `rapids=25.4` is this environment's ROOT EXPLICIT SPEC. Under the libmamba solver `conda remove`
-# does not excise named packages — it RE-SOLVES the environment from the surviving history specs,
-# so the governing rule is "what has no surviving explicit spec", not "who depends on what". With
-# `rapids` gone from the spec set, everything whose only justification was `rapids` goes with it.
-#
-# The solve itself was never the problem. With the cap lifted, layer #10 solved in 12.35 s from
-# this base's own channels with no `-c` and nothing widened, resolving numba 0.61.2 + cupy 13.6.0
-# + numpy 2.2.6 — exactly the corridor spike 004 measured on an RTX 3090 Ti, and at `cupy < 14`,
-# which vindicates D-17-17. The cascade assertion below is what stopped that green-looking build
-# from pushing an image with the right numba and NO cudf.
-#
-# ---- ROUND 3, 2026-08-24: `--force-remove`, on an explicit one-attempt budget extension ----
-# `conda remove --force-remove` skips dependency resolution entirely: it unlinks exactly the named
-# packages and does not re-solve, so the 350-package prune cannot happen. That is the whole of the
-# change from round 2. Two things about it are UNKNOWN and are what this attempt buys:
-#   (a) whether dropping `rapids` from the environment's history/explicit specs is enough to stop
-#       the next `conda install` reinstating `cuxfilter` (and with it the numba<0.61 cap). The
-#       assertion layer below fails the build if either `cuxfilter` or `dask-cuda` comes back.
-#   (b) whether an environment with force-removed packages is SOUND enough to trust on lab
-#       hardware. It is not: conda's metadata will still claim `cugraph` / `raft-dask` are
-#       installed while `dask-cuda` — which they require — is gone. pchandler imports only cudf,
-#       cuspatial and geopandas, none of which reach the force-removed branch, so the corridor
-#       this image exists to carry is unaffected; but this image is deliberately NOT a
-#       general-purpose RAPIDS environment any more, and nothing here proves it is coherent
-#       beyond those three imports. `17-07`'s real `3 passed` on `gseg-pc105` measures the three
-#       imports and the kernel — it does not measure the rest of the environment.
-#
-# THIS REMAINS A MEASUREMENT, NOT AN ADOPTION. D-17-18's three fallbacks are still unchosen. The
-# image is not permitted to be quietly wrong either way: the layer immediately after the drop
-# fails the build if the force-remove reached pchandler's three GPU imports, and the layer after
-# the pin fails it if numba, cupy, cudf, cuspatial or geopandas did not land exactly where they
-# were meant to, or if the dropped branch came back.
-RUN conda list --json > /tmp/pre-drop.json \
-    && python -c 'import json; \
-names = ["rapids", "cuxfilter", "dask-cuda"]; \
-installed = {p["name"]: p["version"] for p in json.load(open("/tmp/pre-drop.json"))}; \
-drop = [n for n in names if n in installed]; \
-skip = [n for n in names if n not in installed]; \
-print("DROP (installed, removing): " + (", ".join("%s=%s" % (n, installed[n]) for n in drop) or "-")); \
-print("DROP (absent, nothing to do): " + (", ".join(skip) or "-")); \
-open("/tmp/drop.txt", "w").write(" ".join(drop))' \
-    && DROP="$(cat /tmp/drop.txt)" \
-    && if [ -n "$DROP" ]; then conda remove -y --force-remove $DROP && conda clean -afy; \
-       else echo "NOTHING DROPPED — the numba cap is somewhere else; the solve below will name it"; fi \
-    && conda list --json > /tmp/post-drop.json \
-    && python -c 'import json; \
-pkgs = {p["name"]: p["version"] for p in json.load(open("/tmp/post-drop.json"))}; \
-missing = [n for n in ("cudf", "cuspatial", "geopandas") if n not in pkgs]; \
-assert not missing, "FORCE-REMOVE CASCADE CHECK FAILED: --force-remove still took %r with it — the drop itself is the cause, not the install that follows" % (missing,); \
-print("POST-DROP OK: cudf=%s cuspatial=%s geopandas=%s | numba=%s cupy=%s numpy=%s | rapids=%s cuxfilter=%s dask-cuda=%s cugraph=%s" % (pkgs.get("cudf"), pkgs.get("cuspatial"), pkgs.get("geopandas"), pkgs.get("numba"), pkgs.get("cupy") or pkgs.get("cupy-core"), pkgs.get("numpy"), pkgs.get("rapids"), pkgs.get("cuxfilter"), pkgs.get("dask-cuda"), pkgs.get("cugraph")))' \
-    && rm -f /tmp/pre-drop.json /tmp/post-drop.json /tmp/drop.txt
-
-RUN conda install -y "numba=0.61.2" "cupy>=13.5,<14" \
+# One line, deliberately: `17-06-PLAN.md` Task 1s gate matches the specs against the conda
+# install with a single-line regex (`conda install[^\n]*numba[=\s]*0\.61\.2`), so splitting the
+# spec list across continuations would break a check that is not wrong.
+RUN conda install -y -c rapidsai -c conda-forge -c nvidia "python=3.12" "cuda-version>=12.0,<=12.8" "cudf>=25.4.0,<25.5.0a0" "cuspatial>=25.4.0,<25.5.0a0" "geopandas" "pip" "numba=0.61.2" "cupy>=13.5,<14" \
     && conda clean -afy
 
 # BUILD-TIME ASSERTION THAT THE PIN TOOK (threat T-17-24). Read the resolved versions from
@@ -159,32 +153,39 @@ RUN conda install -y "numba=0.61.2" "cupy>=13.5,<14" \
 # registry cannot hold an image that does not carry the pinned stack — "the image carries numba
 # 0.61.2" becomes a property the build enforces instead of a claim in a comment. conda-forge
 # splits cupy into `cupy` (metapackage) and `cupy-core`; either name satisfies the check.
-# The resolved versions are printed so the build log records what actually landed.
-# EXTENDED 2026-08-21 alongside the drop layer above, because that layer introduces a new way
-# for this image to be wrong: it now also fails the build if the cascade reached cudf,
-# cuspatial or geopandas (the three `pchandler.filters.gpu` imports), and if `cuxfilter`
-# survived — a build that kept the capping package proves nothing even with numba at 0.61.2.
+#
+# EVERY VERSION THIS IMAGE MUST CARRY IS ASSERTED, NOT PRINTED. R3 came within one clause of
+# pushing a silently re-based RAPIDS 24.12 stack whose only witness was `cudf=24.12.00` inside a
+# `print`. The printed line at the end is a RECORD for the build log; it guards nothing. The
+# absence checks for `cuxfilter`/`dask-cuda`/`rapids` are what make this base change falsifiable:
+# if the slim premise is wrong and a capping branch reappears, this build dies here rather than
+# shipping an image that quietly resolved numba somewhere else.
 RUN conda list --json > /tmp/conda-pins.json \
     && python -c 'import json, re; \
 pkgs = {p["name"]: p["version"] for p in json.load(open("/tmp/conda-pins.json"))}; \
-nb = pkgs.get("numba"); \
+mm = lambda n: tuple(int(x) for x in re.findall(r"[0-9]+", pkgs.get(n) or "")[:2]); \
+assert mm("python") == (3, 12), "PIN CHECK FAILED: python resolved to %r, expected 3.12.x — the slim base carries no python pin of its own, so an unpinned solve can move the interpreter" % (pkgs.get("python"),); \
+assert pkgs.get("numba") == "0.61.2", "PIN CHECK FAILED: numba resolved to %r, expected exactly 0.61.2" % (pkgs.get("numba"),); \
+assert mm("numpy") == (2, 0), "PIN CHECK FAILED: numpy resolved to %r, expected 2.0.x — conda cudf 25.4.0 declares numpy>=1.23,<2.1 and numba 0.61.2 declares numpy>=1.24,<2.3; the corridors 2.2.x arrives at JOB time from .github/constraints/gpu.txt, not here" % (pkgs.get("numpy"),); \
 cp = pkgs.get("cupy") or pkgs.get("cupy-core"); \
-assert nb == "0.61.2", "PIN CHECK FAILED: numba resolved to %r, expected exactly 0.61.2" % (nb,); \
 m = re.match(r"^13\.([0-9]+)([^0-9]|$)", cp or ""); \
-assert m is not None and int(m.group(1)) >= 5, "PIN CHECK FAILED: cupy resolved to %r, expected 13.x with minor >= 5" % (cp,); \
-missing = [n for n in ("cudf", "cuspatial", "geopandas") if n not in pkgs]; \
-assert not missing, "CASCADE CHECK FAILED: dropping the rapids/cuxfilter/dask-cuda branch took %r with it — pchandler.filters.gpu imports cudf, cuspatial and geopandas, so an image without them is useless whatever numba says" % (missing,); \
-back = [n for n in ("cuxfilter", "dask-cuda") if n in pkgs]; \
-assert not back, "DROP CHECK FAILED: %r came back on the install, so dropping rapids from the history specs did NOT stop the solver reinstating the numba<0.61 branch" % (back,); \
-print("PIN CHECK OK: numba=%s cupy=%s numba-cuda=%s numpy=%s cudf=%s cuspatial=%s geopandas=%s" % (nb, cp, pkgs.get("numba-cuda"), pkgs.get("numpy"), pkgs.get("cudf"), pkgs.get("cuspatial"), pkgs.get("geopandas"))); \
-print("DROP CHECK OK: cuxfilter absent; rapids=%s dask-cuda=%s cugraph=%s" % (pkgs.get("rapids"), pkgs.get("dask-cuda"), pkgs.get("cugraph")))' \
+assert m is not None and int(m.group(1)) >= 5, "PIN CHECK FAILED: cupy resolved to %r, expected 13.x with minor >= 5 (D-17-17 refuses cupy 14 as the default)" % (cp,); \
+assert mm("cudf") == (25, 4), "PIN CHECK FAILED: cudf resolved to %r, expected 25.04.x — a stack re-base is exactly what R3 nearly shipped" % (pkgs.get("cudf"),); \
+assert mm("cuspatial") == (25, 4), "PIN CHECK FAILED: cuspatial resolved to %r, expected 25.04.x" % (pkgs.get("cuspatial"),); \
+assert mm("numba-cuda") == (0, 4), "PIN CHECK FAILED: numba-cuda resolved to %r, expected 0.4.x — R3 saw it fall to 0.0.17.1 as the visible edge of a silent 25.04 -> 24.12 re-base" % (pkgs.get("numba-cuda"),); \
+assert "geopandas" in pkgs, "PIN CHECK FAILED: geopandas absent — pchandler.filters.gpu imports it"; \
+assert "pip" in pkgs, "PIN CHECK FAILED: pip absent — the gpu-tests job needs it to install .[dev] under .github/constraints/gpu.txt inside this image"; \
+back = [n for n in ("cuxfilter", "dask-cuda", "rapids") if n in pkgs]; \
+assert not back, "SLIM CHECK FAILED: %r present in an image built from the slim base, so the numba<0.61 capping branch is back and the premise of the 2026-08-24 base change is wrong" % (back,); \
+print("PIN CHECK OK: python=%s numba=%s cupy=%s numba-cuda=%s numpy=%s cudf=%s cuspatial=%s geopandas=%s pip=%s" % (pkgs.get("python"), pkgs.get("numba"), cp, pkgs.get("numba-cuda"), pkgs.get("numpy"), pkgs.get("cudf"), pkgs.get("cuspatial"), pkgs.get("geopandas"), pkgs.get("pip"))); \
+print("SLIM CHECK OK: rapids/cuxfilter/dask-cuda all absent; cugraph=%s cuml=%s" % (pkgs.get("cugraph"), pkgs.get("cuml")))' \
     && rm -f /tmp/conda-pins.json
 # ---------------------------------------------------------------------------------------------
 
-# NOTE: geopandas — pchandler.filters.gpu imports it. If the RAPIDS base does not already
-# ship it (verified during 09-02 local build), uncomment the conda install below. Kept conda
-# (not pip) to avoid mixing package managers in the conda env.
-# RUN conda install -y -c conda-forge geopandas && conda clean -afy
+# NOTE: geopandas is now an EXPLICIT spec above rather than an inherited package — the slim base
+# ships nothing, and `cuspatial` would pull it transitively (it declares `geopandas >=1.0.0`) but
+# pchandler imports it directly, so it is named directly. Kept conda (not pip) to avoid mixing
+# package managers in the conda env.
 
 # The image carries NO pchandler/[dev] toolchain. The gpu-tests job installs `.[dev]` fresh
 # against the checked-out source each run, so the toolchain and code always match the commit
