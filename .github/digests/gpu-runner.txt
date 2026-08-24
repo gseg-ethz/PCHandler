@@ -1,1 +1,1 @@
-ghcr.io/gseg-ethz/pchandler-gpu-runner@sha256:643befe573abae513629bd044c180301fbe46137e4070767a6df853e649b0fd3
+ghcr.io/gseg-ethz/pchandler-gpu-runner@sha256:3d6c6494ff9fcd548469cbc3d525789a22ee356eb6fb504ec393e3285989bdc8
