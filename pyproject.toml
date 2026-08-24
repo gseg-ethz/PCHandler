@@ -25,7 +25,7 @@ dependencies = [
 	"alphashape ~= 1.3",
 	"joblib ~= 1.5",
 	"laspy[lazrs,laszip] ~= 2.6",
-	"numpy >= 2.0, < 2.4",
+	"numpy >= 2.2, < 2.4",
 	"numpydantic ~= 1.10",
 	"plyfile ~= 1.1",
 	"pydantic ~= 2.11",
@@ -96,6 +96,37 @@ Changelog = "https://github.com/gseg-ethz/PCHandler/blob/main/CHANGELOG.md"
 
 
 
+# ---------------------------------------------------------------------------
+# The numpy corridor for the GPU extras  (D-17-14, D-17-09)
+#
+# The GPU corridor is exactly ONE MINOR VERSION WIDE -- numpy 2.2.x -- and BOTH
+# of its walls are EXTERNAL to this project and can move:
+#
+#   floor    ">= 2.2"  is GSEGUtils 0.6.0's declared numpy floor.
+#   ceiling  "< 2.3"   is numba 0.61.2's ("numpy<2.3,>=1.24"). numba enforces
+#                      it at IMPORT time with a hard raise in
+#                      numba/__init__.py::_ensure_critical_deps(), which fires
+#                      on "import cudf" -- it is not a soft metadata cap a
+#                      resolver may quietly step over.
+#
+# The corridor cannot be widened from the numba side either: numba 0.62/0.63
+# would allow numpy < 2.4, but cudf 25.4 declares "numba < 0.62".
+#
+# The "< 2.4" ceiling on [project] dependencies above is a DIFFERENT WALL,
+# owned by pchandler itself: the "sphinx -W" docs gate passes at numpy <= 2.4.4
+# and fails at >= 2.4.5 (DESIGN-DECISIONS.md entry 85's gate matrix). The numba
+# ceiling is deliberately NOT promoted into [project] dependencies (D-17-09):
+# the constraint is numba's and therefore GPU-only, and capping every CPU
+# consumer of this library below numpy 2.3 for an optional extra they may never
+# install taxes the majority for the minority's constraint.
+#
+# 30_GSEGUtils deliberately does NOT take the "< 2.3" ceiling (D-17-12): it has
+# no GPU stack and no numba anywhere, so it keeps ">= 2.2, < 2.4" on both of its
+# numpy sites. That asymmetry is a decision, not drift.
+#
+# Measured, not inferred -- see the GSD workspace planning repo,
+# .planning/spikes/004-numpy-floor-vs-gpu-stack/README.md
+# ---------------------------------------------------------------------------
 [project.optional-dependencies]
 extra = [
     "py4dgeo ~= 0.8",
@@ -116,10 +147,17 @@ dev = [
     "pytest-benchmark ~= 5.2",  # Phase 4 D-30 — opt-in microbenchmark plugin (excluded from CI)
     "pytest-randomly ~= 4.1",   # TEST-07: shuffle test order each run; surfaces order-deps
 ]
-cuda11 = ["geopandas ~= 1.0", "cudf-cu11 == 25.4.*", "cuspatial-cu11 == 25.4.*", "cuproj-cu11 == 25.4.*",
-	"cuml-cu11 == 25.4.*", "dask-cudf-cu11 == 25.4.*", ]
-cuda12 = ["geopandas ~= 1.0", "cudf-cu12 == 25.4.*", "cuspatial-cu12 == 25.4.*", "cuproj-cu12 == 25.4.*",
-	"cuml-cu12 == 25.4.*", "dask-cudf-cu12 == 25.4.*", ]
+# Trimmed from BOTH extras (D-17-13): cuml-cuNN, dask-cudf-cuNN, cuproj-cuNN.
+# pchandler references all three ZERO times -- src/pchandler/filters/gpu.py
+# imports only cudf, cuspatial and geopandas -- and an unused RAPIDS pin is
+# still a LIVE resolver constraint: adding cuml-cu12 back to a passing resolve
+# was OBSERVED to pull numba 0.60.0 and numpy 2.0.2, i.e. below the floor
+# (cuml 25.4 declares "numba < 0.61.0a0"). Re-adding any of the three costs the
+# corridor -- measure a fresh resolve before you do.
+cuda11 = ["geopandas ~= 1.0", "cudf-cu11 == 25.4.*", "cuspatial-cu11 == 25.4.*",
+	"numpy >= 2.2, < 2.3", ]
+cuda12 = ["geopandas ~= 1.0", "cudf-cu12 == 25.4.*", "cuspatial-cu12 == 25.4.*",
+	"numpy >= 2.2, < 2.3", ]
 
 [tool.pytest.ini_options]
 markers = [

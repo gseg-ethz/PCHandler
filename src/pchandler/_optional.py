@@ -101,12 +101,24 @@ def _probe_py4dgeo() -> bool:
 def _probe_gpu() -> bool:
     """Import cudf/cuspatial/geopandas AND execute a smoke kernel; memoise.
 
-    cudf 25.4 imports cleanly on no-GPU hosts (emits ``UserWarning: No NVIDIA GPU detected``).
-    The ``numba_cuda.cudadrv.devices._DeviceList.__getitem__`` bare-``IndexError`` fires
-    only at first kernel call, so the smoke probe surfaces it before ``.mask()``.
+    cudf 25.4 imports cleanly on no-GPU hosts (emits ``UserWarning: No NVIDIA GPU
+    detected``), so the ``cudf.DataFrame({"x": [1]})`` smoke probe below exists as a
+    cheap second signal beyond importability.
 
-    Implements D-06: widened except tuple catches every documented failure mode of
-    ``cudf.DataFrame({"x": [1]})`` on no-GPU hosts.
+    What that smoke probe does **not** do — measured, not assumed (D-17-07). This
+    docstring previously claimed the probe surfaces the ``numba_cuda`` bare-``IndexError``
+    before ``.mask()``. Spike 004 found the claim false in **both** directions: when the
+    numpy floor is wrong, ``import cudf`` raises first and the smoke probe is never reached
+    at all; and in the WSL harness fault the smoke probe **passed** while
+    ``cuspatial.point_in_polygon`` still failed. Evidence:
+    ``.planning/spikes/004-numpy-floor-vs-gpu-stack/README.md`` in the GSD workspace.
+
+    The probe is deliberately **not** strengthened to call ``point_in_polygon`` (D-17-07),
+    and the wide except tuple stays: it is D-06 and it is still right, because a capability
+    probe must not raise. The defect on this path was never the catch — it was that the
+    caught exception, which names both its own cause and its fix, reached nothing that
+    could print it. It is now emitted on the module logger (D-17-06); ``_GPU_ERROR`` is
+    retained for ``ensure_gpu_available()`` to chain from.
     """
     global _HAS_GPU, _GPU_ERROR
     if _HAS_GPU is None:
@@ -115,9 +127,17 @@ def _probe_gpu() -> bool:
             import cuspatial  # noqa: F401
             import geopandas  # noqa: F401
 
-            cudf.DataFrame({"x": [1]})  # Smoke probe — D-06 (surfaces numba_cuda IndexError before .mask())
+            cudf.DataFrame({"x": [1]})  # Smoke probe — D-06; weaker than once claimed, see docstring (D-17-07)
             _HAS_GPU = True
         except (ImportError, RuntimeError, IndexError, Exception) as e:  # noqa: BLE001
+            # D-17-06: emit the reason. Swallowing it silently is how a broken GPU stack
+            # reported green for months — the exception named its own fix the whole time.
+            logger.warning(
+                "GPU support unavailable: the cudf / cuspatial / geopandas capability probe raised %s: %s. "
+                "pchandler.filters.gpu will be inert until this is resolved.",
+                type(e).__name__,
+                e,
+            )
             _GPU_ERROR = e
             _HAS_GPU = False
     return bool(_HAS_GPU)

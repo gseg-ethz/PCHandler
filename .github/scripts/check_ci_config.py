@@ -8,7 +8,7 @@ Invoked from the Lint (pre-commit) CI job as ``python
 violation, emits each as a GitHub ``::error::`` annotation and exits 1 once;
 exits 0 and prints one trailing OK line when the tree is clean.
 
-Seven assertions, each named by the identifier later plans and the adversarial
+Ten assertions, each named by the identifier later plans and the adversarial
 suite refer to:
 
   A1  No filter key under a pull-request-side trigger on a workflow producing a
@@ -25,6 +25,18 @@ suite refer to:
       condition.
   A6  No such job depends on a job that itself carries a job-level condition.
   A7  The lint job declares a permissions block granting no write scope.
+  A8  The GPU job asserts its own GPU capability AFTER its dependency install
+      and BEFORE the suite, in the same step body, with the sense not inverted
+      and the failure not neutered.
+  A9  The GPU corridor's two artefacts exist, are wired in, and are the only
+      place the image pin lives: the container install carries ``-c`` pointing
+      at the constraints file, that file yields a requirement, the digest
+      artefact holds exactly one full-length pinned reference, and no concrete
+      digest is inlined back into the GPU job.
+  A10 Every ``bash -c`` / ``bash -lc`` invocation in every step body hands its
+      script to the shell as exactly ONE argument: the quoting round-trips, and
+      no bare word follows the closing quote. A body that breaks out of its own
+      quotes runs on the runner host instead of inside the container.
 
 **Why A1 inspects the pull-request-side events and NOT push.** A required status
 check comes from the event that produced it. A workflow skipped by a filter never
@@ -75,6 +87,7 @@ import json
 import pathlib
 import re
 import sys
+from collections.abc import Iterator
 from typing import Any
 
 import ruleset_lib
@@ -170,6 +183,62 @@ CI_WORKFLOW_NAME = "CI"
 
 LINT_CONTEXT = "Lint (pre-commit)"
 
+# A8's subject. `GPU_CONTEXT` is the check-run name `gpu.yml` declares AND the
+# required-status-check context string `main.json` requires; A8 keys off exactly
+# that pair, the way A5 and A7 do. `main.no-gpu.json` -- the audited lab-outage
+# override (CI-15, D-17-04) -- deliberately does NOT require it, which is why A8
+# is written to be vacuous when no committed payload requires the context at all.
+GPU_CONTEXT = "Tests (pytest, GPU)"
+
+# The token the capability block in `gpu.yml` carries so A8 can locate it by
+# character index rather than by guessing at shell structure. Editing the token
+# in either file without the other is what the paired real-tree test catches.
+GPU_CAPABILITY_SENTINEL = "POST-INSTALL GPU CAPABILITY ASSERT"
+
+# The guard whose SENSE A8 pins. `if not <alias>.is_gpu_available():` is the only
+# accepted shape; an inverted or rewritten guard fails, because a capability
+# assertion that fires on the healthy state is worse than none at all.
+GPU_CAPABILITY_GUARD_PATTERN = re.compile(r"if\s+not\s+\w+\.is_gpu_available\(\)\s*:")
+
+# A9's subjects. The corridor is three things that only mean anything together,
+# which is why one assertion covers all of them.
+#
+# `GPU_CONSTRAINTS_PATH` is the seam where the container's numpy is actually
+# decided. The container installs `.[dev]` and NEVER `[cuda12]`, so the GPU
+# extras' ceiling never enters that resolve and conda's numba never enters it
+# either -- and pip states outright that it "does not currently take into account
+# all the packages that are installed". Pinning the image alone was MEASURED not
+# to hold (D-17-10; .planning/spikes/004-numpy-floor-vs-gpu-stack/README.md).
+GPU_CONSTRAINTS_PATH = ".github/constraints/gpu.txt"
+
+# `GPU_DIGEST_PATH` sits OUTSIDE `.github/workflows/**` deliberately: that prefix
+# is the one a GitHub App installation token structurally cannot write, which is
+# why `gpu-image-refresh.yml`'s write-back has been rejected since 2026-07-01 and
+# the workflow quarantined since 2026-07-30 (D-17-15, remedy (b); entry 45 for
+# why widening the token is a decision rather than a fix).
+GPU_DIGEST_PATH = ".github/digests/gpu-runner.txt"
+
+GPU_IMAGE_REPOSITORY = "ghcr.io/gseg-ethz/pchandler-gpu-runner"
+
+# The ONLY accepted spelling of the pin: the repository, an `@sha256:` marker and
+# exactly 64 lowercase hex characters, anchored at both ends. A tag-shaped or
+# truncated value is refused rather than resolved, because a moving tag behind a
+# required context is the silent-substitution class this phase closes (T-17-19).
+GPU_PINNED_REFERENCE_PATTERN = re.compile(re.escape(GPU_IMAGE_REPOSITORY) + r"@sha256:[0-9a-f]{64}")
+
+# A concrete digest ANYWHERE in the parsed GPU job means a second source of truth
+# has grown back. Matched against the LOADED document, never the raw file: the
+# parser strips comments by construction, so the header bullet that describes the
+# relocated pin cannot fail the check it describes. Searching raw text here is the
+# recurring trap of this phase -- a search for a removed thing matches the prose
+# documenting its removal.
+GPU_CONCRETE_DIGEST_PATTERN = re.compile(r"@sha256:[0-9a-f]{64}")
+
+# The flag that wires the constraints file into the install. A9 checks that the
+# GPU job's single `pip install` body carries it AND names the constraints path;
+# an unconsumed constraints file is decoration.
+GPU_CONSTRAINTS_FLAG_PATTERN = re.compile(r"-c\s+" + re.escape(GPU_CONSTRAINTS_PATH))
+
 # A7's pending-narrowing register, keyed by required context. An entry suppresses
 # A7 for that one context and MUST state which requirement narrows it and which
 # plan lands the narrowing. It is a narrowing with a stated reason, not a mute:
@@ -182,8 +251,31 @@ LINT_CONTEXT = "Lint (pre-commit)"
 # wave ahead of it (Phase 13 plan 13-03); it was deleted by plan 13-07 once BOTH
 # repos' lint jobs were narrowed (GSEGUtils by 13-04, pchandler by 13-07), in one
 # paired change. Adding an entry is likewise a paired cross-repo change: this
-# file is byte-identical across both repos by design (D-04).
+# file is kept in deliberate near-symmetry with the sibling repository's copy.
+# NOT byte-identity, and NOT D-04: D-04 (Phase 13 CONTEXT) scopes byte-identity
+# to `.github/scripts/ruleset_lib.py`, which IS identical in both repos. This
+# file has been legitimately divergent since Phase 17 plan 17-02 -- the sibling
+# carries A1 through A7, this copy carries A1 through A10, because A8 and A9
+# describe a GPU corridor the sibling has no reason to own. The earlier "(D-04)"
+# wording overstated a decision nobody made; corrected 2026-08-24 (17-07).
 A7_PENDING_NARROWINGS: dict[str, str] = {}
+
+# A10's subject. `bash -lc '<body>'` inside a `run:` step is how this repository
+# launches a container payload (`podman run ... "$GPU_IMAGE" bash -lc '...'`),
+# and the body is a SINGLE quoted argument. The pattern deliberately captures the
+# option cluster so a `-c`-less invocation -- `bash -l /work/script.sh`, which is
+# a file, not a quoted string -- is not treated as one of these.
+#
+# `lead` is consumed rather than looked behind, because Python requires
+# fixed-width lookbehind and the alternatives here are not the same width; the
+# caller adds `len(lead)` to recover the offset of the `bash` word itself.
+BASH_DASH_C_PATTERN = re.compile(r"(?P<lead>^|[\s;|&(])(?:[\w./-]*/)?bash(?P<opts>(?:[ \t]+-[A-Za-z]+)+)\s+")
+
+# What may legally follow the closing quote of a `bash -c` script argument: a
+# command terminator, a redirection, a pipeline or list operator, a closing
+# bracket, or a comment. Anything else is a WORD, and a word after the script is
+# the signature of a quote that closed earlier than its author intended.
+A10_LEGAL_AFTER_SCRIPT: frozenset[str] = frozenset("\n;|&<>)}#")
 
 
 def load_workflows(root: pathlib.Path) -> list[tuple[pathlib.Path, dict[str, Any]]]:
@@ -656,6 +748,572 @@ def check_lint_least_privilege(
     return violations
 
 
+def _gpu_capability_steps(job: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return the job's run-steps whose body carries the A8 sentinel."""
+    steps = job.get("steps")
+    if not isinstance(steps, list):
+        return []
+    return [
+        step
+        for step in steps
+        if isinstance(step, dict) and isinstance(step.get("run"), str) and GPU_CAPABILITY_SENTINEL in step["run"]
+    ]
+
+
+def _gpu_capability_step_violations(filename: str, job_id: str, step: dict[str, Any]) -> list[str]:
+    """Check the sense, the teeth and above all the POSITION of one capability step.
+
+    Split out of :func:`check_gpu_post_install_capability_assert` so each half stays
+    under the complexity ceiling; the contract is entirely A8's, and every message
+    names the file, the job, the requirement and what breaks when it is not held.
+    """
+    body = step["run"]
+    violations: list[str] = []
+
+    if "continue-on-error" in step:
+        violations.append(
+            f"{filename}: the capability step in job `{job_id}` declares `continue-on-error`, which "
+            f"turns a failed capability assertion back into a green required context — the exact "
+            f"fail-open D-17-05 exists to close. The only sanctioned escape for a degraded lab is "
+            f"the committed `main.no-gpu.json` ruleset variant (D-17-04)."
+        )
+    if "|| true" in body:
+        violations.append(
+            f"{filename}: the capability step in job `{job_id}` contains `|| true`, which swallows "
+            f"the non-zero exit the assertion exists to produce (D-17-04)."
+        )
+    if not GPU_CAPABILITY_GUARD_PATTERN.search(body):
+        violations.append(
+            f"{filename}: the capability step in job `{job_id}` does not match "
+            f"{GPU_CAPABILITY_GUARD_PATTERN.pattern!r}. An absent or inverted guard either never "
+            f"fires or fires on the healthy state; neither asserts the capability."
+        )
+    if "sys.exit(1)" not in body:
+        violations.append(
+            f"{filename}: the capability step in job `{job_id}` never calls `sys.exit(1)`, so a lost "
+            f"GPU capability prints and continues instead of reddening the required context."
+        )
+
+    sentinel_at = body.index(GPU_CAPABILITY_SENTINEL)
+    if "pip install" not in body:
+        violations.append(
+            f"{filename}: the capability step in job `{job_id}` runs no `pip install`. The assertion "
+            f"is meaningless unless it FOLLOWS the install in the same container invocation — an "
+            f"install in an earlier step is exactly the 2026-08-17 ordering that let a broken stack "
+            f"through (D-17-05)."
+        )
+    elif sentinel_at < body.rindex("pip install"):
+        violations.append(
+            f"{filename}: {GPU_CAPABILITY_SENTINEL!r} in job `{job_id}` appears BEFORE the last "
+            f"`pip install` in the same body. That is the pre-2026-08-17 ordering: the capability is "
+            f"certified, then the install invalidates it, then the suite skips everything and exits "
+            f"0 (CI-17, D-17-05)."
+        )
+
+    suite_at = body.find("pytest ")
+    if suite_at == -1:
+        violations.append(
+            f"{filename}: the capability step in job `{job_id}` invokes no suite, so the assertion "
+            f"gates nothing. It must sit in the same body as the run it protects."
+        )
+    elif sentinel_at > suite_at:
+        violations.append(
+            f"{filename}: {GPU_CAPABILITY_SENTINEL!r} in job `{job_id}` appears AFTER the suite "
+            f"invocation. An assertion downstream of the run it is meant to gate cannot stop that "
+            f"run from reporting success (CI-17, D-17-05)."
+        )
+    return violations
+
+
+def check_gpu_post_install_capability_assert(root: pathlib.Path) -> list[str]:
+    """A8 -- assert the GPU job checks its capability after its own install and before the suite.
+
+    On 2026-08-17 the ``Tests (pytest, GPU)`` context reported ``success`` having
+    executed nothing. The run log tells the whole story in four timestamps:
+    ``12:33:31`` the pre-flight health check passed against the container's
+    pristine numpy 2.0.2; ``12:33:47`` the job's own dependency install began
+    uninstalling that numpy; ``12:33:54`` it finished with numpy 2.3.5, which
+    ``numba`` refuses; ``12:33:57`` all three GPU tests skipped and pytest exited
+    0. ``tests/filters/test_gpu.py`` carries a module-level ``skipif`` on
+    ``is_gpu_available()``, so an inert GPU stack is indistinguishable from a
+    passing suite. The assertion was never missing -- it simply ran before the
+    step that invalidated it, and that ordering IS the defect (CI-17, D-17-05).
+
+    A8 therefore checks position, not merely presence: the sentinel must sit
+    after the LAST ``pip install`` and before the suite invocation, in the SAME
+    step body, so that it runs inside the same container as both.
+
+    **Vacuous where no GPU context is required, by design.** This file is kept
+    in near-symmetry with the sibling repository's copy (see the module-level
+    note on ``A7_PENDING_NARROWINGS``; byte-identity is D-04's rule for
+    ``ruleset_lib.py``, not for this file), and the sibling repository's
+    committed rulesets require no GPU context. A8 returns cleanly there rather
+    than demanding a job that repository has no reason to declare. The same
+    branch makes A8 inert under the audited ``main.no-gpu.json`` lab-outage
+    override, which is the only sanctioned escape D-17-04 recognises.
+
+    Parameters
+    ----------
+    root
+        Repository root to inspect.
+
+    Returns
+    -------
+    list of str
+        One entry per violation; empty when the context is not required, or when
+        the capability assertion is present, correctly ordered and un-neutered.
+    """
+    if GPU_CONTEXT not in committed_required_contexts(root):
+        return []
+
+    violations: list[str] = []
+    found = False
+    for path, document in load_workflows(root):
+        for job_id, job in _declared_jobs(document).items():
+            if _job_display_name(job_id, job) != GPU_CONTEXT:
+                continue
+            found = True
+            carrying = _gpu_capability_steps(job)
+            if not carrying:
+                violations.append(
+                    f"{path.name}: job `{job_id}` produces required context {GPU_CONTEXT!r} but no "
+                    f"step carries {GPU_CAPABILITY_SENTINEL!r}. Without it a dependency install that "
+                    f"breaks the GPU stack is followed by an all-skipped suite that exits 0, and the "
+                    f"required context reports success having run nothing (CI-17, D-17-05)."
+                )
+            elif len(carrying) > 1:
+                violations.append(
+                    f"{path.name}: job `{job_id}` carries {GPU_CAPABILITY_SENTINEL!r} in "
+                    f"{len(carrying)} steps. A8 decides ordering by character index within ONE body; "
+                    f"two copies make that index ambiguous. Keep exactly one, in the step that also "
+                    f"runs the install and the suite."
+                )
+            else:
+                violations.extend(_gpu_capability_step_violations(path.name, job_id, carrying[0]))
+
+    if not found:
+        violations.append(
+            f"No job under {WORKFLOWS_DIR} declares the name {GPU_CONTEXT!r}, yet it is a required "
+            f"status-check context — nothing produces it, so the gate can never be satisfied."
+        )
+    return violations
+
+
+def _string_values(node: Any) -> Iterator[str]:
+    """Yield every string leaf of a parsed YAML node, depth-first.
+
+    Used by A9 to scan the LOADED GPU job rather than the raw file, so that a
+    comment mentioning the digest is invisible by construction.
+    """
+    if isinstance(node, str):
+        yield node
+    elif isinstance(node, dict):
+        for value in node.values():
+            yield from _string_values(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from _string_values(value)
+
+
+def _gpu_constraints_violations(root: pathlib.Path) -> list[str]:
+    """A9's constraints half -- the file exists and yields at least one requirement."""
+    path = root / GPU_CONSTRAINTS_PATH
+    if not path.is_file():
+        return [
+            f"{GPU_CONSTRAINTS_PATH} is missing, yet the GPU job's install points at it with `-c`. "
+            f"pip fails on an unreadable constraints file, so this reddens the GPU context rather "
+            f"than silently widening the corridor -- but the corridor is then undefined, and the "
+            f"container's numpy is decided by whatever resolves (D-17-10)."
+        ]
+    requirements = [
+        line.strip() for line in path.read_text().splitlines() if line.strip() and not line.strip().startswith("#")
+    ]
+    if not requirements:
+        return [
+            f"{GPU_CONSTRAINTS_PATH} carries no requirement line -- only comments or blanks. A "
+            f"constraints file that constrains nothing is decoration: the container installs "
+            f"`.[dev]` and never `[cuda12]`, so nothing else in that resolve holds numpy inside "
+            f"the corridor (D-17-10, D-17-14)."
+        ]
+    return []
+
+
+def _gpu_digest_violations(root: pathlib.Path) -> list[str]:
+    """A9's digest half -- exactly one line, fully matching the pinned-reference pattern."""
+    path = root / GPU_DIGEST_PATH
+    if not path.is_file():
+        return [
+            f"{GPU_DIGEST_PATH} is missing, so the GPU job cannot resolve its image. The job fails "
+            f"closed on this rather than falling back to a moving tag, which means the required "
+            f"context goes red until the pin is restored (D-17-15, T-17-18)."
+        ]
+    lines = [line.strip() for line in path.read_text().splitlines() if line.strip()]
+    if len(lines) != 1:
+        return [
+            f"{GPU_DIGEST_PATH} holds {len(lines)} non-empty lines; it must hold exactly one. "
+            f"`gpu-image-refresh.yml` rewrites this file with `sed` and greps the written digest "
+            f"back out, and both assume a single-line artefact -- more than one line makes the "
+            f"rewrite ambiguous and the read non-deterministic."
+        ]
+    if not GPU_PINNED_REFERENCE_PATTERN.fullmatch(lines[0]):
+        return [
+            f"{GPU_DIGEST_PATH} does not hold a full-length pinned reference. Expected "
+            f"{GPU_IMAGE_REPOSITORY}@sha256: followed by 64 lowercase hex characters; found "
+            f"{lines[0]!r}. A tag-shaped or truncated value would let the image move under a "
+            f"required context -- the silent substitution D-17-15 keeps closed (T-17-19)."
+        ]
+    return []
+
+
+def _gpu_job_corridor_violations(filename: str, job_id: str, job: dict[str, Any]) -> list[str]:
+    """A9's job half -- the install consumes the constraints file and no digest is inlined."""
+    violations: list[str] = []
+    bodies = [
+        step["run"]
+        for step in job.get("steps", [])
+        if isinstance(step, dict) and isinstance(step.get("run"), str) and "pip install" in step["run"]
+    ]
+    if len(bodies) != 1:
+        violations.append(
+            f"{filename}: job `{job_id}` carries `pip install` in {len(bodies)} step bodies; A9 "
+            f"expects exactly one, the container invocation that also runs the suite. Two installs "
+            f"mean two resolves and only one of them is constrained."
+        )
+    elif not GPU_CONSTRAINTS_FLAG_PATTERN.search(bodies[0]):
+        violations.append(
+            f"{filename}: the container install in job `{job_id}` carries no `-c "
+            f"{GPU_CONSTRAINTS_PATH}`. That flag is the ONLY seam where the corridor is enforced: "
+            f"the install is `.[dev]`, never `[cuda12]`, so the GPU extras' ceiling and conda's "
+            f"numba both sit outside this resolve, and pip does not account for already-installed "
+            f"packages. Unconstrained, numpy walks past numba's wall and the suite skips behind a "
+            f"green required context (CI-17, D-17-10)."
+        )
+    inlined = sorted({value for value in _string_values(job) if GPU_CONCRETE_DIGEST_PATTERN.search(value)})
+    if inlined:
+        violations.append(
+            f"{filename}: job `{job_id}` inlines a concrete image digest in {len(inlined)} parsed "
+            f"value(s). The pin lives in {GPU_DIGEST_PATH} and nowhere else -- a second copy here "
+            f"is a second source of truth, and it is the copy `gpu-image-refresh.yml` cannot "
+            f"rewrite, because a GitHub App token cannot write under {WORKFLOWS_DIR} (D-17-15)."
+        )
+    return violations
+
+
+def check_gpu_corridor_artifacts(root: pathlib.Path) -> list[str]:
+    """A9 -- assert the GPU corridor's artefacts exist, are wired in, and are the only pin.
+
+    Three properties that are worthless apart. A constraints file nothing passes
+    to pip constrains nothing. A digest artefact the job does not read pins
+    nothing. And either of them is undone by a concrete digest left inline in the
+    job, which becomes a second source of truth in the one place the refresh
+    workflow's write-back cannot reach.
+
+    **Why the constraints file rather than an image pin.** Measured, not assumed:
+    the container installs ``.[dev]`` and never ``[cuda12]``, so conda's numba and
+    the GPU extras' ceiling are both outside pip's resolve, and pip says so
+    itself -- *"pip's dependency resolver does not currently take into account all
+    the packages that are installed."* On 2026-08-17 that let numpy walk to 2.3.5,
+    numba refused it, and the whole GPU suite skipped behind a green required
+    context (D-17-10; ``.planning/spikes/004-numpy-floor-vs-gpu-stack/README.md``).
+
+    **Why the digest sits outside the workflows directory.** GitHub refuses any
+    GitHub App push touching ``.github/workflows/**`` unless the App holds
+    ``workflows: write`` -- a permission with no key in a workflow's
+    ``permissions:`` block. Relocating the pin unblocks a write-back broken since
+    2026-07-01 with no new credential (D-17-15, remedy (b)).
+
+    **The digest scan reads the PARSED job, never the raw file.** Comments are
+    stripped by the parser, so the header bullet that documents the relocated pin
+    cannot fail the check it describes.
+
+    **Vacuous where no GPU context is required, by design** -- same branch as A8,
+    for the same reason: a copy of this file in the sibling repository would meet
+    no GPU stack there, so the assertion must be a no-op rather than a demand for
+    artefacts that repository has no reason to carry. (Byte-identity across the
+    two repositories is D-04's rule for ``ruleset_lib.py``; this file is
+    deliberately divergent -- see the note on ``A7_PENDING_NARROWINGS``.)
+
+    Parameters
+    ----------
+    root
+        Repository root to inspect.
+
+    Returns
+    -------
+    list of str
+        One entry per violation; empty when the context is not required, or when
+        the corridor is present, wired in and singly sourced.
+    """
+    if GPU_CONTEXT not in committed_required_contexts(root):
+        return []
+
+    violations: list[str] = [*_gpu_constraints_violations(root), *_gpu_digest_violations(root)]
+    found = False
+    for path, document in load_workflows(root):
+        for job_id, job in _declared_jobs(document).items():
+            if _job_display_name(job_id, job) != GPU_CONTEXT:
+                continue
+            found = True
+            violations.extend(_gpu_job_corridor_violations(path.name, job_id, job))
+
+    if not found:
+        violations.append(
+            f"No job under {WORKFLOWS_DIR} declares the name {GPU_CONTEXT!r}, yet it is a required "
+            f"status-check context — nothing produces it, so the corridor this assertion checks has "
+            f"no job to be wired into."
+        )
+    return violations
+
+
+def _shell_quote_scan(body: str) -> tuple[dict[int, int], list[bool], int | None]:
+    """Walk a shell script once, tracking quoting and comment state.
+
+    A hand-written state machine rather than :mod:`shlex`, and the reason is
+    stated so it is not "improved" later: ``shlex.split`` raises a single
+    ``ValueError`` on an unbalanced quote and reports no position, and it
+    tokenises the whole body -- which for a real ``run:`` script means pipelines,
+    ``$(...)`` and here-documents it has no model for. A10 needs one specific
+    thing instead: WHERE each top-level quote opens and closes, so it can ask
+    what follows the one that carries a ``bash -c`` payload.
+
+    Parameters
+    ----------
+    body
+        The step's ``run:`` script, taken from the PARSED workflow document.
+
+    Returns
+    -------
+    tuple
+        ``(spans, masked, unterminated_at)``. ``spans`` maps the index of each
+        quote that OPENS at the unquoted top level to the index of its matching
+        closing quote. ``masked[i]`` is True where index ``i`` lies inside a
+        quoted region or a comment, so a caller can reject a match that is not
+        really an invocation. ``unterminated_at`` is the index of an opening
+        quote that is never closed, or None; the walk stops there, so ``masked``
+        beyond that index is not meaningful -- which is why an unterminated quote
+        is itself reported as a violation rather than passed over.
+    """
+    spans: dict[int, int] = {}
+    masked = [False] * len(body)
+    index, end = 0, len(body)
+    while index < end:
+        char = body[index]
+        if char == "\\":
+            index += 2
+            continue
+        if char == "#" and (index == 0 or body[index - 1] in " \t\n;|&()"):
+            stop = body.find("\n", index)
+            stop = end if stop == -1 else stop
+            for position in range(index, stop):
+                masked[position] = True
+            index = stop
+            continue
+        if char in "'\"":
+            close = _matching_quote(body, index)
+            if close is None:
+                return spans, masked, index
+            spans[index] = close
+            for position in range(index, close + 1):
+                masked[position] = True
+            index = close + 1
+            continue
+        index += 1
+    return spans, masked, None
+
+
+def _matching_quote(body: str, opening: int) -> int | None:
+    r"""Return the index closing the quote opened at ``opening``, or None if unterminated.
+
+    Single quotes take the next ``'`` with no escape processing -- POSIX is
+    explicit that a backslash is literal inside them, and that is exactly why a
+    stray apostrophe in prose cannot be "escaped away" and closes the argument.
+    Double quotes honour a backslash before ``$``, a backtick, ``"``, ``\\`` or a
+    newline.
+
+    Parameters
+    ----------
+    body
+        The step's ``run:`` script.
+    opening
+        Index of the opening quote character.
+
+    Returns
+    -------
+    int or None
+        Index of the matching closing quote, or None when there is none.
+    """
+    quote = body[opening]
+    if quote == "'":
+        close = body.find("'", opening + 1)
+        return None if close == -1 else close
+    index, end = opening + 1, len(body)
+    while index < end:
+        if body[index] == "\\" and index + 1 < end and body[index + 1] in '$`"\\\n':
+            index += 2
+            continue
+        if body[index] == '"':
+            return index
+        index += 1
+    return None
+
+
+def _bash_dash_c_violations(filename: str, job_id: str, step_name: str, body: str) -> list[str]:
+    """Check every top-level ``bash -c`` invocation in one step body. A10's core.
+
+    Parameters
+    ----------
+    filename
+        Workflow filename, for the message.
+    job_id
+        Job identifier, for the message.
+    step_name
+        Step name (or its id, or a positional label), for the message.
+    body
+        The step's ``run:`` script.
+
+    Returns
+    -------
+    list of str
+        One entry per violation; empty when every invocation round-trips.
+    """
+    where = f"{filename}: step {step_name!r} in job `{job_id}`"
+    if not BASH_DASH_C_PATTERN.search(body):
+        return []
+
+    spans, masked, unterminated_at = _shell_quote_scan(body)
+    violations: list[str] = []
+    if unterminated_at is not None:
+        violations.append(
+            f"{where} carries a `bash -c` payload AND an unterminated {body[unterminated_at]!r} quote "
+            f"opened at character {unterminated_at}, line "
+            f"{body.count(chr(10), 0, unterminated_at) + 1} of the step body. "
+            f"A10 cannot verify the payload reaches the shell as one argument, and a check that cannot "
+            f"verify must not answer `safe` (WINDOWS 30)."
+        )
+
+    for match in BASH_DASH_C_PATTERN.finditer(body):
+        if "c" not in match.group("opts"):
+            continue
+        word_at = match.start() + len(match.group("lead"))
+        if word_at < len(masked) and masked[word_at]:
+            continue  # quoted or commented mention, not an invocation
+        violations.extend(_one_invocation_violations(where, body, spans, match.end()))
+    return violations
+
+
+def _one_invocation_violations(where: str, body: str, spans: dict[int, int], script_at: int) -> list[str]:
+    """Check the single script argument of one ``bash -c`` invocation.
+
+    Parameters
+    ----------
+    where
+        Pre-rendered "file: step in job" prefix for the message.
+    body
+        The step's ``run:`` script.
+    spans
+        Top-level quote spans from :func:`_shell_quote_scan`.
+    script_at
+        Index at which the script argument is expected to begin.
+
+    Returns
+    -------
+    list of str
+        One entry per violation for this invocation.
+    """
+    line = body.count("\n", 0, min(script_at, len(body))) + 1
+    if script_at >= len(body) or body[script_at] not in "'\"":
+        found = body[script_at : script_at + 24] if script_at < len(body) else "<end of body>"
+        return [
+            f"{where} invokes `bash -c` at line {line} of the step body with a script argument that is "
+            f"not a literal quoted string; it reads {found!r}. A10 verifies quoting by round-trip, so it cannot "
+            f"verify this shape -- and an unverifiable invocation is a violation, not a skip. Write the "
+            f"payload as one quoted argument, or move it to a script file and call that file instead."
+        ]
+    close = spans.get(script_at)
+    if close is None:
+        return [
+            f"{where} invokes `bash -c` at line {line} of the step body with a {body[script_at]!r}-quoted "
+            f"script that is never closed, so the payload does not round-trip its own quoting (WINDOWS 30)."
+        ]
+
+    index = close + 1
+    while index < len(body) and (body[index] in " \t" or body[index : index + 2] == "\\\n"):
+        index += 2 if body[index] == "\\" else 1
+    if index >= len(body) or body[index] in A10_LEGAL_AFTER_SCRIPT:
+        return []
+
+    leaked = body[index:].split("\n", 1)[0]
+    broke_at = body.count("\n", 0, close) + 1
+    return [
+        f"{where} breaks out of its own `bash -c` quoting: the {body[script_at]!r} opened at line "
+        f"{line} of the step body is closed by a {body[script_at]!r} at line {broke_at} of that body, "
+        f"and the bare word(s) "
+        f"{leaked.strip()!r} then follow the script argument. Everything after that quote is handed "
+        f"to the OUTER shell -- on this repository that means it runs on the RUNNER HOST instead of "
+        f"inside the container, behind a required status check a satisfying host would report green. "
+        f"An apostrophe in prose is enough; that is exactly how WINDOWS 30 happened (commit 5c4ab66, "
+        f"run 32705493768). Remove the apostrophe, or restructure the payload."
+    ]
+
+
+def check_bash_dash_c_quoting(root: pathlib.Path) -> list[str]:
+    """A10 -- assert every ``bash -c`` payload reaches the shell as exactly one argument.
+
+    On 2026-08-21 commit ``5c4ab66`` added comment prose to ``gpu.yml``'s
+    container payload. One apostrophe -- ``container's`` -- closed the single
+    quote that payload lives in. ``podman`` then received twenty-three arguments
+    instead of sixteen, the container got four lines and exited 0, and the
+    dependency install, the CI-17 capability assert and the entire GPU suite ran
+    on the RUNNER HOST. On that Debian host they failed loudly; on a host whose
+    environment happened to satisfy the imports the same break-out yields a green
+    ``Tests (pytest, GPU)`` required context for a suite that never entered the
+    container. A10 makes the CLASS a build failure rather than the instance
+    (WINDOWS 30).
+
+    **Parsed structure, never a raw-text grep.** The bodies come from the loaded
+    workflow documents, and the quoting is decided by a shell-quoting walk
+    (:func:`_shell_quote_scan`), so a ``bash -lc`` mentioned inside a comment or
+    inside another quoted string is not mistaken for an invocation. This phase
+    has been bitten repeatedly by text searches -- including one where a search
+    for a removed thing matched the prose documenting its removal.
+
+    **Deliberately NOT gated on the GPU context.** A8 and A9 return early where no
+    committed ruleset requires ``Tests (pytest, GPU)``, because the corridor they
+    describe is this repository's. A10's class is generic: any workflow, any job,
+    any step. Gating it on the GPU context would make it vacuous everywhere it is
+    not already unnecessary, which is the opposite of the point.
+
+    **What it deliberately refuses, with the reason.** ``bash -c script name
+    args...`` -- the POSIX form where words after the script become ``$0``,
+    ``$1``... -- is indistinguishable by inspection from a quote break-out, and no
+    workflow in either repository uses it. A10 rejects it. The remedy if one is
+    ever wanted is a script file, which A10 does not inspect at all because a file
+    has no quoting to break.
+
+    Parameters
+    ----------
+    root
+        Repository root to inspect.
+
+    Returns
+    -------
+    list of str
+        One entry per violation; empty when every payload round-trips.
+    """
+    violations: list[str] = []
+    for path, document in load_workflows(root):
+        for job_id, job in _declared_jobs(document).items():
+            steps = job.get("steps")
+            if not isinstance(steps, list):
+                continue
+            for position, step in enumerate(steps):
+                if not isinstance(step, dict) or not isinstance(step.get("run"), str):
+                    continue
+                label = step.get("name") or step.get("id") or f"<step {position}>"
+                violations.extend(_bash_dash_c_violations(path.name, job_id, str(label), step["run"]))
+    return violations
+
+
 def _write_scopes(permissions: Any) -> list[str] | None:
     """Return the permission keys granted at write, or None when no block is declared."""
     if permissions is None:
@@ -697,6 +1355,9 @@ def run_all(
         *check_job_level_conditions(root),
         *check_conditional_dependencies(root),
         *check_lint_least_privilege(root, pending),
+        *check_gpu_post_install_capability_assert(root),
+        *check_gpu_corridor_artifacts(root),
+        *check_bash_dash_c_quoting(root),
     ]
     return violations, len(load_workflows(root))
 
@@ -720,4 +1381,4 @@ if __name__ == "__main__":
         for finding in findings:
             print(f"::error::{finding}")
         sys.exit(1)
-    print(f"check_ci_config: OK — assertions A1 through A7 clean across {inspected_count} workflow(s)")
+    print(f"check_ci_config: OK — assertions A1 through A10 clean across {inspected_count} workflow(s)")
