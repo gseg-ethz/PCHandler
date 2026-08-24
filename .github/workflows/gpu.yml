@@ -203,6 +203,14 @@ jobs:
             "$GPU_IMAGE" \
             bash -lc '
               set -euo pipefail
+              # QUOTING CONTRACT, and it is load-bearing. This whole body is ONE
+              # single-quoted argument to podman. A single apostrophe ANYWHERE in it,
+              # prose included, closes that quote, and every line after it runs on the
+              # RUNNER HOST outside the container -- behind a required context that a
+              # satisfying host would report green. That happened once: WINDOWS 30,
+              # introduced 2026-08-21 by 5c4ab66, carried by run 32705493768 alone.
+              # Assertion A10 in .github/scripts/check_ci_config.py now fails the build
+              # on the whole class. Keep this note apostrophe-free too.
               CON_DRV=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1 | tr -d "[:space:]")
               echo "container driver: $CON_DRV"
               if [ "$CON_DRV" != "$HOST_DRV" ]; then
@@ -237,14 +245,22 @@ jobs:
             "$GPU_IMAGE" \
             bash -lc '
               set -euo pipefail
+              # QUOTING CONTRACT, and it is load-bearing. This whole body is ONE
+              # single-quoted argument to podman. A single apostrophe ANYWHERE in it,
+              # prose included, closes that quote, and every line after it runs on the
+              # RUNNER HOST outside the container -- behind a required context that a
+              # satisfying host would report green. That happened once: WINDOWS 30,
+              # introduced 2026-08-21 by 5c4ab66, carried by run 32705493768 alone.
+              # Assertion A10 in .github/scripts/check_ci_config.py now fails the build
+              # on the whole class. Keep this note apostrophe-free too.
               git config --global --add safe.directory /work
               nvidia-smi
-              # The container's numpy is held inside the corridor by
+              # The container numpy is held inside the corridor by
               # .github/constraints/gpu.txt -- a versioned, diffable, assertable file
               # rather than an inline pin (D-17-10, D-17-14). This is the ONLY seam
               # where it is decided: the install just below is `.[dev]`, so neither the
-              # GPU extras' ceiling nor conda's numba constrains this resolve, and pip
-              # does not take already-installed packages into account. Assertion A9 in
+              # ceiling of the GPU extras nor the conda numba constrains this resolve, and
+              # pip does not take already-installed packages into account. Assertion A9 in
               # .github/scripts/check_ci_config.py fails the build if the `-c` is
               # dropped or the constraints file goes missing.
               pip install -c .github/constraints/gpu.txt -e .[dev]

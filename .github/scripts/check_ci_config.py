@@ -8,7 +8,7 @@ Invoked from the Lint (pre-commit) CI job as ``python
 violation, emits each as a GitHub ``::error::`` annotation and exits 1 once;
 exits 0 and prints one trailing OK line when the tree is clean.
 
-Nine assertions, each named by the identifier later plans and the adversarial
+Ten assertions, each named by the identifier later plans and the adversarial
 suite refer to:
 
   A1  No filter key under a pull-request-side trigger on a workflow producing a
@@ -33,6 +33,10 @@ suite refer to:
       at the constraints file, that file yields a requirement, the digest
       artefact holds exactly one full-length pinned reference, and no concrete
       digest is inlined back into the GPU job.
+  A10 Every ``bash -c`` / ``bash -lc`` invocation in every step body hands its
+      script to the shell as exactly ONE argument: the quoting round-trips, and
+      no bare word follows the closing quote. A body that breaks out of its own
+      quotes runs on the runner host instead of inside the container.
 
 **Why A1 inspects the pull-request-side events and NOT push.** A required status
 check comes from the event that produced it. A workflow skipped by a filter never
@@ -247,8 +251,31 @@ GPU_CONSTRAINTS_FLAG_PATTERN = re.compile(r"-c\s+" + re.escape(GPU_CONSTRAINTS_P
 # wave ahead of it (Phase 13 plan 13-03); it was deleted by plan 13-07 once BOTH
 # repos' lint jobs were narrowed (GSEGUtils by 13-04, pchandler by 13-07), in one
 # paired change. Adding an entry is likewise a paired cross-repo change: this
-# file is byte-identical across both repos by design (D-04).
+# file is kept in deliberate near-symmetry with the sibling repository's copy.
+# NOT byte-identity, and NOT D-04: D-04 (Phase 13 CONTEXT) scopes byte-identity
+# to `.github/scripts/ruleset_lib.py`, which IS identical in both repos. This
+# file has been legitimately divergent since Phase 17 plan 17-02 -- the sibling
+# carries A1 through A7, this copy carries A1 through A10, because A8 and A9
+# describe a GPU corridor the sibling has no reason to own. The earlier "(D-04)"
+# wording overstated a decision nobody made; corrected 2026-08-24 (17-07).
 A7_PENDING_NARROWINGS: dict[str, str] = {}
+
+# A10's subject. `bash -lc '<body>'` inside a `run:` step is how this repository
+# launches a container payload (`podman run ... "$GPU_IMAGE" bash -lc '...'`),
+# and the body is a SINGLE quoted argument. The pattern deliberately captures the
+# option cluster so a `-c`-less invocation -- `bash -l /work/script.sh`, which is
+# a file, not a quoted string -- is not treated as one of these.
+#
+# `lead` is consumed rather than looked behind, because Python requires
+# fixed-width lookbehind and the alternatives here are not the same width; the
+# caller adds `len(lead)` to recover the offset of the `bash` word itself.
+BASH_DASH_C_PATTERN = re.compile(r"(?P<lead>^|[\s;|&(])(?:[\w./-]*/)?bash(?P<opts>(?:[ \t]+-[A-Za-z]+)+)\s+")
+
+# What may legally follow the closing quote of a `bash -c` script argument: a
+# command terminator, a redirection, a pipeline or list operator, a closing
+# bracket, or a comment. Anything else is a WORD, and a word after the script is
+# the signature of a quote that closed earlier than its author intended.
+A10_LEGAL_AFTER_SCRIPT: frozenset[str] = frozenset("\n;|&<>)}#")
 
 
 def load_workflows(root: pathlib.Path) -> list[tuple[pathlib.Path, dict[str, Any]]]:
@@ -816,8 +843,10 @@ def check_gpu_post_install_capability_assert(root: pathlib.Path) -> list[str]:
     after the LAST ``pip install`` and before the suite invocation, in the SAME
     step body, so that it runs inside the same container as both.
 
-    **Vacuous where no GPU context is required, by design.** This file is
-    byte-identical across both repositories (D-04), and the sibling repository's
+    **Vacuous where no GPU context is required, by design.** This file is kept
+    in near-symmetry with the sibling repository's copy (see the module-level
+    note on ``A7_PENDING_NARROWINGS``; byte-identity is D-04's rule for
+    ``ruleset_lib.py``, not for this file), and the sibling repository's
     committed rulesets require no GPU context. A8 returns cleanly there rather
     than demanding a job that repository has no reason to declare. The same
     branch makes A8 inert under the audited ``main.no-gpu.json`` lab-outage
@@ -998,9 +1027,11 @@ def check_gpu_corridor_artifacts(root: pathlib.Path) -> list[str]:
     cannot fail the check it describes.
 
     **Vacuous where no GPU context is required, by design** -- same branch as A8,
-    for the same reason: this file is byte-identical across both repositories
-    (D-04) and the sibling has no GPU stack, so a copy there is a no-op rather
-    than a demand for artefacts it has no reason to carry.
+    for the same reason: a copy of this file in the sibling repository would meet
+    no GPU stack there, so the assertion must be a no-op rather than a demand for
+    artefacts that repository has no reason to carry. (Byte-identity across the
+    two repositories is D-04's rule for ``ruleset_lib.py``; this file is
+    deliberately divergent -- see the note on ``A7_PENDING_NARROWINGS``.)
 
     Parameters
     ----------
@@ -1031,6 +1062,255 @@ def check_gpu_corridor_artifacts(root: pathlib.Path) -> list[str]:
             f"status-check context — nothing produces it, so the corridor this assertion checks has "
             f"no job to be wired into."
         )
+    return violations
+
+
+def _shell_quote_scan(body: str) -> tuple[dict[int, int], list[bool], int | None]:
+    """Walk a shell script once, tracking quoting and comment state.
+
+    A hand-written state machine rather than :mod:`shlex`, and the reason is
+    stated so it is not "improved" later: ``shlex.split`` raises a single
+    ``ValueError`` on an unbalanced quote and reports no position, and it
+    tokenises the whole body -- which for a real ``run:`` script means pipelines,
+    ``$(...)`` and here-documents it has no model for. A10 needs one specific
+    thing instead: WHERE each top-level quote opens and closes, so it can ask
+    what follows the one that carries a ``bash -c`` payload.
+
+    Parameters
+    ----------
+    body
+        The step's ``run:`` script, taken from the PARSED workflow document.
+
+    Returns
+    -------
+    tuple
+        ``(spans, masked, unterminated_at)``. ``spans`` maps the index of each
+        quote that OPENS at the unquoted top level to the index of its matching
+        closing quote. ``masked[i]`` is True where index ``i`` lies inside a
+        quoted region or a comment, so a caller can reject a match that is not
+        really an invocation. ``unterminated_at`` is the index of an opening
+        quote that is never closed, or None; the walk stops there, so ``masked``
+        beyond that index is not meaningful -- which is why an unterminated quote
+        is itself reported as a violation rather than passed over.
+    """
+    spans: dict[int, int] = {}
+    masked = [False] * len(body)
+    index, end = 0, len(body)
+    while index < end:
+        char = body[index]
+        if char == "\\":
+            index += 2
+            continue
+        if char == "#" and (index == 0 or body[index - 1] in " \t\n;|&()"):
+            stop = body.find("\n", index)
+            stop = end if stop == -1 else stop
+            for position in range(index, stop):
+                masked[position] = True
+            index = stop
+            continue
+        if char in "'\"":
+            close = _matching_quote(body, index)
+            if close is None:
+                return spans, masked, index
+            spans[index] = close
+            for position in range(index, close + 1):
+                masked[position] = True
+            index = close + 1
+            continue
+        index += 1
+    return spans, masked, None
+
+
+def _matching_quote(body: str, opening: int) -> int | None:
+    r"""Return the index closing the quote opened at ``opening``, or None if unterminated.
+
+    Single quotes take the next ``'`` with no escape processing -- POSIX is
+    explicit that a backslash is literal inside them, and that is exactly why a
+    stray apostrophe in prose cannot be "escaped away" and closes the argument.
+    Double quotes honour a backslash before ``$``, a backtick, ``"``, ``\\`` or a
+    newline.
+
+    Parameters
+    ----------
+    body
+        The step's ``run:`` script.
+    opening
+        Index of the opening quote character.
+
+    Returns
+    -------
+    int or None
+        Index of the matching closing quote, or None when there is none.
+    """
+    quote = body[opening]
+    if quote == "'":
+        close = body.find("'", opening + 1)
+        return None if close == -1 else close
+    index, end = opening + 1, len(body)
+    while index < end:
+        if body[index] == "\\" and index + 1 < end and body[index + 1] in '$`"\\\n':
+            index += 2
+            continue
+        if body[index] == '"':
+            return index
+        index += 1
+    return None
+
+
+def _bash_dash_c_violations(filename: str, job_id: str, step_name: str, body: str) -> list[str]:
+    """Check every top-level ``bash -c`` invocation in one step body. A10's core.
+
+    Parameters
+    ----------
+    filename
+        Workflow filename, for the message.
+    job_id
+        Job identifier, for the message.
+    step_name
+        Step name (or its id, or a positional label), for the message.
+    body
+        The step's ``run:`` script.
+
+    Returns
+    -------
+    list of str
+        One entry per violation; empty when every invocation round-trips.
+    """
+    where = f"{filename}: step {step_name!r} in job `{job_id}`"
+    if not BASH_DASH_C_PATTERN.search(body):
+        return []
+
+    spans, masked, unterminated_at = _shell_quote_scan(body)
+    violations: list[str] = []
+    if unterminated_at is not None:
+        violations.append(
+            f"{where} carries a `bash -c` payload AND an unterminated {body[unterminated_at]!r} quote "
+            f"opened at character {unterminated_at}, line "
+            f"{body.count(chr(10), 0, unterminated_at) + 1} of the step body. "
+            f"A10 cannot verify the payload reaches the shell as one argument, and a check that cannot "
+            f"verify must not answer `safe` (WINDOWS 30)."
+        )
+
+    for match in BASH_DASH_C_PATTERN.finditer(body):
+        if "c" not in match.group("opts"):
+            continue
+        word_at = match.start() + len(match.group("lead"))
+        if word_at < len(masked) and masked[word_at]:
+            continue  # quoted or commented mention, not an invocation
+        violations.extend(_one_invocation_violations(where, body, spans, match.end()))
+    return violations
+
+
+def _one_invocation_violations(where: str, body: str, spans: dict[int, int], script_at: int) -> list[str]:
+    """Check the single script argument of one ``bash -c`` invocation.
+
+    Parameters
+    ----------
+    where
+        Pre-rendered "file: step in job" prefix for the message.
+    body
+        The step's ``run:`` script.
+    spans
+        Top-level quote spans from :func:`_shell_quote_scan`.
+    script_at
+        Index at which the script argument is expected to begin.
+
+    Returns
+    -------
+    list of str
+        One entry per violation for this invocation.
+    """
+    line = body.count("\n", 0, min(script_at, len(body))) + 1
+    if script_at >= len(body) or body[script_at] not in "'\"":
+        found = body[script_at : script_at + 24] if script_at < len(body) else "<end of body>"
+        return [
+            f"{where} invokes `bash -c` at line {line} of the step body with a script argument that is "
+            f"not a literal quoted string; it reads {found!r}. A10 verifies quoting by round-trip, so it cannot "
+            f"verify this shape -- and an unverifiable invocation is a violation, not a skip. Write the "
+            f"payload as one quoted argument, or move it to a script file and call that file instead."
+        ]
+    close = spans.get(script_at)
+    if close is None:
+        return [
+            f"{where} invokes `bash -c` at line {line} of the step body with a {body[script_at]!r}-quoted "
+            f"script that is never closed, so the payload does not round-trip its own quoting (WINDOWS 30)."
+        ]
+
+    index = close + 1
+    while index < len(body) and (body[index] in " \t" or body[index : index + 2] == "\\\n"):
+        index += 2 if body[index] == "\\" else 1
+    if index >= len(body) or body[index] in A10_LEGAL_AFTER_SCRIPT:
+        return []
+
+    leaked = body[index:].split("\n", 1)[0]
+    broke_at = body.count("\n", 0, close) + 1
+    return [
+        f"{where} breaks out of its own `bash -c` quoting: the {body[script_at]!r} opened at line "
+        f"{line} of the step body is closed by a {body[script_at]!r} at line {broke_at} of that body, "
+        f"and the bare word(s) "
+        f"{leaked.strip()!r} then follow the script argument. Everything after that quote is handed "
+        f"to the OUTER shell -- on this repository that means it runs on the RUNNER HOST instead of "
+        f"inside the container, behind a required status check a satisfying host would report green. "
+        f"An apostrophe in prose is enough; that is exactly how WINDOWS 30 happened (commit 5c4ab66, "
+        f"run 32705493768). Remove the apostrophe, or restructure the payload."
+    ]
+
+
+def check_bash_dash_c_quoting(root: pathlib.Path) -> list[str]:
+    """A10 -- assert every ``bash -c`` payload reaches the shell as exactly one argument.
+
+    On 2026-08-21 commit ``5c4ab66`` added comment prose to ``gpu.yml``'s
+    container payload. One apostrophe -- ``container's`` -- closed the single
+    quote that payload lives in. ``podman`` then received twenty-three arguments
+    instead of sixteen, the container got four lines and exited 0, and the
+    dependency install, the CI-17 capability assert and the entire GPU suite ran
+    on the RUNNER HOST. On that Debian host they failed loudly; on a host whose
+    environment happened to satisfy the imports the same break-out yields a green
+    ``Tests (pytest, GPU)`` required context for a suite that never entered the
+    container. A10 makes the CLASS a build failure rather than the instance
+    (WINDOWS 30).
+
+    **Parsed structure, never a raw-text grep.** The bodies come from the loaded
+    workflow documents, and the quoting is decided by a shell-quoting walk
+    (:func:`_shell_quote_scan`), so a ``bash -lc`` mentioned inside a comment or
+    inside another quoted string is not mistaken for an invocation. This phase
+    has been bitten repeatedly by text searches -- including one where a search
+    for a removed thing matched the prose documenting its removal.
+
+    **Deliberately NOT gated on the GPU context.** A8 and A9 return early where no
+    committed ruleset requires ``Tests (pytest, GPU)``, because the corridor they
+    describe is this repository's. A10's class is generic: any workflow, any job,
+    any step. Gating it on the GPU context would make it vacuous everywhere it is
+    not already unnecessary, which is the opposite of the point.
+
+    **What it deliberately refuses, with the reason.** ``bash -c script name
+    args...`` -- the POSIX form where words after the script become ``$0``,
+    ``$1``... -- is indistinguishable by inspection from a quote break-out, and no
+    workflow in either repository uses it. A10 rejects it. The remedy if one is
+    ever wanted is a script file, which A10 does not inspect at all because a file
+    has no quoting to break.
+
+    Parameters
+    ----------
+    root
+        Repository root to inspect.
+
+    Returns
+    -------
+    list of str
+        One entry per violation; empty when every payload round-trips.
+    """
+    violations: list[str] = []
+    for path, document in load_workflows(root):
+        for job_id, job in _declared_jobs(document).items():
+            steps = job.get("steps")
+            if not isinstance(steps, list):
+                continue
+            for position, step in enumerate(steps):
+                if not isinstance(step, dict) or not isinstance(step.get("run"), str):
+                    continue
+                label = step.get("name") or step.get("id") or f"<step {position}>"
+                violations.extend(_bash_dash_c_violations(path.name, job_id, str(label), step["run"]))
     return violations
 
 
@@ -1077,6 +1357,7 @@ def run_all(
         *check_lint_least_privilege(root, pending),
         *check_gpu_post_install_capability_assert(root),
         *check_gpu_corridor_artifacts(root),
+        *check_bash_dash_c_quoting(root),
     ]
     return violations, len(load_workflows(root))
 
@@ -1100,4 +1381,4 @@ if __name__ == "__main__":
         for finding in findings:
             print(f"::error::{finding}")
         sys.exit(1)
-    print(f"check_ci_config: OK — assertions A1 through A9 clean across {inspected_count} workflow(s)")
+    print(f"check_ci_config: OK — assertions A1 through A10 clean across {inspected_count} workflow(s)")
