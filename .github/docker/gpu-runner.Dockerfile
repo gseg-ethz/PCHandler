@@ -146,6 +146,73 @@ ENV PATH=/opt/conda/bin:${PATH}
 RUN conda install -y -c rapidsai -c conda-forge -c nvidia "python=3.12" "cuda-version>=12.0,<=12.8" "cudf>=25.4.0,<25.5.0a0" "cuspatial>=25.4.0,<25.5.0a0" "geopandas" "pip" "numba=0.61.2" "cupy>=13.5,<14" \
     && conda clean -afy
 
+# ---------------------------------------------------------------------------------------------
+# 17-07 AMENDMENT (2026-08-24) — THE INSTALL SEAM. Two coupled defects, both MEASURED on the very
+# first lab dispatch of this image: run 32705493768, job 97365584143, on gseg-pc105.
+#
+# WHAT HAPPENED. "Pre-flight GPU health check" PASSED on this image. cudf, cuspatial and geopandas
+# imported, a real numba kernel ran on the RTX 3090 Ti, and "cuspatial smoke OK" printed at
+# 09:17:04. Half a second later the next step died BEFORE pytest ever started:
+#
+#     error: externally-managed-environment
+#     x This environment is externally managed
+#     |-> To install Python packages system-wide, try apt install python3-xyz ...
+#         See /usr/share/doc/python3.13/README.venv for more information.
+#
+# READ THE LAST LINE BEFORE CONCLUDING ANYTHING. It names python3.13, and the whole message is
+# Debian/Ubuntu PEP 668 text. THIS environment is conda python 3.12 — the same log shows
+# /opt/conda/lib/python3.12/site-packages/numba_cuda/... one second earlier. So the pip that ran
+# was NOT this environment pip. It was the DISTRO pip, backed by the system interpreter, which
+# has no cudf, no cuspatial and no geopandas in it and never will.
+#
+# WHY, mechanically. gpu.yml runs its container body as `podman run --user 0 ... bash -lc`, i.e.
+# a ROOT LOGIN SHELL. Debian /etc/profile ASSIGNS PATH outright for uid 0 —
+# PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" — discarding the
+# ENV PATH=/opt/conda/bin:... this Dockerfile sets. `python` still resolved to conda ONLY because
+# Ubuntu ships no /usr/bin/python for it to shadow; /usr/bin/pip DOES exist, so `pip` and
+# `python` came from two different interpreters. The metapackage base masked this; the slim base
+# does not. It is an unforeseen consequence of the 2026-08-24 base VARIANT change, not of the
+# corridor.
+#
+# THE FIX IS AT THE SOURCE, and both halves are needed. (a) A login shell must resolve BOTH `pip`
+# and `python` to this environment. (b) If this environment carries a PEP 668 marker, the marker
+# is wrong for the image role — a CI runner image exists to have the project under test installed
+# into it — so it is cleared. Maintainer decision, 2026-08-24.
+#
+# `--break-system-packages` in gpu.yml was CONSIDERED AND REJECTED. It would have silenced the
+# marker while leaving the install pointed at the wrong interpreter — turning a loud failure into
+# a silent one, and carrying the workaround in CI config instead of fixing the image.
+#
+# THE DISTRO PYTHON KEEPS ITS OWN MARKER, DELIBERATELY. Nothing should ever be installed there,
+# and leaving it in place is what makes the login-shell assertion below load-bearing rather than
+# decorative: if PATH ever regresses, pip hits that marker again and the BUILD dies here, on a
+# GPU-less hosted runner, instead of on the lab host after a human approval click.
+# ---------------------------------------------------------------------------------------------
+
+# (a) PATH. Sorted last in /etc/profile.d so it is the final word on PATH in any login shell,
+# whatever the base image own conda hooks do before it.
+RUN set -eu; \
+    printf '%s\n' \
+      '# Phase 17 / plan 17-07, 2026-08-24. Debian /etc/profile ASSIGNS PATH for uid 0, which' \
+      '# discards the ENV PATH this image sets. gpu.yml runs its container body under bash -lc' \
+      '# as root, so without this file `pip` resolves to the DISTRO pip (system python3.13)' \
+      '# while `python` resolves to conda python 3.12 — two different interpreters. Measured in' \
+      '# run 32705493768. Do not remove without reading the block above it in the Dockerfile.' \
+      'export PATH="/opt/conda/bin:$PATH"' \
+      > /etc/profile.d/zzz-conda-first.sh; \
+    chmod 0644 /etc/profile.d/zzz-conda-first.sh; \
+    cat /etc/profile.d/zzz-conda-first.sh
+
+# (b) PEP 668. Sweep the CONDA PREFIX ONLY. The diagnostic listing is printed first and covers the
+# whole filesystem, so the log records what was there whether or not anything was removed — a
+# silent no-op and a clean environment must not look identical.
+RUN set -eu; \
+    echo "PEP 668 markers present anywhere in the image BEFORE the sweep:"; \
+    find / -xdev -name EXTERNALLY-MANAGED -type f -print 2>/dev/null || true; \
+    echo "PEP 668 markers removed from the conda prefix:"; \
+    find /opt/conda -name EXTERNALLY-MANAGED -type f -print -delete; \
+    echo "PEP 668 sweep complete (conda prefix only; the distro python keeps its marker by design)"
+
 # BUILD-TIME ASSERTION THAT THE PIN TOOK (threat T-17-24). Read the resolved versions from
 # conda's OWN metadata, NOT by importing the packages: this image is built on a GPU-less
 # `ubuntu-latest` runner, where importing a CUDA library fails for an entirely different reason
@@ -161,7 +228,7 @@ RUN conda install -y -c rapidsai -c conda-forge -c nvidia "python=3.12" "cuda-ve
 # if the slim premise is wrong and a capping branch reappears, this build dies here rather than
 # shipping an image that quietly resolved numba somewhere else.
 RUN conda list --json > /tmp/conda-pins.json \
-    && python -c 'import json, re; \
+    && python -c 'import json, pathlib, re, sysconfig; \
 pkgs = {p["name"]: p["version"] for p in json.load(open("/tmp/conda-pins.json"))}; \
 mm = lambda n: tuple(int(x) for x in re.findall(r"[0-9]+", pkgs.get(n) or "")[:2]); \
 assert mm("python") == (3, 12), "PIN CHECK FAILED: python resolved to %r, expected 3.12.x — the slim base carries no python pin of its own, so an unpinned solve can move the interpreter" % (pkgs.get("python"),); \
@@ -175,11 +242,69 @@ assert mm("cuspatial") == (25, 4), "PIN CHECK FAILED: cuspatial resolved to %r, 
 assert mm("numba-cuda") == (0, 4), "PIN CHECK FAILED: numba-cuda resolved to %r, expected 0.4.x — R3 saw it fall to 0.0.17.1 as the visible edge of a silent 25.04 -> 24.12 re-base" % (pkgs.get("numba-cuda"),); \
 assert "geopandas" in pkgs, "PIN CHECK FAILED: geopandas absent — pchandler.filters.gpu imports it"; \
 assert "pip" in pkgs, "PIN CHECK FAILED: pip absent — the gpu-tests job needs it to install .[dev] under .github/constraints/gpu.txt inside this image"; \
+em = sorted(str(q) for q in list(pathlib.Path(sysconfig.get_path("stdlib")).glob("EXTERNALLY-MANAGED")) + list(pathlib.Path("/opt/conda/lib").glob("python*/EXTERNALLY-MANAGED"))); \
+assert not em, "PEP 668 CHECK FAILED: %r is still present in the conda prefix, so pip install -e .[dev] inside this image would be refused by PEP 668 exactly as it was in run 32705493768 — the 17-07 sweep did not take" % (em,); \
 back = [n for n in ("cuxfilter", "dask-cuda", "rapids") if n in pkgs]; \
 assert not back, "SLIM CHECK FAILED: %r present in an image built from the slim base, so the numba<0.61 capping branch is back and the premise of the 2026-08-24 base change is wrong" % (back,); \
 print("PIN CHECK OK: python=%s numba=%s cupy=%s numba-cuda=%s numpy=%s cudf=%s cuspatial=%s geopandas=%s pip=%s" % (pkgs.get("python"), pkgs.get("numba"), cp, pkgs.get("numba-cuda"), pkgs.get("numpy"), pkgs.get("cudf"), pkgs.get("cuspatial"), pkgs.get("geopandas"), pkgs.get("pip"))); \
-print("SLIM CHECK OK: rapids/cuxfilter/dask-cuda all absent; cugraph=%s cuml=%s" % (pkgs.get("cugraph"), pkgs.get("cuml")))' \
+print("SLIM CHECK OK: rapids/cuxfilter/dask-cuda all absent; cugraph=%s cuml=%s" % (pkgs.get("cugraph"), pkgs.get("cuml"))); \
+print("PEP 668 CHECK OK: no EXTERNALLY-MANAGED marker in %s" % (sysconfig.get_path("stdlib"),))' \
     && rm -f /tmp/conda-pins.json
+
+# BUILD-TIME ASSERTION ON THE INSTALL SEAM (17-07). Everything above is read from conda metadata;
+# this layer asserts the property the gpu-tests job actually depends on, in the SAME KIND OF SHELL
+# the job uses — `bash -l`, a LOGIN shell, as root. It proves three things at once and fails the
+# build if any of them is false:
+#   1. a login shell resolves `python` inside /opt/conda;
+#   2. a login shell resolves `pip`    inside /opt/conda  <- the defect that killed run 32705493768;
+#   3. that pip can actually install a package into this environment, i.e. PEP 668 does not refuse
+#      it and the files land under /opt/conda.
+# Clause 3 is a REAL INSTALL of a throwaway local package, not a version print: run 32705493768 had
+# a green pre-flight, a working GPU, a correctly pinned image and a resolvable pip, and still could
+# not install anything. Only an install proves an install.
+#
+# THE DIAGNOSTIC LINES ARE PRINTED BEFORE THE ASSERTIONS, ON PURPOSE. If this layer fails, the
+# build log must already say what PATH was and where python and pip resolved, or the next reader
+# is back to inferring a cause from an exit code — which is how this phase lost a lab approval.
+RUN set -eu; \
+    mkdir -p /tmp/pep668-probe/src/pep668probe; \
+    printf '%s\n' 'OK = True' > /tmp/pep668-probe/src/pep668probe/__init__.py; \
+    printf '%s\n' \
+      '[build-system]' \
+      'requires = ["setuptools>=68"]' \
+      'build-backend = "setuptools.build_meta"' \
+      '' \
+      '[project]' \
+      'name = "pep668probe"' \
+      'version = "0.0.0"' \
+      > /tmp/pep668-probe/pyproject.toml; \
+    printf '%s\n' \
+      'set -eu' \
+      'echo "SEAM DIAGNOSTIC login-shell PATH: $PATH"' \
+      'PY=$(command -v python || true)' \
+      'PIP=$(command -v pip || true)' \
+      'echo "SEAM DIAGNOSTIC login-shell python: ${PY:-NONE}"' \
+      'echo "SEAM DIAGNOSTIC login-shell pip:    ${PIP:-NONE}"' \
+      'pip --version || true' \
+      'case "${PY:-NONE}" in' \
+      '  /opt/conda/*) ;;' \
+      '  *) echo "SEAM CHECK FAILED: a login shell resolves python to ${PY:-NONE}, outside /opt/conda"; exit 1 ;;' \
+      'esac' \
+      'case "${PIP:-NONE}" in' \
+      '  /opt/conda/*) ;;' \
+      '  *) echo "SEAM CHECK FAILED: a login shell resolves pip to ${PIP:-NONE}, outside /opt/conda. This is exactly the defect that failed run 32705493768: the distro pip refused the install under PEP 668 while python was conda 3.12."; exit 1 ;;' \
+      'esac' \
+      'pip install --no-deps --quiet /tmp/pep668-probe' \
+      'LOC=$(python -c "import pep668probe; print(pep668probe.__file__)")' \
+      'case "$LOC" in' \
+      '  /opt/conda/*) ;;' \
+      '  *) echo "SEAM CHECK FAILED: pip installed the probe to $LOC, outside /opt/conda"; exit 1 ;;' \
+      'esac' \
+      'pip uninstall -y -q pep668probe' \
+      'echo "SEAM CHECK OK: login-shell python=${PY} pip=${PIP}; a real pip install landed at ${LOC}"' \
+      > /tmp/seam-check.sh; \
+    bash -l /tmp/seam-check.sh; \
+    rm -rf /tmp/pep668-probe /tmp/seam-check.sh
 # ---------------------------------------------------------------------------------------------
 
 # NOTE: geopandas is now an EXPLICIT spec above rather than an inherited package — the slim base
