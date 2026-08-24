@@ -34,7 +34,7 @@ dependencies = [
 	"shapely ~= 2.1",
 	"typing-extensions ~= 4.13",
 
-    "GSEGUtils ~= 0.5",
+    "GSEGUtils ~= 0.6.0",
 ]
 
 [tool.setuptools]
