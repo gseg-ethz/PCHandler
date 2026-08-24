@@ -57,7 +57,10 @@ RUN apt-get update \
 #
 # Installed through CONDA, from the base image's OWN configured channels, honouring the standing
 # instruction in this file not to mix package managers inside the conda env (D-17-16). Both
-# packages are already present in the RAPIDS base — this PINS them, it does not introduce them.
+# packages are already present in the RAPIDS base, but "this PINS them, it does not introduce
+# them" is only half true and round 2 measured which half: the base ships numba 0.60.0 (pinned
+# UP to 0.61.2) and cupy 13.4.1 — which is BELOW the `>= 13.5` floor criterion 3 asks for, so the
+# cupy half of this pin always had to MOVE a package, not merely ratify one.
 ENV PATH=/opt/conda/bin:${PATH}
 
 # ---- MEASURED 2026-08-21: the FIRST attempt at the pin below failed, and this layer is why ----
@@ -86,20 +89,46 @@ ENV PATH=/opt/conda/bin:${PATH}
 # first two are reachable from `rapids`. `cugraph-dgl` / `cugraph-pyg` declare `numba >=0.57` with
 # no ceiling, and are therefore not blockers.
 #
-# THE CASCADE IS BOUNDED, AND IT WAS COMPUTED BEFORE IT WAS RUN. Dropping `rapids` plus the two
-# capping leaves lets conda take `cugraph` and `raft-dask` with them (both require `dask-cuda`),
-# plus `cugraph-dgl` / `cugraph-pyg` / `cugraph-service-server` where installed. `--prune` is
-# deliberately NOT passed, so orphaned dependencies stay in the image. The transitive removal
-# closure over that repodata does NOT contain cudf, cuspatial, cuml, rmm, cuproj or cucim, and
-# `cuspatial` requires `geopandas >=1.0.0` in its own right — so all three of pchandler's GPU
-# imports survive by construction. The assertion layer below PROVES that rather than assuming it.
+# ---- MEASURED 2026-08-21, ROUND 2: a plain `conda remove` of that branch GUTS THE IMAGE ----
+# Refresh run 32498609639 (job 96822856086) ran the drop as a plain `conda remove -y` and conda
+# removed **350 packages**, verbatim from the transaction: cudf 25.4.0, cuspatial 25.04.00,
+# geopandas 1.0.1, libcudf, libcuspatial, rmm, cuml, cuproj, cucim, cuvs, cugraph, raft-dask,
+# pandas, pyarrow, shapely — plus numba 0.60.0, numpy 2.0.2 and cupy 13.4.1. `--prune` was NOT
+# passed and made no difference.
 #
-# THIS IS A MEASUREMENT, NOT AN ADOPTION. D-17-18 offered three fallbacks, all rated `one-way`;
-# the maintainer spent this plan's remaining build attempt SIZING this fourth direction instead of
-# guessing among them. If the solve succeeds the direction is real and cheap; if it fails, the
-# failure IS the sizing. Either way the image is not permitted to be quietly wrong: the layer
-# after the pin fails the build unless numba, cupy, cudf, cuspatial and geopandas all landed
-# exactly where they were meant to.
+# The prediction above was right about the DEPENDENCY GRAPH and wrong about the MECHANISM.
+# `rapids=25.4` is this environment's ROOT EXPLICIT SPEC. Under the libmamba solver `conda remove`
+# does not excise named packages — it RE-SOLVES the environment from the surviving history specs,
+# so the governing rule is "what has no surviving explicit spec", not "who depends on what". With
+# `rapids` gone from the spec set, everything whose only justification was `rapids` goes with it.
+#
+# The solve itself was never the problem. With the cap lifted, layer #10 solved in 12.35 s from
+# this base's own channels with no `-c` and nothing widened, resolving numba 0.61.2 + cupy 13.6.0
+# + numpy 2.2.6 — exactly the corridor spike 004 measured on an RTX 3090 Ti, and at `cupy < 14`,
+# which vindicates D-17-17. The cascade assertion below is what stopped that green-looking build
+# from pushing an image with the right numba and NO cudf.
+#
+# ---- ROUND 3, 2026-08-24: `--force-remove`, on an explicit one-attempt budget extension ----
+# `conda remove --force-remove` skips dependency resolution entirely: it unlinks exactly the named
+# packages and does not re-solve, so the 350-package prune cannot happen. That is the whole of the
+# change from round 2. Two things about it are UNKNOWN and are what this attempt buys:
+#   (a) whether dropping `rapids` from the environment's history/explicit specs is enough to stop
+#       the next `conda install` reinstating `cuxfilter` (and with it the numba<0.61 cap). The
+#       assertion layer below fails the build if either `cuxfilter` or `dask-cuda` comes back.
+#   (b) whether an environment with force-removed packages is SOUND enough to trust on lab
+#       hardware. It is not: conda's metadata will still claim `cugraph` / `raft-dask` are
+#       installed while `dask-cuda` — which they require — is gone. pchandler imports only cudf,
+#       cuspatial and geopandas, none of which reach the force-removed branch, so the corridor
+#       this image exists to carry is unaffected; but this image is deliberately NOT a
+#       general-purpose RAPIDS environment any more, and nothing here proves it is coherent
+#       beyond those three imports. `17-07`'s real `3 passed` on `gseg-pc105` measures the three
+#       imports and the kernel — it does not measure the rest of the environment.
+#
+# THIS REMAINS A MEASUREMENT, NOT AN ADOPTION. D-17-18's three fallbacks are still unchosen. The
+# image is not permitted to be quietly wrong either way: the layer immediately after the drop
+# fails the build if the force-remove reached pchandler's three GPU imports, and the layer after
+# the pin fails it if numba, cupy, cudf, cuspatial or geopandas did not land exactly where they
+# were meant to, or if the dropped branch came back.
 RUN conda list --json > /tmp/pre-drop.json \
     && python -c 'import json; \
 names = ["rapids", "cuxfilter", "dask-cuda"]; \
@@ -110,9 +139,15 @@ print("DROP (installed, removing): " + (", ".join("%s=%s" % (n, installed[n]) fo
 print("DROP (absent, nothing to do): " + (", ".join(skip) or "-")); \
 open("/tmp/drop.txt", "w").write(" ".join(drop))' \
     && DROP="$(cat /tmp/drop.txt)" \
-    && if [ -n "$DROP" ]; then conda remove -y $DROP && conda clean -afy; \
+    && if [ -n "$DROP" ]; then conda remove -y --force-remove $DROP && conda clean -afy; \
        else echo "NOTHING DROPPED — the numba cap is somewhere else; the solve below will name it"; fi \
-    && rm -f /tmp/pre-drop.json /tmp/drop.txt
+    && conda list --json > /tmp/post-drop.json \
+    && python -c 'import json; \
+pkgs = {p["name"]: p["version"] for p in json.load(open("/tmp/post-drop.json"))}; \
+missing = [n for n in ("cudf", "cuspatial", "geopandas") if n not in pkgs]; \
+assert not missing, "FORCE-REMOVE CASCADE CHECK FAILED: --force-remove still took %r with it — the drop itself is the cause, not the install that follows" % (missing,); \
+print("POST-DROP OK: cudf=%s cuspatial=%s geopandas=%s | numba=%s cupy=%s numpy=%s | rapids=%s cuxfilter=%s dask-cuda=%s cugraph=%s" % (pkgs.get("cudf"), pkgs.get("cuspatial"), pkgs.get("geopandas"), pkgs.get("numba"), pkgs.get("cupy") or pkgs.get("cupy-core"), pkgs.get("numpy"), pkgs.get("rapids"), pkgs.get("cuxfilter"), pkgs.get("dask-cuda"), pkgs.get("cugraph")))' \
+    && rm -f /tmp/pre-drop.json /tmp/post-drop.json /tmp/drop.txt
 
 RUN conda install -y "numba=0.61.2" "cupy>=13.5,<14" \
     && conda clean -afy
@@ -139,7 +174,8 @@ m = re.match(r"^13\.([0-9]+)([^0-9]|$)", cp or ""); \
 assert m is not None and int(m.group(1)) >= 5, "PIN CHECK FAILED: cupy resolved to %r, expected 13.x with minor >= 5" % (cp,); \
 missing = [n for n in ("cudf", "cuspatial", "geopandas") if n not in pkgs]; \
 assert not missing, "CASCADE CHECK FAILED: dropping the rapids/cuxfilter/dask-cuda branch took %r with it — pchandler.filters.gpu imports cudf, cuspatial and geopandas, so an image without them is useless whatever numba says" % (missing,); \
-assert "cuxfilter" not in pkgs, "DROP CHECK FAILED: cuxfilter is still installed, so the numba<0.61 cap was never lifted and this build proves nothing"; \
+back = [n for n in ("cuxfilter", "dask-cuda") if n in pkgs]; \
+assert not back, "DROP CHECK FAILED: %r came back on the install, so dropping rapids from the history specs did NOT stop the solver reinstating the numba<0.61 branch" % (back,); \
 print("PIN CHECK OK: numba=%s cupy=%s numba-cuda=%s numpy=%s cudf=%s cuspatial=%s geopandas=%s" % (nb, cp, pkgs.get("numba-cuda"), pkgs.get("numpy"), pkgs.get("cudf"), pkgs.get("cuspatial"), pkgs.get("geopandas"))); \
 print("DROP CHECK OK: cuxfilter absent; rapids=%s dask-cuda=%s cugraph=%s" % (pkgs.get("rapids"), pkgs.get("dask-cuda"), pkgs.get("cugraph")))' \
     && rm -f /tmp/conda-pins.json
