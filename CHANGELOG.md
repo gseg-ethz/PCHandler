@@ -1,5 +1,33 @@
 # Changelog
 
+## [2.1.1](https://github.com/gseg-ethz/PCHandler/compare/v2.1.0...v2.1.1) (2026-08-24)
+
+
+### 🐛 Bug Fixes
+
+* **docs:** promote RTD LICENSE post_build fix to main (DOC-02) ([#44](https://github.com/gseg-ethz/PCHandler/issues/44)) ([84897bf](https://github.com/gseg-ethz/PCHandler/commit/84897bf4c0c5b87cb7d5c37257dc40fd4b284ba0))
+
+
+### 📚 Documentation
+
+* promote v1.1 closeout doc fixes to main (2.1.0 release info) ([#47](https://github.com/gseg-ethz/PCHandler/issues/47)) ([ffd5237](https://github.com/gseg-ethz/PCHandler/commit/ffd5237374b81b4c2141ac8de96cb835eb54be46))
+
+
+### 🔨 Build System
+
+* **deps:** raise the GSEGUtils floor to `~= 0.6.0` ([#65](https://github.com/gseg-ethz/PCHandler/issues/65)) ([b0854f0](https://github.com/gseg-ethz/PCHandler/commit/b0854f00048d48dcf5a5825ac03b897a530b1f40))
+
+
+### 🤖 Continuous Integration
+
+* **13-10:** capture the apply response body instead of discarding it ([#50](https://github.com/gseg-ethz/PCHandler/issues/50)) ([a1a87f7](https://github.com/gseg-ethz/PCHandler/commit/a1a87f7e6b1e2563e43c2c75cd55610c0b6dddd0))
+* **13-15:** make the ruleset payloads appliable, and fail loud on a refused read ([#53](https://github.com/gseg-ethz/PCHandler/issues/53)) ([2ae3e27](https://github.com/gseg-ethz/PCHandler/commit/2ae3e2775ba28cf9d026de7681d0184c03be1a70))
+* **13-16:** the base-ref integrity check and its narrowed exception (D-19/D-23) ([#54](https://github.com/gseg-ethz/PCHandler/issues/54)) ([c6a3e6c](https://github.com/gseg-ethz/PCHandler/commit/c6a3e6c96217bd4f88f73426b68e05d8ff758509))
+* **13-18:** capture the classifier's stderr and warn when the fast path fails open (D-A) ([#63](https://github.com/gseg-ethz/PCHandler/issues/63)) ([d4ed605](https://github.com/gseg-ethz/PCHandler/commit/d4ed605b539b10f1f4e8f66f2be7db5c468cad24))
+* **13:** promote the Phase 13 release flow to main ([#49](https://github.com/gseg-ethz/PCHandler/issues/49)) ([570afa5](https://github.com/gseg-ethz/PCHandler/commit/570afa54c8d4277d3db7c0924a7e81305d0cd0b2))
+* **17:** promote the GPU corridor and the CI-17 observability gate to main ([#82](https://github.com/gseg-ethz/PCHandler/issues/82)) ([9cfa792](https://github.com/gseg-ethz/PCHandler/commit/9cfa7927a3ae8898cf647b8265a8cb39910c73b8))
+* promote CR-01/CR-02 fast-path fix from develop/gsd to main ([#68](https://github.com/gseg-ethz/PCHandler/issues/68)) ([fc423cc](https://github.com/gseg-ethz/PCHandler/commit/fc423ccab8474658504292f991c1e5c6924cc7fa))
+
 ## [2.1.0](https://github.com/gseg-ethz/PCHandler/compare/v2.0.0...v2.1.0) (2026-06-25)
 
 
