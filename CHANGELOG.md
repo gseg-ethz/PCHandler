@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.1.2](https://github.com/gseg-ethz/PCHandler/compare/v2.1.1...v2.1.2) (2026-09-23)
+
+
+### 🤖 Continuous Integration
+
+* remove the deprecation canary, capture the drift report, log the anti-skip pass ([#89](https://github.com/gseg-ethz/PCHandler/issues/89)) ([1e440db](https://github.com/gseg-ethz/PCHandler/commit/1e440dbeff66a00ccbf2f0e77418b1f6033e1035))
+* **rulesets:** record the unattributed-changes approval parameter ([#86](https://github.com/gseg-ethz/PCHandler/issues/86)) ([c808e05](https://github.com/gseg-ethz/PCHandler/commit/c808e054c0b2bcd3cf3faaf0c8660dec2812f61e))
+
 ## [2.1.1](https://github.com/gseg-ethz/PCHandler/compare/v2.1.0...v2.1.1) (2026-08-24)
 
 
