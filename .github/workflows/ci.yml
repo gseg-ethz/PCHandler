@@ -78,7 +78,7 @@ on:
   push:
     branches: [develop/gsd]
   schedule:
-    - cron: '0 5 * * *'   # nightly 05:00 UTC — the one daily slot free in THIS repo's own inventory (canary Mon 08:00, gpu-image-refresh 08:00 on the 1st, scheduled-health daily 06:00)
+    - cron: '0 5 * * *'   # nightly 05:00 UTC — offset on the wall clock from every other slot in THIS repo's own inventory (scheduled-health daily 06:00; gpu-image-refresh 08:00 on the 1st, reserved while its cron is off)
 
 jobs:
   lint:
